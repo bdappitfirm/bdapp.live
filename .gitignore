@@ -1,0 +1,32 @@
+# Python/Django
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+db.sqlite3
+media/
+backup.json
+sqlite_dump.json
+*.zip
+
+# Node/React
+frontend/node_modules/
+frontend/build/
+frontend/.env*
+
+# Data and Logs
+data/
+docs/logs/
+*.log
+.DS_Store
+Thumbs.db
+*.pdf
+.env
+credentials.json
+# Build
+dist/
+build/
+# Node
+node_modules/

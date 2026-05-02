@@ -1,0 +1,149 @@
+import React, { useState } from 'react';
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button, 
+  IconButton, 
+  Drawer, 
+  List, 
+  ListItem, 
+  ListItemText, 
+  Box, 
+  useMediaQuery, 
+  useTheme 
+} from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+const Navbar = ({ role }) => {
+  const navigate = useNavigate();
+  const { id: schoolId } = useParams();
+  const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  
+  // Check if user is effective admin (superuser, admin role, or principal)
+  const isEffectiveAdmin = user?.is_superuser || user?.role === 'admin' || user?.profile?.effective_role === 'admin';
+  
+  const pathMap = {
+    'ড্যাশবোর্ড': '',
+    'শিক্ষক': 'teacher',
+    'ছাত্র-ছাত্রী': 'student',
+    'অভিভাবক': 'parent',
+    'কমিটি': 'committee',
+    'লাইভ ক্লাস': 'live-class',
+    'সফটওয়্যার অ্যাসিস্ট্যান্ট': 'assistant',
+    'প্রবেশপত্র': 'admission-cards',
+    'আমার শ্রেণি': 'classes',
+    'হাজিরা': 'attendance',
+    'বিষয়সমূহ': 'subjects',
+    'পরীক্ষা': 'examinations',
+    'ফলাফল': 'results',
+    'ফি': 'fees',
+    'প্রোফাইল': 'profile',
+    'আমার সন্তান': 'parent/dashboard',
+    'স্কুল তথ্য': 'schools',
+    'সাপোর্ট লাইভ': 'support-live'
+  };
+
+  const handleNavigation = (e, item) => {
+    if (e) e.preventDefault();
+    const path = pathMap[item];
+    if (path !== undefined) {
+      navigate(`/school/${schoolId}/${path}`);
+    }
+    setDrawerOpen(false);
+  };
+
+  let menuItems = [];
+  switch(role) {
+    case 'Admin':
+      menuItems = ['ড্যাশবোর্ড', 'শিক্ষক', 'ছাত্র-ছাত্রী', 'অভিভাবক', 'কমিটি', 'প্রবেশপত্র', 'হাজিরা', 'বিষয়সমূহ', 'পরীক্ষা', 'ফলাফল', 'ফি', 'স্কুল তথ্য', 'সাপোর্ট লাইভ', 'প্রোফাইল'];
+      break;
+    case 'Teacher':
+      menuItems = ['ড্যাশবোর্ড', 'শিক্ষক', 'ছাত্র-ছাত্রী', 'বিষয়সমূহ', 'পরীক্ষা', 'ফলাফল', 'হাজিরা', 'ফি', 'স্কুল তথ্য', 'সাপোর্ট লাইভ', 'প্রোফাইল'];
+      break;
+    case 'Student':
+      // Read-only wide menu for students
+      menuItems = ['ড্যাশবোর্ড', 'আমার শ্রেণি', 'লাইভ ক্লাস', 'শিক্ষক', 'ছাত্র-ছাত্রী', 'অভিভাবক', 'কমিটি', 'বিষয়সমূহ', 'পরীক্ষা', 'ফলাফল', 'হাজিরা', 'ফি', 'স্কুল তথ্য', 'সফটওয়্যার অ্যাসিস্ট্যান্ট', 'সাপোর্ট লাইভ', 'প্রোফাইল'];
+      break;
+    case 'Parent':
+      // Read-only wide menu for parents
+      menuItems = ['ড্যাশবোর্ড', 'আমার সন্তান', 'লাইভ ক্লাস', 'শিক্ষক', 'ছাত্র-ছাত্রী', 'অভিভাবক', 'কমিটি', 'বিষয়সমূহ', 'পরীক্ষা', 'ফলাফল', 'হাজিরা', 'ফি', 'স্কুল তথ্য', 'সফটওয়্যার অ্যাসিস্ট্যান্ট', 'সাপোর্ট লাইভ', 'প্রোফাইল'];
+      break;
+    case 'Committee':
+      // Read-only wide menu for committee members
+      menuItems = ['ড্যাশবোর্ড', 'লাইভ ক্লাস', 'শিক্ষক', 'ছাত্র-ছাত্রী', 'অভিভাবক', 'কমিটি', 'বিষয়সমূহ', 'পরীক্ষা', 'ফলাফল', 'হাজিরা', 'ফি', 'স্কুল তথ্য', 'সফটওয়্যার অ্যাসিস্ট্যান্ট', 'সাপোর্ট লাইভ', 'প্রোফাইল'];
+      break;
+    default:
+      menuItems = [];
+  }
+
+  return (
+    <AppBar position="sticky" sx={{ mb: 2 }}>
+      <Toolbar>
+        {isMobile && (
+          <IconButton
+            color="inherit"
+            aria-label="open drawer"
+            edge="start"
+            onClick={() => setDrawerOpen(true)}
+            sx={{ mr: 2 }}
+          >
+            <MenuIcon />
+          </IconButton>
+        )}
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {isEffectiveAdmin ? 'এডমিন মেনু' : role ? `${role} মেনু` : 'মেনু'}
+        </Typography>
+        {!isMobile && menuItems.map(item => (
+          <Button 
+            key={item} 
+            color="inherit"
+            onClick={(e) => handleNavigation(e, item)}
+            sx={{ 
+              mx: 0.2,
+              fontSize: '0.85rem',
+              '&:hover': { 
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                transform: 'translateY(-1px)'
+              },
+              transition: 'all 0.2s'
+            }}
+          >
+            {item}
+          </Button>
+        ))}
+      </Toolbar>
+
+      <Drawer
+        anchor="left"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+      >
+        <Box sx={{ width: 250, p: 2 }}>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+            {isEffectiveAdmin ? 'এডমিন মেনু' : role ? `${role} মেনু` : 'মেনু'}
+          </Typography>
+          <List>
+            {menuItems.map((item) => (
+              <ListItem 
+                button 
+                key={item} 
+                onClick={(e) => handleNavigation(e, item)}
+                sx={{ borderRadius: 1, mb: 0.5 }}
+              >
+                <ListItemText primary={item} />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Drawer>
+    </AppBar>
+  );
+};
+
+export default Navbar;

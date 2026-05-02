@@ -1,0 +1,109 @@
+# School Management Software (SMS)
+
+A professional Django + React application for schools to manage students, classes, attendance, and fees efficiently. Features a multi-school "Tenant" architecture with strong data isolation and security.
+
+## 🚀 Key Features
+
+- **Multi-School Isolation**: Robust data separation using custom middleware and permission classes.
+- **User Management**: Custom User model with automatic Profile generation for Admins, Teachers, Students, Parents, and Committee members.
+- **Academics**: Manage Classrooms, Sections, Subjects, and Student enrollments.
+- **Attendance**: Daily attendance tracking with reporting.
+- **Fee Management**: Flexible fee structures, payment tracking, and fee slips.
+- **Results**: Automated result card generation and rank list management.
+- **SMS & Messaging**: Integrated SMS (BulkSMS/Custom) and WhatsApp/Telegram notifications.
+- **Software Assistant**: AI-powered assistant for rule suggestions and automated tasks.
+
+## 🛠️ Tech Stack
+
+- **Backend**: Django 4.2+, Django REST Framework (DRF), SimpleJWT (Auth).
+- **Frontend**: React (CRA), Material UI (MUI), Axios.
+- **Security**: JWT Authentication, Throttling (Rate Limiting), CORS restriction, Image Validation.
+- **Monitoring**: Sentry Integration, Django Logging, Debug Toolbar.
+
+---
+
+## 📦 Backend Setup (Django + DRF)
+
+1. **Environment Setup**:
+   ```bash
+   python -m venv .venv
+   . .venv/Scripts/activate  # Windows: .venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
+   ```
+
+2. **Configuration**:
+   Copy `.env.example` to `.env` and fill in your credentials:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Database & Migrations**:
+   ```bash
+   python manage.py makemigrations
+   python manage.py migrate
+   ```
+
+4. **Initial Data (Optional)**:
+   ```bash
+   python manage.py createsuperuser
+   python create_demo_data.py  # Create sample school and admin
+   ```
+
+5. **Run Server**:
+   ```bash
+   python manage.py runserver
+   ```
+
+### 🔐 Security & Monitoring
+
+- **API Versioning**: Current version is `/api/v1/`.
+- **Throttling**: Login and Auth endpoints are rate-limited to prevent brute-force attacks.
+- **Logging**: System logs are stored in `docs/logs/django.log`.
+- **Sentry**: Set `SENTRY_DSN` in `.env` for real-time error tracking.
+
+---
+
+## 💻 Frontend Setup (React)
+
+1. **Installation**:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. **Configuration**:
+   Create a `.env` file in the `frontend` directory:
+   ```env
+   REACT_APP_API_URL=http://127.0.0.1:8000
+   ```
+
+3. **Start Development**:
+   ```bash
+   npm start
+   ```
+
+---
+
+## 📡 API Endpoints (v1)
+
+- `POST /api/v1/token/` — Login & obtain JWT.
+- `GET /api/v1/schools/` — List/Create schools.
+- `GET /api/v1/academics/students/` — Filtered by school.
+- `GET /api/v1/attendance/records/` — Daily attendance.
+- `GET /api/v1/fees/payments/` — Payment history.
+- `GET /api/v1/dashboard-stats/` — Aggregated dashboard data.
+
+*Full API documentation is available via the DRF Browsable API.*
+
+---
+
+## 🛠️ Development & Troubleshooting
+
+- **CORS Issues**: Ensure your frontend URL is listed in `ALLOWED_HOSTS` or allowed origins in `.env`.
+- **401 Unauthorized**: Verify the `Authorization: Bearer <token>` header is being sent.
+- **Empty Dashboard**: Ensure the user has an assigned `Profile.school` or provide `school_id` as a query parameter.
+- **Debugging**: When `DEBUG=True`, use the [Django Debug Toolbar](http://127.0.0.1:8000/__debug__/) to analyze slow queries.
+
+## 📄 License
+
+Proprietary / Private. All rights reserved.
