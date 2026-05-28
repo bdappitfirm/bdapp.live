@@ -73,9 +73,10 @@ export default function ResultsPage() {
      user?.is_staff || 
      user?.user?.is_staff ||
      (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'bdadmin' || 
-     (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'shamir'
+     (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'shamir' ||
+     (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'umor'
    );
-  const role = ((user && (user.profile?.role || user.role)) || '').toLowerCase();
+  const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').toLowerCase();
   const currentUserId = (user && (user.user?.id || user.id)) || null;
   const [assignments, setAssignments] = useState([]);
   const [tabValue, setTabValue] = useState(0);

@@ -8,7 +8,47 @@ import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
-import { isAuthenticated } from './utils/auth';
+import { isAuthenticated, clearTokens } from './utils/auth';
+
+const APP_VERSION = '1.0.1'; // Increment this to force cache clear on next load
+const CACHE_VERSION_KEY = 'bdapp_cache_version';
+
+const CacheClearer = () => {
+  useEffect(() => {
+    try {
+      const storedVersion = localStorage.getItem(CACHE_VERSION_KEY);
+      
+      // If version mismatch or no version stored, clear all cache
+      if (storedVersion !== APP_VERSION) {
+        console.log(`Cache version mismatch (stored: ${storedVersion}, current: ${APP_VERSION}) - clearing cache...`);
+        
+        // Clear all localStorage items except what we want to keep (if any)
+        const keysToKeep = [];
+        const allKeys = Object.keys(localStorage);
+        allKeys.forEach(key => {
+          if (!keysToKeep.includes(key)) {
+            localStorage.removeItem(key);
+          }
+        });
+        
+        // Clear all sessionStorage
+        sessionStorage.clear();
+        
+        // Clear auth tokens specifically
+        clearTokens();
+        
+        // Set new version
+        localStorage.setItem(CACHE_VERSION_KEY, APP_VERSION);
+        
+        console.log('Cache cleared successfully!');
+      }
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+    }
+  }, []);
+  
+  return null;
+};
 
 const WelcomePage = React.lazy(() => import('./pages/WelcomePage'));
 const SchoolDashboard = React.lazy(() => import('./pages/SchoolDashboard.jsx'));
@@ -96,6 +136,7 @@ const PathTracker = () => {
 function App() {
   return (
     <Router>
+      <CacheClearer />
       <ErrorBoundary>
         <AuthProvider>
           <ToastProvider>
@@ -135,7 +176,7 @@ function App() {
           <Route path="result-card" element={<ResultCardGenerator />} />
           <Route path="class-results" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ClassResultsPage /></ProtectedRoute>} />
           <Route path="rank-list" element={<RankListPage />} />
-          <Route path="id-card" element={<ProtectedRoute allowedRoles={['admin','teacher']}><IDCardGenerator /></ProtectedRoute>} />
+          <Route path="id-card" element={<IDCardGenerator />} />
           <Route path="certificate" element={<ProtectedRoute allowedRoles={['admin','teacher']}><CertificateGenerator /></ProtectedRoute>} />
           <Route path="admission-cards" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AdmissionCardGenerator /></ProtectedRoute>} />
           <Route path="assistant" element={<SoftwareAssistant />} />

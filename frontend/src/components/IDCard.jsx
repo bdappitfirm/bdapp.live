@@ -1,10 +1,43 @@
 import React from 'react';
-import { Box, Typography, Avatar, Divider, IconButton, Tooltip } from '@mui/material';
+import { Box, Typography, Avatar, IconButton, Tooltip } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
+import { QRCodeSVG } from 'qrcode.react';
 import './IDCard.css';
 import api from '../utils/api';
 
-export default function IDCard({ type = 'student', data, school, overridePhone, signatureUrl: propSignatureUrl }) {
+export default function IDCard({ type = 'student', data, school, classrooms = [], sections = [], overridePhone, signatureUrl: propSignatureUrl }) {
+  console.log('IDCard data:', JSON.stringify(data, null, 2));
+  console.log('IDCard classroom:', data?.classroom);
+  console.log('IDCard section:', data?.section);
+  console.log('Classrooms array:', classrooms);
+  console.log('Sections array:', sections);
+
+  // Resolve classroom object
+  const getClassroom = () => {
+    console.log('getClassroom - data.classroom:', data?.classroom);
+    console.log('getClassroom - type of data.classroom:', typeof data?.classroom);
+    console.log('getClassroom - classrooms array:', classrooms);
+    if (!data?.classroom) return null;
+    if (typeof data.classroom === 'object' && data.classroom !== null) return data.classroom;
+    // If classroom is an ID, find it in the classrooms array
+    const found = classrooms.find(c => {
+      console.log('Comparing classroom c.id:', c.id, 'to data.classroom:', data.classroom);
+      return c.id === data.classroom || String(c.id) === String(data.classroom);
+    });
+    console.log('getClassroom - found classroom:', found);
+    return found;
+  };
+  const classroom = getClassroom();
+
+  // Resolve section object
+  const getSection = () => {
+    console.log('getSection - data.section:', data?.section);
+    if (!data?.section) return null;
+    if (typeof data.section === 'object' && data.section !== null) return data.section;
+    // If section is an ID, find it in the sections array
+    return sections.find(s => s.id === data.section || String(s.id) === String(data.section));
+  };
+  const section = getSection();
   const defaultSignatureUrl = '/images/signatures/signature.png';
   const signatureUrl = (() => {
     if (propSignatureUrl) return propSignatureUrl;
@@ -22,39 +55,131 @@ export default function IDCard({ type = 'student', data, school, overridePhone, 
     } catch (_) {}
     return defaultSignatureUrl;
   })();
+  
   const handlePrintSingle = () => {
     const printWindow = window.open('', '_blank');
     const cardElement = document.getElementById(`id-card-${data.id}`);
     if (cardElement && printWindow) {
+      // Clone the element to preserve all computed styles
+      const clonedElement = cardElement.cloneNode(true);
+      
+      // Copy computed styles for all elements
+      const copyComputedStyles = (source, target) => {
+        const computedStyle = window.getComputedStyle(source);
+        for (let i = 0; i < computedStyle.length; i++) {
+          const property = computedStyle[i];
+          target.style.setProperty(property, computedStyle.getPropertyValue(property), computedStyle.getPropertyPriority(property));
+        }
+        
+        // Recursively copy styles for child elements
+        const sourceChildren = source.children;
+        const targetChildren = target.children;
+        for (let i = 0; i < sourceChildren.length; i++) {
+          if (targetChildren[i]) {
+            copyComputedStyles(sourceChildren[i], targetChildren[i]);
+          }
+        }
+      };
+      
+      copyComputedStyles(cardElement, clonedElement);
+      
       printWindow.document.write(`
         <html>
           <head>
             <title>ID Card - ${data?.user?.username || 'User'}</title>
             <style>
-              body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: white !important; }
-              .id-card-front, .id-card-back { width: 54mm !important; min-height: 86mm !important; height: auto !important; position: relative !important; }
-              .id-card-front { margin-bottom: 4mm !important; }
-              .id-card { page-break-inside: avoid; break-inside: avoid; margin: 5mm auto; overflow: visible !important; border: 1px solid #eee !important; }
-              .id-card-back { padding-bottom: 12mm !important; position: relative; }
-              .id-card-header { 
-                background-color: #075985 !important; 
-                background-image: none !important;
-                backdrop-filter: none !important; 
-                -webkit-backdrop-filter: none !important;
-                visibility: visible !important;
-                opacity: 1 !important;
+              @page { size: A4; margin: 10mm; }
+              body { 
+                margin: 0; 
+                padding: 10mm; 
+                font-family: Arial, sans-serif; 
+                background: white !important; 
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important;
+              }
+              
+              /* Force exact dimensions */
+              .id-card-front, .id-card-back { 
+                width: 250px !important; 
+                min-height: 386px !important;
+                max-height: none !important;
+                height: auto !important;
+                position: relative !important; 
+                display: flex !important;
+                flex-direction: column !important;
+                overflow: visible !important;
+                border: 2px solid #0a4b94 !important;
+                box-shadow: none !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              
+              .id-card-front { 
+                margin-bottom: 4mm !important; 
+                background: linear-gradient(180deg, #0a4b94 0%, #0a4b94 35%, #ffffff 35%, #ffffff 100%) !important;
+              }
+              
+              .id-card-back { 
+                background: linear-gradient(180deg, #ffffff 0%, #ffffff 70%, #0a4b94 70%, #0a4b94 100%) !important;
+              }
+              
+              .id-card-wrapper { 
+                position: relative !important; 
+                display: block !important;
+                margin-bottom: 20px;
+              }
+              
+              /* Preserve all element positioning */
+              * { 
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important;
+                box-sizing: border-box !important;
+              }
+              
+              .MuiBox-root { 
+                display: flex !important;
+                flex-direction: column !important;
+              }
+              
+              .MuiTypography-root { 
                 display: block !important;
               }
-              .MuiAvatar-root, .MuiAvatar-img { display: block !important; visibility: visible !important; opacity: 1 !important; }
-              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+              
+              .MuiAvatar-root, .MuiAvatar-img { 
+                display: block !important; 
+                visibility: visible !important; 
+                opacity: 1 !important; 
+              }
+              
+              /* Ensure footer is visible */
+              .id-card-front > .MuiBox-root:last-child,
+              .id-card-back > .MuiBox-root:last-child {
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                background-color: #0a4b94 !important;
+                color: white !important;
+              }
+              
+              /* Ensure footer text is visible */
+              .id-card-front > .MuiBox-root:last-child .MuiTypography-root,
+              .id-card-back > .MuiBox-root:last-child .MuiTypography-root {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                color: white !important;
+                font-weight: bold !important;
+                font-size: 0.7rem !important;
+              }
+              
               @media print {
-                body { margin: 0; padding: 0; }
+                body { margin: 0; padding: 10mm; }
                 .no-print { display: none !important; }
               }
             </style>
           </head>
           <body>
-            ${cardElement.innerHTML}
+            ${clonedElement.outerHTML}
           </body>
         </html>
       `);
@@ -63,12 +188,14 @@ export default function IDCard({ type = 'student', data, school, overridePhone, 
       setTimeout(() => {
         printWindow.print();
         printWindow.close();
-      }, 250);
+      }, 500);
     }
   };
+  
   const isStudent = type === 'student';
   const user = data?.user || {};
   const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+  const currentYear = new Date().getFullYear();
 
   // Function to process photo URLs
   const processPhotoUrl = (url) => {
@@ -95,60 +222,9 @@ export default function IDCard({ type = 'student', data, school, overridePhone, 
     username: user.username,
     timestamp: new Date().toISOString()
   });
-  const currentYear = new Date().getFullYear();
-  const headPhone = overridePhone || school?.headmaster_phone || school?.head_teacher_phone || school?.principal_phone || school?.phone || null;
-  const digitMapBn = {'০':'0','১':'1','২':'2','৩':'3','৪':'4','৫':'5','৬':'6','৭':'7','৮':'8','৯':'9'};
-  const toLatinDigits = (s) => String(s || '').replace(/[০-৯]/g, ch => digitMapBn[ch] || ch);
-  const classWordMap = {'প্রথম':1,'১ম':1,'দ্বিতীয়':2,'দ্বিতীয়':2,'২য়':2,'২য়':2,'তৃতীয়':3,'তৃতীয়':3,'৩য়':3,'৩য়':3,'চতুর্থ':4,'৪র্থ':4,'পঞ্চম':5,'৫ম':5,'ষষ্ঠ':6,'৬ষ্ঠ':6,'সপ্তম':7,'৭ম':7,'অষ্টম':8,'৮ম':8,'নবম':9,'৯ম':9,'দশম':10,'১০ম':10,'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10};
-  const romanMap = {'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
-  const getClassNumber = (nm) => {
-    const n = String(nm || '').toLowerCase();
-    for (const k in classWordMap) { if (n.includes(k)) return classWordMap[k]; }
-    const roman = n.replace(/[^ivx]/g,'');
-    if (roman && romanMap[roman]) return romanMap[roman];
-    const m = toLatinDigits(n).match(/\b(1[0-2]|[1-9])\b/);
-    if (m) return parseInt(m[0],10);
-    return null;
-  };
-  const getSectionCode = (secName) => {
-    if (!secName) return '00';
-    const raw = String(secName).trim();
-    const s = raw.replace(/[()\[\]{}]/g, '').trim();
-    const sl = s.toLowerCase();
-    // Stream mapping: Science=01, Commerce=02, Humanities=03
-    if (sl.includes('বিজ্ঞান') || sl.includes('science')) return '01';
-    if (sl.includes('ব্যবসা') || sl.includes('ব্যবসায়') || sl.includes('ব্যবসায়') || sl.includes('commerce') || sl.includes('business')) return '02';
-    if (sl.includes('মানবিক') || sl.includes('arts') || sl.includes('humanities')) return '03';
-    const bnLetters = 'কখগঘঙচছজঝটঠডঢণতথদধনপফবভমযরলশষসহ';
-    // Only accept single-letter sections; otherwise fallback to 00
-    if (s.length === 1) {
-      const idxBn = bnLetters.indexOf(s[0]);
-      if (idxBn >= 0) return String(idxBn + 1).padStart(2, '0');
-      const up = s.toUpperCase();
-      if (/^[A-Z]$/.test(up)) return String(up.charCodeAt(0) - 64).padStart(2, '0');
-    }
-    // If numeric section like "1", "02"
-    const md = toLatinDigits(s).match(/^\d+$/) ? [s] : null;
-    if (md) return String(parseInt(toLatinDigits(md[0]), 10)).padStart(2, '0');
-    return '00';
-  };
-  const getStudentIdCode = () => {
-    if (!isStudent) return '';
-    const year = String(new Date().getFullYear());
-    const clsNum = getClassNumber(data?.classroom?.name);
-    const cls = clsNum != null ? String(clsNum).padStart(2,'0') : '00';
-    const sec = getSectionCode(data?.section?.name);
-    const rollDigits = (() => {
-      const val = data?.roll_number;
-      if (val === null || val === undefined) return null;
-      const str = toLatinDigits(String(val));
-      const m = str.match(/\d+/);
-      return m ? m[0] : null;
-    })();
-    const roll = rollDigits != null ? String(parseInt(rollDigits,10)).padStart(2,'0') : '00';
-    return `${year}${cls}${sec}${roll}`;
-  };
-  const studentIdCode = getStudentIdCode();
+
+  const CARD_WIDTH = 250;
+  const CARD_HEIGHT = 386;
 
   return (
     <Box className="id-card-wrapper" sx={{ position: 'relative' }}>
@@ -173,291 +249,504 @@ export default function IDCard({ type = 'student', data, school, overridePhone, 
       </Tooltip>
 
       <Box id={`id-card-${data.id}`}>
-      {/* Front Side */}
-      <Box className="id-card id-card-front" sx={{ 
-        background: 'linear-gradient(160deg, #0ea5e9 0%, #6366f1 100%)',
-        borderRadius: 2,
-        color: 'white',
-        position: 'relative',
-        boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
-        overflow: 'visible',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '360px'
-      }}>
-        {/* Header Section */}
-        <Box className="id-card-header" sx={{ 
-          bgcolor: 'rgba(0,0,0,0.3)', 
-          backdropFilter: 'blur(10px)',
-          p: 1.5,
-          textAlign: 'center',
-          borderBottom: '1px solid rgba(255,255,255,0.2)',
+        {/* Front Side - Portrait - EXACT SIZE */}
+        <Box className="id-card id-card-front" sx={{ 
+          background: 'linear-gradient(180deg, #0a4b94 0%, #0a4b94 35%, #ffffff 35%, #ffffff 100%)',
+          borderRadius: 0,
+          color: 'black',
           position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: '25%',
-            width: '50%',
-            height: '2px',
-            background: 'rgba(255,255,255,0.5)'
+          boxShadow: 'none',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '386px !important',
+          width: '250px !important',
+          border: '2px solid #0a4b94',
+          '&.id-card-front': {
+            height: '386px !important',
+            width: '250px !important',
+            minHeight: '386px !important',
+            maxHeight: '386px !important'
           }
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 1 }}>
+          {/* Top Header - Blue Section */}
+          <Box sx={{ 
+            p: 0.4,
+            color: 'white',
+            textAlign: 'center',
+            position: 'relative'
+          }}>
+            {/* School Logo */}
             {schoolLogo && (
               <Avatar 
                 src={schoolLogo} 
                 sx={{ 
-                  width: 40, 
-                  height: 40, 
-                  border: '2px solid rgba(255,255,255,0.9)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                  width: 35, 
+                  height: 35, 
+                  border: '2px solid white',
+                  bgcolor: 'white',
+                  mx: 'auto',
+                  mb: 0.1
                 }} 
               />
             )}
-            <Box>
-              <Typography variant="subtitle1" sx={{ 
-                fontWeight: 900, 
-                lineHeight: 1.1, 
-                letterSpacing: 0.5,
-                fontSize: '1.1rem',
-                textShadow: '0 1px 2px rgba(0,0,0,0.3)'
+            {/* School Info */}
+            <Typography variant="h6" sx={{ 
+              fontWeight: 'bold', 
+              lineHeight: 1.1, 
+              fontSize: '0.65rem',
+              mb: 0.05,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word'
+            }}>
+              {school?.name || 'School Name'}
+            </Typography>
+            {school?.ein && (
+              <Typography variant="body2" sx={{ 
+                fontSize: '0.45rem',
+                opacity: 0.9,
+                mb: 0.1
               }}>
-                {school?.name || 'School Name'}
+                EIIN No.- {school.ein}
               </Typography>
-              <Typography variant="caption" sx={{ 
-                opacity: 0.9, 
-                fontSize: '0.65rem',
-                letterSpacing: 0.5,
-                display: 'block',
-                mt: 0.5
-              }}>
-                {school?.address || 'School Address'}
-              </Typography>
-            </Box>
-          </Box>
-          <Box sx={{ 
-            bgcolor: 'rgba(255,255,255,0.25)', 
-            display: 'inline-block',
-            px: 1.5, 
-            py: 0.3, 
-            borderRadius: 1, 
-            fontSize: '0.7rem', 
-            fontWeight: 700,
-            mt: 1,
-            letterSpacing: 1,
-            textTransform: 'uppercase'
-          }}>
-            {isStudent ? 'Student Identity Card' : 'Teacher Identity Card'}
-          </Box>
-        </Box>
-
-        {/* Photo Section - Centered */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          py: 3,
-          px: 1.5,
-          flex: '1 0 auto'
-        }}>
-          <Box sx={{
-            position: 'relative',
-            width: 140,
-            height: 140,
-            borderRadius: '50%',
-            border: '5px solid rgba(255,255,255,0.95)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#fff',
-            margin: '0 auto',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              borderRadius: '50%',
-              border: '2px solid rgba(0,0,0,0.1)',
-              pointerEvents: 'none'
-            }
-          }}>
-            {userPhoto ? (
-              <img
-                src={userPhoto}
-                alt={name}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block'
-                }}
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
-                }}
-              />
-            ) : null}
-            <Box sx={{
-              display: userPhoto ? 'none' : 'flex',
+            )}
+            <Box sx={{ 
+              bgcolor: 'white', 
+              color: '#0a4b94',
+              display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '100%',
-              height: '100%',
-              backgroundColor: '#f0f4f8',
-              color: '#0ea5e9',
-              fontSize: '3.5rem',
-              fontWeight: 'bold'
+              px: 1.4, 
+              pt: 0.4,
+              pb: '1.2rem',
+              borderRadius: 3,
+              fontSize: '0.82rem', 
+              fontWeight: 'bold',
+              lineHeight: 1.2,
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              top: '90px',
+              minWidth: 'fit-content',
+              whiteSpace: 'nowrap',
+              boxShadow: 'none',
+              zIndex: 2
             }}>
-              {name && name.charAt(0) ? name.charAt(0).toUpperCase() : '?'}
+              Student Identity Card
             </Box>
           </Box>
-        </Box>
 
-        {/* Details Section - Centered */}
-        <Box sx={{ 
-          textAlign: 'center', 
-          px: 2,
-          pb: 1.5,
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,  // Reduced gap
-          justifyContent: 'space-between',
-          minHeight: '180px'  // Ensure minimum height for content
-        }}>
-          <Box>
-            <Typography variant="h6" sx={{ 
-              fontWeight: 900, 
-              lineHeight: 1.2, 
-              mb: 1,
-              textShadow: '0 2px 4px rgba(0,0,0,0.2)',
-              fontSize: '1.1rem'
+          {/* Photo Section - Below Student Identity Card */}
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center',
+            mt: '0.1in',
+            mb: 0.15,
+            pt: 0.2,
+            position: 'relative',
+            zIndex: 1
+          }}>
+            <Box sx={{
+              width: 70,
+              height: 90,
+              border: '2px solid #0a4b94',
+              bgcolor: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden'
+            }}>
+              {userPhoto ? (
+                <img
+                  src={userPhoto}
+                  alt={name}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block'
+                  }}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <Box sx={{
+                display: userPhoto ? 'none' : 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: '100%',
+                backgroundColor: '#f0f4f8',
+                color: '#0a4b94',
+                fontSize: '1.8rem',
+                fontWeight: 'bold'
+              }}>
+                {name && name.charAt(0) ? name.charAt(0).toUpperCase() : '?'}
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Student Details */}
+          <Box sx={{ 
+            textAlign: 'center', 
+            px: 0.3,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            py: 0.1,
+            mt: 0
+          }}>
+            <Typography variant="h5" sx={{ 
+              fontWeight: 'bold', 
+              lineHeight: 1, 
+              mb: 0.4,
+              color: '#0a4b94',
+              fontSize: '7px',
+              textTransform: 'uppercase'
             }}>
               {name}
             </Typography>
             
-            <Box sx={{ 
-              bgcolor: 'rgba(255,255,255,0.15)', 
-              borderRadius: 1, 
-              p: 1,
-              my: 1,
-              mx: 'auto',
-              width: '90%'
-            }}>
-              {isStudent ? (
+            {/* ID Card Number */}
+            {isStudent && (
+              <Typography variant="body2" sx={{ 
+                fontWeight: 'bold', 
+                lineHeight: 1, 
+                mb: 0.4,
+                color: '#0a4b94',
+                fontSize: '16px',
+                letterSpacing: '0.03em'
+              }}>
+                ID: {(() => {
+                  // Get class name from various possible fields
+                  let className = classroom?.name || data.classroom_name || data.class_name || '';
+                  
+                  // Map Bengali class names to numbers (like SchoolDashboard.jsx)
+                  const bnMap = { 
+                    'প্রথম': 1, 'দ্বিতীয়': 2, 'তৃতীয়': 3, 'চতুর্থ': 4, 'পঞ্চম': 5, 
+                    'ষষ্ঠ': 6, 'সপ্তম': 7, 'অষ্টম': 8, 'নবম': 9, 'দশম': 10, 
+                    'এসএসসি': 10, 'এসএসসি পরীক্ষার্থী': 10 
+                  };
+                  
+                  let classNum = 0;
+                  // First try Bengali word mapping
+                  for (const k in bnMap) { 
+                    if (String(className).includes(k)) { 
+                      classNum = bnMap[k]; 
+                      break; 
+                    } 
+                  }
+                  // If that didn't work, try extracting digits
+                  if (!classNum) { 
+                    const m = String(className).match(/\d+/); 
+                    if (m) classNum = parseInt(m[0], 10); 
+                  }
+                  
+                  const sectionMap = {
+                    'ক': 1, 'খ': 2, 'গ': 3, 'ঘ': 4, 'ঙ': 5,
+                    'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5,
+                    'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5,
+                    'বিজ্ঞান': 1, 'বিজ্ঞান বিভাগ': 1, 'কলা': 2, 'কলা বিভাগ': 2, 'ব্যবসায়': 3, 'ব্যবসায় বিভাগ': 3
+                  };
+                  let sectionNum = parseInt(section?.name?.replace(/\D/g, '')) || sectionMap[section?.name] || 0;
+                  const rollNum = parseInt(data?.roll_number?.replace(/\D/g, '')) || 0;
+                  
+                  console.log('Generating ID - className:', className, 'classNum:', classNum, 'sectionNum:', sectionNum, 'rollNum:', rollNum);
+                  
+                  return `${currentYear}${String(classNum).padStart(2, '0')}${String(sectionNum).padStart(2, '0')}${String(rollNum).padStart(2, '0')}`;
+                })()}
+              </Typography>
+            )}
+            
+            <Box sx={{ textAlign: 'left', mx: 'auto', minWidth: '110px' }}>
+              {isStudent && (
                 <>
-                  <Typography variant="body2" sx={{ 
-                    fontWeight: 700, 
-                    mb: 0.3,
-                    fontSize: '0.85rem'
-                  }}>
-                    Roll No: <Box component="span" sx={{ fontSize: '1rem' }}>{data?.roll_number || 'N/A'}</Box>
-                  </Typography>
-                  <Typography variant="body2" sx={{ 
-                    fontWeight: 700, 
-                    mb: 0.3,
-                    fontSize: '0.85rem'
-                  }}>
-                    ID: <Box component="span" sx={{ fontSize: '1rem' }}>{studentIdCode || 'N/A'}</Box>
-                  </Typography>
-                  <Typography variant="body2" sx={{ 
-                    fontWeight: 700,
-                    fontSize: '0.85rem'
-                  }}>
-                    Class: <Box component="span" sx={{ fontSize: '1rem' }}>{data?.classroom?.name || 'N/A'}</Box>
-                    {data?.section && ` (${data.section.name})`}
-                  </Typography>
-                </>
-              ) : (
-                <>
-                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.3 }}>
-                    ID: {user.username || 'N/A'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    Designation: Teacher
-                  </Typography>
+                  <Box sx={{ display: 'flex', mb: 0.5, whiteSpace: 'nowrap' }}>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '14px',
+                      width: '52px',
+                      flexShrink: 0,
+                      textAlign: 'right',
+                      pr: 0.5
+                    }}>
+                      Class :
+                    </Typography>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '14px'
+                    }}>
+                      {classroom?.name || data.classroom_name || data.class_name || 'N/A'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', mb: 0.5, whiteSpace: 'nowrap' }}>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '14px',
+                      width: '52px',
+                      flexShrink: 0,
+                      textAlign: 'right',
+                      pr: 0.5
+                    }}>
+                      Roll :
+                    </Typography>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '14px'
+                    }}>
+                      {data?.roll_number || 'N/A'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', mb: 0.5, whiteSpace: 'nowrap' }}>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '14px',
+                      width: '52px',
+                      flexShrink: 0,
+                      textAlign: 'left'
+                    }}>
+                      Section
+                    </Typography>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '14px'
+                    }}>
+                      {section?.name || 'N/A'}
+                    </Typography>
+                  </Box>
                 </>
               )}
             </Box>
-          </Box>
 
-          {/* QR/Validity removed for compact front side */}
-        </Box>
-      </Box>
-
-      {/* Back Side */}
-      <Box className="id-card id-card-back" sx={{ 
-        background: 'linear-gradient(160deg, #14b8a6 0%, #84cc16 100%)',
-        borderRadius: 2,
-        p: 1.5,
-        pb: 3,
-        color: 'white',
-        position: 'relative',
-        boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
-        mt: 2
-      }}>
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1, fontSize: '0.8rem', letterSpacing: 0.3 }}>
-              গুরুত্বপূর্ণ নির্দেশনা
-            </Typography>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', mb: 0.5 }}>
-              • এই কার্ডটি {school?.name || 'School'}-এর সম্পত্তি
-            </Typography>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', mb: 0.5 }}>
-              • ক্যাম্পাসে অবস্থানের সময় সর্বদা কার্ডটি সঙ্গে রাখতে হবে
-            </Typography>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', mb: 0.5 }}>
-              • কার্ডটি পাওয়া গেলে অনুগ্রহ করে স্কুল অফিসে জমা দিন
-            </Typography>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem' }}>
-              • এই কার্ড হস্তান্তরযোগ্য নয়
-            </Typography>
-          </Box>
-
-          <Box sx={{ bgcolor: 'rgba(255,255,255,0.2)', p: 1, borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>
-              জরুরি যোগাযোগ
-            </Typography>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem' }}>
-              স্কুল: {school?.name || 'N/A'}
-            </Typography>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem' }}>
-              প্রধান শিক্ষক: {headPhone || 'N/A'}
-            </Typography>
-          </Box>
-
-          <Box sx={{ textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.3)', pt: 1, mt: 'auto', mb: '18px' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 0.5, height: '30px' }}>
-              <img
-                src={signatureUrl}
-                alt="Authorized Signature"
-                style={{ width: '100%', maxWidth: '150px', height: 'auto', filter: 'brightness(0) invert(1)' }}
-                onError={(e) => {
-                  e.target.onerror = null; // Prevent infinite loop
-                  e.target.src = '/images/signatures/headmaster.png'; // Fallback to default
-                }}
-              />
+            {/* Signature with School Seal Background */}
+            <Box sx={{ 
+              mt: -4.3,
+              textAlign: 'right',
+              pr: 0.5,
+              pt: 0.1,
+              position: 'relative'
+            }}>
+              <Box sx={{ display: 'inline-block', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+                {/* School Seal as Background - centered behind signature */}
+                {schoolLogo && (
+                  <Box 
+                    component="img"
+                    src={schoolLogo}
+                    sx={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '70px',
+                      height: '70px',
+                      opacity: 0.15,
+                      zIndex: 0,
+                      pointerEvents: 'none'
+                    }}
+                    alt=""
+                  />
+                )}
+                <img
+                  src={signatureUrl}
+                  alt="Authorized Signature"
+                  style={{ 
+                    width: '45px', 
+                    height: 'auto', 
+                    filter: 'brightness(0)',
+                    display: 'block',
+                    position: 'relative',
+                    zIndex: 1
+                  }}
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = '/images/signatures/headmaster.png';
+                  }}
+                />
+              </Box>
             </Box>
-            <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: 600 }}>
-              প্রধান শিক্ষক
+          </Box>
+
+          {/* Bottom Bar */}
+          <Box sx={{ 
+            bgcolor: '#0a4b94',
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            px: 0.8,
+            py: 0.3,
+            flexShrink: 0,
+            mt: -3.7
+          }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: 'white' }}>
+              Session: {currentYear}
             </Typography>
-            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6rem', opacity: 0.9, mt: 0.2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: 'white' }}>
+              Headmaster
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* Back Side - Portrait - EXACT SAME SIZE AS FRONT */}
+        <Box className="id-card id-card-back" sx={{ 
+          background: 'linear-gradient(180deg, #ffffff 0%, #ffffff 70%, #0a4b94 70%, #0a4b94 100%)',
+          borderRadius: 0,
+          color: 'black',
+          position: 'relative',
+          boxShadow: 'none',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '386px !important',
+          width: '250px !important',
+          mt: 1,
+          border: '2px solid #0a4b94',
+          '&.id-card-back': {
+            height: '386px !important',
+            width: '250px !important',
+            minHeight: '386px !important',
+            maxHeight: '386px !important'
+          }
+        }}>
+          {/* Top Section - White */}
+          <Box sx={{ px: 0.15, py: 0.15, pb: 0.1, flexShrink: 0 }}>
+            <Box sx={{ 
+              display: 'inline-block', 
+              position: 'relative',
+              mb: 0.1
+            }}>
+              <Typography variant="h6" sx={{ 
+                fontWeight: 'bold', 
+                fontSize: '0.13rem',
+                color: '#333',
+                whiteSpace: 'nowrap',
+                letterSpacing: '-0.02em'
+              }}>
+                If found, please return to
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* School Name */}
+          <Box sx={{ textAlign: 'center', mb: 0.2, px: 0.05, flexShrink: 0 }}>
+            <Typography
+              className="id-card-back-school-name"
+              variant="h5"
+              sx={{ 
+                fontWeight: 'bold', 
+                fontSize: '0.045rem',
+                color: '#0a4b94',
+                whiteSpace: 'normal',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.05,
+                wordBreak: 'break-word'
+              }}
+            >
               {school?.name || 'School Name'}
             </Typography>
           </Box>
+
+          {/* School Seal/Logo + QR Code - moved up */}
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-around',
+            alignItems: 'center',
+            px: 0.6,
+            pt: 0.2,
+            pb: 0.1,
+            mt: 0.2,
+            flexShrink: 0
+          }}>
+            {/* School Logo */}
+            {schoolLogo && (
+              <Avatar 
+                src={schoolLogo} 
+                sx={{ 
+                  width: 42, 
+                  height: 42, 
+                  border: '2px solid #0a4b94',
+                  bgcolor: 'white'
+                }} 
+              />
+            )}
+            {/* QR Code */}
+            <Box sx={{
+              position: 'relative',
+              p: 0.1,
+              bgcolor: 'white'
+            }}>
+              <QRCodeSVG 
+                value={qrData} 
+                size={42}
+                level="H"
+                fgColor="#000000"
+                bgColor="#ffffff"
+              />
+            </Box>
+          </Box>
+
+          {/* Middle Content - Instructions */}
+          <Box sx={{ px: 0.4, mt: 0.3, mb: 0.1, flex: '0 0 auto', overflow: 'hidden' }}>
+            <Typography variant="subtitle1" sx={{ 
+              fontWeight: 'bold', 
+              fontSize: '0.72rem',
+              mb: 0.15,
+              color: '#0a4b94'
+            }}>
+              গুরুত্বপূর্ণ নির্দেশনা
+            </Typography>
+            <Box component="ul" sx={{ 
+              pl: 2.2, 
+              m: 0,
+              listStyleType: 'disc'
+            }}>
+              <Box component="li" sx={{ mb: 0.1 }}>
+                <Typography variant="caption" sx={{ fontSize: '0.62rem', lineHeight: 1.25 }}>
+                  এই কার্ডটি {school?.name || 'স্কুল'}-এর সম্পত্তি
+                </Typography>
+              </Box>
+              <Box component="li" sx={{ mb: 0.1 }}>
+                <Typography variant="caption" sx={{ fontSize: '0.62rem', lineHeight: 1.25 }}>
+                  ক্যাম্পাসে অবস্থানের সময় সর্বদা কার্ডটি সঙ্গে রাখতে হবে
+                </Typography>
+              </Box>
+              <Box component="li" sx={{ mb: 0.1 }}>
+                <Typography variant="caption" sx={{ fontSize: '0.62rem', lineHeight: 1.25 }}>
+                  কার্ডটি পাওয়া গেলে অনুগ্রহ করে স্কুল অফিসে জমা দিন
+                </Typography>
+              </Box>
+              <Box component="li">
+                <Typography variant="caption" sx={{ fontSize: '0.62rem', lineHeight: 1.25 }}>
+                  এই কার্ড হস্তান্তরযোগ্য নয়
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Bottom Section - Blue */}
+          <Box sx={{ 
+            bgcolor: '#0a4b94',
+            color: 'white',
+            px: 0.6,
+            pt: 0.75,
+            pb: 0.75,
+            textAlign: 'center',
+            flexShrink: 0,
+            mt: 'auto'
+          }}>
+            <Typography variant="body2" sx={{ fontSize: '14px', mb: 0.85, lineHeight: 1.3 }}>
+              মেইল: hsbhatra1906@gmail.com
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box sx={{ mr: 0.5, fontSize: '16px' }}>📞</Box>
+              <Typography variant="body2" sx={{ fontSize: '14px', lineHeight: 1.3 }}>
+                মোবাইল: 01712923054
+              </Typography>
+            </Box>
+          </Box>
         </Box>
-        <Box sx={{ position: 'absolute', bottom: 16, left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
-          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.95 }}>
-            Valid: জানুয়ারি {currentYear} - ডিসেম্বর {currentYear}
-          </Typography>
-        </Box>
-      </Box>
       </Box>
     </Box>
   );

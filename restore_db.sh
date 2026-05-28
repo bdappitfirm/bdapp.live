@@ -1,40 +1,59 @@
 #!/bin/bash
-set -e
+# restore_db.sh - Restore PostgreSQL database from backup
 
-# Stop services to avoid DB locks
-systemctl stop gunicorn
-systemctl stop gunicorn.socket
+BACKUP_DIR="/var/www/bdapp/backups/db"
+DB_NAME="local_pg_db"
+DB_USER="local_pg_user"
 
-# Terminate existing connections to the database
-sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'local_pg_db' AND pid <> pg_backend_pid();"
+echo "🚀 Starting Database Restore..."
 
-# Drop and recreate the database
-sudo -u postgres dropdb local_pg_db --if-exists
-sudo -u postgres createdb local_pg_db
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE local_pg_db TO local_pg_user;"
-# In newer PostgreSQL, we also need to grant on public schema
-sudo -u postgres psql -d local_pg_db -c "GRANT ALL ON SCHEMA public TO local_pg_user;"
+# Stop services
+echo "🔄 Stopping services..."
+systemctl stop gunicorn gunicorn.socket daphne 2>/dev/null
 
-# Move dump to /tmp for postgres access
-mv /root/local_db_final.sql /tmp/local_db_final.sql
-chmod 644 /tmp/local_db_final.sql
+# Find latest backup
+if [ -d "$BACKUP_DIR" ]; then
+    LATEST_BACKUP=$(ls -t $BACKUP_DIR/*.sql 2>/dev/null | head -1)
+    if [ -z "$LATEST_BACKUP" ]; then
+        LATEST_BACKUP=$(ls -t $BACKUP_DIR/*.dump 2>/dev/null | head -1)
+    fi
+fi
 
-# Restore the dump using psql
-sudo -u postgres psql -d local_pg_db -f /tmp/local_db_final.sql
+# Also check root directory for backups
+if [ -z "$LATEST_BACKUP" ]; then
+    LATEST_BACKUP=$(ls -t /var/www/bdapp/*.sql 2>/dev/null | head -1)
+    if [ -z "$LATEST_BACKUP" ]; then
+        LATEST_BACKUP=$(ls -t /var/www/bdapp/*.dump 2>/dev/null | head -1)
+    fi
+fi
 
-# Grant permissions to the user
-sudo -u postgres psql -d local_pg_db -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO local_pg_user;"
-sudo -u postgres psql -d local_pg_db -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO local_pg_user;"
-sudo -u postgres psql -d local_pg_db -c "GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO local_pg_user;"
-sudo -u postgres psql -d local_pg_db -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO local_pg_user;"
-sudo -u postgres psql -d local_pg_db -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO local_pg_user;"
+if [ -z "$LATEST_BACKUP" ]; then
+    echo "❌ ERROR: No backup file found!"
+    echo "Please place your backup file (.sql or .dump) in /var/www/bdapp/ or /var/www/bdapp/backups/db/"
+    exit 1
+fi
 
-# Cleanup
-rm /tmp/local_db_final.sql
+echo "✅ Found backup: $LATEST_BACKUP"
+echo "📦 Restoring database..."
 
-# Start services back up
+# Restore based on file type
+if [[ "$LATEST_BACKUP" == *.sql ]]; then
+    sudo -u postgres psql -d $DB_NAME -f "$LATEST_BACKUP"
+else
+    sudo -u postgres pg_restore -d $DB_NAME "$LATEST_BACKUP"
+fi
+
+# Fix ownership
+echo "🔑 Fixing database ownership..."
+sudo -u postgres psql -d $DB_NAME <<EOF
+REASSIGN OWNED BY postgres TO $DB_USER;
+ALTER SCHEMA public OWNER TO $DB_USER;
+EOF
+
+# Restart services
+echo "🚀 Restarting services..."
 systemctl start gunicorn.socket
 systemctl start gunicorn
-systemctl restart nginx
+systemctl start daphne
 
-echo "Database restore completed successfully."
+echo "✅ Database Restore Complete!"

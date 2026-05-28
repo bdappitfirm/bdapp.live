@@ -7,15 +7,18 @@ def is_effective_admin(user):
     - Superuser or staff
     - Profile role is 'admin' or 'super_admin'
     - Profile designation includes 'প্রধান শিক্ষক', 'Headmaster', or 'Principal'
-    - Username is 'shamir' (Principal) or 'bdadmin' (Superuser)
+    - Username is 'shamir', 'umor', or 'bdadmin'
     """
     if not user or not user.is_authenticated:
         return False
     
     # Check for specific usernames (Principal and Superuser)
-    # Strip zero-width characters (like \u200d) and whitespace
-    uname = str(getattr(user, 'username', '')).lower().replace('\u200d', '').strip()
-    if uname in ('shamir', 'bdadmin'):
+    # Strip zero-width characters (like \u200d, \u200b, \ufeff) and whitespace
+    uname = str(getattr(user, 'username', '')).lower()
+    # Remove all zero-width and invisible characters
+    uname = ''.join(c for c in uname if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+    uname = uname.strip()
+    if uname in ('shamir', 'bdadmin', 'umor'):
         return True
         
     if getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False):

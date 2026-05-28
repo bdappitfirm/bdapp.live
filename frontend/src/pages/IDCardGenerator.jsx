@@ -39,7 +39,8 @@ function IDCardGenerator() {
   const [loading, setLoading] = useState(false);
   const [school, setSchool] = useState(null);
   const [classrooms, setClassrooms] = useState([]);
-  const [sections, setSections] = useState([]);
+  const [allSections, setAllSections] = useState([]);
+  const [filterSections, setFilterSections] = useState([]);
   const [hmPhone, setHmPhone] = useState('');
   
   // Generated cards
@@ -49,7 +50,18 @@ function IDCardGenerator() {
     if (!id) return;
     loadSchool();
     loadClassrooms();
+    loadAllSections();
   }, [id]);
+
+  const loadAllSections = () => {
+    api.get(`/api/academics/sections/?school=${id}`)
+      .then(res => {
+        const data = Array.isArray(res.data) ? res.data : res.data.results || [];
+        console.log('Loaded all sections:', data);
+        setAllSections(data);
+      })
+      .catch(err => console.error(err));
+  };
 
   const loadSchool = () => {
     api.get(`/api/schools/${id}/`)
@@ -93,13 +105,13 @@ function IDCardGenerator() {
 
   const loadSections = (classroomId) => {
     if (!classroomId) {
-      setSections([]);
+      setFilterSections([]);
       return;
     }
     api.get(`/api/academics/sections/?classroom=${classroomId}`)
       .then(res => {
         const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        setSections(data);
+        setFilterSections(data);
       })
       .catch(err => console.error(err));
   };
@@ -231,6 +243,8 @@ function IDCardGenerator() {
         body {
           visibility: hidden !important;
           background: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
         }
         .id-card-container, 
         .id-card-container * {
@@ -241,9 +255,12 @@ function IDCardGenerator() {
           left: 0 !important;
           top: 0 !important;
           width: 100% !important;
-          display: block !important;
-          text-align: center !important; /* Center inline-block wrappers */
-          padding: 0 !important;
+          display: flex !important;
+          flex-wrap: wrap !important;
+          justify-content: flex-start !important;
+          align-items: flex-start !important;
+          gap: 8mm !important;
+          padding: 8mm !important;
           margin: 0 !important;
           background: white !important;
         }
@@ -251,18 +268,34 @@ function IDCardGenerator() {
         .id-card-wrapper {
           page-break-inside: avoid !important;
           break-inside: avoid !important;
-          display: inline-block !important;
-          margin: 5mm !important;
+          display: block !important;
+          margin: 6mm !important;
+          width: calc(33.33% - 12mm) !important;
+          box-sizing: border-box !important;
           vertical-align: top !important;
-          text-align: left !important; /* Reset alignment for card contents */
         }
 
         .id-card {
           page-break-inside: avoid !important;
           break-inside: avoid !important;
-          overflow: visible !important;
+          overflow: hidden !important;
           border: 1px solid #eee !important;
           box-shadow: none !important;
+          width: 100% !important;
+        }
+
+        /* 66.7mm x 90.5mm size (2.62x3.56 inches) */
+        .id-card-front, .id-card-back {
+          width: 66.7mm !important;
+          min-height: 90.5mm !important;
+          max-height: 90.5mm !important;
+          height: 90.5mm !important;
+          position: relative !important;
+          margin: 0 auto !important;
+        }
+
+        .id-card-front {
+          margin-bottom: 3mm !important; /* Gap between front and back */
         }
 
         /* Fix for top half missing: Ensure header backgrounds and filters don't break print */
@@ -275,10 +308,6 @@ function IDCardGenerator() {
           opacity: 1 !important;
           visibility: visible !important;
           display: block !important;
-        }
-        
-        .id-card-front {
-          margin-bottom: 4mm !important; /* Gap between front and back */
         }
         
         /* Ensure avatars (logo/photo) are visible */
@@ -333,21 +362,26 @@ function IDCardGenerator() {
         toast.error('No ID cards found to export');
         return;
       }
+      
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const desiredWidthMM = 70; // Bigger than CR80 for better visibility on A4
-      const marginTopMM = 12;
-      const marginBottomMM = 12;
-      const gapMM = 6;
+      const cardWidthMM = 60.96;
+      const cardHeightMM = 82.55;
+      const marginTopMM = 8;
+      const marginLeftMM = 8;
+      const gapXMM = 8;
+      const gapYMM = 8;
+      const cols = 3;
+      
+      const renderedCards = [];
       for (let i = 0; i < wrappers.length; i++) {
         const wrapper = wrappers[i];
         const frontEl = wrapper.querySelector('.id-card-front');
         const backEl = wrapper.querySelector('.id-card-back');
 
-        if (!frontEl && !backEl) continue;
+        if (!frontEl) continue;
 
-        // Render canvases
         const renderCard = async (el) => {
           if (!el) return null;
           const cnv = await html2canvas(el, { 
@@ -356,43 +390,48 @@ function IDCardGenerator() {
             backgroundColor: '#ffffff', 
             logging: false 
           });
-          const img = cnv.toDataURL('image/png');
-          return { img, wpx: cnv.width, hpx: cnv.height };
+          return cnv.toDataURL('image/png');
         };
 
         const front = await renderCard(frontEl);
         const back = await renderCard(backEl);
-
-        // Compute scaled dimensions keeping aspect ratio, place both on ONE page
-        let fw = 0, fh = 0, bw = 0, bh = 0;
-        if (front) {
-          fw = desiredWidthMM;
-          fh = (front.hpx / front.wpx) * fw;
-        }
-        if (back) {
-          bw = desiredWidthMM;
-          bh = (back.hpx / back.wpx) * bw;
-        }
-        let totalH = (front ? fh : 0) + (front && back ? gapMM : 0) + (back ? bh : 0);
-        const availableH = pageHeight - marginTopMM - marginBottomMM;
-        if (totalH > availableH) {
-          const scale = availableH / totalH;
-          fw *= scale; fh *= scale;
-          bw *= scale; bh *= scale;
-          totalH = availableH; // now fits
-        }
-
-        if (i > 0) pdf.addPage();
-        const x = (pageWidth - Math.max(fw, bw)) / 2;
-        let y = marginTopMM + Math.max(0, (availableH - ((front ? fh : 0) + (front && back ? gapMM : 0) + (back ? bh : 0))) / 2);
-        if (front) {
-          pdf.addImage(front.img, 'PNG', x, y, fw, fh);
-          y += fh + (back ? gapMM : 0);
-        }
-        if (back) {
-          pdf.addImage(back.img, 'PNG', x, y, bw, bh);
-        }
+        renderedCards.push({ front, back });
       }
+      
+      // Separate front and back cards
+      const frontCards = renderedCards.map(card => card.front);
+      const backCards = renderedCards.map(card => card.back);
+      
+      // Function to add cards to PDF (3x3 grid = 9 per page)
+      const cardsPerPage = 9;
+      const addCardsToPDF = (cards) => {
+        for (let i = 0; i < cards.length; i++) {
+          const indexOnPage = i % cardsPerPage;
+          const row = Math.floor(indexOnPage / cols);
+          const col = indexOnPage % cols;
+          
+          if (i > 0 && indexOnPage === 0) {
+            pdf.addPage();
+          }
+          
+          const x = marginLeftMM + col * (cardWidthMM + gapXMM);
+          const y = marginTopMM + row * (cardHeightMM + gapYMM);
+          
+          if (cards[i]) {
+            pdf.addImage(cards[i], 'PNG', x, y, cardWidthMM, cardHeightMM);
+          }
+        }
+      };
+      
+      // Add all front cards first
+      addCardsToPDF(frontCards);
+      
+      // Add new page and then back cards
+      if (frontCards.length > 0 && backCards.length > 0) {
+        pdf.addPage();
+      }
+      addCardsToPDF(backCards);
+      
       const fileName = `id-cards-${id}-${new Date().toISOString().slice(0,10)}.pdf`;
       pdf.save(fileName);
       document.head.removeChild(tempStyle);
@@ -575,7 +614,7 @@ function IDCardGenerator() {
                   disabled={!classFilter}
                 >
                   <MenuItem value="">সব সেকশন</MenuItem>
-                  {sections.map((sec) => (
+                  {filterSections.map((sec) => (
                     <MenuItem key={sec.id} value={sec.id}>{sec.name}</MenuItem>
                   ))}
                 </TextField>
@@ -647,6 +686,8 @@ function IDCardGenerator() {
               type={tabValue === 0 ? 'student' : 'teacher'}
               data={item}
               school={school}
+              classrooms={classrooms}
+              sections={allSections}
               overridePhone={hmPhone || (String(id) === '16' ? '01712923054' : undefined)}
               signatureUrl={String(id) === '16' ? `${window.location.origin}/signature.png` : undefined}
             />

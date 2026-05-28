@@ -2,6 +2,7 @@
 .id-card-wrapper {
   display: inline-block;
   margin: 10px;
+  vertical-align: top;
 }
 
 .id-card {
@@ -9,14 +10,26 @@
   border-radius: 6px;
 }
 
-/* Screen preview: scale CR80 portrait (54x86mm) to pixels nicely */
+/* Force exact size for ALL screens */
+.id-card-front,
+.id-card-back {
+  width: 250px !important;
+  height: 386px !important;
+  min-height: 386px !important;
+  max-height: 386px !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Screen preview: 76.2x95.25mm */
 @media screen {
   .id-card-front,
   .id-card-back {
-    /* approximate scale for screen preview */
-    width: 240px;
-    min-height: 380px;
-    height: auto;
+    /* EXACT size for both front and back */
+    width: 250px !important;
+    height: 386px !important;
   }
   .id-card-wrapper {
     transition: transform 0.2s;
@@ -26,11 +39,20 @@
   }
 }
 
+.id-card-back-school-name {
+  font-size: 0.045rem !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.1 !important;
+}
+
 /* Print Styles */
 @media print {
   body {
     visibility: hidden !important;
     background: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   
   .id-card-container,
@@ -43,9 +65,12 @@
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
-    display: block !important;
-    text-align: center !important; /* Center inline-block wrappers */
-    padding: 0 !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    gap: 8mm !important;
+    padding: 8mm !important;
     margin: 0 !important;
     background: white !important;
   }
@@ -53,43 +78,42 @@
   .id-card-wrapper {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    display: inline-block !important;
-    margin: 5mm !important;
+    display: block !important;
+    margin: 6mm !important;
+    width: calc(33.33% - 12mm) !important;
+    box-sizing: border-box !important;
     vertical-align: top !important;
-    text-align: left !important; /* Reset alignment */
+  }
+
+  .id-card-back-school-name {
+    font-size: 0.045rem !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    line-height: 1.1 !important;
   }
 
   .id-card {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     overflow: visible !important;
-    margin: 0 !important;
-    box-shadow: none !important;
     border: 1px solid #eee !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    height: auto !important;
   }
 
-  /* True CR80 portrait size: 54mm x 86mm */
+  /* New size: 66.7mm x 90.5mm (2.62x3.56 inches) */
   .id-card-front, .id-card-back {
-    width: 54mm !important;
-    min-height: 86mm !important;
+    width: 66.7mm !important;
+    min-height: 90.5mm !important;
+    max-height: none !important;
     height: auto !important;
     position: relative !important;
+    margin: 0 auto !important;
   }
 
   .id-card-front {
     margin-bottom: 4mm !important; /* Gap between front and back */
-  }
-
-  /* Fix for missing top half (header) */
-  .id-card-front > div:first-of-type,
-  .id-card-header {
-    background-color: #075985 !important;
-    background-image: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    display: block !important;
   }
 
   /* Ensure avatars (logo/photo) are visible */
@@ -100,11 +124,6 @@
     opacity: 1 !important;
   }
 
-  /* Ensure text is white for front */
-  .id-card-front {
-    color: white !important;
-  }
-  
   .no-print {
     display: none !important;
   }

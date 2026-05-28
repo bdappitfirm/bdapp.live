@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAccessToken, login as authLogin, logout as authLogout } from '../utils/auth';
+import { getAccessToken, login as authLogin, logout as authLogout, clearTokens } from '../utils/auth';
 import api from '../utils/api';
 
 const AuthContext = createContext(null);
@@ -50,7 +50,11 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Failed to fetch user:', error);
-      setUser(null);
+      // If we get a 401, clear tokens and redirect
+      if (error.response && error.response.status === 401) {
+        clearTokens();
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }

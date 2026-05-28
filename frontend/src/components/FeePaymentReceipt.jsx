@@ -578,7 +578,7 @@ const FeePaymentReceipt = () => {
                 <img src={schoolData.logo} alt={schoolData.name} style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
               )}
             </Box>
-            <Typography variant="h5" sx={{ fontWeight: 'bold', fontSize: '1.5rem' }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', fontSize: '1.8rem' }}>
               {schoolData?.name || 'স্কুল নাম'}
             </Typography>
             <Box sx={{ width: 80, height: 80, border: '1px solid #000', borderRadius: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -588,50 +588,50 @@ const FeePaymentReceipt = () => {
             </Box>
           </Box>
           {schoolData?.bank_info && (
-            <Typography variant="body2" sx={{ fontSize: '0.9rem', mt: 1 }}>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem', mt: 1, color: '#000' }}>
               {schoolData.bank_info}
             </Typography>
           )}
         </Box>
 
-        <Box sx={{ textAlign: 'center', mb: 2, py: 1, bgcolor: '#f5f5f5', border: '1px solid #000' }}>
-          <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1.2rem' }}>
+        <Box sx={{ textAlign: 'center', mb: 2, py: 1, bgcolor: 'white', border: '1px solid #000' }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1.4rem', color: '#000' }}>
             বেতন পরিশোধের রশিদ
           </Typography>
-          <Typography variant="body2" sx={{ fontStyle: 'italic', color: '#666' }}>
+          <Typography variant="body2" sx={{ fontStyle: 'italic', color: '#000', fontSize: '1rem' }}>
             {copyLabel}
           </Typography>
         </Box>
 
-        <Grid container spacing={1} sx={{ mb: 2, fontSize: '0.9rem' }}>
+        <Grid container spacing={1} sx={{ mb: 2, fontSize: '1.1rem' }}>
           <Grid item xs={6}>
-            <Typography variant="body2"><strong>রশিদ নং:</strong> {data.receiptNumber}</Typography>
-            <Typography variant="body2"><strong>তারিখ:</strong> {data.paymentData.date}</Typography>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem' }}><strong>রশিদ নং:</strong> {data.receiptNumber}</Typography>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem' }}><strong>তারিখ:</strong> {data.paymentData.date}</Typography>
           </Grid>
           <Grid item xs={6}>
-            <Typography variant="body2"><strong>শিক্ষার্থীর নাম:</strong> {data.student?.user?.first_name} {data.student?.user?.last_name}</Typography>
-            <Typography variant="body2"><strong>শ্রেণি:</strong> {data.student?.classroom?.name || '-'}</Typography>
-            <Typography variant="body2"><strong>শাখা:</strong> {data.student?.section?.name || '-'}</Typography>
-            <Typography variant="body2"><strong>রোল:</strong> {data.student?.roll_number || '-'}</Typography>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem' }}><strong>শিক্ষার্থীর নাম:</strong> {data.student?.user?.first_name} {data.student?.user?.last_name}</Typography>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem' }}><strong>শ্রেণি:</strong> {data.student?.classroom?.name || '-'}</Typography>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem' }}><strong>শাখা:</strong> {data.student?.section?.name || '-'}</Typography>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem' }}><strong>রোল:</strong> {data.student?.roll_number || '-'}</Typography>
           </Grid>
         </Grid>
 
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>ফি-এর বিবরণঃ</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#000' }}>ফি-এর বিবরণঃ</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2">গ্রহণ পদ্ধতি:</Typography>
+              <Typography variant="body2" sx={{ fontSize: '1.1rem', color: '#000' }}>গ্রহণ পদ্ধতি:</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Checkbox checked={methodChecks.cash} onChange={() => toggleMethod('cash')} />
-                <Typography variant="body2">ক্যাশ</Typography>
+                <Checkbox checked={methodChecks.cash} onChange={() => toggleMethod('cash')} sx={{ color: '#000', '&.Mui-checked': { color: '#000' } }} />
+                <Typography variant="body2" sx={{ fontSize: '1.1rem', color: '#000' }}>ক্যাশ</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Checkbox checked={methodChecks.bkash} onChange={() => toggleMethod('bkash')} />
-                <Typography variant="body2">বিকাশ</Typography>
+                <Checkbox checked={methodChecks.bkash} onChange={() => toggleMethod('bkash')} sx={{ color: '#000', '&.Mui-checked': { color: '#000' } }} />
+                <Typography variant="body2" sx={{ fontSize: '1.1rem', color: '#000' }}>বিকাশ</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Checkbox checked={methodChecks.bank} onChange={() => toggleMethod('bank')} />
-                <Typography variant="body2">ব্যাংক</Typography>
+                <Checkbox checked={methodChecks.bank} onChange={() => toggleMethod('bank')} sx={{ color: '#000', '&.Mui-checked': { color: '#000' } }} />
+                <Typography variant="body2" sx={{ fontSize: '1.1rem', color: '#000' }}>ব্যাংক</Typography>
               </Box>
             </Box>
           </Box>
@@ -765,11 +765,11 @@ const FeePaymentReceipt = () => {
           const asText = (num) => `৳${Math.max(0, num).toFixed(2)}`;
           
           return (
-            <Table size="small" sx={{ border: '1px solid #000' }}>
+            <Table size="small" sx={{ border: '1px solid #000', '& .MuiTableCell-root': { fontSize: '1.3rem' } }}>
               <TableHead>
               <TableRow>
-                  <TableCell sx={{ border: '1px solid #000', fontWeight: 'bold', bgcolor: '#e3f2fd' }}>বিবরণ</TableCell>
-                  <TableCell align="right" sx={{ border: '1px solid #000', fontWeight: 'bold', bgcolor: '#e3f2fd' }}>পরিমাণ</TableCell>
+                  <TableCell sx={{ border: '1px solid #000', fontWeight: 'bold', bgcolor: 'white' }}>বিবরণ</TableCell>
+                  <TableCell align="right" sx={{ border: '1px solid #000', fontWeight: 'bold', bgcolor: 'white' }}>পরিমাণ</TableCell>
               </TableRow>
             </TableHead>
               <TableBody>
@@ -791,19 +791,19 @@ const FeePaymentReceipt = () => {
                   { key: 'exam', label: 'পরীক্ষার ফি', amount: examAmount }
                 ].map((row) => (
                   <TableRow key={row.key}>
-                    <TableCell sx={{ border: '1px solid #000' }}>{row.label}</TableCell>
-                    <TableCell align="right" sx={{ border: '1px solid #000' }}>
+                    <TableCell sx={{ border: '1px solid #000', fontSize: '1.3rem' }}>{row.label}</TableCell>
+                    <TableCell align="right" sx={{ border: '1px solid #000', fontSize: '1.3rem' }}>
                       <TextField
                         type="number"
                         size="small"
-                        value={manualAmounts[row.key] ?? ''}
+                        value={manualAmounts[row.key] || ''}
                         onChange={(e) => {
                           const val = Math.max(0, Number(e.target.value || 0));
                           setManualAmounts(prev => ({ ...prev, [row.key]: val }));
                         }}
-                        inputProps={{ min: 0, step: '0.01' }}
-                        placeholder={String(row.amount ?? '')}
-                        sx={{ width: 140, '& .MuiInputBase-input::placeholder': { color: '#9aa0a6' } }}
+                        inputProps={{ min: 0, step: '0.01', style: { fontSize: '1.3rem' } }}
+                        placeholder=""
+                        sx={{ width: 150, '& .MuiInputBase-root': { fontSize: '1.3rem' } }}
                       />
                     </TableCell>
                   </TableRow>
@@ -814,32 +814,32 @@ const FeePaymentReceipt = () => {
                     <TextField
                       type="number"
                       size="small"
-                      value={fineAmount}
+                      value={fineAmount || ''}
                       onChange={(e) => setFineAmount(Math.max(0, Number(e.target.value || 0)))}
                       inputProps={{ min: 0, step: '0.01' }}
-                      placeholder="পরিমাণ"
+                      placeholder=""
                       sx={{ width: 140 }}
                     />
                   </TableCell>
                 </TableRow>
-                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                <TableRow sx={{ bgcolor: 'white' }}>
                   <TableCell sx={{ border: '1px solid #000', fontWeight: 'bold' }}>মোট</TableCell>
                   <TableCell align="right" sx={{ border: '1px solid #000', fontWeight: 'bold' }}>{'৳' + Math.max(0, ([
-                      { key: 'registration', amount: registrationFeeAmount },
-                      { key: 'session', amount: sessionFeeAmount },
-                      { key: 'assessment', amount: assessmentFeeAmount },
-                      { key: 'board', amount: boardFeeAmount },
-                      { key: 'exam_center', amount: examCenterFeeAmount },
-                      { key: 'ict', amount: ictFeeAmount },
-                      { key: 'sports', amount: sportsFeeAmount },
-                      { key: 'development', amount: developmentFeeTotal },
-                      { key: 'electricity', amount: electricityFeeAmount },
-                      { key: 'tc', amount: tcFeeAmount },
-                      { key: 'computer_lab', amount: computerLabFeeAmount },
-                      { key: 'scouts', amount: scoutsFeeAmount },
-                      { key: 'admission', amount: admissionAmount },
-                      { key: 'monthly', amount: monthlyAmount },
-                      { key: 'exam', amount: examAmount }
+                      { key: 'registration' },
+                      { key: 'session' },
+                      { key: 'assessment' },
+                      { key: 'board' },
+                      { key: 'exam_center' },
+                      { key: 'ict' },
+                      { key: 'sports' },
+                      { key: 'development' },
+                      { key: 'electricity' },
+                      { key: 'tc' },
+                      { key: 'computer_lab' },
+                      { key: 'scouts' },
+                      { key: 'admission' },
+                      { key: 'monthly' },
+                      { key: 'exam' }
                   ].reduce((acc, r) => acc + Number(manualAmounts[r.key] || 0), 0) + Number(fineAmount || 0))).toFixed(2)}</TableCell>
                 </TableRow>
               </TableBody>
@@ -850,28 +850,10 @@ const FeePaymentReceipt = () => {
 
 
 
-      <Box sx={{ mb: 2, p: 1.5, textAlign: 'center', border: '1px dashed #000', bgcolor: '#fafafa' }}>
-        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>কথায়</Typography>
-        <Typography variant="body2">
+      <Box sx={{ mb: 2, p: 1.5, textAlign: 'center', border: '1px dashed #000', bgcolor: 'white' }}>
+        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '1.1rem' }}>কথায়</Typography>
+        <Typography variant="body2" sx={{ fontSize: '1.1rem' }}>
           {(() => {
-            const clsId = data.student?.classroom?.id;
-            const clsName = data.student?.classroom?.name || '';
-            const row = (data.classFeeMatrix || []).find(r => r.classId === clsId) || (data.classFeeMatrix || []).find(r => clsName.includes(r.className));
-            const monthly = Number(row?.monthly || 0);
-            const session = Number(row?.session || 0);
-            const assessment = Number(row?.assessment || 0);
-            const reg = Number(data.feeSummary?.registration_fee ?? 350);
-            const ict = Number(data.feeSummary?.ict_fee ?? 200);
-            const sports = Number(data.feeSummary?.sports_fee ?? 75);
-            const dev = Number(data.feeSummary?.development_fee ?? 300);
-            const elec = Number(data.feeSummary?.electricity_welfare_fee ?? 30);
-            const tc = Number(data.feeSummary?.tc_certificate_fee ?? 300);
-            const lab = Number(data.feeSummary?.computer_lab_fee ?? 20);
-            const scouts = Number(data.feeSummary?.scouts_fee ?? 20);
-            const board = Number(data.feeSummary?.board_fee ?? 0);
-            const center = Number(data.feeSummary?.exam_center_fee ?? 0);
-            const admission = Number(data.feeSummary?.admission_fee ?? 0);
-            const exam = Number(data.feeSummary?.exam_fee ?? 0);
             const currentEnteredTotal = ([
               'registration','session','assessment','board','exam_center','ict','sports','development','electricity','tc','computer_lab','scouts','admission','monthly','exam'
             ].reduce((acc, k) => acc + Number(manualAmounts[k] || 0), 0) + Number(fineAmount || 0));
@@ -883,7 +865,7 @@ const FeePaymentReceipt = () => {
       {/* Signature & Seal */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3, pt: 2, borderTop: '1px solid #000' }}>
         <Box sx={{ textAlign: 'center' }}>
-          <Typography variant="body2" sx={{ mb: 2, fontSize: '0.9rem' }}>
+          <Typography variant="body2" sx={{ mb: 2, fontSize: '1.1rem', color: '#000' }}>
             গ্রহণকারীর স্বাক্ষর
           </Typography>
           <Box sx={{ 
@@ -906,12 +888,12 @@ const FeePaymentReceipt = () => {
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </Box>
-          <Typography variant="caption" sx={{ fontSize: '0.8rem', color: '#666' }}>
+          <Typography variant="caption" sx={{ fontSize: '1rem', color: '#000' }}>
             (অফিস সহকারী / হিসাব রক্ষক)
           </Typography>
         </Box>
         <Box sx={{ textAlign: 'center' }}>
-          <Typography variant="body2" sx={{ mb: 2, fontSize: '0.9rem' }}>
+          <Typography variant="body2" sx={{ mb: 2, fontSize: '1.1rem', color: '#000' }}>
             স্বাক্ষর
           </Typography>
           <Box sx={{ 
@@ -949,7 +931,7 @@ const FeePaymentReceipt = () => {
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </Box>
-          <Typography variant="caption" sx={{ fontSize: '0.8rem', color: '#666' }}>
+          <Typography variant="caption" sx={{ fontSize: '1rem', color: '#000' }}>
             (প্রধান শিক্ষক)
           </Typography>
         </Box>
@@ -957,8 +939,8 @@ const FeePaymentReceipt = () => {
 
       {/* Footer */}
       <Box sx={{ textAlign: 'center', mt: 3, pt: 2, borderTop: '1px solid #000' }}>
-        <Typography variant="caption" sx={{ fontSize: '0.8rem', color: '#666', display: 'block' }}>
-          আপনার সন্তানের স্কুলের বকেয়া ফি পরিশোধের জন্য আপনাকে ধন্যবাদ।
+        <Typography variant="caption" sx={{ fontSize: '1rem', color: '#000', display: 'block' }}>
+          আপনার সন্তানের স্কুলের বকেয়া ফি পরিশোধের জন্য আপনাকে ধন্যবাদ।
         </Typography>
       </Box>
       </Box>

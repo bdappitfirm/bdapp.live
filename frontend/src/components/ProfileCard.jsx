@@ -125,7 +125,7 @@ export default function ProfileCard({
   const { user: authUser } = useAuth();
   const actorRoleLower = String(authUser?.profile?.role || authUser?.role || '').toLowerCase();
   const actorUsernameLower = String(authUser?.username || authUser?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
-  const canAdminEdit = !!(authUser?.is_superuser || authUser?.is_staff || actorRoleLower === 'admin' || actorRoleLower === 'superadmin' || actorUsernameLower === 'shamir' || actorUsernameLower === 'bdadmin');
+  const canAdminEdit = !!(authUser?.is_superuser || authUser?.is_staff || actorRoleLower === 'admin' || actorRoleLower === 'superadmin' || actorUsernameLower === 'shamir' || actorUsernameLower === 'bdadmin' || actorUsernameLower === 'umor');
   const denyMsg = 'আপনি  এই কাজটি করার জন্য অনুমোদিত ব্যাক্তি নন, দয়া করে এডমিন অথবা প্রধান শিক্ষকের সাথে যোগাযোগ করুন, ধন্যবাদ।';
 
   

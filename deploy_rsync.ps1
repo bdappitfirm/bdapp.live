@@ -7,7 +7,7 @@ param (
     [switch]$RestartOnly
 )
 
-$VPS_IP = "138.252.124.52"
+$VPS_IP = "103.112.62.72"
 $USER = "root"
 
 if ($RestartOnly) {

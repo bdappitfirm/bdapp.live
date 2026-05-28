@@ -170,7 +170,7 @@ const VirtualClassPage = () => {
   }
 
   // Handle both user with profile and superuser without profile
-  const role = user?.profile?.role || (user?.user?.is_superuser || user?.user?.is_staff ? 'admin' : '');
+  const role = user?.profile?.effective_role || user?.profile?.role || (user?.user?.is_superuser || user?.user?.is_staff ? 'admin' : '');
   const isAdmin = role === 'admin' || user?.user?.is_staff || user?.user?.is_superuser;
   const isTeacher = role === 'teacher' || isAdmin;
   const currentUserId = user?.user?.id;

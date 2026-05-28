@@ -296,6 +296,16 @@ class AssistantLogic:
             all_uids = uids.union(suids)
             
             # --- ALWAYS SHOW FULL LIST WITH NAMES AND MOBILES ---
+            users_list = []
+            role_map = {'student': 'শিক্ষার্থী', 'teacher': 'শিক্ষক', 'admin': 'অ্যাডমিন', 'parent': 'অভিভাবক'}
+            for u in User.objects.filter(id__in=all_uids):
+                p = Profile.objects.filter(user=u).first()
+                sp = StudentProfile.objects.filter(user=u).first()
+                role_key = p.role if p else ('student' if sp else 'unknown')
+                user_info = {'name': u.get_full_name() or u.username, 'phone': u.phone_number, 'role': role_map.get(role_key, role_key)}
+                if sp: user_info.update({'class': sp.classroom.name if sp.classroom else 'N/A', 'roll': sp.roll_number or 'N/A'})
+                users_list.append(user_info)
+            
             if school_id:
                 user_roles = {}
                 for p in qs_p: user_roles[p.user_id] = p.role
@@ -306,25 +316,7 @@ class AssistantLogic:
                 role_map = {'student': 'শিক্ষার্থী', 'teacher': 'শিক্ষক', 'admin': 'অ্যাডমিন', 'parent': 'অভিভাবক'}
                 details = [f"{role_map.get(r, r)}: {c}" for r, c in role_counts.items() if c > 0]
                 text = f"**{bg}** রক্তের গ্রুপের মোট {len(all_uids)} জন পাওয়া গেছে।" + (f" ({', '.join(details)})" if details else "")
-                return {'text': text}
-            else:
-                users_list = []
-                role_map = {'student': 'শিক্ষার্থী', 'teacher': 'শিক্ষক', 'admin': 'অ্যাডমিন', 'parent': 'অভিভাবক'}
-                for u in User.objects.filter(id__in=all_uids):
-                    p = Profile.objects.filter(user=u).first()
-                    sp = StudentProfile.objects.filter(user=u).first()
-                    role_key = p.role if p else ('student' if sp else 'unknown')
-                    user_info = {'name': u.get_full_name() or u.username, 'phone': u.phone_number, 'role': role_map.get(role_key, role_key)}
-                    if sp: user_info.update({'class': sp.classroom.name if sp.classroom else 'N/A', 'roll': sp.roll_number or 'N/A'})
-                    users_list.append(user_info)
-                
-                if len(users_list) == 1:
-                    u = users_list[0]
-                    text = f"{bg} রক্তের গ্রুপের {u['role']} পাওয়া গেছে:\n**নাম:** {u['name']}\n"
-                    if 'class' in u: text += f"**শ্রেণি:** {u['class']}, **রোল:** {u['roll']}\n"
-                    text += f"**মোবাইল:** {u['phone'] or 'নেই'}"
-                    return {'text': text, 'users_list': users_list}
-                return {'text': f"{bg} রক্তের গ্রুপের তালিকা ({len(users_list)} জন):", 'users_list': users_list}
+            return {'text': text, 'users_list': users_list}
 
         if it == 'entity_details_followup':
             bg_map = [('ab positive', 'AB+'), ('ab negative', 'AB-'), ('a positive', 'A+'), ('a negative', 'A-'), ('b positive', 'B+'), ('b negative', 'B-'), ('o positive', 'O+'), ('o negative', 'O-'),
@@ -339,42 +331,6 @@ class AssistantLogic:
                     if last_assistant:
                         content = last_assistant.content.lower()
                         bg = next((v for k, v in bg_map if k in content), None)
-            student_name = None
-            session_id = params.get('session_id')
-            if session_id:
-                last_assistant_msg = AIChatMessage.objects.filter(session_id=session_id, role='assistant').order_by('-timestamp').first()
-                if last_assistant_msg:
-                    name_phone_match = re.findall(r'([অ-হ\u09BE-\u09D7\s]+?)\s*:\s*\+?\d+', last_assistant_msg.content)
-                    if name_phone_match:
-                        student_name = name_phone_match[-1].strip()
-            
-            if student_name:
-                students = User.objects.filter(Q(first_name__icontains=student_name) | Q(last_name__icontains=student_name) | Q(username__icontains=student_name))
-                if school_id:
-                    students = students.filter(profile__school_id=school_id)
-                
-                student_profiles = StudentProfile.objects.filter(user__in=students)
-                if school_id:
-                    student_profiles = student_profiles.filter(school_id=school_id)
-                
-                if bg:
-                    student_profiles = student_profiles.filter(blood_group=bg)
-                
-                if student_profiles.exists():
-                    sp = student_profiles.first()
-                    user = sp.user
-                    response_text = f"**{user.get_full_name() or user.username}** সম্পর্কে বিস্তারিত তথ্য:\n"
-                    response_text += f"- নাম: {user.get_full_name() or user.username}\n"
-                    response_text += f"- মোবাইল: {user.phone_number or 'নেই'}\n"
-                    if sp.classroom:
-                        response_text += f"- ক্লাস: {sp.classroom.name}\n"
-                    if sp.section:
-                        response_text += f"- শাখা: {sp.section.name}\n"
-                    if sp.roll_number:
-                        response_text += f"- রোল: {sp.roll_number}\n"
-                    if sp.blood_group:
-                        response_text += f"- রক্তের গ্রুপ: {sp.blood_group}\n"
-                    return {'text': response_text}
             
             if not bg:
                 return {'text': 'কোন রক্তের গ্রুপের বিস্তারিত তথ্য চান? দয়া করে রক্তের গ্রুপ উল্লেখ করুন।'}
@@ -386,16 +342,30 @@ class AssistantLogic:
             uids = set(qs_p.values_list('user_id', flat=True))
             suids = set(qs_s.values_list('user_id', flat=True))
             all_uids = uids.union(suids)
-            users = User.objects.filter(id__in=all_uids)
-            if not users.exists():
-                return {'text': f"{bg} রক্তের গ্রুপের কোনো ব্যক্তি পাওয়া যায়নি।"}
-            phones = []
-            for u in users:
-                if u.phone_number:
-                    phones.append(f"{u.get_full_name() or u.username}: {u.phone_number}")
-            if not phones:
-                return {'text': f"{bg} রক্তের গ্রুপের কোনো ব্যক্তির মোবাইল নাম্বার পাওয়া যায়নি।"}
-            return {'text': f"{bg} রক্তের গ্রুপের মোবাইল নাম্বার:\n" + '\n'.join(phones)}
+            
+            users_list = []
+            role_map = {'student': 'শিক্ষার্থী', 'teacher': 'শিক্ষক', 'admin': 'অ্যাডমিন', 'parent': 'অভিভাবক'}
+            for u in User.objects.filter(id__in=all_uids):
+                p = Profile.objects.filter(user=u).first()
+                sp = StudentProfile.objects.filter(user=u).first()
+                role_key = p.role if p else ('student' if sp else 'unknown')
+                user_info = {'name': u.get_full_name() or u.username, 'phone': u.phone_number, 'role': role_map.get(role_key, role_key)}
+                if sp: user_info.update({'class': sp.classroom.name if sp.classroom else 'N/A', 'roll': sp.roll_number or 'N/A'})
+                users_list.append(user_info)
+            
+            if school_id:
+                user_roles = {}
+                for p in qs_p: user_roles[p.user_id] = p.role
+                for uid in suids:
+                    if uid not in user_roles: user_roles[uid] = 'student'
+                role_counts = {}
+                for role in user_roles.values(): role_counts[role] = role_counts.get(role, 0) + 1
+                details = [f"{role_map.get(r, r)}: {c}" for r, c in role_counts.items() if c > 0]
+                text = f"**{bg}** রক্তের গ্রুপের মোট {len(all_uids)} জন পাওয়া গেছে।" + (f" ({', '.join(details)})" if details else "")
+            else:
+                text = f"{bg} রক্তের গ্রুপের তালিকা ({len(users_list)} জন):"
+                
+            return {'text': text, 'users_list': users_list}
 
         if it == 'teacher_subject_search':
             subject_map = [

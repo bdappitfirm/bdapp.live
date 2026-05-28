@@ -12,7 +12,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
   
   // Extract role and user's school ID
-  const role = ((user && (user.profile?.role || user.role)) || '').trim().toLowerCase();
+  const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').trim().toLowerCase();
   const username = String(user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
   const userSchoolId = user?.profile?.school;
   const adminRoles = ['admin', 'super_admin', 'superadmin', 'bdadmin', 'school_admin'];
@@ -24,7 +24,8 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     user?.user?.is_staff ||
     adminRoles.includes(role) || 
     username === 'bdadmin' || 
-    username === 'shamir'
+    username === 'shamir' ||
+    username === 'umor'
   );
 
   useEffect(() => {

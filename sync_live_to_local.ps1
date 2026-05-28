@@ -3,7 +3,7 @@
 # Instead of dropping the database, it uses --clean and --if-exists for a smoother transition.
 # Usage: .\sync_live_to_local.ps1
 
-$VPS_IP = "138.252.124.52"
+$VPS_IP = "103.112.62.72"
 $USER = "root"
 $REMOTE_DB_NAME = "local_pg_db" 
 $LOCAL_DB_NAME = "local_pg_db"  
@@ -75,7 +75,7 @@ scp -r "${USER}@${VPS_IP}:/var/www/bdapp/media/*" ./media/
 Write-Host "Step 5: Cleaning up..." -ForegroundColor Yellow
 ssh "${USER}@${VPS_IP}" "rm /tmp/live_db_dump.sql"
 if (Test-Path "./live_db_dump.sql") {
-    Remove-Item "./live_db_dump.sql"
+    Remove-Item "./live_db_dump.sql" -Force
 }
 
 Write-Host "✅ SUCCESS: Your local project is now professionally synced with live data!" -ForegroundColor Green

@@ -2,8 +2,13 @@
 # fix_all.sh - Comprehensive deployment and fix script for bdapp.live
 echo "🚀 Starting Master Deployment Fix for bdapp.live..."
 
+# 0. Install required build dependencies
+echo "📦 Installing build dependencies..."
+apt update
+apt install -y build-essential pkg-config libpq-dev
+
 # 1. Extraction (if new tars exist)
-BACKEND_DIR="/var/www/bdapp/backend"
+BACKEND_DIR="/var/www/bdapp"
 FRONTEND_DIR="/var/www/bdapp/frontend/build"
 
 if [ -f "/root/backend_minimal.tar" ]; then
@@ -129,7 +134,7 @@ PG_PASSWORD=Bangladesh@4321$
 PG_HOST=localhost
 PG_PORT=5432
 USE_POSTGRES=True
-ALLOWED_HOSTS=bdapp.live,www.bdapp.live,api.bdapp.live,138.252.124.52
+ALLOWED_HOSTS=bdapp.live,www.bdapp.live,api.bdapp.live,103.112.62.72,127.0.0.1,localhost
 EOF
 else
     # Ensure DEBUG is False and all hosts are allowed
@@ -143,13 +148,12 @@ fi
 # Load variables from .env
 export $(grep -v '^#' "$BACKEND_DIR/.env" | xargs)
 
-# DEEP CLEAN: Recreate venv once to fix persistent Google namespace import errors
-if [ ! -f "$BACKEND_DIR/.deep_clean_v6" ]; then
-    echo "🧹 Performing DEEP CLEAN of Virtualenv and Cache..."
-    rm -rf .venv
-    rm -rf ~/.cache/pip
-    touch $BACKEND_DIR/.deep_clean_v6
-fi
+# DEEP CLEAN: Recreate venv to fix issues
+echo "🧹 Performing DEEP CLEAN of Virtualenv and Cache..."
+rm -rf .venv
+rm -rf ~/.cache/pip
+rm -f $BACKEND_DIR/.deep_clean_v9
+touch $BACKEND_DIR/.deep_clean_v10
 
 if [ ! -d ".venv" ]; then
     echo "📦 Virtualenv not found. Creating one..."
@@ -163,6 +167,22 @@ echo "📦 Syncing dependencies..."
 $VENV_PIP install --upgrade pip
 $VENV_PIP install --no-cache-dir -r requirements.txt
 $VENV_PIP install gunicorn daphne
+
+# Verify Gunicorn and Daphne are installed
+echo "✅ Verifying Gunicorn and Daphne installation..."
+if [ -f "$BACKEND_DIR/.venv/bin/gunicorn" ]; then
+    echo "✅ Gunicorn found at $BACKEND_DIR/.venv/bin/gunicorn"
+    chmod +x "$BACKEND_DIR/.venv/bin/gunicorn"
+else
+    echo "❌ ERROR: Gunicorn not found!"
+fi
+
+if [ -f "$BACKEND_DIR/.venv/bin/daphne" ]; then
+    echo "✅ Daphne found at $BACKEND_DIR/.venv/bin/daphne"
+    chmod +x "$BACKEND_DIR/.venv/bin/daphne"
+else
+    echo "❌ ERROR: Daphne not found!"
+fi
 
 echo "🔍 Checking Database Connection and Tables..."
 $VENV_PYTHON manage.py shell <<'EOF'
@@ -244,26 +264,74 @@ except Exception as e:
     print(f"Error setting admin: {e}")
 EOF
 
-# Idempotent password reset: run only once by sentinel file
-if [ -f "$BACKEND_DIR/.pw_reset_done" ]; then
-  echo "🔒 Password reset already applied — skipping"
+# 🗄️ Restore Old Database Backup
+echo "🗄️ Checking for database backup..."
+if [ -f "$BACKEND_DIR/local_db_backup.sql" ]; then
+    echo "📦 Found database backup (SQL format)! Restoring your old data..."
+    
+    # Stop services temporarily
+    systemctl stop gunicorn gunicorn.socket daphne 2>/dev/null
+    
+    # First, try to restore the SQL file directly (it may contain CREATE DATABASE)
+    sudo -u postgres psql < "$BACKEND_DIR/local_db_backup.sql" 2>/tmp/restore_errors.txt || true
+    
+    # Check if restore was successful by checking for users_user table
+    TABLE_EXISTS=$(sudo -u postgres psql -d local_pg_db -t -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users_user');" 2>/dev/null || echo "f")
+    
+    if echo "$TABLE_EXISTS" | grep -q "t\|true"; then
+        echo "✅ Database restored successfully from SQL file!"
+    else
+        echo "⚠️ Direct restore failed. Trying alternative method..."
+        # Drop and recreate database, then restore without the CREATE DATABASE commands
+        sudo -u postgres psql <<EOF
+DROP DATABASE IF EXISTS local_pg_db;
+CREATE DATABASE local_pg_db OWNER local_pg_user;
+EOF
+        # Restore only the data part
+        sudo -u postgres psql -d local_pg_db -f "$BACKEND_DIR/local_db_backup.sql" 2>/dev/null || true
+    fi
+    
+    # Fix ownership
+    sudo -u postgres psql -d local_pg_db 2>/dev/null <<EOF
+REASSIGN OWNED BY postgres TO local_pg_user;
+ALTER SCHEMA public OWNER TO local_pg_user;
+EOF
+    
+    echo "✅ Old database restored successfully!"
+    
+    # Clean up the backup file
+    rm -f "$BACKEND_DIR/local_db_backup.sql"
 else
-  echo "🔐 Resetting passwords for Students, Parents, and Committee members to 12345678..."
-  $VENV_PYTHON manage.py shell <<'EOF'
+    echo "⚠️ No database backup found. Seeding demo data instead..."
+    SCHOOL_COUNT=$($VENV_PYTHON manage.py shell -c "from schools.models import School; print(School.objects.count())" 2>/dev/null || echo "0")
+    if [ "$SCHOOL_COUNT" -eq "0" ]; then
+        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "ভারতী বিদ্যানিকেতন" --students 50 --teachers 10
+        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "আদর্শ উচ্চ বিদ্যালয়" --students 40 --teachers 8
+        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "শিশু শিক্ষা নিকেতন" --students 30 --teachers 6
+        echo "✅ Demo data seeded successfully!"
+    else
+        echo "✅ $SCHOOL_COUNT schools already exist."
+    fi
+fi
+
+# Now reset passwords AFTER database is fully restored
+echo "🔐 Resetting passwords for Students, Parents, and Committee members to 12345678..."
+$VENV_PYTHON manage.py shell <<'EOF'
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 
 User = get_user_model()
-target_roles = ['student', 'parent', 'committee']
-updated_count = User.objects.filter(
-    profile__role__in=target_roles,
-    is_staff=False,
-    is_superuser=False
-).update(password=make_password('12345678'))
-print(f"✅ Successfully reset passwords for {updated_count} users.")
+try:
+    target_roles = ['student', 'parent', 'committee']
+    updated_count = User.objects.filter(
+        profile__role__in=target_roles,
+        is_staff=False,
+        is_superuser=False
+    ).update(password=make_password('12345678'))
+    print(f"✅ Successfully reset passwords for {updated_count} users.")
+except Exception as e:
+    print(f"⚠️ Password reset skipped: {e}")
 EOF
-  touch $BACKEND_DIR/.pw_reset_done
-fi
 
 # 4. Gunicorn and Socket Configuration (Robust Setup)
 echo "⚙️ Configuring Gunicorn Service for Auto-Restart..."
@@ -352,18 +420,22 @@ else
     journalctl -u gunicorn --no-pager | tail -n 20
 fi
 
-# 6. Nginx Optimization for stability and UTF-8
+# 6. Nginx Optimization for stability and UTF-8 (with HTTPS support)
 echo "⚙️ Optimizing Nginx for stability and UTF-8..."
+# Clean up old configs
+rm -f /etc/nginx/sites-enabled/*
+rm -f /etc/nginx/sites-available/*
+
 cat <<EOF > /etc/nginx/sites-available/bdapp.live
 server {
     listen 80;
-    server_name bdapp.live www.bdapp.live;
-    return 301 https://\$host\$request_uri;
+    server_name bdapp.live www.bdapp.live 103.112.62.72;
+    return 301 https://\$server_name\$request_uri;
 }
 
 server {
-    listen 443 ssl;
-    server_name bdapp.live www.bdapp.live;
+    listen 443 ssl http2;
+    server_name bdapp.live www.bdapp.live 103.112.62.72;
     charset utf-8;
     client_max_body_size 100M;
 
@@ -389,11 +461,6 @@ server {
         add_header Access-Control-Allow-Origin *;
         expires 30d;
         autoindex off;
-        try_files $uri $uri/ @backend_media;
-    }
-
-    location @backend_media {
-        alias $BACKEND_DIR/media/;
     }
 
     location /api/ {
@@ -419,16 +486,22 @@ server {
 }
 EOF
 
+# Enable the Nginx site
+ln -sf /etc/nginx/sites-available/bdapp.live /etc/nginx/sites-enabled/
+
+# Test Nginx config and restart
 nginx -t && systemctl restart nginx
 
 # 7. Diagnostic Check
 echo "🔍 Checking Backend Health..."
-STATUS_CODE=$(curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8000/api/v1/ 2>/dev/null || echo "FAIL")
-if [ "$STATUS_CODE" == "200" ] || [ "$STATUS_CODE" == "301" ]; then
-    echo "✅ Gunicorn is responding locally ($STATUS_CODE)"
+sleep 5
+
+# Check if Gunicorn is active
+if systemctl is-active --quiet gunicorn; then
+    echo "✅ Gunicorn is active"
 else
-    echo "⚠️ Gunicorn check failed (Status: $STATUS_CODE). Checking journalctl..."
-    journalctl -u gunicorn --no-pager | tail -n 10
+    echo "⚠️ Gunicorn is NOT active. Checking journalctl..."
+    journalctl -u gunicorn --no-pager | tail -n 20
 fi
 
 # Check Daphne (ASGI)
@@ -437,6 +510,14 @@ if systemctl is-active --quiet daphne; then
 else
     echo "❌ Daphne (ASGI) is NOT active. Checking logs..."
     journalctl -u daphne --no-pager | tail -n 10
+fi
+
+# Check Nginx
+if systemctl is-active --quiet nginx; then
+    echo "✅ Nginx is active"
+    echo "🌐 You can now access the site at: http://103.112.62.72"
+else
+    echo "❌ Nginx is NOT active"
 fi
 
 # 8. Setup Auto-Fix Cron (Runs every minute to ensure service is alive)

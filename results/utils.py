@@ -73,8 +73,10 @@ SECTION_MAXIMA = {
         
         # BGS
         "bangladesh and global studies": DIST_70_30,
-        "বাংলাদেশ ও বিশ্বপরিচয়": DIST_70_30,
-        "বাংলাদেশ ও বিশ্বপরিয়": DIST_70_30,
+        "বাংলাদেশ ও বিশ্বপরিচয়": DIST_70_30,
+        "বাংলাদেশ ও বিশ্বপরিয়": DIST_70_30,
+        "সমাজ": DIST_70_30,
+        "social science": DIST_70_30,
         
         # Religion
         "religion": DIST_70_30,

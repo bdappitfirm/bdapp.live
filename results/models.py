@@ -120,6 +120,7 @@ class Result(models.Model):
         denom = Decimal(wm + mm + pm) if (wm or mm or pm) else Decimal(self.examination.total_marks)
         percentage = (self.total_obtained / denom) * 100 if denom > 0 else 0
         
+        # First, always calculate grade and GPA based on percentage
         if percentage >= 80:
             self.grade = 'A+'
             self.gpa = 5.00
@@ -141,7 +142,8 @@ class Result(models.Model):
         else:
             self.grade = 'F'
             self.gpa = 0.00
-        # Original pass/fail calculation logic
+            
+        # Pass/fail calculation logic
         if (wm or mm or pm):
             req_written = (wm or 0) > 0
             req_mcq = (mm or 0) > 0
@@ -166,13 +168,10 @@ class Result(models.Model):
                 threshold = Decimal(_round_half_up(denom / Decimal(3)))
             self.is_passed = self.total_obtained >= threshold
         
+        # Now override grade and GPA if failed!
         if not self.is_passed:
             self.grade = 'F'
             self.gpa = 0.00
-        else:
-            if self.grade == 'F':
-                self.grade = 'D'
-                self.gpa = 1.00
         
         super().save(*args, **kwargs)
     

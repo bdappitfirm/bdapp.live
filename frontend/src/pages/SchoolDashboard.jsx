@@ -225,10 +225,10 @@ const SchoolDashboard = () => {
   const isMainDashboard = location.pathname === `/school/${id}` || location.pathname === `/school/${id}/`;
   
   // Get role and permissions
-  const role = ((user && (user.profile?.role || user.role)) || '').trim().toLowerCase();
-  const effectiveRole = user?.profile?.effective_role || role; // Check for principal treated as admin
-  const isSuperUser = !!(user?.is_superuser || user?.user?.is_superuser || user?.profile?.is_superuser || user?.is_staff || role === 'admin' || role === 'super_admin' || role === 'superadmin' || effectiveRole === 'admin');
-  const isTeacher = role === 'teacher' || effectiveRole === 'admin'; // Principal also gets teacher menu
+  const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').trim().toLowerCase();
+  const effectiveRole = role; // Now role is already effective_role
+  const isSuperUser = !!(user?.is_superuser || user?.user?.is_superuser || user?.profile?.is_superuser || user?.is_staff || role === 'admin' || role === 'super_admin' || role === 'superadmin');
+  const isTeacher = role === 'teacher' || role === 'admin'; // Principal also gets teacher menu
 
   useEffect(() => {
     if (authLoading) return; // Wait until user data is loaded
@@ -257,7 +257,7 @@ const SchoolDashboard = () => {
     if (isSuperUser) return true;
 
     // Allowed for everyone
-    const commonKeys = ['', 'classes', 'teacher', 'student', 'subjects', 'assistant', 'support-live', 'profile', 'live-class', 'results'];
+    const commonKeys = ['', 'classes', 'teacher', 'student', 'subjects', 'assistant', 'support-live', 'profile', 'live-class', 'results', 'result-card', 'id-card'];
     if (commonKeys.includes(item.key)) return true;
 
     // Allowed for Teachers

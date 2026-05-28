@@ -64,7 +64,7 @@ export default function ExaminationsPage() {
   const { id } = useParams(); // school id
   const navigate = useNavigate();
   const { user } = useAuth();
-  const role = ((user && (user.profile?.role || user.role)) || '').toLowerCase();
+  const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').toLowerCase();
   const [examinations, setExaminations] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
   const [sections, setSections] = useState([]);

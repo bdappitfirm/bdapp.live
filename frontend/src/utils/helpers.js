@@ -51,7 +51,7 @@ export const canDelete = (user, itemUserId = null, itemRole = null) => {
 export const canEditResult = (user, subjectTeacherId = null) => {
   if (!user) return false;
   const username = (user.username || user.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
-  const isSuper = !!(user.is_superuser || user.user?.is_superuser || user.is_staff || user.user?.is_staff || username === 'bdadmin' || username === 'shamir');
+  const isSuper = !!(user.is_superuser || user.user?.is_superuser || user.is_staff || user.user?.is_staff || username === 'bdadmin' || username === 'shamir' || username === 'umor');
   if (isSuper || user.role === 'admin' || user.role === 'super_admin' || user.role === 'superadmin') return true;
   if (user.role === 'teacher' && subjectTeacherId && user.id === subjectTeacherId) return true;
   return false;

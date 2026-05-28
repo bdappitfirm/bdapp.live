@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 const ProtectedButton = ({ children, onClick, allowedRoles, ...props }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const role = ((user && (user.profile?.role || user.role)) || '').trim().toLowerCase();
+  const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').trim().toLowerCase();
 
   const handleClick = (e) => {
     if (!(isAuthenticated() || !!user)) {
@@ -17,7 +17,7 @@ const ProtectedButton = ({ children, onClick, allowedRoles, ...props }) => {
     }
     if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
       const username = String(user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
-      const isAdminLike = role === 'admin' || role === 'super_admin' || username === 'bdadmin' || username === 'shamir' || user?.is_superuser || user?.user?.is_superuser;
+      const isAdminLike = role === 'admin' || role === 'super_admin' || username === 'bdadmin' || username === 'shamir' || username === 'umor' || user?.is_superuser || user?.user?.is_superuser;
       if (!isAdminLike && (!role || !allowedRoles.map(r => String(r).toLowerCase()).includes(role))) {
         e.preventDefault();
         return;

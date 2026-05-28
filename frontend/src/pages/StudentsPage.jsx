@@ -99,9 +99,17 @@ export default function StudentsPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { user: authUser } = useAuth();
-  const currentRole = String(authUser?.profile?.role || authUser?.role || '').toLowerCase();
-  const currentUsername = String(authUser?.username || authUser?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
-  const canAdminEdit = !!(authUser?.is_superuser || authUser?.is_staff || currentRole === 'admin' || currentRole === 'superadmin' || currentUsername === 'shamir' || currentUsername === 'bdadmin');
+  // Helper to normalize username (strip all invisible chars, trim, lowercase)
+  const normalizeUsername = (uname) => {
+    return String(uname || '')
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, '')
+      .trim();
+  };
+  const currentRole = String(authUser?.role || authUser?.profile?.effective_role || authUser?.profile?.role || '').toLowerCase();
+  const currentUsername = normalizeUsername(authUser?.username || authUser?.user?.username || '');
+  const canAdminEdit = !!(authUser?.is_superuser || authUser?.is_staff || currentRole === 'admin' || currentRole === 'superadmin' || currentUsername === 'shamir' || currentUsername === 'bdadmin' || currentUsername === 'umor');
   const denyMsg = 'আপনি এই কাজটি করার জন্য অনুমোদিত ব্যাক্তি নন, দয়া করে এডমিন অথবা প্রধান শিক্ষকের সাথে যোগাযোগ করুন, ধন্যবাদ।';
   const [editFormData, setEditFormData] = useState({
     first_name: '',

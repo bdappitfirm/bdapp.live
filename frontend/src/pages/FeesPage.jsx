@@ -74,9 +74,9 @@ const FeesPage = () => {
   // Removed page-level authentication check to allow public view
   const { school } = useSchool(); // School context provides current school if available
   const { user } = useAuth();
-  const roleLower = String(user?.profile?.role || user?.role || '').toLowerCase();
+  const roleLower = String(user?.role || user?.profile?.effective_role || user?.profile?.role || '').toLowerCase();
   const usernameLower = String(user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
-  const canAdminEdit = !!(user?.is_superuser || user?.is_staff || roleLower === 'admin' || roleLower === 'superadmin' || usernameLower === 'shamir' || usernameLower === 'bdadmin');
+  const canAdminEdit = !!(user?.is_superuser || user?.is_staff || roleLower === 'admin' || roleLower === 'superadmin' || usernameLower === 'shamir' || usernameLower === 'bdadmin' || usernameLower === 'umor');
   const [fees, setFees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
