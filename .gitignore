@@ -32,6 +32,10 @@ build/
 node_modules/
 
 # Local backups, temp files, and workspace-specific artifacts
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
 backend_minimal.tar
 frontend.tar.gz
 local_db_backup.dump
@@ -48,6 +52,15 @@ frontend/src/pages/SchoolEditPage.jsx
 schools/migrations/0007_school_ein_school_email_school_phone_number.py
 schools/migrations/0008_alter_advertisement_school.py
 temp_dashboard_error.html
+media.tar.gz
+user_photos.tar.gz
+media_primary.tar.gz
+backend_v2.tar
+frontend_build.tar.gz
+frontend_build_final.tar.gz
+frontend_build_v4.tar.gz
+frontend_update.tar.gz
+frontend_mobile.tar.gz
 temp_dashboard_error2.html
 temp_dashboard_stats*.json
 temp_dashboard_timed.json
