@@ -115,6 +115,31 @@ class Task(models.Model):
     def __str__(self):
         return f"{self.title} - {self.assigned_to.username}"
 
+class ActivityLog(models.Model):
+    ACTION_CHOICES = [
+        ('profile_create', 'Profile Creation'),
+        ('login', 'User Login'),
+        ('data_input', 'Data Input'),
+        ('result_input', 'Result Input'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities')
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='activities')
+    action_type = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    details = models.JSONField(default=dict)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # 3 TK per profile
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['school', 'timestamp'], name='activity_school_ts_idx'),
+            models.Index(fields=['action_type'], name='activity_type_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username if self.user else 'Unknown'} - {self.action_type} - {self.timestamp}"
+
 class AssistantLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assistant_logs')
     school = models.ForeignKey(School, on_delete=models.SET_NULL, null=True, blank=True, related_name='assistant_logs')
@@ -167,7 +192,7 @@ class AIChatSession(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.title or self.created_at}"
+        return f"{self.user.username if self.user else 'Anonymous'} - {self.title or self.created_at}"
 
 class AIChatMessage(models.Model):
     """Stores individual messages within a session."""
@@ -205,6 +230,3 @@ class SupportCall(models.Model):
             models.Index(fields=['status', 'created_at'], name='users_supcall_stat_cre_idx'),
             models.Index(fields=['requester', 'status'], name='users_supcall_req_stat_idx'),
         ]
-
-    def __str__(self):
-        return f"{self.school_id}:{self.requester_id}:{self.status}"

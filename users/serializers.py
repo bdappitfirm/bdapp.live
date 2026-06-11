@@ -2,10 +2,24 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 import unicodedata
 from schools.models import School
-from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory
+from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, ActivityLog
 from academics.models import StudentProfile, ClassRoom, Section
 
 User = get_user_model()
+
+class ActivityLogSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    user_full_name = serializers.SerializerMethodField()
+    school_name = serializers.CharField(source='school.name', read_only=True)
+    
+    class Meta:
+        model = ActivityLog
+        fields = ['id', 'user', 'username', 'user_full_name', 'school', 'school_name', 'action_type', 'details', 'ip_address', 'timestamp', 'cost']
+    
+    def get_user_full_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return "Unknown"
 
 class UserSerializer(serializers.ModelSerializer):
     photo_url = serializers.SerializerMethodField()
@@ -107,6 +121,11 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             data['class_teacher_classroom'] = None
         if 'class_teacher_section' in data and data['class_teacher_section'] == '':
             data['class_teacher_section'] = None
+        
+        # Mapping school_id to school for consistency
+        if 'school_id' in data and 'school' not in data:
+            data['school'] = data['school_id']
+            
         return super().to_internal_value(data)
 
     def get_class_teacher_classroom_name(self, obj):
@@ -187,7 +206,7 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             'class_teacher_classroom', 'class_teacher_section',
             'class_teacher_classroom_name', 'class_teacher_section_name'
         ]
-        read_only_fields = ['id', 'role', 'school']
+        read_only_fields = ['id']
 
     def _ensure_user(self, validated_data):
         user = validated_data.get('user')

@@ -199,28 +199,48 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
                 attendance_map[student_id]['absent'] += 1
                 per_day_map[student_id][day_str] = 'absent'
         
-        # Calculate total days in month (include weekends; adjust if holiday logic is added later)
-        total_days = (end_date - start_date).days
+        # Calculate working days (exclude Fri/Sat and basic holidays)
+        working_days = []
+        # Basic holiday list (could be moved to a model)
+        govt_holidays = [
+            '02-21', # Shaheed Day
+            '03-17', # Sheikh Mujib's Birthday
+            '03-26', # Independence Day
+            '04-14', # Bengali New Year
+            '05-01', # May Day
+            '12-16', # Victory Day
+        ]
+        
+        total_days_in_month = (end_date - start_date).days
+        for i in range(total_days_in_month):
+            day = (start_date + timedelta(days=i))
+            # 4=Friday, 5=Saturday in some systems, but Python's weekday() is 0=Mon...4=Fri, 5=Sat, 6=Sun
+            # So Friday=4, Saturday=5
+            if day.weekday() in [4, 5]: # Friday and Saturday
+                continue
+            if day.strftime('%m-%d') in govt_holidays:
+                continue
+            working_days.append(day)
+            
+        total_working_days = len(working_days)
         
         # Format response
         reports = []
         for student in students:
-            present_marked = attendance_map[student.id]['present']
-            # Build attendance_details covering all days in month
             details = []
-            present_full = 0
-            for i in range(total_days):
-                day = (start_date + timedelta(days=i))
+            present_count = 0
+            for day in working_days:
                 day_str = day.strftime('%Y-%m-%d')
                 status = per_day_map[student.id].get(day_str, 'absent')
                 if status == 'present':
-                    present_full += 1
+                    present_count += 1
                 details.append({
                     'date': day_str,
                     'status': status
                 })
-            absent_full = total_days - present_full
-            percentage_full = (present_full / total_days * 100) if total_days > 0 else 0
+            
+            absent_count = total_working_days - present_count
+            percentage = (present_count / total_working_days * 100) if total_working_days > 0 else 0
             
             reports.append({
                 'student_id': student.id,
@@ -228,10 +248,10 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
                 'classroom': student.classroom.name if student.classroom else 'N/A',
                 'section': student.section.name if student.section else 'N/A',
                 'roll_number': student.roll_number or '',
-                'total_days': total_days,
-                'present_days': present_full,
-                'absent_days': absent_full,
-                'attendance_percentage': round(percentage_full, 2),
+                'total_days': total_working_days,
+                'present_days': present_count,
+                'absent_days': absent_count,
+                'attendance_percentage': round(percentage, 2),
                 'attendance_details': details
             })
         

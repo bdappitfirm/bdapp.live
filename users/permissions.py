@@ -1,74 +1,111 @@
 from rest_framework import permissions
 
-def is_effective_admin(user):
+def is_effective_admin(user, request=None):
     """
-    Check if a user is an effective admin.
-    Effective admin means:
-    - Superuser or staff
-    - Profile role is 'admin' or 'super_admin'
-    - Profile designation includes 'প্রধান শিক্ষক', 'Headmaster', or 'Principal'
-    - Username is 'shamir', 'umor', or 'bdadmin'
+    Check if a user is an effective admin for a given request/school.
     """
     if not user or not user.is_authenticated:
         return False
     
-    # Check for specific usernames (Principal and Superuser)
-    # Strip zero-width characters (like \u200d, \u200b, \ufeff) and whitespace
+    # Strip zero-width characters and whitespace from username
     uname = str(getattr(user, 'username', '')).lower()
-    # Remove all zero-width and invisible characters
     uname = ''.join(c for c in uname if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
     uname = uname.strip()
-    if uname in ('shamir', 'bdadmin', 'umor'):
+
+    # 1. bdadmin has global access
+    if uname == 'bdadmin' or getattr(user, 'is_superuser', False):
         return True
-        
-    if getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False):
-        return True
-        
+
+    # Get profile data
     profile = getattr(user, 'profile', None)
     if not profile:
         return False
         
     role = getattr(profile, 'role', None)
-    designation = str(getattr(profile, 'designation', None) or '').strip()
+    user_school_id = str(profile.school_id if hasattr(profile, 'school_id') else (profile.school.id if profile.school else ''))
     
+    # 2. School 6 teachers are staff (global access)
+    if role == 'teacher' and user_school_id == '6':
+        return True
+
+    # Identify target school for the request
+    target_school_id = None
+    if request:
+        # Try to get from current_school (TenantMiddleware)
+        current_school = getattr(request, 'current_school', None)
+        if current_school:
+            target_school_id = str(current_school.id)
+        else:
+            # Try from query params or view kwargs
+            target_school_id = request.query_params.get('school') or request.query_params.get('school_id')
+            if not target_school_id and hasattr(view := getattr(request, 'parser_context', {}).get('view'), 'kwargs'):
+                target_school_id = view.kwargs.get('school_id') or view.kwargs.get('pk') if 'school' in request.path else None
+
+    # 3. shamir and umor only for school 16
+    if uname in ('shamir', 'umor'):
+        return target_school_id == '16'
+
+    # 4. Regular teachers/admins only for their own school
+    designation = str(getattr(profile, 'designation', None) or '').strip()
     is_admin_role = role in ('admin', 'super_admin')
     is_principal_designation = any(x in designation for x in ['প্রধান শিক্ষক', 'Headmaster', 'Principal', 'Head Master', 'সহকারী প্রধান শিক্ষক'])
     
-    return is_admin_role or is_principal_designation
+    if is_admin_role or is_principal_designation or role == 'teacher':
+        return target_school_id == user_school_id
+
+    return False
 
 class AdminOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return is_effective_admin(getattr(request, 'user', None))
+        return is_effective_admin(request.user, request)
 
 class IsSchoolMember(permissions.BasePermission):
     """
     Ensures that a user can only access resources belonging to their own school.
-    Superusers and staff are exempt.
     """
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
             
-        # Superusers, staff and effective admins (Principal) can access any school
-        if is_effective_admin(request.user):
-            return True
-            
-        # Get the current school from the request (attached by TenantMiddleware)
-        current_school = getattr(request, 'current_school', None)
-        
-        # If no school is identified in the request, we can't enforce this check here
-        if not current_school:
+        uname = str(getattr(request.user, 'username', '')).lower()
+        uname = ''.join(c for c in uname if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+        uname = uname.strip()
+
+        # bdadmin or superuser always allowed
+        if uname == 'bdadmin' or getattr(request.user, 'is_superuser', False):
             return True
 
-        # Get the user's school from their profile
         profile = getattr(request.user, 'profile', None)
-        if not profile or not profile.school:
+        if not profile:
             return False
-            
-        # Compare schools
-        return profile.school == current_school
+
+        user_school_id = str(profile.school_id if hasattr(profile, 'school_id') else (profile.school.id if profile.school else ''))
+        role = getattr(profile, 'role', None)
+
+        # School 6 teachers (Staff) always allowed
+        if role == 'teacher' and user_school_id == '6':
+            return True
+
+        # Identify target school
+        target_school_id = None
+        current_school = getattr(request, 'current_school', None)
+        if current_school:
+            target_school_id = str(current_school.id)
+        else:
+            target_school_id = request.query_params.get('school') or request.query_params.get('school_id')
+
+        # If no target school, we can't restrict here (might be a global list view)
+        if not target_school_id:
+            return True
+
+        # shamir and umor restricted to school 16
+        if uname in ('shamir', 'umor'):
+            return target_school_id == '16'
+
+        # Others restricted to their own school
+        return target_school_id == user_school_id
 
 class SubjectResultWritePermission(permissions.BasePermission):
     message = 'এই সাবজেক্টে রেজাল্ট ইনপুট দেবার জন্য আপনি অনুমোদিত নন। দয়া করে আপনার প্রতিষ্ঠানের প্রধান শিক্ষক অথবা এ্যাডমিনের সাথে যোগাযোগ করুন।'
@@ -78,7 +115,7 @@ class SubjectResultWritePermission(permissions.BasePermission):
         user = getattr(request, 'user', None)
         if not user or not user.is_authenticated:
             return False
-        if is_effective_admin(user):
+        if is_effective_admin(user, request):
             return True
             
         # For bulk_results action, we let the view's internal logic handle the per-subject permission check
@@ -135,7 +172,7 @@ class TeacherSelfOrAdminChange(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         user = getattr(request, 'user', None)
-        if is_effective_admin(user):
+        if is_effective_admin(user, request):
             return True
         if not user or not user.is_authenticated:
             return False
@@ -148,7 +185,7 @@ class TeacherSelfOrAdminChange(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         user = getattr(request, 'user', None)
-        if is_effective_admin(user):
+        if is_effective_admin(user, request):
             return True
         
         # A teacher can edit their own profile
@@ -173,7 +210,7 @@ class RolePermission(permissions.BasePermission):
         user = getattr(request, 'user', None)
         if not user or not user.is_authenticated:
             return False
-        if is_effective_admin(user):
+        if is_effective_admin(user, request):
             return True
             
         profile = getattr(user, 'profile', None)
@@ -195,7 +232,7 @@ class RolePermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         user = getattr(request, 'user', None)
-        if is_effective_admin(user):
+        if is_effective_admin(user, request):
             return True
             
         profile = getattr(user, 'profile', None)
@@ -244,7 +281,7 @@ class TeacherSubjectResultPermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         user = getattr(request, 'user', None)
-        if is_effective_admin(user):
+        if is_effective_admin(user, request):
             return True
         try:
             from academics.models import TeacherAssignment

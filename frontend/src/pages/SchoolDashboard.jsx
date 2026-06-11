@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import PersonIcon from "@mui/icons-material/Person";
 import EmptyState from '../components/EmptyState';
@@ -107,6 +107,62 @@ const getClassOrder = (name) => {
   const match = str.match(/\d+/);
   if (match) return parseInt(match[0], 10);
   return 999;
+};
+
+const isBanglaFirst = (name) => {
+  const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+  const hasBangla = n.includes('bangla') || n.includes('বাংলা');
+  const hasFirst = n.includes('first') || n.includes('1st') || n.includes('১ম') || n.includes('প্রথম');
+  return hasBangla && hasFirst;
+};
+
+const isBanglaSecond = (name) => {
+  const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+  const hasBangla = n.includes('bangla') || n.includes('বাংলা');
+  const hasSecond = n.includes('second') || n.includes('2nd') || n.includes('২য়') || n.includes('দ্বিত');
+  return hasBangla && hasSecond;
+};
+
+const isBanglaPaper = (name) => isBanglaFirst(name) || isBanglaSecond(name);
+
+const isClassNineOrTenName = (className) => {
+  const lower = String(className || '').toLowerCase();
+  return /নবম|দশম|\b9\b|\b10\b/.test(lower);
+};
+
+const computeBanglaCombinedPass = (resultsForStudent, passMarks) => {
+  const banglaList = resultsForStudent.filter(r => isBanglaPaper(r.subject?.name || r.subject_name));
+  if (!banglaList.length) return false;
+  const sumCQ = banglaList.reduce((s, r) => s + (parseFloat(r.written_marks) || 0), 0);
+  const sumMCQ = banglaList.reduce((s, r) => s + (parseFloat(r.mcq_marks) || 0), 0);
+  return (sumCQ >= passMarks) && (sumMCQ >= passMarks);
+};
+
+const toBn = (val) => {
+  const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+  return String(val).replace(/\d/g, d => bn[d] ?? d);
+};
+
+const normalizeExamType = (type, name) => {
+  const s = String(type || '').toLowerCase();
+  const rn = String(name || '').toLowerCase();
+  const hasAny = (str, keys) => keys.some(k => str.includes(k));
+  if (s) {
+    if (hasAny(s, ['final','annual','yearly','বার্ষিক'])) return 'annual';
+    if (hasAny(s, ['half','half_yearly','mid','half-yearly','অর্ধ'])) return 'half_yearly';
+    if (hasAny(s, ['terminal','term','টার্মিনাল'])) return 'terminal';
+    if (hasAny(s, ['model','model_test','model-test','মডেল'])) return 'model';
+    if (hasAny(s, ['test','monthly','টেস্ট','মাসিক'])) return 'test';
+    if (hasAny(s, ['first_term','first','first-term','প্রথম'])) return 'first_term';
+    return s;
+  }
+  if (hasAny(rn, ['final','annual','yearly','বার্ষিক'])) return 'annual';
+  if (hasAny(rn, ['half','half_yearly','mid','half-yearly','অর্ধ'])) return 'half_yearly';
+  if (hasAny(rn, ['terminal','term','টার্মিনাল'])) return 'terminal';
+  if (hasAny(rn, ['model','model_test','model-test','মডেল'])) return 'model';
+  if (hasAny(rn, ['test','monthly','টেস্ট','মাসিক'])) return 'test';
+  if (hasAny(rn, ['first_term','first','first-term','প্রথম'])) return 'first_term';
+  return 'annual';
 };
 
 const menuItems = [
@@ -227,34 +283,73 @@ const SchoolDashboard = () => {
   // Get role and permissions
   const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').trim().toLowerCase();
   const effectiveRole = role; // Now role is already effective_role
-  const isSuperUser = !!(user?.is_superuser || user?.user?.is_superuser || user?.profile?.is_superuser || user?.is_staff || role === 'admin' || role === 'super_admin' || role === 'superadmin');
+  
+  // Helper to normalize username (strip invisible chars, lowercase, trim)
+  const normalizeUsername = (uname) => {
+    return String(uname || '')
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, '')
+      .trim();
+  };
+  
+  const username = normalizeUsername(user?.username || user?.user?.username);
+  const userSchoolId = String(user?.profile?.school_id || (user?.profile?.school?.id) || '');
+  const isSuperUser = !!(
+    username === 'bdadmin' || 
+    user?.is_superuser || 
+    user?.user?.is_superuser || 
+    user?.profile?.is_superuser || 
+    user?.is_staff || 
+    role === 'admin' || 
+    role === 'super_admin' || 
+    role === 'superadmin' ||
+    (role === 'teacher' && userSchoolId === '6') // School 6 teachers are staff
+  );
+  
+  const isShamirOrUmor = username === 'shamir' || username === 'umor';
   const isTeacher = role === 'teacher' || role === 'admin'; // Principal also gets teacher menu
 
   useEffect(() => {
     if (authLoading) return; // Wait until user data is loaded
 
-    // Superusers can access any school
+    // Superusers (bdadmin, superuser, school6 teachers) can access any school
     if (isSuperUser) return;
+    
+    // Shamir and Umor can only access school 16
+    if (isShamirOrUmor) {
+      if (String(id) !== '16') {
+        setError('দুঃখিত, আপনি এই স্কুলে প্রবেশের জন্য অনুমোদিত ব্যাক্তি নন, ধন্যবাদ।');
+        setLoading(false);
+        setTimeout(() => {
+          navigate('/school/16');
+        }, 3000);
+      }
+      return;
+    }
 
     // For regular users, check if their profile school matches the dashboard ID
-    if (user && user.profile?.school && String(user.profile.school) !== String(id)) {
+    if (user && userSchoolId && String(userSchoolId) !== String(id)) {
       setError('দুঃখিত, আপনি এই স্কুলে প্রবেশের জন্য অনুমোদিত ব্যাক্তি নন, ধন্যবাদ।');
       setLoading(false);
       // Optional: Redirect to their own school's dashboard or a generic page
       setTimeout(() => {
-        if (user.profile.school) {
-          navigate(`/school/${user.profile.school}/dashboard`);
+        if (userSchoolId) {
+          navigate(`/school/${userSchoolId}`);
         } else {
           navigate('/welcome');
         }
       }, 3000);
     }
-  }, [id, user, authLoading, isSuperUser, navigate]);
+  }, [id, user, authLoading, isSuperUser, isShamirOrUmor, userSchoolId, navigate]);
 
   // Filter menu items based on user role
-  const filteredMenuItems = menuItems.filter(item => {
+  const filteredMenuItems = useMemo(() => menuItems.filter(item => {
     // Admin and Superuser see everything
     if (isSuperUser) return true;
+
+    // Shamir and Umor see everything on school 16
+    if (isShamirOrUmor && String(id) === '16') return true;
 
     // Allowed for everyone
     const commonKeys = ['', 'classes', 'teacher', 'student', 'subjects', 'assistant', 'support-live', 'profile', 'live-class', 'results', 'result-card', 'id-card'];
@@ -272,61 +367,9 @@ const SchoolDashboard = () => {
 
     // Default: hide everything else
     return false;
-  });
+  }), [isSuperUser, isShamirOrUmor, id, isTeacher, role, effectiveRole]);
 
-  const isBanglaFirst = (name) => {
-    const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-    // Must contain 'bangla' or 'বাংলা' AND ('1st', 'first', '১ম', etc.)
-    const hasBangla = n.includes('bangla') || n.includes('বাংলা');
-    const hasFirst = n.includes('first') || n.includes('1st') || n.includes('১ম') || n.includes('প্রথম');
-    return hasBangla && hasFirst;
-  };
-  const isBanglaSecond = (name) => {
-    const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-    const hasBangla = n.includes('bangla') || n.includes('বাংলা');
-    const hasSecond = n.includes('second') || n.includes('2nd') || n.includes('২য়') || n.includes('দ্বিত');
-    return hasBangla && hasSecond;
-  };
-  const isBanglaPaper = (name) => isBanglaFirst(name) || isBanglaSecond(name);
-  const isClassNineOrTenName = (className) => {
-    const lower = String(className || '').toLowerCase();
-    return /নবম|দশম|\b9\b|\b10\b/.test(lower);
-  };
-  const computeBanglaCombinedPass = (resultsForStudent, passMarks) => {
-    const banglaList = resultsForStudent.filter(r => isBanglaPaper(r.subject?.name || r.subject_name));
-    if (!banglaList.length) return false;
-    const sumCQ = banglaList.reduce((s, r) => s + (parseFloat(r.written_marks) || 0), 0);
-    const sumMCQ = banglaList.reduce((s, r) => s + (parseFloat(r.mcq_marks) || 0), 0);
-    return (sumCQ >= passMarks) && (sumMCQ >= passMarks);
-  };
-  const toBn = (val) => {
-    const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-    return String(val).replace(/\d/g, d => bn[d] ?? d);
-  };
-  
-  const normalizeExamType = (type, name) => {
-    const s = String(type || '').toLowerCase();
-    const rn = String(name || '').toLowerCase();
-    const hasAny = (str, keys) => keys.some(k => str.includes(k));
-    if (s) {
-      if (hasAny(s, ['final','annual','yearly','বার্ষিক'])) return 'annual';
-      if (hasAny(s, ['half','half_yearly','mid','half-yearly','অর্ধ'])) return 'half_yearly';
-      if (hasAny(s, ['terminal','term','টার্মিনাল'])) return 'terminal';
-      if (hasAny(s, ['model','model_test','model-test','মডেল'])) return 'model';
-      if (hasAny(s, ['test','monthly','টেস্ট','মাসিক'])) return 'test';
-      if (hasAny(s, ['first_term','first','first-term','প্রথম'])) return 'first_term';
-      return s;
-    }
-    if (hasAny(rn, ['final','annual','yearly','বার্ষিক'])) return 'annual';
-    if (hasAny(rn, ['half','half_yearly','mid','half-yearly','অর্ধ'])) return 'half_yearly';
-    if (hasAny(rn, ['terminal','term','টার্মিনাল'])) return 'terminal';
-    if (hasAny(rn, ['model','model_test','model-test','মডেল'])) return 'model';
-    if (hasAny(rn, ['test','monthly','টেস্ট','মাসিক'])) return 'test';
-    if (hasAny(rn, ['first_term','first','first-term','প্রথম'])) return 'first_term';
-    return 'annual';
-  };
-
-  const generateSummary = async () => {
+  const generateSummary = useCallback(async () => {
     if (!id) return;
     setSummaryLoading(true);
     try {
@@ -345,10 +388,11 @@ const SchoolDashboard = () => {
     } finally {
       setSummaryLoading(false);
     }
-  };
+  }, [id, summaryExamType, summaryYear]);
+  
   useEffect(() => {
     generateSummary();
-  }, [id, summaryExamType, summaryYear, feeYear]);
+  }, [id, summaryExamType, summaryYear, generateSummary]);
 
   useEffect(() => {
     const computeSchoolStatsFallback = async (schoolId, targetYear) => {
@@ -450,14 +494,11 @@ const SchoolDashboard = () => {
       return enriched;
     };
     if (id) {
-      console.log('SchoolDashboard useEffect triggered with id:', id);
       setCurrentSchoolId(id);
       
       // Fetch school data
-      console.log('Fetching school data from /api/schools/' + id + '/');
       api.get(`/api/schools/${id}/`)
         .then(res => {
-          console.log('School data received:', res.data);
           setSchoolData(res.data);
         })
         .catch(err => {
@@ -466,11 +507,9 @@ const SchoolDashboard = () => {
         });
       
       // Fetch dashboard stats
-      console.log('Starting to fetch dashboard stats...');
       setLoading(true);
       getDashboardStats(id, feeYear)
         .then(async data => {
-          console.log('Dashboard stats received:', data);
           // Fallback enrichment if some fields are missing
           const enriched = { ...(data || {}) };
           try {
@@ -1020,8 +1059,6 @@ const SchoolDashboard = () => {
             }
           })();
         });
-    } else {
-      console.log('SchoolDashboard useEffect: no id provided');
     }
   }, [id, feeYear]);
 

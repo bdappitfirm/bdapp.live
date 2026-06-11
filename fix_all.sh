@@ -163,9 +163,9 @@ fi
 VENV_PYTHON="$BACKEND_DIR/.venv/bin/python"
 VENV_PIP="$BACKEND_DIR/.venv/bin/pip"
 
+# 📦 Master Dependency Sync
 echo "📦 Syncing dependencies..."
-$VENV_PIP install --upgrade pip
-$VENV_PIP install --no-cache-dir -r requirements.txt
+$VENV_PIP install -r requirements.txt
 $VENV_PIP install gunicorn daphne
 
 # Verify Gunicorn and Daphne are installed
@@ -229,11 +229,14 @@ EOF
 # Ensure the static directory exists
 mkdir -p $BACKEND_DIR/static
 
-$VENV_PYTHON manage.py makemigrations --noinput
-if ! $VENV_PYTHON manage.py migrate --noinput; then
-    echo "⚠️ Standard migration failed. Attempting with --run-syncdb as last resort..."
-    $VENV_PYTHON manage.py migrate --run-syncdb --noinput
-fi
+# 🛠️ Database Fixes (Before Migration)
+echo "🛠️ Applying pre-migration database fixes..."
+sudo -u postgres psql -d local_pg_db -c "UPDATE schools_advertisement SET school_id = (SELECT id FROM schools_school LIMIT 1) WHERE school_id IS NULL;" 2>/dev/null || true
+
+# 🗄️ Database Migrations
+echo "🗄️ Running migrations..."
+$VENV_PYTHON manage.py makemigrations schools
+$VENV_PYTHON manage.py migrate --noinput
 
 echo "📂 Collecting Static Files..."
 $VENV_PYTHON manage.py collectstatic --noinput
@@ -498,31 +501,18 @@ sleep 5
 
 # Check if Gunicorn is active
 if systemctl is-active --quiet gunicorn; then
-    echo "✅ Gunicorn is active"
+    echo "✅ Gunicorn is active!"
 else
-    echo "⚠️ Gunicorn is NOT active. Checking journalctl..."
-    journalctl -u gunicorn --no-pager | tail -n 20
+    echo "❌ ERROR: Gunicorn is NOT active!"
+    systemctl status gunicorn --no-pager
 fi
 
-# Check Daphne (ASGI)
+# Check if Daphne is active
 if systemctl is-active --quiet daphne; then
-    echo "✅ Daphne (ASGI) is active"
+    echo "✅ Daphne is active!"
 else
-    echo "❌ Daphne (ASGI) is NOT active. Checking logs..."
-    journalctl -u daphne --no-pager | tail -n 10
+    echo "❌ ERROR: Daphne is NOT active!"
+    systemctl status daphne --no-pager
 fi
 
-# Check Nginx
-if systemctl is-active --quiet nginx; then
-    echo "✅ Nginx is active"
-    echo "🌐 You can now access the site at: http://103.112.62.72"
-else
-    echo "❌ Nginx is NOT active"
-fi
-
-# 8. Setup Auto-Fix Cron (Runs every minute to ensure service is alive)
-echo "⏲️ Setting up Auto-Fix Cronjob..."
-CRON_JOB="* * * * * (systemctl is-active --quiet gunicorn || systemctl restart gunicorn) && (systemctl is-active --quiet daphne || systemctl restart daphne) && (systemctl is-active --quiet nginx || systemctl restart nginx)"
-(crontab -l 2>/dev/null | grep -v "gunicorn" ; echo "$CRON_JOB") | crontab -
-
-echo "✅ Comprehensive Permanent Fixes Applied!"
+echo "🚀 Master Deployment Fix Complete!"

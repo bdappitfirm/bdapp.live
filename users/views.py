@@ -6,8 +6,9 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth import get_user_model
-from django.db.models import Sum, F
-from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, SupportCall
+from django.db.models import Sum, F, Count
+from django.db.models.functions import TruncDate
+from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, SupportCall, ActivityLog
 from .serializers import (
     UserSerializer,
     ProfileSerializer,
@@ -17,6 +18,7 @@ from .serializers import (
     CommitteeProfileSerializer,
     TeacherProfileSerializer,
     TaskSerializer,
+    ActivityLogSerializer,
 )
 from .sms_service import send_sms, send_bulk_sms, SMSTemplates
 from django.core.files.storage import default_storage
@@ -607,7 +609,7 @@ class SupportCallAcceptView(APIView):
             try:
                 cid = int(call_id)
             except Exception:
-                return Response({"error": "invalid call_id"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "invalid_call_id"}, status=status.HTTP_400_BAD_REQUEST)
             with transaction.atomic():
                 # Fix: remove select_related from select_for_update to avoid PostgreSQL "outer join" error
                 call = SupportCall.objects.select_for_update().filter(id=cid).first()
@@ -704,3 +706,56 @@ class SupportCallPingView(APIView):
         call.last_client_ping_at = timezone.now()
         call.save(update_fields=['last_client_ping_at'])
         return Response({"ok": True})
+
+class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ActivityLog.objects.all().select_related('user', 'school')
+    serializer_class = ActivityLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        # Check if user is superuser/staff OR specific admin role
+        is_master = user.is_superuser or user.is_staff
+        
+        if is_master:
+            school_id = self.request.query_params.get('school')
+            if school_id:
+                qs = qs.filter(school_id=school_id)
+            return qs
+            
+        if hasattr(user, 'profile') and user.profile.school:
+            return qs.filter(school=user.profile.school)
+        return qs.none()
+
+    @action(detail=False, methods=['get'])
+    def reports(self, request):
+        if not (request.user.is_superuser or request.user.is_staff):
+            return Response({"detail": "Not authorized"}, status=403)
+            
+        days = int(request.query_params.get('days', 30))
+        cutoff = timezone.now() - timezone.timedelta(days=days)
+        
+        # Daily summary for profile creations
+        daily_stats = ActivityLog.objects.filter(
+            action_type='profile_create',
+            timestamp__gte=cutoff
+        ).annotate(date=TruncDate('timestamp')).values('date').annotate(
+            count=Count('id'),
+            total_cost=Sum('cost')
+        ).order_by('-date')
+        
+        # School-wise summary
+        school_stats = ActivityLog.objects.filter(
+            action_type='profile_create',
+            timestamp__gte=cutoff
+        ).values('school__name', 'school__id').annotate(
+            count=Count('id'),
+            total_cost=Sum('cost')
+        ).order_by('-total_cost')
+
+        return Response({
+            "daily_stats": daily_stats,
+            "school_stats": school_stats,
+            "total_earnings": ActivityLog.objects.filter(action_type='profile_create').aggregate(Sum('cost'))['cost__sum'] or 0
+        })

@@ -601,7 +601,6 @@ export default function StudentsPage() {
       setLoading(true);
       setError(null);
       
-      console.log('Refreshing academic shell (classes/sections/subjects)...');
       await Promise.allSettled([
         refreshClassrooms(id),
         refreshSections(id),
@@ -611,13 +610,10 @@ export default function StudentsPage() {
       // OPTIMIZATION: If we already have students in context, don't force a school-wide refresh
       // This makes page navigation much faster.
       if (Array.isArray(contextStudents) && contextStudents.length > 0) {
-        console.log('Using cached students from context');
         setLoading(false);
         setInitialLoad(false);
         return;
       }
-
-      console.log('Academic shell refreshed. Loading students list...');
       // Try context-native refresh first for robustness
       let list = [];
       try {
@@ -680,7 +676,6 @@ export default function StudentsPage() {
           toast.success(`Loaded ${studentCount} students (school-wide)`);
         }
       }
-      console.log('Current student IDs:', list.map(s => s.id));
     } catch (err) {
       if (err.response?.status === 401) {
         // Interceptor handles logout

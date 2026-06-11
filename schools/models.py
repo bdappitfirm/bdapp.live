@@ -3,6 +3,9 @@ from django.utils import timezone
 
 class School(models.Model):
     name = models.CharField(max_length=255)
+    ein = models.CharField(max_length=50, blank=True, null=True, verbose_name="EIIN Number")
+    email = models.EmailField(blank=True, null=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True)
     logo = models.ImageField(upload_to='school_logos/', blank=True, null=True)
     principal_name = models.CharField(max_length=255, blank=True, null=True)
@@ -18,7 +21,7 @@ class Advertisement(models.Model):
         ('image', 'Image'),
         ('video', 'Video'),
     )
-    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='advertisements')
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='advertisements', null=True, blank=True)
     text = models.CharField(max_length=255, blank=True)
     link = models.URLField(blank=True)
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='image')

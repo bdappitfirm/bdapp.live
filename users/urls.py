@@ -37,6 +37,7 @@ from .views import (
     SupportCallCancelView,
     SupportCallEndView,
     SupportCallPingView,
+    ActivityLogViewSet,
 )
 
 router = DefaultRouter()
@@ -45,6 +46,7 @@ router.register(r'parents', ParentProfileViewSet, basename='parents')
 router.register(r'committees', CommitteeProfileViewSet, basename='committees')
 router.register(r'teachers', TeacherProfileViewSet, basename='teachers')
 router.register(r'tasks', TaskViewSet, basename='tasks')
+router.register(r'activities', ActivityLogViewSet, basename='activities')
 
 # Expose Groups CRUD
 class GroupSerializer(ModelSerializer):

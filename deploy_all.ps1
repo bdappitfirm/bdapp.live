@@ -55,17 +55,21 @@ Write-Host "  bdapp.live - 103.112.62.72" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 
 if (-not $NoFrontend) {
-    Write-Host "Checking Frontend Build..." -ForegroundColor Yellow
-    if (!(Test-Path "$PROJECT_ROOT\frontend\build")) {
-        Write-Host "Frontend build not found! Building now..." -ForegroundColor Yellow
-        Set-Location "$PROJECT_ROOT\frontend"
-        npm run build
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Frontend build failed! Aborting deployment."
-            exit 1
-        }
-        Set-Location $PROJECT_ROOT
+    Write-Host "Cleaning old build..." -ForegroundColor Yellow
+    if (Test-Path "$PROJECT_ROOT\frontend\build") {
+        Remove-Item -Path "$PROJECT_ROOT\frontend\build" -Recurse -Force
     }
+    
+    Write-Host "Building Frontend..." -ForegroundColor Yellow
+    Set-Location "$PROJECT_ROOT\frontend"
+    npm run build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Frontend build failed! Aborting deployment."
+        Set-Location $PROJECT_ROOT
+        exit 1
+    }
+    Set-Location $PROJECT_ROOT
+    
     Write-Host "Packaging Frontend..." -ForegroundColor Cyan
     if (Test-Path "frontend.tar.gz") { Remove-Item "frontend.tar.gz" -Force }
     tar -czf frontend.tar.gz -C frontend build

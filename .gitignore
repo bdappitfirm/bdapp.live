@@ -79,3 +79,9 @@ scripts/set_teacher_passwords.py
 scripts/verify_admins.py
 seed_demo_schools.sh
 setup_new_vps.sh
+.git_backup/
+backups/
+local_db_final.sql
+local_db_fresh.dump
+local_db_plain.sql
+filter_paths.txt
