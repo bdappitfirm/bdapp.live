@@ -193,6 +193,7 @@ const menuItems = [
   { label: 'কমিটি', icon: <GroupIcon />, key: 'committee' },
   { label: 'আইডি লিস্ট', icon: <LockIcon />, key: 'credentials' },
   { label: 'এডমিন', icon: <AccountBalanceIcon />, key: 'admin' },
+  { label: 'স্কুল সেটিংস', icon: <SchoolIcon />, key: 'school-settings' },
   { label: 'প্রোফাইল', icon: <AccountCircleIcon />, key: 'profile', divider: true },
 ];
 

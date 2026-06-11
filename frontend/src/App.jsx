@@ -96,6 +96,7 @@ const DebugPage = React.lazy(() => import('./pages/DebugPage'));
 const YearReportPage = React.lazy(() => import('./pages/YearReportPage'));
 const VirtualClassPage = React.lazy(() => import('./pages/VirtualClassPage'));
 const SupportLivePage = React.lazy(() => import('./pages/SupportLive.jsx'));
+const SchoolSettings = React.lazy(() => import('./pages/SchoolSettings.jsx'));
 
 const StartupRedirect = () => {
   const navigate = useNavigate();
@@ -184,6 +185,7 @@ function App() {
           <Route path="sms" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SMSPage /></ProtectedRoute>} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="admin" element={<RoleDashboard role="admin" />} />
+          <Route path="school-settings" element={<ProtectedRoute allowedRoles={['admin']}><SchoolSettings /></ProtectedRoute> />
           <Route path="parent" element={<ParentsPage />} />
           <Route path="credentials" element={<ProtectedRoute allowedRoles={['admin']}><CredentialsPage /></ProtectedRoute>} />
           <Route path="parent/add" element={<AddParentPage />} />

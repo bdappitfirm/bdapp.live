@@ -51,6 +51,7 @@ import StatCard from '../components/dashboard/StatCard';
 import AttendanceChart from '../components/dashboard/AttendanceChart';
 import ClassDistributionChart from '../components/dashboard/ClassDistributionChart';
 import FeeCollectionChart from '../components/dashboard/FeeCollectionChart';
+import MasterMonitor from '../components/dashboard/MasterMonitor';
 import { getDashboardStats } from '../services/dashboardService';
 
 const banglaNumberMap = { 'প্রথম': 1, 'দ্বিতীয়': 2, 'দ্বিতীয়': 2, 'তৃতীয়': 3, 'তৃতীয়': 3, 'চতুর্থ': 4, 'পঞ্চম': 5, 'ষষ্ঠ': 6, 'সপ্তম': 7, 'অষ্টম': 8, 'নবম': 9, 'দশম': 10, 'একাদশ': 11, 'দ্বাদশ': 12, 'ছয়': 6, 'ছয়': 6 };
@@ -1460,6 +1461,7 @@ const RoleDashboard = ({ role: roleProp }) => {
   const renderCards = () => (
     role === 'admin' ? (
       <Box>
+        {id && <MasterMonitor schoolId={id} />}
         {adminLoading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 2, sm: 4 } }}>
             <Paper 
