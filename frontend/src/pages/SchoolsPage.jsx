@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { Box, Typography, Grid, Card, CardContent, Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
 import { useToast } from '../components/Toast';
 
 export default function SchoolsPage(){
   const toast = useToast();
+  const navigate = useNavigate();
   const [schools, setSchools] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -30,7 +32,7 @@ export default function SchoolsPage(){
                 <Typography variant="h6">{s.name}</Typography>
                 {s.address && <Typography variant="body2">{s.address}</Typography>}
                 <Stack direction="row" spacing={1} sx={{ mt:1 }}>
-                  <Button size="small" variant="outlined" onClick={()=>{ setEditing(s); setForm({ name: s.name || '', address: s.address || '' }); setOpen(true); }}>Edit</Button>
+                  <Button size="small" variant="contained" onClick={()=>navigate(`/school/${s.id}/settings`)}>Edit School Settings</Button>
                 </Stack>
               </CardContent>
             </Card>

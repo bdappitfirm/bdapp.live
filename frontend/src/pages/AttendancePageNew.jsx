@@ -41,8 +41,11 @@ import {
   Class as ClassIcon,
   Group as GroupIcon,
   Description as DescriptionIcon,
-  Print as PrintIcon
+  Print as PrintIcon,
+  QrCodeScanner as QrCodeScannerIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import api from '../utils/api';
 import { scopedGet } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
@@ -55,10 +58,72 @@ export default function AttendancePageNew() {
   const { id } = useParams(); // School ID
   const navigate = useNavigate();
   const toast = useToast();
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [manualStudentId, setManualStudentId] = useState('');
+  const [showBackup, setShowBackup] = useState(false);
+  const qrScannerRef = useRef(null);
+  const wakeLockRef = useRef(null);
+  
+  // Check user role - only admin and teacher can access
   useEffect(() => {
     if (!isAuthenticated()) {
       navigate('/login', { replace: true });
+      return;
     }
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        const allowedRoles = ['admin', 'teacher'];
+        if (!allowedRoles.includes(user.role?.toLowerCase())) {
+          toast.error('Access denied');
+          navigate('/');
+        }
+      } catch (_) {
+        navigate('/login', { replace: true });
+      }
+    }
+  }, []);
+
+  // Keep screen awake
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.error('Wake Lock error:', err);
+      }
+    };
+
+    requestWakeLock();
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && wakeLockRef.current === null) {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockRef.current = await navigator.wakeLock.request('screen');
+          }
+        } catch (err) {
+          console.error('Wake Lock error:', err);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(console.error);
+      }
+    };
+  }, []);
+
+  // Open QR scanner immediately on page load
+  useEffect(() => {
+    setQrScannerOpen(true);
   }, []);
   
   // State management
@@ -442,6 +507,190 @@ export default function AttendancePageNew() {
     }
   };
 
+  // Function to play beep sound
+  const playBeep = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 1000;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.5;
+      
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (error) {
+      console.error('Failed to play beep sound:', error);
+    }
+  };
+
+  // Save attendance to localStorage as backup
+  const saveLocalBackup = (attendanceData) => {
+    const backupKey = `attendance_backup_${id}_${date}`;
+    const existingBackup = JSON.parse(localStorage.getItem(backupKey) || '[]');
+    const updatedBackup = [...existingBackup, attendanceData];
+    localStorage.setItem(backupKey, JSON.stringify(updatedBackup));
+    console.log('Attendance backed up to localStorage:', updatedBackup);
+  };
+
+  const handleQrScanSuccess = async (decodedText) => {
+    try {
+      const data = JSON.parse(decodedText);
+      if (data.type === 'student' && data.id) {
+        const studentId = data.id;
+        const studentName = data.name || 'student';
+        
+        // First, try to find the student across all classes
+        let student = null;
+        
+        // Check if we have the student in current list
+        if (students.length > 0) {
+          student = students.find(s => s.id === studentId);
+        }
+        
+        // If not found, try to fetch the student directly
+        if (!student) {
+          try {
+            const res = await api.get(`/api/academics/students/${studentId}/`);
+            student = res.data;
+          } catch (err) {
+            console.error('Failed to fetch student:', err);
+            toast.error('Failed to get student details');
+            return;
+          }
+        }
+        
+        // Create attendance record
+        const attendanceRecord = {
+          school: parseInt(id),
+          student: studentId,
+          student_name: studentName,
+          date: date,
+          present: true,
+          timestamp: new Date().toISOString()
+        };
+        
+        // Save to localStorage backup FIRST
+        saveLocalBackup(attendanceRecord);
+        
+        // Now save the attendance to server
+        try {
+          await api.post('/api/attendance/records/bulk_save/', {
+            records: [{
+              school: parseInt(id),
+              student: studentId,
+              date: date,
+              present: true,
+              note: ''
+            }]
+          });
+          
+          playBeep();
+          toast.success(`হাজিরা সংরক্ষিত হয়েছে! ${studentName}`);
+          
+          // If we have students loaded, update the state
+          if (students.length > 0 && student) {
+            setAttendance(prev => ({
+              ...prev,
+              [studentId]: true
+            }));
+          }
+        } catch (err) {
+          console.error('Failed to save attendance to server, but local backup exists:', err);
+          toast.error('সার্ভারে সংরক্ষণ ব্যর্থ, কিন্তু লোকাল ব্যাকআপ আছে!');
+        }
+      } else {
+        toast.error('অবৈধ QR কোড');
+      }
+    } catch (error) {
+      console.error('QR parse error:', error);
+      toast.error('QR কোড পার্স করতে ব্যর্থ');
+    }
+  };
+
+  const handleQrScanError = (error) => {
+    console.error('QR scan error:', error);
+  };
+
+  const handleManualEntry = async () => {
+    if (!manualStudentId.trim()) {
+      toast.error('আইডি নম্বর দিন');
+      return;
+    }
+    
+    // Create attendance record
+    const attendanceRecord = {
+      school: parseInt(id),
+      student: parseInt(manualStudentId),
+      student_name: 'Manual Entry',
+      date: date,
+      present: true,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Save to localStorage backup FIRST
+    saveLocalBackup(attendanceRecord);
+    
+    try {
+      // Try to find student or directly create attendance
+      await api.post('/api/attendance/records/bulk_save/', {
+        records: [{
+          school: parseInt(id),
+          student: parseInt(manualStudentId),
+          date: date,
+          present: true,
+          note: 'Manual entry'
+        }]
+      });
+      playBeep();
+      toast.success('হাজিরা সফলভাবে সংরক্ষিত হয়েছে');
+      setManualStudentId('');
+    } catch (err) {
+      console.error('Failed to save manual attendance to server, but local backup exists:', err);
+      toast.error('সার্ভারে সংরক্ষণ ব্যর্থ, কিন্তু লোকাল ব্যাকআপ আছে!');
+      setManualStudentId('');
+    }
+  };
+
+  useEffect(() => {
+    if (qrScannerOpen) {
+      // Delay to ensure the dialog renders first
+      setTimeout(() => {
+        const scannerElement = document.getElementById('qr-scanner');
+        if (scannerElement && !qrScannerRef.current) {
+          qrScannerRef.current = new Html5QrcodeScanner(
+            'qr-scanner',
+            { 
+              fps: 5, // Lower FPS for more stable scanning
+              qrbox: { width: 300, height: 300 }, // Larger scan area
+              rememberLastUsedCamera: true,
+              supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA],
+              aspectRatio: 1.0,
+              showTorchButtonIfSupported: true, // Add torch button for low light
+              showZoomSliderIfSupported: true // Add zoom control
+            },
+            false
+          );
+          qrScannerRef.current.render(handleQrScanSuccess, handleQrScanError);
+        }
+      }, 400);
+    } else {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.clear().catch(console.error);
+        qrScannerRef.current = null;
+      }
+    }
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.clear().catch(console.error);
+      }
+    };
+  }, [qrScannerOpen]);
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Printable Area (hidden on screen) */}
@@ -631,6 +880,18 @@ export default function AttendancePageNew() {
               sx={{ height: '56px' }}
             >
               শিক্ষার্থী লোড করুন
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Button
+              fullWidth
+              variant="contained"
+              color="secondary"
+              startIcon={<QrCodeScannerIcon />}
+              onClick={() => setQrScannerOpen(true)}
+              sx={{ height: '56px' }}
+            >
+              QR স্ক্যান করুন
             </Button>
           </Grid>
         </Grid>
@@ -1059,6 +1320,47 @@ export default function AttendancePageNew() {
           </Table>
         </Paper>
       )}
+
+      {/* QR Scanner Dialog */}
+        <Dialog
+          open={qrScannerOpen}
+          onClose={() => setQrScannerOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">QR কোড স্ক্যান করুন</Typography>
+              <IconButton onClick={() => setQrScannerOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+          <DialogContent>
+            <Box id="qr-scanner" sx={{ mt: 1 }} />
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+              QR স্ক্যান না হলে ম্যানুয়ালি আইডি নম্বর দিন:
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                label="Student ID"
+                fullWidth
+                placeholder="Student ID লিখুন"
+                value={manualStudentId}
+                onChange={(e) => setManualStudentId(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleManualEntry()}
+              />
+              <Button
+                variant="contained"
+                onClick={handleManualEntry}
+                disabled={!manualStudentId}
+              >
+                সেভ
+              </Button>
+            </Box>
+          </DialogContent>
+        </Dialog>
     </Box>
   );
 }

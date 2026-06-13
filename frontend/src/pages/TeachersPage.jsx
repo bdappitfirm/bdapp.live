@@ -86,6 +86,7 @@ export default function TeachersPage() {
     phone_number: '',
     educational_qualification: '',
     designation: '',
+    blood_group: '',
     class_teacher_classroom: '',
     class_teacher_section: '',
     _photoFile: null,
@@ -187,6 +188,7 @@ export default function TeachersPage() {
     phone_number: '',
     educational_qualification: '',
     designation: '',
+    blood_group: '',
     class_teacher_classroom: '',
     class_teacher_section: '',
     _photoFile: null,
@@ -428,6 +430,7 @@ export default function TeachersPage() {
         phone_number: userData.phone_number || '',
         educational_qualification: userData.educational_qualification || '',
         designation: prof?.designation || '',
+        blood_group: prof?.blood_group || '',
         class_teacher_classroom: prof?.class_teacher_classroom?.id || prof?.class_teacher_classroom || '',
         class_teacher_section: prof?.class_teacher_section?.id || prof?.class_teacher_section || '',
         _photoFile: null,
@@ -465,7 +468,15 @@ export default function TeachersPage() {
       
       const formData = new FormData();
       console.log('editFormData.password:', editFormData.password);
-      if (editFormData.username) formData.append('username', editFormData.username);
+      
+      // Get original user data
+      const originalUser = selectedTeacher.user || selectedTeacher;
+      
+      // Only send username if it's changed
+      if (editFormData.username && editFormData.username !== originalUser.username) {
+        formData.append('username', editFormData.username);
+      }
+      
       if (editFormData.password) {
         console.log('Appending password:', editFormData.password);
         formData.append('password', editFormData.password);
@@ -476,6 +487,7 @@ export default function TeachersPage() {
       formData.append('phone_number', editFormData.phone_number || '');
       formData.append('educational_qualification', editFormData.educational_qualification || '');
       formData.append('designation', editFormData.designation || '');
+      formData.append('blood_group', editFormData.blood_group || '');
       
       // Only append if they have a value, otherwise they will be handled by to_internal_value on backend
       formData.append('class_teacher_classroom', editFormData.class_teacher_classroom || '');
@@ -807,6 +819,9 @@ export default function TeachersPage() {
         fd.append('last_name', newTeacher.last_name || '');
         fd.append('email', newTeacher.email || '');
         fd.append('phone_number', newTeacher.phone_number || '');
+        fd.append('educational_qualification', newTeacher.educational_qualification || '');
+        fd.append('designation', newTeacher.designation || '');
+        fd.append('blood_group', newTeacher.blood_group || '');
         if (newTeacher.class_teacher_classroom) fd.append('class_teacher_classroom', newTeacher.class_teacher_classroom);
         if (newTeacher.class_teacher_section) fd.append('class_teacher_section', newTeacher.class_teacher_section);
         if (newTeacher._photoFile) {
@@ -861,12 +876,16 @@ export default function TeachersPage() {
       last_name: '',
       email: '',
       phone_number: '',
+      educational_qualification: '',
+      designation: '',
+      blood_group: '',
       subject_id: '',
       classroom_id: '',
       section_id: '',
       class_teacher_classroom: '',
       class_teacher_section: '',
-      _photoFile: null
+      _photoFile: null,
+      assignments: [{ subjectId: '', classAssignments: [{ classroomId: '', sectionId: '' }] }]
     });
   };
 
@@ -1235,6 +1254,11 @@ export default function TeachersPage() {
             <Typography variant="body1" color="textSecondary">
               <strong>Mobile:</strong> {selectedTeacher?.phone_number || selectedTeacher?.mobile_number || 'Not available'}
             </Typography>
+            {selectedTeacherProfile?.blood_group && (
+              <Typography variant="body1" color="textSecondary">
+                <strong>Blood Group:</strong> {selectedTeacherProfile.blood_group}
+              </Typography>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -1314,6 +1338,24 @@ export default function TeachersPage() {
               placeholder="e.g., B.A., M.A., B.Ed., এম.এ., বি.এড."
               helperText="Optional - শিক্ষাগত যোগ্যতা লিখুন"
             />
+            
+            <TextField
+              select
+              label="রক্তের গ্রুপ (Blood Group)"
+              fullWidth
+              value={editFormData.blood_group || ''}
+              onChange={(e) => setEditFormData({...editFormData, blood_group: e.target.value})}
+            >
+              <MenuItem value="">নির্বাচন করুন</MenuItem>
+              <MenuItem value="A+">A+</MenuItem>
+              <MenuItem value="A-">A-</MenuItem>
+              <MenuItem value="B+">B+</MenuItem>
+              <MenuItem value="B-">B-</MenuItem>
+              <MenuItem value="AB+">AB+</MenuItem>
+              <MenuItem value="AB-">AB-</MenuItem>
+              <MenuItem value="O+">O+</MenuItem>
+              <MenuItem value="O-">O-</MenuItem>
+            </TextField>
 
             <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 2 }}>👨‍🏫 শ্রেণি শিক্ষক তথ্য (Class Teacher Info)</Typography>
             <Stack direction="row" spacing={2}>
@@ -1574,6 +1616,26 @@ export default function TeachersPage() {
                 error={!!newTeacherErrors.phone_number}
                 helperText={newTeacherErrors.phone_number || 'Include country code'}
               />
+            </Grid>
+            
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                select
+                label="রক্তের গ্রুপ (Blood Group)"
+                value={newTeacher.blood_group}
+                onChange={(e) => setNewTeacher({...newTeacher, blood_group: e.target.value})}
+                fullWidth
+              >
+                <MenuItem value="">নির্বাচন করুন</MenuItem>
+                <MenuItem value="A+">A+</MenuItem>
+                <MenuItem value="A-">A-</MenuItem>
+                <MenuItem value="B+">B+</MenuItem>
+                <MenuItem value="B-">B-</MenuItem>
+                <MenuItem value="AB+">AB+</MenuItem>
+                <MenuItem value="AB-">AB-</MenuItem>
+                <MenuItem value="O+">O+</MenuItem>
+                <MenuItem value="O-">O-</MenuItem>
+              </TextField>
             </Grid>
 
             {/* Class Teacher Assignment */}

@@ -84,4 +84,4 @@ backups/
 local_db_final.sql
 local_db_fresh.dump
 local_db_plain.sql
-filter_paths.txt
+filter_paths.txt.git.old

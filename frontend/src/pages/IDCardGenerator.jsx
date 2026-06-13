@@ -30,7 +30,7 @@ function IDCardGenerator() {
   const { id } = useParams();
   const toast = useToast();
   
-  const [tabValue, setTabValue] = useState(0); // 0 = Student, 1 = Teacher
+  const [tabValue, setTabValue] = useState(0); // 0 = Student, 1 = Teacher, 2 = Committee
   const [searchType, setSearchType] = useState('single'); // single or bulk
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -120,9 +120,12 @@ function IDCardGenerator() {
     if (tabValue === 0) {
       // Student search
       await searchStudents();
-    } else {
+    } else if (tabValue === 1) {
       // Teacher search
       await searchTeachers();
+    } else {
+      // Committee search
+      await searchCommittee();
     }
   };
 
@@ -194,35 +197,102 @@ function IDCardGenerator() {
   const searchTeachers = async () => {
     setLoading(true);
     try {
-      let url = `/api/academics/assignments/?classroom__school=${id}`;
+      let url = `/api/users/teachers/?school=${id}`;
       
       if (searchQuery) {
         url += `&search=${searchQuery}`;
       }
 
       const res = await api.get(url);
-      const data = Array.isArray(res.data) ? res.data : res.data.results || [];
+      let data = Array.isArray(res.data) ? res.data : res.data.results || [];
       
-      // Extract unique teachers
-      const teacherMap = new Map();
-      data.forEach(assignment => {
-        if (assignment.teacher) {
-          teacherMap.set(assignment.teacher.id, assignment.teacher);
-        }
+      // Map teacher data to include all necessary fields
+      data = data.map(teacher => {
+        const photoUrl = teacher.photo || 
+                        teacher.user?.photo || 
+                        teacher.user?.photo_url ||
+                        (teacher.user?.photo && `${String((api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : ''))).replace(/\/+$/,'')}${teacher.user.photo}`);
+
+        return {
+          ...teacher,
+          // Ensure fields are available at top level
+          designation: teacher.designation || '',
+          subject: teacher.subject || '',
+          blood_group: teacher.blood_group || '',
+          id_card_number: teacher.id_card_number || teacher.id || '',
+          // Ensure user object has first_name and last_name
+          user: {
+            ...teacher.user,
+            photo_url: photoUrl,
+            photo: photoUrl,
+            first_name: teacher.user?.first_name || '',
+            last_name: teacher.user?.last_name || ''
+          }
+        };
       });
       
-      const teachers = Array.from(teacherMap.values());
-      
-      if (teachers.length === 0) {
+      if (data.length === 0) {
         toast.warning('No teachers found');
         setCards([]);
       } else {
-        setCards(teachers);
-        toast.success(`Generated ${teachers.length} teacher ID card(s)`);
+        setCards(data);
+        toast.success(`Generated ${data.length} teacher ID card(s)`);
       }
     } catch (err) {
       console.error(err);
       toast.error('Failed to load teachers');
+      setCards([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchCommittee = async () => {
+    setLoading(true);
+    try {
+      let url = `/api/users/committees/?school=${id}`;
+      
+      if (searchQuery) {
+        url += `&search=${searchQuery}`;
+      }
+
+      const res = await api.get(url);
+      let data = Array.isArray(res.data) ? res.data : res.data.results || [];
+      
+      // Map committee data to include all necessary fields
+      data = data.map(member => {
+        const photoUrl = member.photo || 
+                        member.user?.photo || 
+                        member.user?.photo_url ||
+                        (member.user?.photo && `${String((api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : ''))).replace(/\/+$/,'')}${member.user.photo}`);
+
+        return {
+          ...member,
+          // Ensure fields are available at top level
+          designation: member.designation || '',
+          blood_group: member.blood_group || '',
+          id_card_number: member.id_card_number || member.id || '',
+          // Ensure user object has first name and last name
+          user: {
+            ...member.user,
+            photo_url: photoUrl,
+            photo: photoUrl,
+            first_name: member.user?.first_name || '',
+            last_name: member.user?.last_name || ''
+          }
+        };
+      });
+      
+      if (data.length === 0) {
+        toast.warning('No committee members found');
+        setCards([]);
+      } else {
+        setCards(data);
+        toast.success(`Generated ${data.length} committee ID card(s)`);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load committee members');
       setCards([]);
     } finally {
       setLoading(false);
@@ -554,6 +624,7 @@ function IDCardGenerator() {
         <Tabs value={tabValue} onChange={(e, v) => { setTabValue(v); setCards([]); }} sx={{ mb: 2 }}>
           <Tab label="শিক্ষার্থী আইডি কার্ড" />
           <Tab label="শিক্ষক আইডি কার্ড" />
+          <Tab label="কমিটি আইডি কার্ড" />
         </Tabs>
 
         {/* Student Search */}
@@ -636,6 +707,19 @@ function IDCardGenerator() {
           />
         )}
 
+        {/* Committee Search */}
+        {tabValue === 2 && (
+          <TextField
+            label="Search Committee Member"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Enter committee member name or leave empty for all"
+            fullWidth
+            sx={{ mb: 2 }}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+          />
+        )}
+
         {/* Action Buttons */}
         <Stack direction="row" spacing={2}>
           <Button
@@ -683,7 +767,7 @@ function IDCardGenerator() {
           {cards.map((item, idx) => (
             <IDCard
               key={idx}
-              type={tabValue === 0 ? 'student' : 'teacher'}
+              type={tabValue === 0 ? 'student' : tabValue === 1 ? 'teacher' : 'committee'}
               data={item}
               school={school}
               classrooms={classrooms}
