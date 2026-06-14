@@ -267,7 +267,7 @@ export default function AdmissionCardGenerator() {
         return;
       }
 
-      const cardsPerPage = 2;
+      const cardsPerPage = 3;
       const totalPages = Math.ceil(images.length / cardsPerPage);
 
       let htmlContent = `
@@ -291,13 +291,14 @@ export default function AdmissionCardGenerator() {
               }
               .print-container {
                 display: flex;
-                flex-direction: column;
+                flex-direction: row;
+                flex-wrap: wrap;
                 gap: 5mm;
                 width: 100%;
                 box-sizing: border-box;
               }
               .card-slot {
-                width: 100%;
+                width: calc((100% - 10mm) / 3);
                 box-sizing: border-box;
                 break-inside: avoid;
                 page-break-inside: avoid;
@@ -305,7 +306,6 @@ export default function AdmissionCardGenerator() {
               .card-slot img {
                 width: 100%;
                 height: auto;
-                max-height: 45vh;
                 display: block;
                 border: 1px solid #e5e7eb;
                 border-radius: 10px;
@@ -378,16 +378,16 @@ export default function AdmissionCardGenerator() {
     
     try {
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4'
       });
       
-      const a4Width = 210; // A4 width in mm
-      const a4Height = 297; // A4 height in mm
+      const a4Width = 297; // A4 width in mm (landscape)
+      const a4Height = 210; // A4 height in mm (landscape)
       const margin = 5;
-      const availableHeight = a4Height - (margin * 3); // margin top, between cards, margin bottom
-      const cardWidth = a4Width - (margin * 2);
+      const gap = 5;
+      const cardWidth = (a4Width - (margin * 2) - (gap * 2)) / 3;
 
       for (let i = 0; i < studentsToExport.length; i++) {
         const student = studentsToExport[i];
@@ -403,22 +403,23 @@ export default function AdmissionCardGenerator() {
           
           const imgData = canvas.toDataURL('image/png');
           const imgHeight = (canvas.height * cardWidth) / canvas.width;
-          const maxCardHeight = availableHeight / 2;
+          const maxCardHeight = a4Height - (margin * 2);
           const finalCardHeight = Math.min(imgHeight, maxCardHeight);
           
           // Check if we need to add a new page
           const isFirstCard = i === 0;
-          const isSecondCardOnPage = i % 2 === 1;
+          const isNewPage = i % 3 === 0;
           
-          if (!isFirstCard && !isSecondCardOnPage) {
-            // Add a new page for every odd index (0 is first, 1 second, 2 new page)
+          if (!isFirstCard && isNewPage) {
+            // Add a new page for every 3rd card
             pdf.addPage();
           }
           
-          // Calculate Y position
-          const positionY = isSecondCardOnPage ? (a4Height / 2) + (margin / 2) : margin;
+          // Calculate X position
+          const positionX = margin + ((i % 3) * (cardWidth + gap));
+          const positionY = margin;
           
-          pdf.addImage(imgData, 'PNG', margin, positionY, cardWidth, finalCardHeight);
+          pdf.addImage(imgData, 'PNG', positionX, positionY, cardWidth, finalCardHeight);
         }
       }
 
