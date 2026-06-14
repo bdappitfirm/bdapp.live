@@ -345,10 +345,57 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
       {/* Valid For removed per requirement */}
 
+      {/* Instructions Section */}
+      <Box sx={{
+        mt: 2,
+        p: 2,
+        backgroundColor: '#f0f4ff',
+        borderRadius: '6px'
+      }}>
+        <Typography variant="subtitle2" sx={{ 
+          fontWeight: 'bold', 
+          mb: 1,
+          color: '#1a237e',
+          textAlign: 'center',
+          fontSize: '0.85rem'
+        }}>
+          পরীক্ষার্থীদের জন্য নির্দেশনা
+        </Typography>
+        <Box component="ol" sx={{ 
+          pl: 2,
+          m: 0,
+          '& li': {
+            mb: 0.8,
+            lineHeight: 1.4,
+            fontSize: '0.75rem',
+            color: '#333'
+          }
+        }}>
+          <li>পরীক্ষার দিন অবশ্যই প্রবেশপত্র সঙ্গে আনতে হবে।</li>
+          <li>পরীক্ষার নির্ধারিত সময়ের কমপক্ষে ৩০ মিনিট আগে কেন্দ্রে উপস্থিত হতে হবে।</li>
+          <li>প্রবেশপত্র ছাড়া পরীক্ষায় অংশগ্রহণ করা যাবে না।</li>
+          <li>মোবাইল ফোন, স্মার্টওয়াচ, ক্যালকুলেটর ও অন্যান্য ইলেকট্রনিক ডিভাইস সঙ্গে আনা নিষিদ্ধ।</li>
+          <li>পরীক্ষার হলে শৃঙ্খলা বজায় রাখতে হবে এবং কর্তব্যরত শিক্ষকদের নির্দেশনা মেনে চলতে হবে।</li>
+          <li>পরীক্ষার সময় কোনো প্রকার অসদুপায় অবলম্বন করলে পরীক্ষার ফল বাতিল করা হতে পারে।</li>
+          <li>উত্তরপত্রে রোল নম্বর ও প্রয়োজনীয় তথ্য সঠিকভাবে লিখতে হবে।</li>
+          <li>পরীক্ষা শেষ হওয়ার আগে অনুমতি ছাড়া হল ত্যাগ করা যাবে না।</li>
+        </Box>
+        <Typography variant="body2" sx={{ 
+          mt: 1.2,
+          pt: 1,
+          borderTop: '1px dashed #b0b7d9',
+          fontSize: '0.75rem',
+          fontWeight: 'bold',
+          color: '#1a237e'
+        }}>
+          বি.দ্র.: প্রবেশপত্রটি যত্নসহকারে সংরক্ষণ করুন এবং পরীক্ষার প্রতিদিন সঙ্গে আনুন।
+        </Typography>
+      </Box>
+
       {/* Footer */}
       <Box sx={{
-        mt: 3,
-        pt: 3,
+        mt: 2,
+        pt: 2,
         borderTop: '2px dashed #d1d9ff'
       }}>
         <Box sx={{ 
