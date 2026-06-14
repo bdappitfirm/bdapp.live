@@ -1,9 +1,9 @@
 #!/bin/bash
 # fix_all.sh - Comprehensive deployment and fix script for bdapp.live
-echo "🚀 Starting Master Deployment Fix for bdapp.live..."
+echo "ðŸš€ Starting Master Deployment Fix for bdapp.live..."
 
 # 0. Install required build dependencies
-echo "📦 Installing build dependencies..."
+echo "ðŸ“¦ Installing build dependencies..."
 apt update
 apt install -y build-essential pkg-config libpq-dev
 
@@ -12,7 +12,7 @@ BACKEND_DIR="/var/www/bdapp"
 FRONTEND_DIR="/var/www/bdapp/frontend/build"
 
 if [ -f "/root/backend_minimal.tar" ]; then
-    echo "📦 Extracting Backend..."
+    echo "ðŸ“¦ Extracting Backend..."
     mkdir -p $BACKEND_DIR
     # Extract into PROJECT ROOT instead of directly backend folder
     mkdir -p /var/www/bdapp
@@ -20,20 +20,20 @@ if [ -f "/root/backend_minimal.tar" ]; then
     
     # --- COPY LOCAL MEDIA from tar to server locations!
     if [ -d "/var/www/bdapp/media" ]; then
-        echo "✅ Found LOCAL MEDIA from tar! Copying to all media locations..."
+        echo "âœ… Found LOCAL MEDIA from tar! Copying to all media locations..."
         cp -ar /var/www/bdapp/media/. $BACKEND_DIR/media/ 2>/dev/null || true
     fi
 fi
 
 # --- ULTIMATE MEDIA FIX ---
-echo "📸 STARTING ULTIMATE MEDIA RESCUE!"
+echo "ðŸ“¸ STARTING ULTIMATE MEDIA RESCUE!"
 
 # List all possible media locations first
-echo "🔍 SEARCHING FOR ALL MEDIA FILES..."
+echo "ðŸ” SEARCHING FOR ALL MEDIA FILES..."
 for CHECK in "/var/www/bdapp/media" "/var/www/bdapp/backend/media" "/root/media"
 do
     if [ -d "$CHECK" ]; then
-        echo "✅ Found media at $CHECK"
+        echo "âœ… Found media at $CHECK"
         echo "   Contents (first 20 files):"
         ls -la "$CHECK" 2>/dev/null | head -30
     fi
@@ -44,7 +44,7 @@ mkdir -p /var/www/bdapp/media
 mkdir -p $BACKEND_DIR/media
 
 # 2. Copy everything from EVERY possible source
-echo "🚚 COPYING ALL MEDIA FILES..."
+echo "ðŸšš COPYING ALL MEDIA FILES..."
 for SOURCE in \
     "/var/www/bdapp/media" \
     "/var/www/bdapp/backend/media" \
@@ -69,21 +69,21 @@ mkdir -p $BACKEND_DIR/media/student_photos
 mkdir -p $BACKEND_DIR/media/user_photos
 
 # 4. Set full permissions
-echo "🔑 SETTING FULL MEDIA PERMISSIONS..."
+echo "ðŸ”‘ SETTING FULL MEDIA PERMISSIONS..."
 chown -R www-data:www-data /var/www/bdapp/media
 chown -R www-data:www-data $BACKEND_DIR/media
 chmod -R 777 /var/www/bdapp/media
 chmod -R 777 $BACKEND_DIR/media
 
 # 5. Show final media structure
-echo "✅ FINAL MEDIA CHECK:"
+echo "âœ… FINAL MEDIA CHECK:"
 ls -la /var/www/bdapp/media/ 2>/dev/null || true
 
 mkdir -p $BACKEND_DIR/staticfiles
 mkdir -p $BACKEND_DIR/static
 
 if [ -f "/root/frontend.tar.gz" ]; then
-    echo "📦 Extracting Frontend..."
+    echo "ðŸ“¦ Extracting Frontend..."
     mkdir -p $FRONTEND_DIR
     tar -xzf /root/frontend.tar.gz -C /var/www/bdapp/frontend/
     # If nested build/ exists, move it
@@ -94,7 +94,7 @@ if [ -f "/root/frontend.tar.gz" ]; then
 fi
 
 # 2. Permissions (Fixed for Executables)
-echo "🔑 Setting permissions for www-data..."
+echo "ðŸ”‘ Setting permissions for www-data..."
 chown -R www-data:www-data /var/www/bdapp
 find /var/www/bdapp -type d -exec chmod 755 {} \;
 # Set files to 644 but KEEP binaries executable
@@ -114,17 +114,17 @@ fi
 chmod +x /var /var/www /var/www/bdapp
 
 # 3. Backend Setup
-echo "⚙️ Running Backend Setup..."
+echo "âš™ï¸ Running Backend Setup..."
 cd $BACKEND_DIR
 
 # Ensure .env exists with production settings
 if [ -f "$BACKEND_DIR/backend/.env" ]; then
-    echo "🚚 Moving existing .env from backend/ to root..."
+    echo "ðŸšš Moving existing .env from backend/ to root..."
     mv "$BACKEND_DIR/backend/.env" "$BACKEND_DIR/.env"
 fi
 
 if [ ! -f "$BACKEND_DIR/.env" ]; then
-    echo "📝 Creating default .env file..."
+    echo "ðŸ“ Creating default .env file..."
     cat <<EOF > $BACKEND_DIR/.env
 DEBUG=False
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')
@@ -149,59 +149,59 @@ fi
 export $(grep -v '^#' "$BACKEND_DIR/.env" | xargs)
 
 # DEEP CLEAN: Recreate venv to fix issues
-echo "🧹 Performing DEEP CLEAN of Virtualenv and Cache..."
+echo "ðŸ§¹ Performing DEEP CLEAN of Virtualenv and Cache..."
 rm -rf .venv
 rm -rf ~/.cache/pip
 rm -f $BACKEND_DIR/.deep_clean_v9
 touch $BACKEND_DIR/.deep_clean_v10
 
 if [ ! -d ".venv" ]; then
-    echo "📦 Virtualenv not found. Creating one..."
+    echo "ðŸ“¦ Virtualenv not found. Creating one..."
     python3 -m venv .venv
 fi
 
 VENV_PYTHON="$BACKEND_DIR/.venv/bin/python"
 VENV_PIP="$BACKEND_DIR/.venv/bin/pip"
 
-# 📦 Master Dependency Sync
-echo "📦 Syncing dependencies..."
+# ðŸ“¦ Master Dependency Sync
+echo "ðŸ“¦ Syncing dependencies..."
 $VENV_PIP install -r requirements.txt
 $VENV_PIP install gunicorn daphne
 
 # Verify Gunicorn and Daphne are installed
-echo "✅ Verifying Gunicorn and Daphne installation..."
+echo "âœ… Verifying Gunicorn and Daphne installation..."
 if [ -f "$BACKEND_DIR/.venv/bin/gunicorn" ]; then
-    echo "✅ Gunicorn found at $BACKEND_DIR/.venv/bin/gunicorn"
+    echo "âœ… Gunicorn found at $BACKEND_DIR/.venv/bin/gunicorn"
     chmod +x "$BACKEND_DIR/.venv/bin/gunicorn"
 else
-    echo "❌ ERROR: Gunicorn not found!"
+    echo "âŒ ERROR: Gunicorn not found!"
 fi
 
 if [ -f "$BACKEND_DIR/.venv/bin/daphne" ]; then
-    echo "✅ Daphne found at $BACKEND_DIR/.venv/bin/daphne"
+    echo "âœ… Daphne found at $BACKEND_DIR/.venv/bin/daphne"
     chmod +x "$BACKEND_DIR/.venv/bin/daphne"
 else
-    echo "❌ ERROR: Daphne not found!"
+    echo "âŒ ERROR: Daphne not found!"
 fi
 
-echo "🔍 Checking Database Connection and Tables..."
+echo "ðŸ” Checking Database Connection and Tables..."
 $VENV_PYTHON manage.py shell <<'EOF'
 from django.db import connection
 try:
     connection.ensure_connection()
     tables = connection.introspection.table_names()
-    print(f"✅ Database connection successful. Found {len(tables)} tables.")
+    print(f"âœ… Database connection successful. Found {len(tables)} tables.")
     if 'schools_school' in tables:
-        print("✅ 'schools_school' table exists.")
+        print("âœ… 'schools_school' table exists.")
     else:
-        print("⚠️ 'schools_school' table is MISSING!")
+        print("âš ï¸ 'schools_school' table is MISSING!")
 except Exception as e:
-    print(f"❌ Database connection failed: {e}")
+    print(f"âŒ Database connection failed: {e}")
 EOF
 
-echo "🚀 Running Migrations..."
+echo "ðŸš€ Running Migrations..."
 # Fix ownership issues in PostgreSQL more aggressively using psql directly as postgres user
-echo "🔑 Fixing Database Ownership for all objects..."
+echo "ðŸ”‘ Fixing Database Ownership for all objects..."
 sudo -u postgres psql -d $PG_NAME <<EOF
 -- Reassign ownership of all tables, sequences, and views
 DO \$\$ 
@@ -229,20 +229,20 @@ EOF
 # Ensure the static directory exists
 mkdir -p $BACKEND_DIR/static
 
-# 🛠️ Database Fixes (Before Migration)
-echo "🛠️ Applying pre-migration database fixes..."
+# ðŸ› ï¸ Database Fixes (Before Migration)
+echo "ðŸ› ï¸ Applying pre-migration database fixes..."
 sudo -u postgres psql -d local_pg_db -c "UPDATE schools_advertisement SET school_id = (SELECT id FROM schools_school LIMIT 1) WHERE school_id IS NULL;" 2>/dev/null || true
 
-# 🗄️ Database Migrations
-echo "🗄️ Running migrations..."
+# ðŸ—„ï¸ Database Migrations
+echo "ðŸ—„ï¸ Running migrations..."
 $VENV_PYTHON manage.py makemigrations schools
 $VENV_PYTHON manage.py migrate --noinput
 
-echo "📂 Collecting Static Files..."
+echo "ðŸ“‚ Collecting Static Files..."
 $VENV_PYTHON manage.py collectstatic --noinput
 
 # 3.5 Custom Fix: Set Omar Farooq as Admin and Reset Passwords
-echo "👑 Running Custom Security and Admin Fixes..."
+echo "ðŸ‘‘ Running Custom Security and Admin Fixes..."
 $VENV_PYTHON manage.py shell <<'EOF'
 from django.contrib.auth import get_user_model
 from users.models import Profile
@@ -267,10 +267,10 @@ except Exception as e:
     print(f"Error setting admin: {e}")
 EOF
 
-# 🗄️ Restore Old Database Backup
-echo "🗄️ Checking for database backup..."
+# ðŸ—„ï¸ Restore Old Database Backup
+echo "ðŸ—„ï¸ Checking for database backup..."
 if [ -f "$BACKEND_DIR/local_db_backup.sql" ]; then
-    echo "📦 Found database backup (SQL format)! Restoring your old data..."
+    echo "ðŸ“¦ Found database backup (SQL format)! Restoring your old data..."
     
     # Stop services temporarily
     systemctl stop gunicorn gunicorn.socket daphne 2>/dev/null
@@ -282,9 +282,9 @@ if [ -f "$BACKEND_DIR/local_db_backup.sql" ]; then
     TABLE_EXISTS=$(sudo -u postgres psql -d local_pg_db -t -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users_user');" 2>/dev/null || echo "f")
     
     if echo "$TABLE_EXISTS" | grep -q "t\|true"; then
-        echo "✅ Database restored successfully from SQL file!"
+        echo "âœ… Database restored successfully from SQL file!"
     else
-        echo "⚠️ Direct restore failed. Trying alternative method..."
+        echo "âš ï¸ Direct restore failed. Trying alternative method..."
         # Drop and recreate database, then restore without the CREATE DATABASE commands
         sudo -u postgres psql <<EOF
 DROP DATABASE IF EXISTS local_pg_db;
@@ -300,25 +300,25 @@ REASSIGN OWNED BY postgres TO local_pg_user;
 ALTER SCHEMA public OWNER TO local_pg_user;
 EOF
     
-    echo "✅ Old database restored successfully!"
+    echo "âœ… Old database restored successfully!"
     
     # Clean up the backup file
     rm -f "$BACKEND_DIR/local_db_backup.sql"
 else
-    echo "⚠️ No database backup found. Seeding demo data instead..."
+    echo "âš ï¸ No database backup found. Seeding demo data instead..."
     SCHOOL_COUNT=$($VENV_PYTHON manage.py shell -c "from schools.models import School; print(School.objects.count())" 2>/dev/null || echo "0")
     if [ "$SCHOOL_COUNT" -eq "0" ]; then
-        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "ভারতী বিদ্যানিকেতন" --students 50 --teachers 10
-        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "আদর্শ উচ্চ বিদ্যালয়" --students 40 --teachers 8
-        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "শিশু শিক্ষা নিকেতন" --students 30 --teachers 6
-        echo "✅ Demo data seeded successfully!"
+        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "à¦­à¦¾à¦°à¦¤à§€ à¦¬à¦¿à¦¦à§à¦¯à¦¾à¦¨à¦¿à¦•à§‡à¦¤à¦¨" --students 50 --teachers 10
+        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "à¦†à¦¦à¦°à§à¦¶ à¦‰à¦šà§à¦š à¦¬à¦¿à¦¦à§à¦¯à¦¾à¦²à¦¯à¦¼" --students 40 --teachers 8
+        $VENV_PYTHON manage.py seed_demo_data --create-school --school-name "à¦¶à¦¿à¦¶à§ à¦¶à¦¿à¦•à§à¦·à¦¾ à¦¨à¦¿à¦•à§‡à¦¤à¦¨" --students 30 --teachers 6
+        echo "âœ… Demo data seeded successfully!"
     else
-        echo "✅ $SCHOOL_COUNT schools already exist."
+        echo "âœ… $SCHOOL_COUNT schools already exist."
     fi
 fi
 
 # Now reset passwords AFTER database is fully restored
-echo "🔐 Resetting passwords for Students, Parents, and Committee members to 12345678..."
+echo "ðŸ” Resetting passwords for Students, Parents, and Committee members to 12345678..."
 $VENV_PYTHON manage.py shell <<'EOF'
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
@@ -331,13 +331,13 @@ try:
         is_staff=False,
         is_superuser=False
     ).update(password=make_password('12345678'))
-    print(f"✅ Successfully reset passwords for {updated_count} users.")
+    print(f"âœ… Successfully reset passwords for {updated_count} users.")
 except Exception as e:
-    print(f"⚠️ Password reset skipped: {e}")
+    print(f"âš ï¸ Password reset skipped: {e}")
 EOF
 
 # 4. Gunicorn and Socket Configuration (Robust Setup)
-echo "⚙️ Configuring Gunicorn Service for Auto-Restart..."
+echo "âš™ï¸ Configuring Gunicorn Service for Auto-Restart..."
 cat <<EOF > /etc/systemd/system/gunicorn.socket
 [Unit]
 Description=gunicorn socket
@@ -403,7 +403,7 @@ chown www-data:www-data /var/log/gunicorn-*.log /var/log/daphne-*.log
 chmod 664 /var/log/gunicorn-*.log /var/log/daphne-*.log
 
 # 5. Service Restart and Health Check
-echo "🔄 Restarting Services..."
+echo "ðŸ”„ Restarting Services..."
 systemctl daemon-reload
 systemctl stop gunicorn gunicorn.socket daphne 2>/dev/null
 systemctl start gunicorn.socket
@@ -415,16 +415,16 @@ systemctl enable daphne
 
 # Ensure socket permissions
 if [ -S "/run/gunicorn.sock" ]; then
-    echo "✅ Gunicorn socket found. Setting permissions..."
+    echo "âœ… Gunicorn socket found. Setting permissions..."
     chown root:www-data /run/gunicorn.sock
     chmod 660 /run/gunicorn.sock
 else
-    echo "❌ ERROR: Gunicorn socket NOT found at /run/gunicorn.sock"
+    echo "âŒ ERROR: Gunicorn socket NOT found at /run/gunicorn.sock"
     journalctl -u gunicorn --no-pager | tail -n 20
 fi
 
 # 6. Nginx Optimization for stability and UTF-8 (with HTTPS support)
-echo "⚙️ Optimizing Nginx for stability and UTF-8..."
+echo "âš™ï¸ Optimizing Nginx for stability and UTF-8..."
 # Clean up old configs
 rm -f /etc/nginx/sites-enabled/*
 rm -f /etc/nginx/sites-available/*
@@ -496,23 +496,23 @@ ln -sf /etc/nginx/sites-available/bdapp.live /etc/nginx/sites-enabled/
 nginx -t && systemctl restart nginx
 
 # 7. Diagnostic Check
-echo "🔍 Checking Backend Health..."
+echo "ðŸ” Checking Backend Health..."
 sleep 5
 
 # Check if Gunicorn is active
 if systemctl is-active --quiet gunicorn; then
-    echo "✅ Gunicorn is active!"
+    echo "âœ… Gunicorn is active!"
 else
-    echo "❌ ERROR: Gunicorn is NOT active!"
+    echo "âŒ ERROR: Gunicorn is NOT active!"
     systemctl status gunicorn --no-pager
 fi
 
 # Check if Daphne is active
 if systemctl is-active --quiet daphne; then
-    echo "✅ Daphne is active!"
+    echo "âœ… Daphne is active!"
 else
-    echo "❌ ERROR: Daphne is NOT active!"
+    echo "âŒ ERROR: Daphne is NOT active!"
     systemctl status daphne --no-pager
 fi
 
-echo "🚀 Master Deployment Fix Complete!"
+echo "ðŸš€ Master Deployment Fix Complete!"
