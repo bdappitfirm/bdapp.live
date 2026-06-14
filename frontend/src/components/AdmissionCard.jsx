@@ -3,7 +3,8 @@ import api from '../utils/api';
 import { Box, Typography, Avatar } from '@mui/material';
 import QRCode from 'qrcode.react';
 
-export default function AdmissionCard({ data, school, exam }) {
+export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
+  console.log('AdmissionCard: examSlots =', examSlots);
   const user = data?.user || {};
   const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
   const className = data?.classroom?.name || 'N/A';
@@ -68,7 +69,7 @@ export default function AdmissionCard({ data, school, exam }) {
     if (/(annual|final|yearly|বার্ষিক)/.test(raw)) return 'বার্ষিক';
     if (/(terminal|term|টার্মিনাল)/.test(raw)) return 'টার্মিনাল';
     if (/(model|মডেল)/.test(raw)) return 'মডেল টেস্ট';
-    if (/(test|টেস্ট|বিশেষ)/.test(raw)) return 'বিশেষ মূল্যায়ন';
+    if (/(test|টেস্ট|বিশেষ)/.test(raw)) return 'বিশেষ মূল্যায়ন';
     return '';
   };
   const getExamYearBn = () => {
@@ -243,26 +244,102 @@ export default function AdmissionCard({ data, school, exam }) {
           borderBottom: '1px solid #e0e0e0',
           pb: 0.5
         }}>
-          Exam Details:
+          পরীক্ষার রুটিন (সময়):
         </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <Typography variant="body2" sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>তারিখ:</span> <span>{exam?.start_date ? new Date(exam.start_date).toLocaleDateString() : toBnDigits(new Date().toLocaleDateString())}</span>
-          </Typography>
-          <Typography variant="body2" sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>সময়:</span> <span>সকাল ১০:০০</span>
-          </Typography>
-          <Typography variant="body2" sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            mt: 1,
-            pt: 1,
-            borderTop: '1px dashed #e0e0e0'
-          }}>
-            <span>Center:</span> <span style={{ textAlign: 'right' }}>{exam?.center || (school?.name || 'স্কুল নাম')}</span>
-          </Typography>
-        </Box>
+        
+        {/* Exam Routine Table - Two Columns */}
+        {(() => {
+              // Filter slots to match student's classroom and section
+              const studentClassroomId = data?.classroom?.id;
+              const studentSectionId = data?.section?.id;
+              const filteredSlots = examSlots.filter(slot => {
+                // Match classroom if set
+                const classroomMatch = !slot.classroom || slot.classroom === studentClassroomId;
+                // Match section if set, else match any section (including null)
+                const sectionMatch = !slot.section || slot.section === studentSectionId;
+                return classroomMatch && sectionMatch;
+              });
+              
+              if (filteredSlots.length === 0) {
+                return (
+                  <Typography variant="body2" sx={{ textAlign: 'center', color: '#757575' }}>
+                    রুটিন পাওয়া যায়নি
+                  </Typography>
+                );
+              }
+              
+              // Helper to format date in Bengali
+      const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const d = new Date(year, month - 1, day);
+        const dayBn = toBnDigits(d.getDate());
+        const monthBn = toBnDigits(d.getMonth() + 1);
+        return `${dayBn}/${monthBn}`;
+      };
+              
+              // Helper to format time
+              const formatTime = (timeStr) => {
+                if (!timeStr) return '';
+                const [h, m] = timeStr.split(':');
+                return `${toBnDigits(h)}:${toBnDigits(m)}`;
+              };
+              
+              return (
+                <Box sx={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 1,
+                  border: '1px solid #e0e8ff',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}>
+                  {/* Header */}
+                  <Box sx={{ 
+                    backgroundColor: '#1a237e', 
+                    color: 'white', 
+                    p: 1, 
+                    fontWeight: 'bold', 
+                    textAlign: 'center'
+                  }}>
+                    তারিখ
+                  </Box>
+                  <Box sx={{ 
+                    backgroundColor: '#1a237e', 
+                    color: 'white', 
+                    p: 1, 
+                    fontWeight: 'bold', 
+                    textAlign: 'center'
+                  }}>
+                    বিষয়
+                  </Box>
+                  
+                  {/* Rows */}
+                  {filteredSlots.map((slot, idx) => (
+                    <>
+                      <Box key={`date-${slot.id}`} sx={{ 
+                        p: 1, 
+                        backgroundColor: idx % 2 === 0 ? 'white' : '#f8f9ff',
+                        textAlign: 'center'
+                      }}>
+                        <Typography variant="body2" sx={{ fontWeight: '500' }}>
+                          {formatDate(slot.exam_date)} {formatTime(slot.start_time) ? `(${formatTime(slot.start_time)})` : ''}
+                        </Typography>
+                      </Box>
+                      <Box key={`subject-${slot.id}`} sx={{ 
+                        p: 1, 
+                        backgroundColor: idx % 2 === 0 ? 'white' : '#f8f9ff',
+                        textAlign: 'center'
+                      }}>
+                        <Typography variant="body2" sx={{ fontWeight: '500' }}>
+                          {slot.subject_name || 'বিষয়'}
+                        </Typography>
+                      </Box>
+                    </>
+                  ))}
+                </Box>
+              );
+            })()}
       </Box>
 
       {/* Valid For removed per requirement */}

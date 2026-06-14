@@ -768,7 +768,11 @@ export default function CertificateGenerator() {
           width: 1200,
           height: clone.scrollHeight,
           windowWidth: 1200,
-          windowHeight: clone.scrollHeight
+          windowHeight: clone.scrollHeight,
+          allowTaint: false,
+          foreignObjectRendering: false,
+          imageTimeout: 15000,
+          removeContainer: false
         });
         
         // Cleanup temporary container

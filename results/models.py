@@ -65,6 +65,25 @@ class Examination(models.Model):
         super().save(*args, **kwargs)
 
 
+class ExamSlot(models.Model):
+    """Exam routine slot - defines date, time, and subject for an exam"""
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='exam_slots', null=True, blank=True)
+    examination = models.ForeignKey(Examination, on_delete=models.CASCADE, related_name='slots', null=True, blank=True)
+    classroom = models.ForeignKey(ClassRoom, on_delete=models.CASCADE, related_name='exam_slots', null=True, blank=True)
+    section = models.ForeignKey(Section, on_delete=models.SET_NULL, null=True, blank=True, related_name='exam_slots')
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='exam_slots')
+    exam_date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    room = models.CharField(max_length=100, blank=True, null=True)
+    
+    class Meta:
+        ordering = ['exam_date', 'start_time', 'subject']
+    
+    def __str__(self):
+        return f"{self.subject.name} - {self.exam_date} {self.start_time}"
+
+
 class Result(models.Model):
     """Individual student result for a subject in an exam"""
     GRADE_CHOICES = [

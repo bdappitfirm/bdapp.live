@@ -54,12 +54,22 @@ $backendExcludes = @(
 $backendRsyncCmd = "rsync -avz --progress --delete " + ($backendExcludes -join " ") + " " + ($backendIncludes -join " ") + " ${USER}@${VPS_IP}:/var/www/bdapp/"
 Invoke-Expression $backendRsyncCmd
 
-Write-Host "`n📦 Syncing Frontend Files..." -ForegroundColor Yellow
+Write-Host "`n📦 Building Frontend..." -ForegroundColor Yellow
 
-if (!(Test-Path "frontend/build")) {
-    Write-Error "Build directory not found! Please run 'npm run build' in the frontend directory first."
-    exit
+# Clean old build and rebuild
+if (Test-Path "frontend/build") {
+    Remove-Item -Path "frontend/build" -Recurse -Force
 }
+Set-Location "frontend"
+npm run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Frontend build failed! Aborting deployment."
+    Set-Location $PSScriptRoot
+    exit 1
+}
+Set-Location $PSScriptRoot
+
+Write-Host "`n📦 Syncing Frontend Files..." -ForegroundColor Yellow
 
 $frontendRsyncCmd = "rsync -avz --progress --delete frontend/build/ ${USER}@${VPS_IP}:/var/www/bdapp/frontend/build/"
 Invoke-Expression $frontendRsyncCmd

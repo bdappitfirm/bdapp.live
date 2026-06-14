@@ -45,6 +45,7 @@ export default function AdmissionCardGenerator() {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [exams, setExams] = useState([]);
   const [loadingExams, setLoadingExams] = useState(false);
+  const [examSlots, setExamSlots] = useState([]);
 
   // Load school data
   useEffect(() => {
@@ -95,6 +96,28 @@ export default function AdmissionCardGenerator() {
     };
     fetchExams();
   }, [id, classFilter]);
+
+  // Load exam slots for the selected exam
+  useEffect(() => {
+    if (!id) return;
+    const fetchExamSlots = async () => {
+      try {
+        let url = `/api/results/exam-slots/?school=${id}`;
+        if (selectedExam) {
+          url += `&examination=${selectedExam}`;
+        } else if (classFilter) {
+          url += `&classroom=${classFilter}`;
+        }
+        const res = await api.get(url);
+        const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        setExamSlots(data);
+      } catch (err) {
+        console.error('Failed to load exam slots:', err);
+        setExamSlots([]);
+      }
+    };
+    fetchExamSlots();
+  }, [id, classFilter, selectedExam]);
 
   // Load sections when class is selected
   const loadSections = async (classroomId) => {
@@ -252,7 +275,7 @@ export default function AdmissionCardGenerator() {
           <head>
             <title>Admission Cards</title>
             <style>
-              @page { size: landscape; margin: 6mm; }
+              @page { size: portrait; margin: 5mm; }
               body {
                 margin: 0;
                 padding: 0;
@@ -262,19 +285,20 @@ export default function AdmissionCardGenerator() {
               }
               .print-page {
                 width: 100%;
-                height: 100%;
+                height: auto;
                 page-break-after: always;
                 box-sizing: border-box;
               }
               .print-container {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 6mm;
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 5mm;
                 width: 100%;
                 box-sizing: border-box;
               }
               .card-slot {
-                width: 100%;
+                width: calc((100% - 10mm) / 3);
                 box-sizing: border-box;
                 break-inside: avoid;
                 page-break-inside: avoid;
@@ -285,6 +309,7 @@ export default function AdmissionCardGenerator() {
                 display: block;
                 border: 1px solid #e5e7eb;
                 border-radius: 10px;
+                object-fit: contain;
               }
               @media print {
                 .print-page { page-break-after: always; }
@@ -353,10 +378,16 @@ export default function AdmissionCardGenerator() {
     
     try {
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4'
       });
+      
+      const a4Width = 297; // A4 width in mm (landscape)
+      const a4Height = 210; // A4 height in mm (landscape)
+      const margin = 5;
+      const gap = 5;
+      const cardWidth = (a4Width - (margin * 2) - (gap * 2)) / 3;
 
       for (let i = 0; i < studentsToExport.length; i++) {
         const student = studentsToExport[i];
@@ -371,25 +402,24 @@ export default function AdmissionCardGenerator() {
           });
           
           const imgData = canvas.toDataURL('image/png');
-          const imgWidth = 210; // A4 width in mm
-          const pageHeight = 297; // A4 height in mm
-          const imgHeight = (canvas.height * imgWidth) / canvas.width;
-          let heightLeft = imgHeight;
-          let position = 0;
+          const imgHeight = (canvas.height * cardWidth) / canvas.width;
+          const maxCardHeight = a4Height - (margin * 2);
+          const finalCardHeight = Math.min(imgHeight, maxCardHeight);
           
-          if (i > 0) {
+          // Check if we need to add a new page
+          const isFirstCard = i === 0;
+          const isNewPage = i % 3 === 0;
+          
+          if (!isFirstCard && isNewPage) {
+            // Add a new page for every 3rd card
             pdf.addPage();
           }
           
-          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
+          // Calculate X position
+          const positionX = margin + ((i % 3) * (cardWidth + gap));
+          const positionY = margin;
           
-          while (heightLeft >= 0) {
-            position = heightLeft - imgHeight;
-            pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
-          }
+          pdf.addImage(imgData, 'PNG', positionX, positionY, cardWidth, finalCardHeight);
         }
       }
 
@@ -418,6 +448,7 @@ export default function AdmissionCardGenerator() {
   };
 
   const selectedExamData = exams.find(exam => String(exam.id) === String(selectedExam)) || {};
+  console.log('AdmissionCardGenerator: selectedExamData =', selectedExamData);
 
   useEffect(() => {
     if (!selectedExam) return;
@@ -646,6 +677,7 @@ export default function AdmissionCardGenerator() {
                       data={student} 
                       school={school} 
                       exam={selectedExamData}
+                      examSlots={examSlots}
                     />
                   </Box>
                   <Box 
@@ -714,6 +746,7 @@ export default function AdmissionCardGenerator() {
                   data={selectedStudent} 
                   school={school} 
                   exam={selectedExamData}
+                  examSlots={examSlots}
                 />
               </Box>
             </Box>

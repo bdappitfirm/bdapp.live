@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 import unicodedata
 from schools.models import School
 from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, ActivityLog
-from academics.models import StudentProfile, ClassRoom, Section
+from academics.models import StudentProfile, ClassRoom, Section, Subject
 
 User = get_user_model()
 
@@ -44,18 +44,23 @@ class ProfileSerializer(serializers.ModelSerializer):
     effective_role = serializers.SerializerMethodField()
     class_teacher_classroom_name = serializers.SerializerMethodField()
     class_teacher_section_name = serializers.SerializerMethodField()
+    assigned_subject_name = serializers.SerializerMethodField()
     
     def get_class_teacher_classroom_name(self, obj):
         return obj.class_teacher_classroom.name if obj.class_teacher_classroom else None
 
     def get_class_teacher_section_name(self, obj):
         return obj.class_teacher_section.name if obj.class_teacher_section else None
+        
+    def get_assigned_subject_name(self, obj):
+        return obj.assigned_subject.name if obj.assigned_subject else None
     
     class Meta:
         model = Profile
         fields = [
             'id', 'user', 'school', 'role', 'effective_role', 'blood_group', 
-            'occupation', 'income', 'designation',
+            'occupation', 'income', 'designation', 'index_number', 'joining_date',
+            'assigned_subject', 'assigned_subject_name',
             'class_teacher_classroom', 'class_teacher_section',
             'class_teacher_classroom_name', 'class_teacher_section_name'
         ]
@@ -111,8 +116,10 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
     designation = serializers.CharField(required=False, allow_blank=True)
     class_teacher_classroom = serializers.PrimaryKeyRelatedField(queryset=ClassRoom.objects.all(), required=False, allow_null=True)
     class_teacher_section = serializers.PrimaryKeyRelatedField(queryset=Section.objects.all(), required=False, allow_null=True)
+    assigned_subject = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), required=False, allow_null=True)
     class_teacher_classroom_name = serializers.SerializerMethodField()
     class_teacher_section_name = serializers.SerializerMethodField()
+    assigned_subject_name = serializers.SerializerMethodField()
 
     def to_internal_value(self, data):
         # Handle empty strings for ForeignKey fields from FormData
@@ -121,12 +128,17 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             data['class_teacher_classroom'] = None
         if 'class_teacher_section' in data and data['class_teacher_section'] == '':
             data['class_teacher_section'] = None
+        if 'assigned_subject' in data and data['assigned_subject'] == '':
+            data['assigned_subject'] = None
         
         # Mapping school_id to school for consistency
         if 'school_id' in data and 'school' not in data:
             data['school'] = data['school_id']
             
         return super().to_internal_value(data)
+        
+    def get_assigned_subject_name(self, obj):
+        return obj.assigned_subject.name if obj.assigned_subject else None
 
     def get_class_teacher_classroom_name(self, obj):
         return obj.class_teacher_classroom.name if obj.class_teacher_classroom else None
@@ -202,7 +214,8 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             'id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 
             'email', 'phone_number', 'educational_qualification', 'photo', 
             'school', 'school_id', 'role', 'designation', 'blood_group', 
-            'occupation', 'income',
+            'occupation', 'income', 'index_number', 'joining_date',
+            'assigned_subject', 'assigned_subject_name',
             'class_teacher_classroom', 'class_teacher_section',
             'class_teacher_classroom_name', 'class_teacher_section_name'
         ]
@@ -348,6 +361,9 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
                 'blood_group': validated_data.get('blood_group') if 'blood_group' in validated_data else None,
                 'occupation': validated_data.get('occupation') if 'occupation' in validated_data else None,
                 'income': validated_data.get('income') if 'income' in validated_data else None,
+                'index_number': validated_data.get('index_number') if 'index_number' in validated_data else None,
+                'joining_date': validated_data.get('joining_date') if 'joining_date' in validated_data else None,
+                'assigned_subject': validated_data.get('assigned_subject') if 'assigned_subject' in validated_data else None,
                 'class_teacher_classroom': validated_data.get('class_teacher_classroom') if 'class_teacher_classroom' in validated_data else None,
                 'class_teacher_section': validated_data.get('class_teacher_section') if 'class_teacher_section' in validated_data else None,
             }.items() if v is not None}
@@ -409,15 +425,19 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         instance.blood_group = validated_data.get('blood_group', instance.blood_group)
         instance.occupation = validated_data.get('occupation', instance.occupation)
         instance.income = validated_data.get('income', instance.income)
+        instance.index_number = validated_data.get('index_number', instance.index_number)
+        instance.joining_date = validated_data.get('joining_date', instance.joining_date)
         
-        # Explicitly handle clearing for classroom/section fields
+        # Explicitly handle clearing for classroom/section/assigned_subject fields
         if 'class_teacher_classroom' in validated_data:
             instance.class_teacher_classroom = validated_data.get('class_teacher_classroom')
         if 'class_teacher_section' in validated_data:
             instance.class_teacher_section = validated_data.get('class_teacher_section')
+        if 'assigned_subject' in validated_data:
+            instance.assigned_subject = validated_data.get('assigned_subject')
         
         for attr, value in validated_data.items():
-            if attr not in ['designation', 'blood_group', 'occupation', 'income', 'class_teacher_classroom', 'class_teacher_section']:
+            if attr not in ['designation', 'blood_group', 'occupation', 'income', 'index_number', 'joining_date', 'class_teacher_classroom', 'class_teacher_section', 'assigned_subject']:
                 setattr(instance, attr, value)
         instance.save()
         
@@ -463,6 +483,16 @@ class CommitteeProfileSerializer(BaseRoleProfileSerializer):
 
 class TeacherProfileSerializer(BaseRoleProfileSerializer):
     role_value = 'teacher'
+    assignments = serializers.SerializerMethodField()
+
+    def get_assignments(self, obj):
+        from academics.models import TeacherAssignment
+        from academics.serializers import TeacherAssignmentSerializer
+        assignments = TeacherAssignment.objects.filter(teacher=obj.user).select_related('subject', 'classroom', 'section')
+        return TeacherAssignmentSerializer(assignments, many=True, context=self.context).data
+
+    class Meta(BaseRoleProfileSerializer.Meta):
+        fields = BaseRoleProfileSerializer.Meta.fields + ['assignments']
 
 class TaskSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.SerializerMethodField()

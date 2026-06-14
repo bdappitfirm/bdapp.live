@@ -30,7 +30,9 @@ import {
   Delete as DeleteIcon,
   School as SchoolIcon,
   FilterList as FilterIcon,
-  Autorenew as RecalcIcon
+  Autorenew as RecalcIcon,
+  Event as EventIcon,
+  Schedule as ScheduleIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -68,11 +70,25 @@ export default function ExaminationsPage() {
   const [examinations, setExaminations] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
   const [sections, setSections] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [selectedClassroom, setSelectedClassroom] = useState(null);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExam, setEditingExam] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, exam: null });
+  const [slotDialogOpen, setSlotDialogOpen] = useState(false);
+  const [editingSlot, setEditingSlot] = useState(null);
+  const [selectedExamForSlots, setSelectedExamForSlots] = useState(null);
+  const [examSlots, setExamSlots] = useState([]);
+  const [slotFormData, setSlotFormData] = useState({
+    subject: null,
+    classroom: null,
+    section: null,
+    exam_date: null,
+    start_time: '',
+    end_time: '',
+    room: ''
+  });
   const toast = useToast();
 
   // Form state
@@ -273,18 +289,39 @@ export default function ExaminationsPage() {
       })();
     } else if (dialogOpen && !clsId) {
       setSections([]);
-      // Ensure section clears if classroom cleared
+      // Ensure section clears if classroom clears
       setFormData(prev => ({ ...prev, section: '' }));
     }
   }, [dialogOpen, formData.classroom]);
 
+  // Load sections when a classroom is chosen inside the slot dialog
+  useEffect(() => {
+    const clsId = slotFormData.classroom?.id;
+    if (slotDialogOpen && clsId) {
+      (async () => {
+        try {
+          const res = await api.get(`/api/academics/sections/?classroom=${clsId}`);
+          setSections(Array.isArray(res.data) ? res.data : res.data?.results || []);
+        } catch (_) {
+          setSections([]);
+        }
+      })();
+    } else if (slotDialogOpen && !clsId) {
+      setSections([]);
+    }
+  }, [slotDialogOpen, slotFormData.classroom]);
+
   const loadData = async () => {
     setLoading(true);
     try {
-      const [examsRes, classroomsRes] = await Promise.all([
+      const [examsRes, classroomsRes, subjectsRes] = await Promise.all([
         api.get(`/api/results/examinations/?school=${id}`),
-        api.get(`/api/academics/classrooms/?school=${id}`)
+        api.get(`/api/academics/classrooms/?school=${id}`),
+        api.get(`/api/academics/subjects/?school=${id}`)
       ]);
+      
+      const subjectData = Array.isArray(subjectsRes.data) ? subjectsRes.data : (subjectsRes.data?.results || []);
+      setSubjects(subjectData);
       
       setExaminations(Array.isArray(examsRes.data) ? examsRes.data : examsRes.data.results || []);
       const rawCls = Array.isArray(classroomsRes.data) ? classroomsRes.data : classroomsRes.data.results || [];
@@ -407,6 +444,14 @@ export default function ExaminationsPage() {
     }
   }, [bulkForm.written_max, bulkForm.mcq_max, bulkForm.practical_max]);
 
+  const formatDateLocal = (date) => {
+    if (!date) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleSubmit = async () => {
     if (!isAuthenticated()) {
       navigate('/login');
@@ -420,7 +465,7 @@ export default function ExaminationsPage() {
     const examData = {
       ...formData,
       school: parseInt(id),
-      exam_date: formData.exam_date ? formData.exam_date.toISOString().split('T')[0] : null,
+      exam_date: formatDateLocal(formData.exam_date),
       section: formData.section ? Number(formData.section) : null,
       written_max: parseInt(formData.written_max || 0) || null,
       mcq_max: parseInt(formData.mcq_max || 0) || null,
@@ -464,6 +509,125 @@ export default function ExaminationsPage() {
   const getExamTypeLabel = (type) => {
     const examType = EXAM_TYPES.find(t => t.value === type);
     return examType ? examType.label : type;
+  };
+
+  const loadExamSlots = async (exam) => {
+    setSelectedExamForSlots(exam);
+    try {
+      const res = await api.get(`/api/results/exam-slots/?examination=${exam.id}`);
+      const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      console.log('Loaded exam slots:', data);
+      setExamSlots(data);
+    } catch (error) {
+      console.error('Error loading exam slots:', error);
+      toast.error('Failed to load exam slots');
+    }
+  };
+
+  const handleSlotDialogOpen = (slot = null) => {
+    console.log('handleSlotDialogOpen called with slot:', slot);
+    if (!isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
+    if (slot) {
+      setEditingSlot(slot);
+      console.log('Setting editing slot:', slot);
+      setSlotFormData({
+        subject: subjects.find(s => s.id === slot.subject) || null,
+        classroom: classrooms.find(c => c.id === slot.classroom) || null,
+        section: sections.find(sec => sec.id === slot.section) || null,
+        exam_date: slot.exam_date ? new Date(slot.exam_date) : null,
+        start_time: slot.start_time || '',
+        end_time: slot.end_time || '',
+        room: slot.room || ''
+      });
+    } else {
+      setEditingSlot(null);
+      setSlotFormData({
+        subject: null,
+        classroom: null,
+        section: null,
+        exam_date: null,
+        start_time: '',
+        end_time: '',
+        room: ''
+      });
+    }
+    setSlotDialogOpen(true);
+  };
+
+  const handleSlotDialogClose = () => {
+    setSlotDialogOpen(false);
+    setEditingSlot(null);
+    setSlotFormData({
+      subject: null,
+      exam_date: null,
+      start_time: '',
+      end_time: '',
+      room: ''
+    });
+  };
+
+  const handleSlotInputChange = (field, value) => {
+    setSlotFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSlotSubmit = async () => {
+    console.log('handleSlotSubmit called, editingSlot:', editingSlot);
+    if (!isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
+    if (!slotFormData.subject) {
+      toast.error('Subject is required');
+      return;
+    }
+    try {
+      const slotData = {
+        school: id,
+        examination: selectedExamForSlots?.id || null,
+        classroom: slotFormData.classroom?.id || null,
+        section: slotFormData.section?.id || null,
+        subject: slotFormData.subject.id,
+        exam_date: formatDateLocal(slotFormData.exam_date),
+        start_time: slotFormData.start_time,
+        end_time: slotFormData.end_time,
+        room: slotFormData.room
+      };
+      
+      if (editingSlot) {
+        console.log('Updating exam slot with ID:', editingSlot.id);
+        await api.put(`/api/results/exam-slots/${editingSlot.id}/`, slotData);
+        toast.success('Exam slot updated');
+      } else {
+        console.log('Creating new exam slot');
+        await api.post('/api/results/exam-slots/', slotData);
+        toast.success('Exam slot created');
+      }
+      handleSlotDialogClose();
+      loadExamSlots(selectedExamForSlots);
+      loadData(); // Refresh exams to get updated slots
+    } catch (error) {
+      console.error('Error saving exam slot:', error);
+      toast.error(`Failed to ${editingSlot ? 'update' : 'create'} exam slot`);
+    }
+  };
+
+  const handleSlotDelete = async (slot) => {
+    if (!isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
+    try {
+      await api.delete(`/api/results/exam-slots/${slot.id}/`);
+      toast.success('Exam slot deleted');
+      loadExamSlots(selectedExamForSlots);
+      loadData(); // Refresh exams
+    } catch (error) {
+      console.error('Error deleting exam slot:', error);
+      toast.error('Failed to delete exam slot');
+    }
   };
 
   // Filter examinations by selected classroom
@@ -624,6 +788,17 @@ export default function ExaminationsPage() {
                     <TableCell align="center">{exam.pass_marks}</TableCell>
                     <TableCell align="center">
                       <Stack direction="row" spacing={1}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ScheduleIcon />}
+                          onClick={() => {
+                            if (!isAuthenticated()) navigate('/login');
+                            loadExamSlots(exam);
+                          }}
+                        >
+                          রুটিন
+                        </Button>
                         <ProtectedButton
                           size="small"
                           onClick={() => handleDialogOpen(exam)}
@@ -999,7 +1174,7 @@ export default function ExaminationsPage() {
                           exam_type: bulkForm.exam_type,
                           classroom: classroomId,
                           section: sec.id,
-                          exam_date: bulkForm.exam_date ? bulkForm.exam_date.toISOString().split('T')[0] : null,
+                          exam_date: formatDateLocal(bulkForm.exam_date),
                           total_marks: bulkForm.total_marks,
                           pass_marks: bulkForm.pass_marks,
                           written_max: parseInt(bulkForm.written_max || 0) || null,
@@ -1022,7 +1197,7 @@ export default function ExaminationsPage() {
                           exam_type: bulkForm.exam_type,
                           classroom: classroom.id,
                           section: null,
-                          exam_date: bulkForm.exam_date ? bulkForm.exam_date.toISOString().split('T')[0] : (exists.exam_date || null),
+                          exam_date: formatDateLocal(bulkForm.exam_date) || (exists.exam_date || null),
                           total_marks: bulkForm.total_marks,
                           pass_marks: bulkForm.pass_marks,
                           written_max: parseInt(bulkForm.written_max || 0) || null,
@@ -1037,7 +1212,7 @@ export default function ExaminationsPage() {
                           exam_type: bulkForm.exam_type,
                           classroom: classroom.id,
                           section: null,
-                          exam_date: bulkForm.exam_date ? bulkForm.exam_date.toISOString().split('T')[0] : null,
+                          exam_date: formatDateLocal(bulkForm.exam_date),
                           total_marks: bulkForm.total_marks,
                           pass_marks: bulkForm.pass_marks,
                           written_max: parseInt(bulkForm.written_max || 0) || null,
@@ -1060,6 +1235,190 @@ export default function ExaminationsPage() {
                 setBulkLoading(false);
               }
             }} variant="contained" disabled={bulkLoading}>{bulkLoading ? 'সেট করা হচ্ছে...' : 'সেট করুন'}</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Exam Slots UI */}
+        {selectedExamForSlots && (
+          <Box sx={{ mt: 4 }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
+              <Typography variant="h5">
+                <ScheduleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                {selectedExamForSlots.name} - পরীক্ষার রুটিন
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => handleSlotDialogOpen()}
+              >
+                নতুন স্লট যোগ করুন
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => setSelectedExamForSlots(null)}
+              >
+                বন্ধ করুন
+              </Button>
+            </Stack>
+            
+            {examSlots.length === 0 ? (
+              <EmptyState
+                icon={EventIcon}
+                title="এখনও কোনো রুটিন নেই"
+                message="পরীক্ষার জন্য রুটিন তৈরি করতে উপরের বাটনে ক্লিক করুন"
+              />
+            ) : (
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'primary.main' }}>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>তারিখ</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শুরুর সময়</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শেষের সময়</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>রুম</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">অ্যাকশন</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {examSlots.map((slot) => (
+                      <TableRow key={slot.id} hover>
+                        <TableCell>{slot.subject_name || subjects.find(s => s.id === slot.subject)?.name}</TableCell>
+                        <TableCell>
+                          {slot.exam_date ? (() => {
+                            const [year, month, day] = slot.exam_date.split('-').map(Number);
+                            const d = new Date(year, month - 1, day);
+                            return d.toLocaleDateString();
+                          })() : '-'}
+                        </TableCell>
+                        <TableCell>{slot.start_time || '-'}</TableCell>
+                        <TableCell>{slot.end_time || '-'}</TableCell>
+                        <TableCell>{slot.room || '-'}</TableCell>
+                        <TableCell align="center">
+                          <Stack direction="row" spacing={1} justifyContent="center">
+                            <ProtectedButton
+                              size="small"
+                              onClick={() => handleSlotDialogOpen(slot)}
+                              color="primary"
+                              allowedRoles={['admin']}
+                            >
+                              <EditIcon />
+                            </ProtectedButton>
+                            <ProtectedButton
+                              size="small"
+                              onClick={() => handleSlotDelete(slot)}
+                              color="error"
+                              allowedRoles={['admin']}
+                            >
+                              <DeleteIcon />
+                            </ProtectedButton>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Box>
+        )}
+
+        {/* Exam Slot Add/Edit Dialog */}
+        <Dialog open={slotDialogOpen} onClose={handleSlotDialogClose} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            {editingSlot ? 'রুটিন স্লট সম্পাদনা' : 'নতুন রুটিন স্লট যোগ'}
+          </DialogTitle>
+          <DialogContent sx={{ pt: 2 }}>
+            <Grid container spacing={3}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Autocomplete
+                  options={classrooms}
+                  getOptionLabel={(option) => option.name}
+                  value={slotFormData.classroom}
+                  onChange={(_, newValue) => handleSlotInputChange('classroom', newValue)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="শ্রেণি"
+                      placeholder="শ্রেণি নির্বাচন করুন"
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Autocomplete
+                  options={sections}
+                  getOptionLabel={(option) => option.name || ''}
+                  value={slotFormData.section}
+                  onChange={(_, newValue) => handleSlotInputChange('section', newValue)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="শাখা"
+                      placeholder="শাখা নির্বাচন করুন (ঐচ্ছিক)"
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid size={12}>
+                <Autocomplete
+                  options={subjects}
+                  getOptionLabel={(option) => option.name}
+                  value={slotFormData.subject}
+                  onChange={(_, newValue) => handleSlotInputChange('subject', newValue)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="বিষয়"
+                      placeholder="বিষয় নির্বাচন করুন"
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <DatePicker
+                  label="পরীক্ষার তারিখ"
+                  value={slotFormData.exam_date}
+                  onChange={(date) => handleSlotInputChange('exam_date', date)}
+                  slotProps={{ textField: { fullWidth: true } }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="শুরুর সময়"
+                  type="time"
+                  value={slotFormData.start_time}
+                  onChange={(e) => handleSlotInputChange('start_time', e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="শেষের সময়"
+                  type="time"
+                  value={slotFormData.end_time}
+                  onChange={(e) => handleSlotInputChange('end_time', e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="রুম"
+                  value={slotFormData.room}
+                  onChange={(e) => handleSlotInputChange('room', e.target.value)}
+                  placeholder="যেমন: ৩০১"
+                />
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleSlotDialogClose}>বাতিল</Button>
+            <Button onClick={handleSlotSubmit} variant="contained">
+              {editingSlot ? 'আপডেট' : 'তৈরি করুন'}
+            </Button>
           </DialogActions>
         </Dialog>
 

@@ -481,19 +481,15 @@ export default function ResultCardGenerator() {
           const pp = parseFloat(prev.practical_marks) || 0;
           const po = ((pw + pmq + pp) > 0) ? (pw + pmq + pp) : (parseFloat(prev.total_obtained) || 0);
           const pt = getTotalMaxForResult(prev);
-          let { grade: pGrade, gpa: pGpa } = calculateGradeAndGPA(po, pt);
-          const pPassed = computeSubjectPass(prev.subject?.name || prev.subject_name || nm, pw, pmq, pp, exams, prev.examination);
-          if (!pPassed) { pGrade = 'F'; pGpa = '0.00'; }
-          else if (pGrade === 'F') { pGrade = 'D'; pGpa = '1.00'; }
+          let { grade: pGrade, gpa: pGpa } = (prev.grade && prev.gpa) ? { grade: prev.grade, gpa: prev.gpa } : calculateGradeAndGPA(po, pt);
+          let pPassed = (prev.is_passed !== undefined && prev.is_passed !== null) ? prev.is_passed : computeSubjectPass(prev.subject?.name || prev.subject_name || nm, pw, pmq, pp, exams, prev.examination);
           const rw = parseFloat(r.written_marks) || 0;
           const rmq = parseFloat(r.mcq_marks) || 0;
           const rp = parseFloat(r.practical_marks) || 0;
           const ro = ((rw + rmq + rp) > 0) ? (rw + rmq + rp) : (parseFloat(r.total_obtained) || 0);
           const rt = getTotalMaxForResult(r);
-          let { grade: rGrade, gpa: rGpa } = calculateGradeAndGPA(ro, rt);
-          const rPassed = computeSubjectPass(r.subject?.name || r.subject_name || nm, rw, rmq, rp, exams, r.examination);
-          if (!rPassed) { rGrade = 'F'; rGpa = '0.00'; }
-          else if (rGrade === 'F') { rGrade = 'D'; rGpa = '1.00'; }
+          let { grade: rGrade, gpa: rGpa } = (r.grade && r.gpa) ? { grade: r.grade, gpa: r.gpa } : calculateGradeAndGPA(ro, rt);
+          let rPassed = (r.is_passed !== undefined && r.is_passed !== null) ? r.is_passed : computeSubjectPass(r.subject?.name || r.subject_name || nm, rw, rmq, rp, exams, r.examination);
           const chosen = ro >= po ? { base: r, w: rw, m: rmq, p: rp, o: ro, t: rt, grade: rGrade, gpa: rGpa, pass: rPassed } : { base: prev, w: pw, m: pmq, p: pp, o: po, t: pt, grade: pGrade, gpa: pGpa, pass: pPassed };
           let cleanName = chosen.base.subject?.name || chosen.base.subject_name || nm;
           cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
@@ -526,10 +522,8 @@ export default function ResultCardGenerator() {
           const p = parseFloat(base.practical_marks) || 0;
           const o = ((w + m + p) > 0) ? (w + m + p) : (parseFloat(base.total_obtained) || 0);
           const t = getTotalMaxForResult(base);
-          let { grade, gpa } = calculateGradeAndGPA(o, t);
-          const passed = computeSubjectPass(base.subject?.name || base.subject_name || nm, w, m, p, exams, base.examination);
-          if (!passed) { grade = 'F'; gpa = '0.00'; }
-          else if (grade === 'F') { grade = 'D'; gpa = '1.00'; }
+          let { grade, gpa } = (base.grade && base.gpa) ? { grade: base.grade, gpa: base.gpa } : calculateGradeAndGPA(o, t);
+          let passed = (base.is_passed !== undefined && base.is_passed !== null) ? base.is_passed : computeSubjectPass(base.subject?.name || base.subject_name || nm, w, m, p, exams, base.examination);
           let cleanName = base.subject?.name || base.subject_name || nm;
           cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
           const clsObj = classrooms.find(c => parseInt(c.id, 10) === parseInt(selectedClass, 10)) || {};
@@ -558,10 +552,8 @@ export default function ResultCardGenerator() {
         const p = parseFloat(r.practical_marks) || 0;
         const obtained = ((w + m + p) > 0) ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
         const totalMax = getTotalMaxForResult(r);
-        let { grade, gpa } = calculateGradeAndGPA(obtained, totalMax);
-        const passed = computeSubjectPass(r.subject?.name || r.subject_name || nm, w, m, p, exams, r.examination);
-        if (!passed) { grade = 'F'; gpa = '0.00'; }
-        else if (grade === 'F') { grade = 'D'; gpa = '1.00'; }
+        let { grade, gpa } = (r.grade && r.gpa) ? { grade: r.grade, gpa: r.gpa } : calculateGradeAndGPA(obtained, totalMax);
+        let passed = (r.is_passed !== undefined && r.is_passed !== null) ? r.is_passed : computeSubjectPass(r.subject?.name || r.subject_name || nm, w, m, p, exams, r.examination);
         let cleanName = r.subject?.name || r.subject_name || nm;
         cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
         {

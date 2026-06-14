@@ -365,6 +365,58 @@ export default function TeacherCard({
                 {qualification}
               </Typography>
             )}
+            {(teacher?.blood_group || teacher?.profile?.blood_group) && (
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: 'rgba(255,255,255,0.9)',
+                  fontWeight: 'bold',
+                  mb: 1,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                }}
+              >
+                রক্তের গ্রুপ: {teacher?.blood_group || teacher?.profile?.blood_group}
+              </Typography>
+            )}
+            {(teacher?.index_number || teacher?.profile?.index_number) && (
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: 'rgba(255,255,255,0.9)',
+                  fontWeight: 'bold',
+                  mb: 1,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                }}
+              >
+                ইনডেক্স নম্বর: {teacher?.index_number || teacher?.profile?.index_number}
+              </Typography>
+            )}
+            {(teacher?.joining_date || teacher?.profile?.joining_date) && (
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: 'rgba(255,255,255,0.9)',
+                  fontWeight: 'bold',
+                  mb: 1,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                }}
+              >
+                যোগদানের তারিখ: {teacher?.joining_date || teacher?.profile?.joining_date}
+              </Typography>
+            )}
+            {(teacher?.assigned_subject?.name || teacher?.profile?.assigned_subject?.name) && (
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: 'rgba(255,255,255,0.9)',
+                  fontWeight: 'bold',
+                  mb: 1,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                }}
+              >
+                নিযুক্ত বিষয়: {teacher?.assigned_subject?.name || teacher?.profile?.assigned_subject?.name}
+              </Typography>
+            )}
             
             {/* Subjects and Classes */}
             {groupedAssignments.length > 0 ? (

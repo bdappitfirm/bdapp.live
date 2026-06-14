@@ -379,7 +379,7 @@ class CommitteeProfileViewSet(viewsets.ModelViewSet):
         return qs
 
 class TeacherProfileViewSet(viewsets.ModelViewSet):
-    queryset = Profile.objects.select_related('user', 'school', 'class_teacher_classroom', 'class_teacher_section').filter(role='teacher')
+    queryset = Profile.objects.select_related('user', 'school', 'class_teacher_classroom', 'class_teacher_section').prefetch_related('user__assignments', 'user__assignments__subject', 'user__assignments__classroom', 'user__assignments__section').filter(role='teacher')
     serializer_class = TeacherProfileSerializer
     permission_classes = [IsSchoolMember, TeacherSelfOrAdminChange]
     filterset_fields = ['school', 'user']

@@ -36,6 +36,11 @@ class Profile(models.Model):
     occupation = models.CharField(max_length=120, blank=True, null=True, help_text='Occupation of the user (parent/guardian)')
     income = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True, help_text='Monthly income (numeric)')
     
+    # Teacher-specific fields
+    index_number = models.CharField(max_length=100, blank=True, null=True, help_text='Index number for teacher ID')
+    joining_date = models.DateField(blank=True, null=True, help_text='Teacher joining date')
+    assigned_subject = models.ForeignKey('academics.Subject', on_delete=models.SET_NULL, null=True, blank=True, related_name='teacher_profiles', help_text='Subject assigned to teacher')
+    
     # Class teacher info (mainly for teachers)
     class_teacher_classroom = models.ForeignKey('academics.ClassRoom', on_delete=models.SET_NULL, null=True, blank=True, related_name='class_teacher_profiles')
     class_teacher_section = models.ForeignKey('academics.Section', on_delete=models.SET_NULL, null=True, blank=True, related_name='class_teacher_profiles')

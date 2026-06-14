@@ -21,11 +21,11 @@ export const AcademicsProvider = ({ children }) => {
   const [currentSchoolId, setCurrentSchoolId] = useState(null);
 
   // Fetch classrooms
-  const refreshClassrooms = useCallback(async (schoolId = currentSchoolId) => {
+  const refreshClassrooms = useCallback(async (schoolId = currentSchoolId, force = false) => {
     if (!schoolId) return;
     
-    // CACHE: If data exists for current school, don't refetch
-    if (classrooms.length > 0 && currentSchoolId === schoolId) return classrooms;
+    // CACHE: If data exists for current school and not forced, don't refetch
+    if (!force && classrooms.length > 0 && currentSchoolId === schoolId) return classrooms;
 
     try {
       const response = await scopedGet('/api/academics/classrooms/', schoolId, {}, { timeout: 30000 });
@@ -39,11 +39,11 @@ export const AcademicsProvider = ({ children }) => {
   }, [currentSchoolId, classrooms.length]);
 
   // Fetch sections
-  const refreshSections = useCallback(async (schoolId = currentSchoolId) => {
+  const refreshSections = useCallback(async (schoolId = currentSchoolId, force = false) => {
     if (!schoolId) return;
     
-    // CACHE: If data exists for current school, don't refetch
-    if (sections.length > 0 && currentSchoolId === schoolId) return sections;
+    // CACHE: If data exists for current school and not forced, don't refetch
+    if (!force && sections.length > 0 && currentSchoolId === schoolId) return sections;
 
     try {
       const response = await scopedGet('/api/academics/sections/', schoolId, {}, { timeout: 15000 });
@@ -57,11 +57,11 @@ export const AcademicsProvider = ({ children }) => {
   }, [currentSchoolId, sections.length]);
 
   // Fetch students
-  const refreshStudents = useCallback(async (schoolId = currentSchoolId) => {
+  const refreshStudents = useCallback(async (schoolId = currentSchoolId, force = false) => {
     if (!schoolId) return;
 
-    // CACHE: If data exists for current school, don't refetch
-    if (students.length > 0 && currentSchoolId === schoolId) return students;
+    // CACHE: If data exists for current school and not forced, don't refetch
+    if (!force && students.length > 0 && currentSchoolId === schoolId) return students;
 
     let attempts = 0;
     const maxAttempts = 3;
@@ -191,11 +191,11 @@ export const AcademicsProvider = ({ children }) => {
   }, [currentSchoolId]);
 
   // Fetch subjects
-  const refreshSubjects = useCallback(async (schoolId = currentSchoolId) => {
+  const refreshSubjects = useCallback(async (schoolId = currentSchoolId, force = false) => {
     if (!schoolId) return;
     
-    // CACHE: If data exists for current school, don't refetch
-    if (subjects.length > 0 && currentSchoolId === schoolId) return subjects;
+    // CACHE: If data exists for current school and not forced, don't refetch
+    if (!force && subjects.length > 0 && currentSchoolId === schoolId) return subjects;
 
     try {
       const response = await scopedGet('/api/academics/subjects/', schoolId, {}, { timeout: 60000 });
@@ -209,7 +209,7 @@ export const AcademicsProvider = ({ children }) => {
   }, [currentSchoolId, subjects.length]);
 
   // Refresh all academic data
-  const refreshAll = useCallback(async (schoolId) => {
+  const refreshAll = useCallback(async (schoolId, force = true) => {
     if (!schoolId) return;
     
     setLoading(true);
@@ -217,10 +217,10 @@ export const AcademicsProvider = ({ children }) => {
     
     try {
       const results = await Promise.allSettled([
-        refreshClassrooms(schoolId),
-        refreshSections(schoolId),
-        refreshStudents(schoolId),
-        refreshSubjects(schoolId)
+        refreshClassrooms(schoolId, force),
+        refreshSections(schoolId, force),
+        refreshStudents(schoolId, force),
+        refreshSubjects(schoolId, force)
       ]);
       const failed = results.filter(r => r.status === 'rejected');
       if (failed.length) {

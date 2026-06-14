@@ -5,10 +5,32 @@ from users.permissions import AdminOrReadOnly, RolePermission, SubjectResultWrit
 from rest_framework.permissions import IsAuthenticated
 from django.http import HttpResponse
 from .utils import _class_group, get_subject_maxima, SECTION_MAXIMA
-from .models import Examination, Result, StudentOverallResult
-from .serializers import ExaminationSerializer, ResultSerializer, StudentOverallResultSerializer
+from .models import Examination, Result, StudentOverallResult, ExamSlot
+from .serializers import ExaminationSerializer, ResultSerializer, StudentOverallResultSerializer, ExamSlotSerializer
 import csv
 from decimal import Decimal
+
+
+class ExamSlotViewSet(viewsets.ModelViewSet):
+    queryset = ExamSlot.objects.select_related('examination', 'subject', 'classroom', 'section', 'school').all()
+    serializer_class = ExamSlotSerializer
+    permission_classes = [IsSchoolMember, IsAuthenticated, RolePermission]
+    
+    def get_queryset(self):
+        qs = super().get_queryset()
+        school_id = self.request.query_params.get('school')
+        if school_id:
+            qs = qs.filter(school_id=school_id)
+        exam_id = self.request.query_params.get('examination')
+        if exam_id:
+            qs = qs.filter(examination_id=exam_id)
+        classroom_id = self.request.query_params.get('classroom')
+        if classroom_id:
+            qs = qs.filter(classroom_id=classroom_id)
+        section_id = self.request.query_params.get('section')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        return qs
 
 
 class ResultPagination(pagination.PageNumberPagination):
@@ -18,7 +40,7 @@ class ResultPagination(pagination.PageNumberPagination):
 
 
 class ExaminationViewSet(viewsets.ModelViewSet):
-    queryset = Examination.objects.select_related('school', 'classroom', 'section').all()
+    queryset = Examination.objects.select_related('school', 'classroom', 'section').prefetch_related('slots', 'slots__subject').all()
     serializer_class = ExaminationSerializer
     permission_classes = [IsSchoolMember, IsAuthenticated, RolePermission]
     filter_backends = [filters.SearchFilter]

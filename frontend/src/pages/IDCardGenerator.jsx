@@ -458,7 +458,11 @@ function IDCardGenerator() {
             scale: Math.min(3, window.devicePixelRatio || 2),
             useCORS: true, 
             backgroundColor: '#ffffff', 
-            logging: false 
+            logging: false,
+            allowTaint: false,
+            foreignObjectRendering: false,
+            imageTimeout: 15000,
+            removeContainer: false
           });
           return cnv.toDataURL('image/png');
         };

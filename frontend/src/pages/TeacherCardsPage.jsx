@@ -78,7 +78,15 @@ export default function TeacherCardsPage() {
         teacherList = teacherList.map(t => {
           const prof = byUserId.get(t.id) || null;
           const designation = prof?.designation || '';
-          return { ...t, profile: prof, designation };
+          return { 
+            ...t, 
+            profile: prof, 
+            designation,
+            index_number: prof?.index_number,
+            joining_date: prof?.joining_date,
+            assigned_subject: prof?.assigned_subject,
+            blood_group: prof?.blood_group
+          };
         });
       } catch (e) {
         // profile fetch failure shouldn't block UI

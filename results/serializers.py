@@ -1,15 +1,26 @@
 from rest_framework import serializers
-from .models import Examination, Result, StudentOverallResult
+from .models import Examination, Result, StudentOverallResult, ExamSlot
 from academics.serializers import StudentProfileSerializer, SubjectSerializer
+
+
+class ExamSlotSerializer(serializers.ModelSerializer):
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    classroom_name = serializers.CharField(source='classroom.name', read_only=True)
+    section_name = serializers.CharField(source='section.name', read_only=True)
+    
+    class Meta:
+        model = ExamSlot
+        fields = ['id', 'school', 'examination', 'classroom', 'classroom_name', 'section', 'section_name', 'subject', 'subject_name', 'exam_date', 'start_time', 'end_time', 'room']
 
 
 class ExaminationSerializer(serializers.ModelSerializer):
     classroom_name = serializers.CharField(source='classroom.name', read_only=True)
     section_name = serializers.CharField(source='section.name', read_only=True)
+    slots = ExamSlotSerializer(many=True, read_only=True)
     
     class Meta:
         model = Examination
-        fields = ['id', 'school', 'name', 'exam_type', 'classroom', 'classroom_name', 'section', 'section_name', 'exam_date', 'total_marks', 'pass_marks', 'written_max', 'mcq_max', 'practical_max']
+        fields = ['id', 'school', 'name', 'exam_type', 'classroom', 'classroom_name', 'section', 'section_name', 'exam_date', 'total_marks', 'pass_marks', 'written_max', 'mcq_max', 'practical_max', 'slots']
 
 
 class ResultSerializer(serializers.ModelSerializer):

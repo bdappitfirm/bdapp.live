@@ -21,6 +21,10 @@ export default function AddTeacherPage() {
     phone_number: '',
     educational_qualification: '',
     designation: '',
+    blood_group: '',
+    index_number: '',
+    joining_date: '',
+    assigned_subject: '',
     class_teacher_classroom: '',
     class_teacher_section: ''
   });
@@ -151,6 +155,10 @@ export default function AddTeacherPage() {
       fd.append('phone_number', form.phone_number || '');
       fd.append('educational_qualification', form.educational_qualification || '');
       fd.append('designation', form.designation || '');
+      fd.append('blood_group', form.blood_group || '');
+      fd.append('index_number', form.index_number || '');
+      fd.append('joining_date', form.joining_date || '');
+      fd.append('assigned_subject', form.assigned_subject || '');
       
       // Class teacher info
       if (form.class_teacher_classroom) fd.append('class_teacher_classroom', form.class_teacher_classroom);
@@ -269,6 +277,51 @@ export default function AddTeacherPage() {
             placeholder="e.g., Assistant Teacher, Lecturer, Demonstrator"
             error={!!formErrors.designation} 
             helperText={formErrors.designation || 'Optional - শিক্ষকের পদবী'} 
+          />
+          
+          <TextField 
+            select
+            label="রক্তের গ্রুপ (Blood Group)" 
+            value={form.blood_group} 
+            onChange={e => setForm({ ...form, blood_group: e.target.value })} 
+            fullWidth
+          >
+            <MenuItem value="">নির্বাচন করুন</MenuItem>
+            <MenuItem value="A+">A+</MenuItem>
+            <MenuItem value="A-">A-</MenuItem>
+            <MenuItem value="B+">B+</MenuItem>
+            <MenuItem value="B-">B-</MenuItem>
+            <MenuItem value="AB+">AB+</MenuItem>
+            <MenuItem value="AB-">AB-</MenuItem>
+            <MenuItem value="O+">O+</MenuItem>
+            <MenuItem value="O-">O-</MenuItem>
+          </TextField>
+
+          <TextField 
+            label="ইনডেক্স নাম্বার (Index Number)" 
+            value={form.index_number} 
+            onChange={e => setForm({ ...form, index_number: e.target.value })} 
+            fullWidth
+          />
+
+          <TextField 
+            label="যোগদানের তারিখ (Joining Date)" 
+            type="date"
+            value={form.joining_date} 
+            onChange={e => setForm({ ...form, joining_date: e.target.value })} 
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
+
+          <Autocomplete
+            fullWidth
+            options={subjects || []}
+            getOptionLabel={(s) => s?.name || ''}
+            value={subjects.find(s => String(s.id) === String(form.assigned_subject)) || null}
+            onChange={(e, val) => setForm({ ...form, assigned_subject: val ? val.id : '' })}
+            renderInput={(params) => (
+              <TextField {...params} label="নিযুক্ত বিষয় (Assigned Subject)" placeholder="বিষয় নির্বাচন করুন" />
+            )}
           />
 
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mt: 2 }}>👨‍🏫 শ্রেণি শিক্ষক তথ্য (Class Teacher Info)</Typography>

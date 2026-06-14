@@ -665,10 +665,10 @@ export default function AttendancePageNew() {
           qrScannerRef.current = new Html5QrcodeScanner(
             'qr-scanner',
             { 
-              fps: 5, // Lower FPS for more stable scanning
-              qrbox: { width: 300, height: 300 }, // Larger scan area
+              fps: 10, // Higher FPS for faster scanning
+              qrbox: { width: 250, height: 250 }, // Optimal scan area
               rememberLastUsedCamera: true,
-              supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA],
+              supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA, Html5Qrcode.SCAN_TYPE_IMAGE], // Support both camera and image upload
               aspectRatio: 1.0,
               showTorchButtonIfSupported: true, // Add torch button for low light
               showZoomSliderIfSupported: true // Add zoom control

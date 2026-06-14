@@ -87,6 +87,9 @@ export default function TeachersPage() {
     educational_qualification: '',
     designation: '',
     blood_group: '',
+    index_number: '',
+    joining_date: '',
+    assigned_subject: '',
     class_teacher_classroom: '',
     class_teacher_section: '',
     _photoFile: null,
@@ -161,6 +164,10 @@ export default function TeachersPage() {
       phone_number: teacher.phone_number || '',
       educational_qualification: teacher.educational_qualification || '',
       designation: profile?.designation || '',
+      blood_group: profile?.blood_group || '',
+      index_number: profile?.index_number || '',
+      joining_date: profile?.joining_date || '',
+      assigned_subject: profile?.assigned_subject?.id || profile?.assigned_subject || '',
       class_teacher_classroom: profile?.class_teacher_classroom || '',
       class_teacher_section: profile?.class_teacher_section || '',
       _photoFile: null,
@@ -286,7 +293,7 @@ export default function TeachersPage() {
       .filter(p => p.user?.id && !assignedTeacherIds.has(p.user.id))
       .map(p => ({
         id: `t-${p.id}`,
-        teacher: p.user,
+        teacher: { ...p.user, ...p },
         teacherProfile: p,
         subject: null,
         classroom: null,
@@ -431,6 +438,9 @@ export default function TeachersPage() {
         educational_qualification: userData.educational_qualification || '',
         designation: prof?.designation || '',
         blood_group: prof?.blood_group || '',
+        index_number: prof?.index_number || '',
+        joining_date: prof?.joining_date || '',
+        assigned_subject: prof?.assigned_subject?.id || prof?.assigned_subject || '',
         class_teacher_classroom: prof?.class_teacher_classroom?.id || prof?.class_teacher_classroom || '',
         class_teacher_section: prof?.class_teacher_section?.id || prof?.class_teacher_section || '',
         _photoFile: null,
@@ -488,6 +498,9 @@ export default function TeachersPage() {
       formData.append('educational_qualification', editFormData.educational_qualification || '');
       formData.append('designation', editFormData.designation || '');
       formData.append('blood_group', editFormData.blood_group || '');
+      formData.append('index_number', editFormData.index_number || '');
+      formData.append('joining_date', editFormData.joining_date || '');
+      formData.append('assigned_subject', editFormData.assigned_subject || '');
       
       // Only append if they have a value, otherwise they will be handled by to_internal_value on backend
       formData.append('class_teacher_classroom', editFormData.class_teacher_classroom || '');
@@ -596,6 +609,10 @@ export default function TeachersPage() {
         phone_number: '',
         educational_qualification: '',
         designation: '',
+        blood_group: '',
+        index_number: '',
+        joining_date: '',
+        assigned_subject: '',
         class_teacher_classroom: '',
         class_teacher_section: '',
         _photoFile: null,
@@ -964,8 +981,12 @@ export default function TeachersPage() {
       if (!uid) return;
       let g = byUser.get(uid);
       if (!g) {
+        // Merge profile data into teacher object
+        const mergedTeacher = a.teacherProfile 
+          ? { ...a.teacher, ...a.teacherProfile, user: { ...a.teacher, ...a.teacherProfile.user } }
+          : a.teacher;
         g = {
-          teacher: a.teacher,
+          teacher: mergedTeacher,
           teacherProfile: a.teacherProfile || null,
           subjects: new Set(),
           classes: new Set(),
@@ -1356,6 +1377,33 @@ export default function TeachersPage() {
               <MenuItem value="O+">O+</MenuItem>
               <MenuItem value="O-">O-</MenuItem>
             </TextField>
+
+            <TextField
+              label="ইনডেক্স নম্বর (Index Number)"
+              fullWidth
+              value={editFormData.index_number || ''}
+              onChange={(e) => setEditFormData({...editFormData, index_number: e.target.value})}
+            />
+
+            <TextField
+              label="যোগদানের তারিখ (Joining Date)"
+              type="date"
+              fullWidth
+              value={editFormData.joining_date || ''}
+              onChange={(e) => setEditFormData({...editFormData, joining_date: e.target.value})}
+              InputLabelProps={{ shrink: true }}
+            />
+
+            <Autocomplete
+              fullWidth
+              options={subjects || []}
+              getOptionLabel={(s) => s?.name || ''}
+              value={subjects.find(s => String(s.id) === String(editFormData.assigned_subject)) || null}
+              onChange={(e, val) => setEditFormData({...editFormData, assigned_subject: val ? val.id : ''})}
+              renderInput={(params) => (
+                <TextField {...params} label="নিযুক্ত বিষয় (Assigned Subject)" placeholder="বিষয় নির্বাচন করুন" />
+              )}
+            />
 
             <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 2 }}>👨‍🏫 শ্রেণি শিক্ষক তথ্য (Class Teacher Info)</Typography>
             <Stack direction="row" spacing={2}>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Avatar, IconButton, Tooltip } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import './IDCard.css';
 import api from '../utils/api';
 
@@ -286,8 +286,8 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
     // Combine all parts
     customIdNumber = `${schoolEin}${numericClass}${numericSection}${paddedRoll}`;
   } else {
-    // For teachers/committee, use existing id or id_card_number
-    customIdNumber = data?.id_card_number || data?.id || '';
+    // For teachers/committee, use index_number if available, else existing id or id_card_number
+    customIdNumber = data?.index_number || data?.id_card_number || data?.id || '';
   }
   
   // Generate QR code data - simplified for easier scanning
@@ -623,7 +623,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                       fontSize: '0.8rem',
                       color: '#0a4b94'
                     }}>
-                      {data?.subject || 'N/A'}
+                      {data?.assigned_subject_name || data?.subject || 'N/A'}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
@@ -644,6 +644,26 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                       color: '#0a4b94'
                     }}>
                       {data?.blood_group || 'N/A'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '0.8rem',
+                      width: '70px',
+                      flexShrink: 0,
+                      textAlign: 'right',
+                      pr: 0.6, /* More space */
+                      color: '#0a4b94'
+                    }}>
+                      Join Date :
+                    </Typography>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '0.8rem',
+                      color: '#0a4b94'
+                    }}>
+                      {data?.joining_date || 'N/A'}
                     </Typography>
                   </Box>
                 </>
@@ -805,13 +825,13 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
             }}>
               <Box sx={{
                 position: 'relative',
-                p: 3, // Extra large quiet zone
-                border: '4px solid #000000', // High contrast border
+                p: 1.5, // Even smaller padding
+                border: '2px solid #000000', // Thinner border
                 bgcolor: '#ffffff' // Pure white background
               }}>
-                <QRCodeSVG 
+                <QRCodeCanvas 
                   value={qrData} 
-                  size={180} // Larger QR code for better scanning
+                  size={100} // Even smaller QR code
                   level="H" // Maximum error correction (30%)
                   includeMargin={false}
                   fgColor="#000000" // Pure black
@@ -827,7 +847,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                 variant="h5"
                 sx={{ 
                   fontWeight: 'bold', 
-                  fontSize: '0.9rem',
+                  fontSize: '0.85rem',
                   color: '#0a4b94',
                   whiteSpace: 'normal',
                   lineHeight: 1.2,
@@ -838,7 +858,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
               </Typography>
             </Box>
 
-            {/* School Seal/Logo - Bigger */}
+            {/* School Seal/Logo - Smaller */}
             <Box sx={{ 
               display: 'flex', 
               justifyContent: 'center',
@@ -848,8 +868,8 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                 <Avatar 
                   src={schoolLogo} 
                   sx={{ 
-                    width: 85, 
-                    height: 85, 
+                    width: 40, // Even smaller logo
+                    height: 40, 
                     border: '2px solid #0a4b94',
                     bgcolor: 'white'
                   }} 
