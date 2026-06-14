@@ -427,6 +427,7 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         instance.income = validated_data.get('income', instance.income)
         instance.index_number = validated_data.get('index_number', instance.index_number)
         instance.joining_date = validated_data.get('joining_date', instance.joining_date)
+        instance.role = validated_data.get('role', instance.role)
         
         # Explicitly handle clearing for classroom/section/assigned_subject fields
         if 'class_teacher_classroom' in validated_data:
@@ -437,7 +438,7 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             instance.assigned_subject = validated_data.get('assigned_subject')
         
         for attr, value in validated_data.items():
-            if attr not in ['designation', 'blood_group', 'occupation', 'income', 'index_number', 'joining_date', 'class_teacher_classroom', 'class_teacher_section', 'assigned_subject']:
+            if attr not in ['designation', 'blood_group', 'occupation', 'income', 'index_number', 'joining_date', 'role', 'class_teacher_classroom', 'class_teacher_section', 'assigned_subject']:
                 setattr(instance, attr, value)
         instance.save()
         

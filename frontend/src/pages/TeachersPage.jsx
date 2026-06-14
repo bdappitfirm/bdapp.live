@@ -90,6 +90,7 @@ export default function TeachersPage() {
     index_number: '',
     joining_date: '',
     assigned_subject: '',
+    role: '',
     class_teacher_classroom: '',
     class_teacher_section: '',
     _photoFile: null,
@@ -444,6 +445,7 @@ export default function TeachersPage() {
         index_number: prof?.index_number || '',
         joining_date: prof?.joining_date || '',
         assigned_subject: prof?.assigned_subject?.id || prof?.assigned_subject || '',
+        role: prof?.role || '',
         class_teacher_classroom: prof?.class_teacher_classroom?.id || prof?.class_teacher_classroom || '',
         class_teacher_section: prof?.class_teacher_section?.id || prof?.class_teacher_section || '',
         _photoFile: null,
@@ -504,6 +506,7 @@ export default function TeachersPage() {
       formData.append('index_number', editFormData.index_number || '');
       formData.append('joining_date', editFormData.joining_date || '');
       formData.append('assigned_subject', editFormData.assigned_subject || '');
+      formData.append('role', editFormData.role || '');
       
       // Only append if they have a value, otherwise they will be handled by to_internal_value on backend
       formData.append('class_teacher_classroom', editFormData.class_teacher_classroom || '');
@@ -845,6 +848,7 @@ export default function TeachersPage() {
         fd.append('index_number', newTeacher.index_number || '');
         fd.append('joining_date', newTeacher.joining_date || '');
         fd.append('assigned_subject', newTeacher.assigned_subject || '');
+        fd.append('role', newTeacher.role || 'teacher');
         if (newTeacher.class_teacher_classroom) fd.append('class_teacher_classroom', newTeacher.class_teacher_classroom);
         if (newTeacher.class_teacher_section) fd.append('class_teacher_section', newTeacher.class_teacher_section);
         if (newTeacher._photoFile) {
@@ -863,7 +867,7 @@ export default function TeachersPage() {
           email: newTeacher.email || '',
           phone_number: newTeacher.phone_number || '',
           school: id,
-          role: 'teacher'
+          role: newTeacher.role || 'teacher'
         });
         teacherId = userRes.data?.teacher?.id || userRes.data?.user?.id || null;
       }
@@ -1414,6 +1418,17 @@ export default function TeachersPage() {
               )}
             />
 
+            <TextField
+              select
+              label="Role"
+              fullWidth
+              value={editFormData.role || ''}
+              onChange={(e) => setEditFormData({...editFormData, role: e.target.value})}
+            >
+              <MenuItem value="teacher">Teacher</MenuItem>
+              <MenuItem value="admin">Admin</MenuItem>
+            </TextField>
+
             <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 2 }}>👨‍🏫 শ্রেণি শিক্ষক তথ্য (Class Teacher Info)</Typography>
             <Stack direction="row" spacing={2}>
               <Autocomplete
@@ -1726,6 +1741,19 @@ export default function TeachersPage() {
                   <TextField {...params} label="নিযুক্ত বিষয় (Assigned Subject)" placeholder="বিষয় নির্বাচন করুন" />
                 )}
               />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                select
+                label="Role"
+                value={newTeacher.role || ''}
+                onChange={(e) => setNewTeacher({...newTeacher, role: e.target.value})}
+                fullWidth
+              >
+                <MenuItem value="teacher">Teacher</MenuItem>
+                <MenuItem value="admin">Admin</MenuItem>
+              </TextField>
             </Grid>
 
             {/* Class Teacher Assignment */}
