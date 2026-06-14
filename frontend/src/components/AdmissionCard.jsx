@@ -65,12 +65,13 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
   };
   const getExamTypeBn = () => {
     const raw = String(exam?.name || exam?.exam_type || '').toLowerCase();
+    if (/(প্রাক|pre)/.test(raw)) return 'প্রাক নির্বাচনী';
     if (/(half|mid|অর্ধ)/.test(raw)) return 'অর্ধ-বার্ষিক';
     if (/(annual|final|yearly|বার্ষিক)/.test(raw)) return 'বার্ষিক';
     if (/(terminal|term|টার্মিনাল)/.test(raw)) return 'টার্মিনাল';
     if (/(model|মডেল)/.test(raw)) return 'মডেল টেস্ট';
     if (/(test|টেস্ট|বিশেষ)/.test(raw)) return 'বিশেষ মূল্যায়ন';
-    return '';
+    return exam?.name || '';
   };
   const getExamYearBn = () => {
     const yr =
@@ -167,7 +168,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
             fontWeight: 500,
             lineHeight: 1.2
           }}>
-            {(getExamTypeBn() || 'পরিক্ষা') + ' পরিক্ষা-' + getExamYearBn() + 'ইং'}
+            {(getExamTypeBn() ? `${getExamTypeBn()} পরিক্ষা-` : 'পরিক্ষা ') + getExamYearBn() + 'খ্রীঃ'}
           </Typography>
         </Box>
         
