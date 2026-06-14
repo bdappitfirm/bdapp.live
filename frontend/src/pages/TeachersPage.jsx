@@ -196,6 +196,9 @@ export default function TeachersPage() {
     educational_qualification: '',
     designation: '',
     blood_group: '',
+    index_number: '',
+    joining_date: '',
+    assigned_subject: '',
     class_teacher_classroom: '',
     class_teacher_section: '',
     _photoFile: null,
@@ -839,6 +842,9 @@ export default function TeachersPage() {
         fd.append('educational_qualification', newTeacher.educational_qualification || '');
         fd.append('designation', newTeacher.designation || '');
         fd.append('blood_group', newTeacher.blood_group || '');
+        fd.append('index_number', newTeacher.index_number || '');
+        fd.append('joining_date', newTeacher.joining_date || '');
+        fd.append('assigned_subject', newTeacher.assigned_subject || '');
         if (newTeacher.class_teacher_classroom) fd.append('class_teacher_classroom', newTeacher.class_teacher_classroom);
         if (newTeacher.class_teacher_section) fd.append('class_teacher_section', newTeacher.class_teacher_section);
         if (newTeacher._photoFile) {
@@ -896,6 +902,9 @@ export default function TeachersPage() {
       educational_qualification: '',
       designation: '',
       blood_group: '',
+      index_number: '',
+      joining_date: '',
+      assigned_subject: '',
       subject_id: '',
       classroom_id: '',
       section_id: '',
@@ -1684,6 +1693,39 @@ export default function TeachersPage() {
                 <MenuItem value="O+">O+</MenuItem>
                 <MenuItem value="O-">O-</MenuItem>
               </TextField>
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="ইনডেক্স নাম্বার (Index Number)"
+                value={newTeacher.index_number}
+                onChange={(e) => setNewTeacher({...newTeacher, index_number: e.target.value})}
+                fullWidth
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="যোগদানের তারিখ (Joining Date)"
+                type="date"
+                value={newTeacher.joining_date}
+                onChange={(e) => setNewTeacher({...newTeacher, joining_date: e.target.value})}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Autocomplete
+                fullWidth
+                options={subjects || []}
+                getOptionLabel={(s) => s?.name || ''}
+                value={subjects.find(s => String(s.id) === String(newTeacher.assigned_subject)) || null}
+                onChange={(e, val) => setNewTeacher({...newTeacher, assigned_subject: val ? val.id : ''})}
+                renderInput={(params) => (
+                  <TextField {...params} label="নিযুক্ত বিষয় (Assigned Subject)" placeholder="বিষয় নির্বাচন করুন" />
+                )}
+              />
             </Grid>
 
             {/* Class Teacher Assignment */}

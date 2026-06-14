@@ -1904,7 +1904,7 @@ const SchoolDashboard = () => {
                   </ListItemIcon>
                   <ListItemText 
                     primary={item.label}
-                    primaryTypographyProps={{ fontSize: '0.95rem', fontWeight: 500 }}
+                    primaryTypographyProps={{ fontSize: '1.1rem', fontWeight: 500 }}
                   />
                 </ListItemButton>
               </ListItem>
@@ -1971,7 +1971,7 @@ const SchoolDashboard = () => {
                   </ListItemIcon>
                   <ListItemText 
                     primary={item.label}
-                    primaryTypographyProps={{ fontSize: '0.95rem', fontWeight: 500 }}
+                    primaryTypographyProps={{ fontSize: '1.1rem', fontWeight: 500 }}
                   />
                 </ListItemButton>
               </ListItem>
