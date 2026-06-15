@@ -148,7 +148,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         <Box className="school-info-box" sx={{ textAlign: 'center', flex: 1, px: 1, minWidth: 0 }}>
           <Typography variant="h6" sx={{ 
             fontWeight: 'bold', 
-            fontSize: '1.1rem',
+            fontSize: '1.3rem',
             mb: 0.5,
             lineHeight: 1.2,
             wordBreak: 'break-word'
@@ -156,7 +156,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
             {school?.bn_name || school?.name || 'স্কুলের নাম'}
           </Typography>
           <Typography variant="h5" sx={{ 
-            fontSize: '1.3rem',
+            fontSize: '1.5rem',
             fontWeight: 'bold',
             mb: 0.5,
             lineHeight: 1.2
@@ -164,7 +164,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
             প্রবেশপত্র
           </Typography>
           <Typography variant="body2" sx={{ 
-            fontSize: '0.9rem',
+            fontSize: '1.1rem',
             fontWeight: 500,
             lineHeight: 1.2
           }}>
@@ -208,7 +208,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
       }}>
         <Typography variant="h6" sx={{ 
           fontWeight: 'bold',
-          fontSize: '1.1rem',
+          fontSize: '1.3rem',
           textAlign: 'center',
           mb: 1.5,
           lineHeight: 1.2
@@ -217,13 +217,13 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         </Typography>
         
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-          <Typography variant="body2" sx={{ flex: '1 1 45%', minWidth: '120px' }}>
+          <Typography variant="body1" sx={{ flex: '1 1 45%', minWidth: '120px', fontSize: '1.1rem' }}>
             <strong>Roll:</strong> {rollNumber || 'রোল'}
           </Typography>
-          <Typography variant="body2" sx={{ flex: '1 1 45%', minWidth: '120px' }}>
+          <Typography variant="body1" sx={{ flex: '1 1 45%', minWidth: '120px', fontSize: '1.1rem' }}>
             <strong>Class:</strong> {className && className !== 'N/A' ? `${className} ${section}` : 'শ্রেণি'}
           </Typography>
-          <Typography variant="body2" sx={{ flex: '1 1 100%' }}>
+          <Typography variant="body1" sx={{ flex: '1 1 100%', fontSize: '1.1rem' }}>
             <strong>Exam ID:</strong> {exam?.exam_id || 'N/A'}
           </Typography>
         </Box>
@@ -238,12 +238,13 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         backgroundColor: '#f8f9ff',
         boxShadow: '0 2px 8px rgba(26, 35, 126, 0.05)'
       }}>
-        <Typography variant="subtitle2" sx={{ 
+        <Typography variant="h6" sx={{ 
           fontWeight: 'bold', 
           mb: 1.5, 
           textAlign: 'center',
           borderBottom: '1px solid #e0e0e0',
-          pb: 0.5
+          pb: 0.5,
+          fontSize: '1.2rem'
         }}>
           পরীক্ষার রুটিন (সময়):
         </Typography>
@@ -263,7 +264,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
               
               if (filteredSlots.length === 0) {
                 return (
-                  <Typography variant="body2" sx={{ textAlign: 'center', color: '#757575' }}>
+                  <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '1rem' }}>
                     রুটিন পাওয়া যায়নি
                   </Typography>
                 );
@@ -301,7 +302,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                     color: 'white', 
                     p: 1, 
                     fontWeight: 'bold', 
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    fontSize: '1.1rem'
                   }}>
                     তারিখ
                   </Box>
@@ -310,7 +312,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                     color: 'white', 
                     p: 1, 
                     fontWeight: 'bold', 
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    fontSize: '1.1rem'
                   }}>
                     বিষয়
                   </Box>
@@ -323,7 +326,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                         backgroundColor: idx % 2 === 0 ? 'white' : '#f8f9ff',
                         textAlign: 'center'
                       }}>
-                        <Typography variant="body2" sx={{ fontWeight: '500' }}>
+                        <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '1rem' }}>
                           {formatDate(slot.exam_date)} {formatTime(slot.start_time) ? `(${formatTime(slot.start_time)})` : ''}
                         </Typography>
                       </Box>
@@ -332,7 +335,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                         backgroundColor: idx % 2 === 0 ? 'white' : '#f8f9ff',
                         textAlign: 'center'
                       }}>
-                        <Typography variant="body2" sx={{ fontWeight: '500' }}>
+                        <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '1rem' }}>
                           {slot.subject_name || 'বিষয়'}
                         </Typography>
                       </Box>
@@ -352,14 +355,14 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         backgroundColor: '#f0f4ff',
         borderRadius: '6px'
       }}>
-        <Typography variant="subtitle2" sx={{ 
+        <Typography variant="subtitle1" sx={{ 
           fontWeight: 'bold', 
           mb: 1,
           color: '#1a237e',
           textAlign: 'center',
-          fontSize: '0.85rem'
+          fontSize: '1rem'
         }}>
-          পরীক্ষার্থীদের জন্য নির্দেশনা
+          নির্দেশনা
         </Typography>
         <Box component="ol" sx={{ 
           pl: 2,
@@ -367,29 +370,14 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
           '& li': {
             mb: 0.8,
             lineHeight: 1.4,
-            fontSize: '0.75rem',
+            fontSize: '0.85rem',
             color: '#333'
           }
         }}>
-          <li>পরীক্ষার দিন অবশ্যই প্রবেশপত্র সঙ্গে আনতে হবে।</li>
-          <li>পরীক্ষার নির্ধারিত সময়ের কমপক্ষে ৩০ মিনিট আগে কেন্দ্রে উপস্থিত হতে হবে।</li>
-          <li>প্রবেশপত্র ছাড়া পরীক্ষায় অংশগ্রহণ করা যাবে না।</li>
-          <li>মোবাইল ফোন, স্মার্টওয়াচ, ক্যালকুলেটর ও অন্যান্য ইলেকট্রনিক ডিভাইস সঙ্গে আনা নিষিদ্ধ।</li>
-          <li>পরীক্ষার হলে শৃঙ্খলা বজায় রাখতে হবে এবং কর্তব্যরত শিক্ষকদের নির্দেশনা মেনে চলতে হবে।</li>
-          <li>পরীক্ষার সময় কোনো প্রকার অসদুপায় অবলম্বন করলে পরীক্ষার ফল বাতিল করা হতে পারে।</li>
-          <li>উত্তরপত্রে রোল নম্বর ও প্রয়োজনীয় তথ্য সঠিকভাবে লিখতে হবে।</li>
-          <li>পরীক্ষা শেষ হওয়ার আগে অনুমতি ছাড়া হল ত্যাগ করা যাবে না।</li>
+          <li>প্রবেশপত্র সঙ্গে আনতে হবে।</li>
+          <li>সময়ের আগে উপস্থিত হতে হবে।</li>
+          <li>শৃঙ্খলা বজায় রাখুন।</li>
         </Box>
-        <Typography variant="body2" sx={{ 
-          mt: 1.2,
-          pt: 1,
-          borderTop: '1px dashed #b0b7d9',
-          fontSize: '0.75rem',
-          fontWeight: 'bold',
-          color: '#1a237e'
-        }}>
-          বি.দ্র.: প্রবেশপত্রটি যত্নসহকারে সংরক্ষণ করুন এবং পরীক্ষার প্রতিদিন সঙ্গে আনুন।
-        </Typography>
       </Box>
 
       {/* Footer */}
@@ -453,9 +441,9 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                 />
               )}
             </Box>
-            <Typography variant="body2" sx={{ 
+            <Typography variant="body1" sx={{ 
               fontWeight: 'bold',
-              fontSize: '0.85rem'
+              fontSize: '1rem'
             }}>
               প্রধান শিক্ষক
             </Typography>

@@ -267,7 +267,7 @@ export default function AdmissionCardGenerator() {
         return;
       }
 
-      const cardsPerPage = 3;
+      const cardsPerPage = 2;
       const totalPages = Math.ceil(images.length / cardsPerPage);
 
       let htmlContent = `
@@ -291,14 +291,13 @@ export default function AdmissionCardGenerator() {
               }
               .print-container {
                 display: flex;
-                flex-direction: row;
-                flex-wrap: wrap;
+                flex-direction: column;
                 gap: 5mm;
                 width: 100%;
                 box-sizing: border-box;
               }
               .card-slot {
-                width: calc((100% - 10mm) / 3);
+                width: 100%;
                 box-sizing: border-box;
                 break-inside: avoid;
                 page-break-inside: avoid;
@@ -378,16 +377,16 @@ export default function AdmissionCardGenerator() {
     
     try {
       const pdf = new jsPDF({
-        orientation: 'landscape',
+        orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
       
-      const a4Width = 297; // A4 width in mm (landscape)
-      const a4Height = 210; // A4 height in mm (landscape)
+      const a4Width = 210; // A4 width in mm (portrait)
+      const a4Height = 297; // A4 height in mm (portrait)
       const margin = 5;
       const gap = 5;
-      const cardWidth = (a4Width - (margin * 2) - (gap * 2)) / 3;
+      const cardWidth = a4Width - (margin * 2);
 
       for (let i = 0; i < studentsToExport.length; i++) {
         const student = studentsToExport[i];
@@ -403,21 +402,21 @@ export default function AdmissionCardGenerator() {
           
           const imgData = canvas.toDataURL('image/png');
           const imgHeight = (canvas.height * cardWidth) / canvas.width;
-          const maxCardHeight = a4Height - (margin * 2);
+          const maxCardHeight = (a4Height - (margin * 3) - gap) / 2; // Half page minus margin and gap
           const finalCardHeight = Math.min(imgHeight, maxCardHeight);
           
           // Check if we need to add a new page
           const isFirstCard = i === 0;
-          const isNewPage = i % 3 === 0;
+          const isNewPage = i % 2 === 0;
           
           if (!isFirstCard && isNewPage) {
-            // Add a new page for every 3rd card
+            // Add a new page for every 2nd card
             pdf.addPage();
           }
           
-          // Calculate X position
-          const positionX = margin + ((i % 3) * (cardWidth + gap));
-          const positionY = margin;
+          // Calculate Y position
+          const positionX = margin;
+          const positionY = margin + ((i % 2) * (finalCardHeight + gap));
           
           pdf.addImage(imgData, 'PNG', positionX, positionY, cardWidth, finalCardHeight);
         }
