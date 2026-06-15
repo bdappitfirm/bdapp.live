@@ -1917,7 +1917,10 @@ const SchoolDashboard = () => {
               <ListItemIcon sx={{ minWidth: 40, color: 'error.main' }}>
                 <AccountCircle />
               </ListItemIcon>
-              <ListItemText primary="লগআউট" />
+              <ListItemText 
+                primary="লগআউট" 
+                primaryTypographyProps={{ fontSize: '1.1rem', fontWeight: 500 }} 
+              />
             </ListItemButton>
           </ListItem>
         </List>

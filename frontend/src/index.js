@@ -14,13 +14,33 @@ import { ThemeProvider, createTheme, responsiveFontSizes } from '@mui/material/s
 const root = ReactDOM.createRoot(document.getElementById('root'));
 let theme = createTheme({
   typography: {
-    fontSize: 14,
+    fontSize: 16,
   },
   components: {
     MuiTableContainer: {
       styleOverrides: {
         root: {
           overflowX: 'auto',
+        },
+      },
+    },
+    MuiTextField: {
+      styleOverrides: {
+        root: {
+          '& .MuiInputBase-input': {
+            fontSize: '1rem',
+          },
+          '& .MuiInputLabel-root': {
+            fontSize: '1rem',
+          },
+        },
+      },
+    },
+    MuiListItemText: {
+      styleOverrides: {
+        primary: {
+          fontSize: '1.1rem',
+          fontWeight: 500,
         },
       },
     },

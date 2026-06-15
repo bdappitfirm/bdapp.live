@@ -212,7 +212,12 @@ export default function ClassroomsPage() {
       refreshAll(id); // Use context's refresh function instead of loadData
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.name?.[0] || err.response?.data?.detail || 'Failed to add section');
+      const errorMsg = 
+        err.response?.data?.non_field_errors?.[0] || 
+        err.response?.data?.name?.[0] || 
+        err.response?.data?.detail || 
+        'Failed to add section';
+      toast.error(errorMsg);
     } finally {
       setSaving(false);
     }
