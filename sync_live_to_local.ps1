@@ -7,7 +7,8 @@ $VPS_IP = "103.112.62.72"
 $USER = "root"
 $REMOTE_DB_NAME = "local_pg_db" 
 $LOCAL_DB_NAME = "local_pg_db"  
-$LOCAL_DB_USER = "local_pg_user" 
+$LOCAL_DB_USER = "local_pg_user"
+$LOCAL_DB_PASSWORD = "Bangladesh@4321$" 
 
 Write-Host "🔄 Starting Professional Sync: Live (bdapp.live) -> Local" -ForegroundColor Cyan
 
@@ -50,6 +51,9 @@ if (!(Test-Path "./live_db_dump.sql")) {
     Write-Error "Error: live_db_dump.sql not found!"
     exit
 }
+
+# Set PostgreSQL password environment variable
+$env:PGPASSWORD = $LOCAL_DB_PASSWORD
 
 # Ensure local database exists first (if it doesn't, create it)
 $dbExists = psql -U $LOCAL_DB_USER -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$LOCAL_DB_NAME'"
