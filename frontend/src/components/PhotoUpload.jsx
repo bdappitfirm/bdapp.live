@@ -19,6 +19,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import CloseIcon from '@mui/icons-material/Close';
+import FlipCameraIosIcon from '@mui/icons-material/FlipCameraIos';
 import { useToast } from './Toast';
 
 export default function PhotoUpload({ currentPhoto, onPhotoChange, userName = 'User' }) {
@@ -29,6 +30,7 @@ export default function PhotoUpload({ currentPhoto, onPhotoChange, userName = 'U
   const [preview, setPreview] = useState(currentPhoto || null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [stream, setStream] = useState(null);
+  const [facingMode, setFacingMode] = useState('environment'); // Default to back camera
   
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
@@ -41,15 +43,20 @@ export default function PhotoUpload({ currentPhoto, onPhotoChange, userName = 'U
     }
   }, [currentPhoto, open]);
 
-  // Open camera
-  const handleOpenCamera = async () => {
+  // Helper function to open camera with given facing mode
+  const openCameraWithFacingMode = async (mode) => {
     try {
+      // Stop existing stream if any
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user' },
+        video: { facingMode: mode },
         audio: false 
       });
       setStream(mediaStream);
-      setCameraOpen(true);
+      setFacingMode(mode);
       
       // Wait for video element to be ready
       setTimeout(() => {
@@ -57,11 +64,31 @@ export default function PhotoUpload({ currentPhoto, onPhotoChange, userName = 'U
           videoRef.current.srcObject = mediaStream;
         }
       }, 100);
-      
+    } catch (err) {
+      console.error('Camera error:', err);
+      toast.error('Failed to access camera. Please check permissions.');
+    }
+  };
+
+  // Open camera
+  const handleOpenCamera = async () => {
+    try {
+      await openCameraWithFacingMode('environment'); // Default to back camera
+      setCameraOpen(true);
       toast.info('Camera opened. Click "Capture Photo" to take picture.');
     } catch (err) {
       console.error('Camera error:', err);
       toast.error('Failed to access camera. Please check permissions.');
+    }
+  };
+
+  // Switch camera between front and back
+  const handleSwitchCamera = async () => {
+    try {
+      const newFacingMode = facingMode === 'environment' ? 'user' : 'environment';
+      await openCameraWithFacingMode(newFacingMode);
+    } catch (err) {
+      console.error('Switch camera error:', err);
     }
   };
 
@@ -224,6 +251,19 @@ export default function PhotoUpload({ currentPhoto, onPhotoChange, userName = 'U
                   playsInline
                   style={{ width: '100%', maxHeight: '400px', borderRadius: '8px' }}
                 />
+                <IconButton
+                  onClick={handleSwitchCamera}
+                  sx={{
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    bgcolor: 'rgba(0,0,0,0.5)',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                  }}
+                >
+                  <FlipCameraIosIcon />
+                </IconButton>
               </Paper>
               
               <Stack direction="row" spacing={2} sx={{ mt: 2 }} justifyContent="center">

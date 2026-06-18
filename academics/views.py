@@ -12,11 +12,11 @@ from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 
 from schools.models import School
-from .models import ClassRoom, Section, Subject, StudentProfile, TeacherAssignment, VirtualClass
+from .models import ClassRoom, Section, Subject, StudentProfile, TeacherAssignment, VirtualClass, Building, Room, ExamSeatPlan
 from .serializers import (
     SchoolSerializer, ClassRoomSerializer, SectionSerializer,
     SubjectSerializer, StudentProfileSerializer, TeacherAssignmentSerializer,
-    VirtualClassSerializer
+    VirtualClassSerializer, BuildingSerializer, RoomSerializer, ExamSeatPlanSerializer
 )
 
 from results.models import Examination, StudentOverallResult
@@ -1787,3 +1787,120 @@ class VirtualClassViewSet(viewsets.ModelViewSet):
         vclass.ended_at = timezone.now()
         vclass.save()
         return Response({'status': 'class ended'})
+
+
+# ---- Building, Room, ExamSeatPlan ViewSets ----
+class BuildingViewSet(viewsets.ModelViewSet):
+    queryset = Building.objects.select_related('school').all()
+    serializer_class = BuildingSerializer
+    permission_classes = [IsSchoolMember, RolePermission]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name']
+    
+    def get_queryset(self):
+        queryset = Building.objects.select_related('school').all()
+        school_id = self.request.query_params.get('school')
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        return queryset
+
+
+class RoomViewSet(viewsets.ModelViewSet):
+    queryset = Room.objects.select_related('building', 'building__school').all()
+    serializer_class = RoomSerializer
+    permission_classes = [IsSchoolMember, RolePermission]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name']
+    
+    def get_queryset(self):
+        queryset = Room.objects.select_related('building', 'building__school').all()
+        school_id = self.request.query_params.get('school')
+        building_id = self.request.query_params.get('building')
+        if school_id:
+            queryset = queryset.filter(building__school_id=school_id)
+        if building_id:
+            queryset = queryset.filter(building_id=building_id)
+        return queryset
+
+
+class ExamSeatPlanViewSet(viewsets.ModelViewSet):
+    queryset = ExamSeatPlan.objects.select_related('exam_slot', 'student', 'room', 'room__building').all()
+    serializer_class = ExamSeatPlanSerializer
+    permission_classes = [IsSchoolMember, RolePermission]
+    
+    def get_queryset(self):
+        queryset = ExamSeatPlan.objects.select_related('exam_slot', 'student', 'room', 'room__building').all()
+        school_id = self.request.query_params.get('school')
+        exam_slot_id = self.request.query_params.get('exam_slot')
+        room_id = self.request.query_params.get('room')
+        if school_id:
+            queryset = queryset.filter(room__building__school_id=school_id)
+        if exam_slot_id:
+            queryset = queryset.filter(exam_slot_id=exam_slot_id)
+        if room_id:
+            queryset = queryset.filter(room_id=room_id)
+        return queryset
+
+
+# ---- API Views for Gender Update and Seat Plan Generation ----
+class UpdateStudentGendersAPI(APIView):
+    permission_classes = [IsSchoolMember, RolePermission]
+    
+    def post(self, request):
+        school_id = request.data.get('school') or request.query_params.get('school')
+        try:
+            from .utils import update_student_genders
+            if school_id:
+                school = School.objects.get(pk=school_id)
+                updated = update_student_genders(school)
+            else:
+                updated = update_student_genders()
+            return Response({"status": "ok", "updated_count": updated}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GenerateExamSeatPlanAPI(APIView):
+    permission_classes = [IsSchoolMember, RolePermission]
+    
+    def post(self, request):
+        from .utils import generate_exam_seat_plan, generate_exam_buildings_and_rooms
+        
+        # Get required params
+        exam_slot_id = request.data.get('exam_slot_id')
+        school_id = request.data.get('school_id')
+        num_buildings = request.data.get('num_buildings', 1)
+        num_rooms_per_building = request.data.get('num_rooms_per_building', 5)
+        room_capacity = request.data.get('room_capacity', 40)
+        
+        if not exam_slot_id:
+            return Response({"detail": "exam_slot_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from results.models import ExamSlot
+            exam_slot = ExamSlot.objects.get(pk=exam_slot_id)
+            
+            # If school not provided, get from exam_slot
+            if not school_id:
+                school_id = exam_slot.school_id or exam_slot.examination.school_id
+            
+            school = School.objects.get(pk=school_id)
+            
+            # Generate buildings/rooms if needed
+            generate_exam_buildings_and_rooms(school, num_buildings, num_rooms_per_building, room_capacity)
+            
+            # Generate seat plan
+            seat_plans = generate_exam_seat_plan(exam_slot, num_buildings, num_rooms_per_building, room_capacity)
+            
+            # Return the seat plans
+            from .serializers import ExamSeatPlanSerializer
+            return Response({
+                "status": "ok", 
+                "seat_plans": ExamSeatPlanSerializer(seat_plans, many=True, context={'request': request}).data
+            }, status=status.HTTP_200_OK)
+        except ExamSlot.DoesNotExist:
+            return Response({"detail": "ExamSlot not found"}, status=status.HTTP_404_NOT_FOUND)
+        except School.DoesNotExist:
+            return Response({"detail": "School not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

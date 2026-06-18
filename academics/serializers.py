@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from schools.models import School
-from .models import ClassRoom, Section, Subject, StudentProfile, TeacherAssignment, VirtualClass
+from .models import ClassRoom, Section, Subject, StudentProfile, TeacherAssignment, VirtualClass, Building, Room, ExamSeatPlan
+from .utils import predict_gender_from_name
 from django.contrib.auth import get_user_model
 from users.models import Profile
 
@@ -285,6 +286,15 @@ class StudentProfileSerializer(serializers.ModelSerializer):
                 Profile.objects.update_or_create(user=g_user, defaults={'school': school, 'role': 'parent'})
                 guardian = g_user
 
+        # Auto-predict gender if not provided
+        if 'gender' not in validated_data or validated_data['gender'] is None:
+            full_name = f"{user.first_name} {user.last_name}".strip()
+            if not full_name:
+                full_name = user.username
+            predicted_gender = predict_gender_from_name(full_name)
+            if predicted_gender:
+                validated_data['gender'] = predicted_gender
+
         # Create the StudentProfile
         sp = StudentProfile.objects.create(user=user, classroom=classroom, section=section, guardian=guardian, **validated_data)
         return sp
@@ -453,3 +463,39 @@ class VirtualClassSerializer(serializers.ModelSerializer):
             return "Unknown"
         full_name = obj.teacher.get_full_name()
         return full_name if full_name.strip() else obj.teacher.username
+
+
+class BuildingSerializer(serializers.ModelSerializer):
+    school_id = serializers.PrimaryKeyRelatedField(source='school', queryset=School.objects.all(), write_only=True)
+    school = SchoolSerializer(read_only=True)
+    
+    class Meta:
+        model = Building
+        fields = ['id', 'school', 'school_id', 'name', 'description']
+        read_only_fields = ['school']
+
+
+class RoomSerializer(serializers.ModelSerializer):
+    building_id = serializers.PrimaryKeyRelatedField(source='building', queryset=Building.objects.all(), write_only=True)
+    building = BuildingSerializer(read_only=True)
+    
+    class Meta:
+        model = Room
+        fields = ['id', 'building', 'building_id', 'name', 'capacity']
+
+
+class ExamSeatPlanSerializer(serializers.ModelSerializer):
+    exam_slot_id = serializers.PrimaryKeyRelatedField(source='exam_slot', queryset=__import__('results.models').models.ExamSlot.objects.all(), write_only=True)
+    student_id = serializers.PrimaryKeyRelatedField(source='student', queryset=StudentProfile.objects.all(), write_only=True)
+    room_id = serializers.PrimaryKeyRelatedField(source='room', queryset=Room.objects.all(), write_only=True)
+    exam_slot = serializers.SerializerMethodField()
+    student = StudentProfileSerializer(read_only=True)
+    room = RoomSerializer(read_only=True)
+    
+    class Meta:
+        model = ExamSeatPlan
+        fields = ['id', 'exam_slot', 'exam_slot_id', 'student', 'student_id', 'room', 'room_id', 'seat_number', 'gender_segregated']
+    
+    def get_exam_slot(self, obj):
+        from results.serializers import ExamSlotSerializer
+        return ExamSlotSerializer(obj.exam_slot, context=self.context).data

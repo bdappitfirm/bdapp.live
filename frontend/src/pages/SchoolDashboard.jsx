@@ -18,6 +18,7 @@ import PaymentIcon from "@mui/icons-material/Payment";
 import ReceiptIcon from "@mui/icons-material/Receipt";
 import PeopleIcon from "@mui/icons-material/People";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
+import EventSeatIcon from "@mui/icons-material/EventSeat";
 import { setCurrentSchoolId, getDashboardStats } from '../services/dashboardService';
 import api from '../utils/api';
 import StatCard from '../components/dashboard/StatCard';
@@ -183,6 +184,7 @@ const menuItems = [
   { label: 'প্রমোশন', icon: <AssessmentIcon />, key: 'promotion' },
   { label: 'বছরভিত্তিক রিপোর্ট', icon: <AssessmentIcon />, key: 'year-report' },
   { label: 'পরীক্ষা', icon: <AssessmentIcon />, key: 'examinations' },
+  { label: 'সিট বন্টন', icon: <EventSeatIcon />, key: 'seat-allocation' },
   { label: 'ফি', icon: <PaymentIcon />, key: 'fees' },
   { label: 'ফি পরিশোধ', icon: <ReceiptIcon />, key: 'fee-receipt' },
   { label: 'রিসিট বই', icon: <ReceiptIcon />, key: 'receipt-book' },
@@ -359,7 +361,7 @@ const SchoolDashboard = () => {
     // Allowed for Teachers
     // হাজিরা, রেজাল্ট সংশ্লিষ্ট পেজগুলো (results, class-results, result-card, rank-list, examinations)
     if (isTeacher && role === 'teacher') {
-      const teacherKeys = ['attendance', 'results', 'class-results', 'result-card', 'rank-list', 'examinations', 'fees', 'fee-receipt', 'receipt-book', 'promotion', 'year-report', 'parent', 'committee', 'sms'];
+      const teacherKeys = ['attendance', 'results', 'class-results', 'result-card', 'rank-list', 'examinations', 'seat-allocation', 'fees', 'fee-receipt', 'receipt-book', 'promotion', 'year-report', 'parent', 'committee', 'sms'];
       if (teacherKeys.includes(item.key)) return true;
     }
 

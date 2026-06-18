@@ -9,8 +9,9 @@ import { AuthProvider } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import { isAuthenticated, clearTokens } from './utils/auth';
+import { CircularProgress, Box, Typography } from '@mui/material';
 
-const APP_VERSION = '1.0.1'; // Increment this to force cache clear on next load
+const APP_VERSION = '1.0.2'; // Increment this to force cache clear on next load
 const CACHE_VERSION_KEY = 'bdapp_cache_version';
 
 const CacheClearer = () => {
@@ -97,6 +98,7 @@ const YearReportPage = React.lazy(() => import('./pages/YearReportPage'));
 const VirtualClassPage = React.lazy(() => import('./pages/VirtualClassPage'));
 const SupportLivePage = React.lazy(() => import('./pages/SupportLive.jsx'));
 const SchoolSettings = React.lazy(() => import('./pages/SchoolSettings.jsx'));
+const SeatAllocationPage = React.lazy(() => import('./pages/SeatAllocationPage.jsx'));
 
 const StartupRedirect = () => {
   const navigate = useNavigate();
@@ -144,7 +146,21 @@ function App() {
             <NotificationProvider>
               <SchoolProvider>
                 <AcademicsProvider>
-                  <Suspense fallback={<div>Loading...</div>}>
+                  <Suspense fallback={
+                    <Box 
+                      sx={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        minHeight: '100vh',
+                        gap: 2
+                      }}
+                    >
+                      <CircularProgress />
+                      <Typography variant="body1">Loading...</Typography>
+                    </Box>
+                  }>
                     <StartupRedirect />
                     <PathTracker />
                     <Routes>
@@ -191,6 +207,7 @@ function App() {
           <Route path="parent/add" element={<AddParentPage />} />
           <Route path="parent/:parentId/dashboard" element={<ParentDashboard />} />
           <Route path="student/:studentId/dashboard" element={<StudentDashboard />} />
+          <Route path="seat-allocation" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SeatAllocationPage /></ProtectedRoute>} />
           <Route path="committee" element={<RoleDashboard role="committee" />} />
           <Route path="committee/add" element={<AddCommitteePage />} />
           <Route path=":role/:itemId" element={<RoleDetail />} />
