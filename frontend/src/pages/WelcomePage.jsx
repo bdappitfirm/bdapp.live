@@ -205,8 +205,8 @@ const WelcomePage = () => {
 
   const handleInstall = async () => {
     if (!deferredPrompt) {
-      // If we don't have the deferred prompt, just hide the prompt for now
-      setShowInstallPrompt(false);
+      // If we don't have the deferred prompt, show a friendly instructions message instead of hiding
+      alert("অ্যাপটি ইনস্টল করতে ব্রাউজারের মেনুতে যান এবং 'Add to Home Screen' বিকল্পটি নির্বাচন করুন।");
       return;
     }
     
