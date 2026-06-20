@@ -165,8 +165,7 @@ class TeacherSelfOrAdminChange(permissions.BasePermission):
     """
     Permission for Teacher profile editing:
     - Admin (Principal) can edit everything.
-    - Teachers can edit their own profile.
-    - Teachers can edit ANY student or parent profile (but this class is used for TeacherProfileViewSet).
+    - Teachers can edit their own profile, and also create/edit ANY other teacher profiles.
     """
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
@@ -176,9 +175,10 @@ class TeacherSelfOrAdminChange(permissions.BasePermission):
             return True
         if not user or not user.is_authenticated:
             return False
-        # If it's a POST, only admin can create new teachers (usually)
-        if request.method == 'POST':
-            return False
+        # Check if user is a teacher
+        profile = getattr(user, 'profile', None)
+        if profile and profile.role == 'teacher':
+            return True
         return True
 
     def has_object_permission(self, request, view, obj):
@@ -186,6 +186,11 @@ class TeacherSelfOrAdminChange(permissions.BasePermission):
             return True
         user = getattr(request, 'user', None)
         if is_effective_admin(user, request):
+            return True
+        
+        profile = getattr(user, 'profile', None)
+        if profile and profile.role == 'teacher':
+            # Teachers can edit any teacher profile
             return True
         
         # A teacher can edit their own profile
