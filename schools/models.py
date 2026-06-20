@@ -26,7 +26,7 @@ class Advertisement(models.Model):
     text = models.CharField(max_length=255, blank=True)
     link = models.URLField(blank=True)
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='image')
-    media = models.FileField(upload_to='school_ads/')
+    media = models.FileField(upload_to='school_ads/', null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

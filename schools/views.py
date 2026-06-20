@@ -124,6 +124,14 @@ def dashboard_stats(request):
     except School.DoesNotExist:
         return Response({"error": "School not found"}, status=404)
     
+    # Determine target year (query param or current year) FIRST!
+    try:
+        year_param = request.query_params.get('year')
+        target_year = int(year_param) if year_param is not None else datetime.now().year
+    except Exception:
+        target_year = datetime.now().year
+    cutoff_date = datetime(target_year, 1, 1).date()
+    
     # Check for simple mode
     simple_mode = request.query_params.get('simple_mode', 'false').lower() == 'true'
     
@@ -199,6 +207,12 @@ def dashboard_stats(request):
     
     paid_map = {p['fee_assignment_id']: p['paid'] for p in payments}
     
+    # Initialize all fee summary variables
+    tuition_due_total = 0
+    exam_due_total = 0
+    total_due = 0
+    class_dues_map = {}
+    
     if simple_mode:
         # Simple mode: sum all payable amounts minus paid, without complex filtering
         total_due = 0
@@ -211,11 +225,10 @@ def dashboard_stats(request):
             due = max(0.0, payable - paid)
             total_due += due
         fee_dues_summary = {
+            'tuition_due_total': 0,
+            'exam_due_total': 0,
             'total_due': total_due,
-            'tuition_due': total_due,  # Simple mode doesn't separate
-            'exam_due': 0,
         }
-        class_dues_map = {}  # Not calculated in simple mode
     else:
         # Complex mode calculation
         tuition_due_total = 0
@@ -253,13 +266,6 @@ def dashboard_stats(request):
     except Exception:
         paid_group_map = {}
     
-    # Determine target year (query param or current year)
-    try:
-        year_param = request.query_params.get('year')
-        target_year = int(year_param) if year_param is not None else datetime.now().year
-    except Exception:
-        target_year = datetime.now().year
-    cutoff_date = datetime(target_year, 1, 1).date()
     def _is_target_year(assign):
         # 1) Assigned date in current year
         try:
@@ -479,7 +485,7 @@ def dashboard_stats(request):
     fee_dues_summary = {
         'tuition_due_total': tuition_due_total,
         'exam_due_total': exam_due_total,
-        'total_due': tuition_due_total + exam_due_total
+        'total_due': total_due if simple_mode else (tuition_due_total + exam_due_total)
     }
     
     fee_dues_by_class = sorted(
