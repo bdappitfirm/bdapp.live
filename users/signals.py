@@ -24,7 +24,7 @@ def save_user_profile(sender, instance, **kwargs):
 @receiver(post_save, sender=Profile)
 def log_profile_creation(sender, instance, created, **kwargs):
     if created and instance.school and instance.school.id == 6 and instance.role in ['teacher']:
-        # Profile cost is 5.00 TK
+        # Profile cost is 0.00 TK
         log_activity(
             user=instance.user,
             school=instance.school,
@@ -34,7 +34,7 @@ def log_profile_creation(sender, instance, created, **kwargs):
                 'username': instance.user.username,
                 'name': f"{instance.user.first_name} {instance.user.last_name}".strip()
             },
-            cost=5.00
+            cost=0.00
         )
 
 @receiver(user_logged_in)
@@ -64,5 +64,5 @@ def log_student_profile_creation(sender, instance, created, **kwargs):
                 'roll': instance.roll_number,
                 'class': instance.classroom.name if instance.classroom else 'N/A'
             },
-            cost=5.00
+            cost=0.00
         )
