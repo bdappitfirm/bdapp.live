@@ -145,10 +145,11 @@ class StudentProfileSerializer(serializers.ModelSerializer):
     phone_number = serializers.CharField(write_only=True, required=False, allow_blank=True)
     guardian_name = serializers.CharField(required=False, allow_blank=True)
     photo = serializers.ImageField(write_only=True, required=False)
+    student_custom_id = serializers.CharField(read_only=True)
 
     class Meta:
         model = StudentProfile
-        fields = ['id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 'email', 'phone_number', 'photo', 'school', 'school_id', 'classroom', 'classroom_id', 'section', 'section_id', 'roll_number', 'group', 'blood_group', 'guardian', 'guardian_id', 'guardian_name']
+        fields = ['id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 'email', 'phone_number', 'photo', 'school', 'school_id', 'classroom', 'classroom_id', 'section', 'section_id', 'roll_number', 'group', 'blood_group', 'gender', 'student_custom_id', 'guardian', 'guardian_id', 'guardian_name']
         read_only_fields = ['school']
 
     def validate(self, data):
@@ -391,11 +392,21 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             instance.section = section
         # Set guardian if it was explicitly provided in the request (including None to clear it)
         if guardian_was_provided:
-            instance.guardian = guardian
+            # Handle case where empty string is sent (treat as no change)
+            if guardian == '' or guardian == '""' or guardian is None:
+                # Only clear guardian if explicitly told to (e.g., send null)
+                if guardian is None:
+                    instance.guardian = None
+            else:
+                instance.guardian = guardian
         
         # Update other fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        
+        # Regenerate custom ID if any relevant fields changed
+        if any(key in validated_data for key in ['gender', 'roll_number', 'group']) or classroom_was_provided or section_was_provided:
+            instance.student_custom_id = instance.generate_custom_id()
         
         instance.save()
         return instance
@@ -485,17 +496,27 @@ class RoomSerializer(serializers.ModelSerializer):
 
 
 class ExamSeatPlanSerializer(serializers.ModelSerializer):
-    exam_slot_id = serializers.PrimaryKeyRelatedField(source='exam_slot', queryset=__import__('results.models').models.ExamSlot.objects.all(), write_only=True)
+    exam_slot_id = serializers.PrimaryKeyRelatedField(source='exam_slot', queryset=__import__('results.models').models.ExamSlot.objects.all(), write_only=True, required=False)
+    examination_id = serializers.PrimaryKeyRelatedField(source='examination', queryset=__import__('results.models').models.Examination.objects.all(), write_only=True, required=False)
     student_id = serializers.PrimaryKeyRelatedField(source='student', queryset=StudentProfile.objects.all(), write_only=True)
     room_id = serializers.PrimaryKeyRelatedField(source='room', queryset=Room.objects.all(), write_only=True)
     exam_slot = serializers.SerializerMethodField()
+    examination = serializers.SerializerMethodField()
     student = StudentProfileSerializer(read_only=True)
     room = RoomSerializer(read_only=True)
     
     class Meta:
         model = ExamSeatPlan
-        fields = ['id', 'exam_slot', 'exam_slot_id', 'student', 'student_id', 'room', 'room_id', 'seat_number', 'gender_segregated']
+        fields = ['id', 'exam_slot', 'exam_slot_id', 'examination', 'examination_id', 'student', 'student_id', 'room', 'room_id', 'seat_number', 'gender_segregated', 'session']
     
     def get_exam_slot(self, obj):
-        from results.serializers import ExamSlotSerializer
-        return ExamSlotSerializer(obj.exam_slot, context=self.context).data
+        if obj.exam_slot:
+            from results.serializers import ExamSlotSerializer
+            return ExamSlotSerializer(obj.exam_slot, context=self.context).data
+        return None
+    
+    def get_examination(self, obj):
+        if obj.examination:
+            from results.serializers import ExaminationSerializer
+            return ExaminationSerializer(obj.examination, context=self.context).data
+        return None

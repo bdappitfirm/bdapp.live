@@ -404,10 +404,7 @@ const RoleDashboard = ({ role: roleProp }) => {
   };
 
   // Helpers: Bangla numerals and date formatting (e.g., ৬ নভেম্বর)
-  const engToBnDigits = (s) => String(s ?? '')
-    .replace(/0/g, '০').replace(/1/g, '১').replace(/2/g, '২')
-    .replace(/3/g, '৩').replace(/4/g, '৪').replace(/5/g, '৫')
-    .replace(/6/g, '৬').replace(/7/g, '৭').replace(/8/g, '৮').replace(/9/g, '৯');
+  const engToBnDigits = (s) => String(s ?? '');
   const bnMonth = (m) => ['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'][m] || '';
   const formatBnDateShort = (iso) => {
     if (!iso) return '';

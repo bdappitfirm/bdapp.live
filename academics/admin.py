@@ -2,7 +2,7 @@ from django.contrib import admin
 from django import forms
 from django.contrib.auth import get_user_model
 from users.models import Profile
-from .models import ClassRoom, Section, Subject, StudentProfile, TeacherAssignment
+from .models import ClassRoom, Section, Subject, StudentProfile, TeacherAssignment, Building, Room, ExamSeatPlan
 import uuid
 import secrets, string
 
@@ -172,3 +172,22 @@ class TeacherAssignmentAdmin(admin.ModelAdmin):
             'fields': ('subject', 'classroom', 'section'),
         }),
     )
+
+
+@admin.register(Building)
+class BuildingAdmin(admin.ModelAdmin):
+    list_display = ['id', 'school', 'name']
+    search_fields = ['name']
+
+
+@admin.register(Room)
+class RoomAdmin(admin.ModelAdmin):
+    list_display = ['id', 'building', 'name', 'capacity']
+    search_fields = ['name']
+
+
+@admin.register(ExamSeatPlan)
+class ExamSeatPlanAdmin(admin.ModelAdmin):
+    list_display = ['id', 'exam_slot', 'student', 'room', 'seat_number']
+    list_filter = ['exam_slot', 'room']
+    search_fields = ['student__user__username', 'student__roll_number']

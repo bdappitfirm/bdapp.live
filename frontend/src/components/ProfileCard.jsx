@@ -40,7 +40,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import PhotoUpload from './PhotoUpload';
 import { useToast } from './Toast';
 import api from '../utils/api';
-import { canEdit, canDelete } from '../utils/helpers';
+import { canEdit, canDelete, normalizeNumberInput } from '../utils/helpers';
 import { getMediaUrl } from '../utils/media';
 
 /**
@@ -83,7 +83,8 @@ export default function ProfileCard({
     blood_group: '',
     occupation: '',
     income: '',
-    designation: ''
+    designation: '',
+    gender: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [photoFile, setPhotoFile] = useState(null);
@@ -106,14 +107,11 @@ export default function ProfileCard({
 
   const [localProfile, setLocalProfile] = useState(profile);
   useEffect(() => {
-    setLocalProfile(prev => {
-      const p = profile || {};
-      return {
-        ...prev,
-        ...p,
-        user: { ...(prev?.user || {}), ...(p.user || {}) }
-      };
-    });
+    setLocalProfile(prev => ({
+      ...prev,
+      ...profile,
+      user: { ...(prev?.user || {}), ...(profile?.user || {}) }
+    }));
   }, [profile]);
 
   // Extract user data
@@ -126,7 +124,7 @@ export default function ProfileCard({
   const actorRoleLower = String(authUser?.profile?.role || authUser?.role || '').toLowerCase();
   const actorUsernameLower = String(authUser?.username || authUser?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
   const canAdminEdit = !!(authUser?.is_superuser || authUser?.is_staff || actorRoleLower === 'admin' || actorRoleLower === 'superadmin' || actorUsernameLower === 'shamir' || actorUsernameLower === 'bdadmin' || actorUsernameLower === 'umor');
-  const denyMsg = 'আপনি  এই কাজটি করার জন্য অনুমোদিত ব্যাক্তি নন, দয়া করে এডমিন অথবা প্রধান শিক্ষকের সাথে যোগাযোগ করুন, ধন্যবাদ।';
+  const denyMsg = 'আপনি  এই কাজটি করার জন্য অনুমোদিত ব্যাক্তি নন, দয়া করে এডমিন অথবা প্রধান শিক্ষকের সাথে যোগাযোগ করুন, ধন্যবাদ।';
 
   
 
@@ -165,7 +163,8 @@ export default function ProfileCard({
       blood_group: (profile?.blood_group ?? profile?.user?.blood_group ?? ''),
       occupation: (profile?.occupation ?? profile?.user?.occupation ?? ''),
       income: (profile?.income ?? profile?.user?.income ?? '') !== '' ? String(profile?.income ?? profile?.user?.income ?? '') : '',
-      designation: profile?.designation || ''
+      designation: profile?.designation || '',
+      gender: profile?.gender || ''
     });
     setFormErrors({});
     setPhotoFile(null);
@@ -547,6 +546,9 @@ export default function ProfileCard({
       if (showDesignation) {
         fd.append('designation', formData.designation || '');
       }
+      if ((roleLower === 'student' || localProfile?.classroom || localProfile?.roll_number || localProfile?.student_custom_id) && formData.gender) {
+        fd.append('gender', formData.gender);
+      }
       if (photoFile) fd.append('photo', photoFile);
 
       // Choose correct endpoint per role
@@ -578,6 +580,7 @@ export default function ProfileCard({
         blood_group: formData.blood_group || '',
         occupation: formData.occupation || '',
         income: formData.income || '',
+        gender: formData.gender || '',
         user: {
           ...(prev?.user || {}),
           blood_group: formData.blood_group || (prev?.user?.blood_group || ''),
@@ -702,6 +705,11 @@ export default function ProfileCard({
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                   ({user?.username || 'unknown'})
                 </Typography>
+                {roleLower === 'student' && localProfile?.student_custom_id && (
+                  <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'primary.main', fontWeight: 'bold', mb: 0.5 }}>
+                    Custom ID: {localProfile.student_custom_id}
+                  </Typography>
+                )}
                 {showRole && displayRole && (role?.toLowerCase?.() !== 'parent') && (
                   <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'primary.main', fontWeight: 500, mb: 0.5 }}>
                     {displayRole}
@@ -731,6 +739,13 @@ export default function ProfileCard({
                     রক্তের গ্রুপ: {localProfile?.blood_group ?? localProfile?.user?.blood_group ?? 'N/A'}
                   </Typography>
                 </Stack>
+                {roleLower === 'student' && localProfile?.gender && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                      লিঙ্গ: {localProfile.gender === 'male' ? 'Male' : localProfile.gender === 'female' ? 'Female' : 'Other'}
+                    </Typography>
+                  </Stack>
+                )}
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
                     পেশা: {localProfile?.occupation ?? localProfile?.user?.occupation ?? 'N/A'}
@@ -738,7 +753,7 @@ export default function ProfileCard({
                 </Stack>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-                    আয়: {(localProfile?.income ?? localProfile?.user?.income) != null && (localProfile?.income ?? localProfile?.user?.income) !== '' ? `৳${localProfile?.income ?? localProfile?.user?.income}` : 'N/A'}
+                    আয়: {(localProfile?.income ?? localProfile?.user?.income) != null && (localProfile?.income ?? localProfile?.user?.income) !== '' ? `৳${localProfile?.income ?? localProfile?.user?.income}` : 'N/A'}
                   </Typography>
                 </Stack>
                 {Array.isArray(childProfiles) && childProfiles.length > 0 ? (
@@ -750,7 +765,7 @@ export default function ProfileCard({
                           <Stack direction="row" spacing={1} alignItems="center">
                             <Avatar src={src} sx={{ width: 24, height: 24 }} />
                             <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-                              {`${cp.name}${cp?.roll_number ? `(${cp.roll_number})` : ''}`}
+                              {`${cp.name}${cp?.roll_number ? `(${cp.roll_number})` : ''}${cp?.student_custom_id ? ` [${cp.student_custom_id}]` : ''}`}
                             </Typography>
                           </Stack>
                           <Tooltip title="Unlink student">
@@ -864,6 +879,12 @@ export default function ProfileCard({
                   <Typography variant="caption" color="text.secondary">User ID</Typography>
                   <Typography variant="body1">{user?.id ?? localProfile?.id ?? 'N/A'}</Typography>
                 </Grid>
+                {roleLower === 'student' && localProfile?.student_custom_id && (
+                  <Grid size={{ xs: 12 }}>
+                    <Typography variant="caption" color="text.secondary">Student Custom ID</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'primary.main' }}>{localProfile.student_custom_id}</Typography>
+                  </Grid>
+                )}
                 {showRole && (
                   <Grid size={{ xs: 12 }}>
                     <Typography variant="caption" color="text.secondary">Role</Typography>
@@ -886,6 +907,12 @@ export default function ProfileCard({
                   <Typography variant="caption" color="text.secondary">Blood Group</Typography>
                   <Typography variant="body1">{localProfile?.blood_group ?? localProfile?.user?.blood_group ?? 'N/A'}</Typography>
                 </Grid>
+                {roleLower === 'student' && (
+                  <Grid size={{ xs: 12 }}>
+                    <Typography variant="caption" color="text.secondary">Gender</Typography>
+                    <Typography variant="body1">{localProfile?.gender ? (localProfile.gender === 'male' ? 'Male' : localProfile.gender === 'female' ? 'Female' : 'Other') : 'N/A'}</Typography>
+                  </Grid>
+                )}
                 <Grid size={{ xs: 12 }}>
                   <Typography variant="caption" color="text.secondary">Occupation</Typography>
                   <Typography variant="body1">{localProfile?.occupation ?? localProfile?.user?.occupation ?? 'N/A'}</Typography>
@@ -942,10 +969,13 @@ export default function ProfileCard({
                         {(() => {
                           const checkboxId = `link-student-${s.id}`;
                           const primary = `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() || s.user?.username || `Student #${s.id}`;
-                          const secondary = `Class: ${s.classroom?.name || 'N/A'}${s.section?.name ? ` (${s.section.name})` : ''} • Roll: ${s.roll_number || 'N/A'}`;
+                          const secondary = `Class: ${s.classroom?.name || 'N/A'}${s.section?.name ? ` (${s.section.name})` : ''} • Roll: ${s.roll_number || 'N/A'}${s.student_custom_id ? ` • ID: ${s.student_custom_id}` : ''}`;
                           return (
                             <label htmlFor={checkboxId} style={{ cursor: 'pointer', width: '100%' }}>
-                              <ListItemText primary={primary} secondary={secondary} />
+                              <ListItemText
+                                primary={primary}
+                                secondary={secondary}
+                              />
                             </label>
                           );
                         })()}
@@ -1012,7 +1042,7 @@ export default function ProfileCard({
                   <TextField id="edit-username" name="username" label="ইউজার আইডি (Login ID)" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} fullWidth error={!!formErrors.username} helperText={formErrors.username || ''} />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField id="edit-password" name="password" label="নতুন পাসওয়ার্ড" type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} fullWidth helperText="পরিবর্তন না করতে চাইলে ফাঁকা রাখুন" />
+                  <TextField id="edit-password" name="password" label="নতুন পাসওয়ার্ড" type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} fullWidth helperText="পরিবর্তন না করতে চাইলে ফাঁকা রাখুন" />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField id="edit-first-name" name="first_name" label="First Name" value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} fullWidth error={!!formErrors.first_name} helperText={formErrors.first_name || ''} />
@@ -1039,6 +1069,16 @@ export default function ProfileCard({
                     <MenuItem value="O-">O-</MenuItem>
                   </TextField>
                 </Grid>
+                {(roleLower === 'student' || localProfile?.classroom || localProfile?.roll_number || localProfile?.student_custom_id) && (
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField select label="Gender" value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} fullWidth>
+                      <MenuItem value="">Select</MenuItem>
+                      <MenuItem value="male">Male</MenuItem>
+                      <MenuItem value="female">Female</MenuItem>
+                      <MenuItem value="other">Other</MenuItem>
+                    </TextField>
+                  </Grid>
+                )}
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField label="Occupation" value={formData.occupation} onChange={(e) => setFormData({ ...formData, occupation: e.target.value })} fullWidth />
                 </Grid>

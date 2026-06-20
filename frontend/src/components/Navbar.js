@@ -11,9 +11,11 @@ import {
   ListItemText, 
   Box, 
   useMediaQuery, 
-  useTheme 
+  useTheme,
+  Divider
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import CloseIcon from '@mui/icons-material/Close';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -98,7 +100,7 @@ const Navbar = ({ role }) => {
           </IconButton>
         )}
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          {isEffectiveAdmin ? 'এডমিন মেনু' : role ? `${role} মেনু` : 'মেনু'}
+          BD School App
         </Typography>
         {!isMobile && menuItems.map(item => (
           <Button 
@@ -125,19 +127,48 @@ const Navbar = ({ role }) => {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
       >
-        <Box sx={{ width: 250, p: 2 }}>
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-            {isEffectiveAdmin ? 'এডমিন মেনু' : role ? `${role} মেনু` : 'মেনু'}
-          </Typography>
-          <List>
+        <Box sx={{ width: 280 }} role="presentation">
+          <Box sx={{ 
+            p: 2, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            backgroundColor: '#1a237e',
+            color: 'white'
+          }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              {isEffectiveAdmin ? 'এডমিন মেনু' : role ? `${role} মেনু` : 'মেনু'}
+            </Typography>
+            <IconButton 
+              color="inherit" 
+              onClick={() => setDrawerOpen(false)}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          <Divider />
+          <List sx={{ p: 1 }}>
             {menuItems.map((item) => (
               <ListItem 
                 button 
                 key={item} 
                 onClick={(e) => handleNavigation(e, item)}
-                sx={{ borderRadius: 1, mb: 0.5 }}
+                sx={{ 
+                  borderRadius: 1, 
+                  mb: 0.5,
+                  py: 1.5,
+                  '&:hover': {
+                    backgroundColor: 'rgba(26, 35, 126, 0.1)'
+                  }
+                }}
               >
-                <ListItemText primary={item} />
+                <ListItemText 
+                  primary={item} 
+                  primaryTypographyProps={{
+                    fontSize: '1rem',
+                    fontWeight: 500
+                  }}
+                />
               </ListItem>
             ))}
           </List>

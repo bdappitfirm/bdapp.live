@@ -26,14 +26,14 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
   const userPhoto = processPhotoUrl(user.photo_url || user.photo || data.photo);
   const signatureUrl = (() => {
     if (school?.principal_signature) {
-      const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'');
+      const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/g, '');
       const sig = String(school.principal_signature);
       if (sig.startsWith('http')) return sig;
-      return `${base}/media/${sig.replace(/^\/+/, '')}`;
+      return `${base}/media/${sig.replace(/^\/+/g, '')}`;
     }
     try {
       if (school?.id && String(school.id) === '19') {
-        const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'');
+        const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/g, '');
         return `${base}/media/BHS/signature.png`;
       }
     } catch (_) {}
@@ -41,10 +41,10 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
   })();
 
   const schoolSealUrl = school?.school_seal ? (() => {
-    const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'');
+    const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/g, '');
     const seal = String(school.school_seal);
     if (seal.startsWith('http')) return seal;
-    return `${base}/media/${seal.replace(/^\/+/, '')}`;
+    return `${base}/media/${seal.replace(/^\/+/g, '')}`;
   })() : null;
 
   // QR Code data
@@ -60,8 +60,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
   });
 
   const toBnDigits = (v) => {
-    const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-    return String(v ?? '').replace(/[0-9]/g, d => bn[d] ?? d);
+    return String(v ?? '');
   };
   const getExamTypeBn = () => {
     const raw = String(exam?.name || exam?.exam_type || '').toLowerCase();
@@ -90,14 +89,15 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         borderRadius: '12px',
         color: '#1a237e',
         width: '100%',
-        maxWidth: '420px',
-        overflow: 'hidden',
+        maxWidth: '800px',
+        overflow: 'visible',
         boxShadow: '0 4px 20px rgba(26, 35, 126, 0.1)',
         position: 'relative',
         fontFamily: 'Hind Siliguri, Arial, sans-serif',
         border: '1px solid #e0e8ff',
-        p: 3,
-        lineHeight: 1.6,
+        p: 1.2,
+        lineHeight: 1.8,
+        display: 'block',
         '&:hover': {
           boxShadow: '0 6px 24px rgba(26, 35, 126, 0.15)',
           transform: 'translateY(-2px)',
@@ -110,8 +110,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'flex-start', 
-        mb: 2,
-        padding: '12px',
+        mb: 0.8,
+        padding: '7px',
         backgroundColor: '#1a237e',
         borderRadius: '8px',
         color: 'white'
@@ -120,15 +120,16 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         <Box 
           className="school-logo-box"
           sx={{ 
-          width: '60px',
-          height: '60px',
+          width: '90px',
+          height: '90px',
           border: '1px solid #e0e0e0',
           borderRadius: '4px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
-          backgroundColor: '#f5f5f5'
+          backgroundColor: '#f5f5f5',
+          flexShrink: 0
         }}>
           {schoolLogo ? (
             <img 
@@ -145,12 +146,12 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         </Box>
         
         {/* School Info */}
-        <Box className="school-info-box" sx={{ textAlign: 'center', flex: 1, px: 1, minWidth: 0 }}>
+        <Box className="school-info-box" sx={{ textAlign: 'center', flex: 1, px: 2, minWidth: 0, overflow: 'visible' }}>
           <Typography variant="h6" sx={{ 
             fontWeight: 'bold', 
-            fontSize: '1.5rem',
-            mb: 0.5,
-            lineHeight: 1.2,
+            fontSize: '1.6rem',
+            mb: 0.3,
+            lineHeight: 1.8,
             wordBreak: 'break-word'
           }}>
             {school?.bn_name || school?.name || 'স্কুলের নাম'}
@@ -158,17 +159,17 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
           <Typography variant="h5" sx={{ 
             fontSize: '1.8rem',
             fontWeight: 'bold',
-            mb: 0.5,
-            lineHeight: 1.2
+            mb: 0.3,
+            lineHeight: 1.8
           }}>
             প্রবেশপত্র
           </Typography>
           <Typography variant="body2" sx={{ 
             fontSize: '1.3rem',
             fontWeight: 500,
-            lineHeight: 1.2
+            lineHeight: 1.8
           }}>
-            {(getExamTypeBn() ? `${getExamTypeBn()} পরিক্ষা-` : 'পরিক্ষা ') + getExamYearBn() + 'খ্রীঃ'}
+            {(getExamTypeBn() ? `${getExamTypeBn()} পরীক্ষা-` : 'পরীক্ষা ') + getExamYearBn() + 'খ্রিঃ'}
           </Typography>
         </Box>
         
@@ -176,12 +177,13 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         <Box 
           className="student-photo-box"
           sx={{ 
-          width: '60px',
-          height: '75px',
+          width: '90px',
+          height: '110px',
           border: '1px solid #e0e0e0',
           borderRadius: '4px',
           overflow: 'hidden',
-          backgroundColor: '#f5f5f5'
+          backgroundColor: '#f5f5f5',
+          flexShrink: 0
         }}>
           {userPhoto ? (
             <img 
@@ -200,56 +202,57 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
       {/* Student Info */}
       <Box sx={{ 
-        mb: 2,
-        padding: '16px',
+        mb: 0.7,
+        padding: '8px',
         backgroundColor: 'white',
         borderRadius: '8px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
       }}>
         <Typography variant="h6" sx={{ 
-          fontWeight: 'bold',
-          fontSize: '1.6rem',
-          textAlign: 'center',
-          mb: 1.5,
-          lineHeight: 1.2
-        }}>
-          {name || 'শিক্ষার্থীর নাম'}
-        </Typography>
-        
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-          <Typography variant="body1" sx={{ flex: '1 1 45%', minWidth: '120px', fontSize: '1.3rem' }}>
-            <strong>Roll:</strong> {rollNumber || 'রোল'}
+            fontWeight: 'bold',
+            fontSize: '1.2rem',
+            textAlign: 'center',
+            mb: 0.5,
+            lineHeight: 1.8
+          }}>
+            {name || 'শিক্ষার্থীর নাম'}
           </Typography>
-          <Typography variant="body1" sx={{ flex: '1 1 45%', minWidth: '120px', fontSize: '1.3rem' }}>
-            <strong>Class:</strong> {className && className !== 'N/A' ? `${className} ${section}` : 'শ্রেণি'}
-          </Typography>
-          <Typography variant="body1" sx={{ flex: '1 1 100%', fontSize: '1.3rem' }}>
-            <strong>Exam ID:</strong> {exam?.exam_id || 'N/A'}
-          </Typography>
+          
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.3 }}>
+            <Typography variant="body1" sx={{ flex: '1 1 45%', minWidth: '120px', fontSize: '1rem', lineHeight: 1.8 }}>
+              <strong>Roll:</strong> {rollNumber || 'রোল'}
+            </Typography>
+            <Typography variant="body1" sx={{ flex: '1 1 45%', minWidth: '120px', fontSize: '1rem', lineHeight: 1.8 }}>
+              <strong>Class:</strong> {className && className !== 'N/A' ? `${className} ${section}` : 'শ্রেণি'}
+            </Typography>
+            <Typography variant="body1" sx={{ flex: '1 1 100%', fontSize: '1rem', lineHeight: 1.8 }}>
+              <strong>Exam ID:</strong> {exam?.exam_id || 'N/A'}
+            </Typography>
         </Box>
       </Box>
 
       {/* Exam Details */}
       <Box sx={{ 
-        mb: 2, 
+        mb: 0.7, 
         border: '1px solid #d1d9ff', 
         borderRadius: '8px', 
-        p: 2,
+        p: 0.9,
         backgroundColor: '#f8f9ff',
         boxShadow: '0 2px 8px rgba(26, 35, 126, 0.05)'
       }}>
         <Typography variant="h6" sx={{ 
-          fontWeight: 'bold', 
-          mb: 1.5, 
-          textAlign: 'center',
-          borderBottom: '1px solid #e0e0e0',
-          pb: 0.5,
-          fontSize: '1.4rem'
-        }}>
-          পরীক্ষার রুটিন (সময়):
-        </Typography>
+            fontWeight: 'bold', 
+            mb: 0.6, 
+            textAlign: 'center',
+            borderBottom: '1px solid #e0e0e0',
+            pb: 0.3,
+            fontSize: '1.1rem',
+            lineHeight: 1.8
+          }}>
+            পরীক্ষার রুটিনঃ
+          </Typography>
         
-        {/* Exam Routine Table - Two Columns */}
+        {/* Exam Routine Table - Four Columns */}
         {(() => {
               // Filter slots to match student's classroom and section
               const studentClassroomId = data?.classroom?.id;
@@ -264,7 +267,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
               
               if (filteredSlots.length === 0) {
                 return (
-                  <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '1rem' }}>
+                  <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '0.9rem' }}>
                     রুটিন পাওয়া যায়নি
                   </Typography>
                 );
@@ -283,64 +286,125 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
               // Helper to format time
               const formatTime = (timeStr) => {
                 if (!timeStr) return '';
-                const [h, m] = timeStr.split(':');
-                return `${toBnDigits(h)}:${toBnDigits(m)}`;
+                const [h, m] = timeStr.split(':').map(Number);
+                const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+                const period = h < 12 ? 'সকাল' : 'বিকাল';
+                return `${period} ${toBnDigits(displayH)}টা`;
               };
               
               return (
                 <Box sx={{ 
                   display: 'grid', 
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 1,
+                  gridTemplateColumns: '0.8fr 1.7fr 0.8fr 1.7fr',
+                  gridAutoRows: 'auto',
+                  gap: 0.3,
                   border: '1px solid #e0e8ff',
                   borderRadius: '4px',
-                  overflow: 'hidden'
+                  overflow: 'visible'
                 }}>
                   {/* Header */}
                   <Box sx={{ 
                     backgroundColor: '#1a237e', 
                     color: 'white', 
-                    p: 1, 
+                    py: 0.7,
+                    px: 0.2, 
                     fontWeight: 'bold', 
                     textAlign: 'center',
-                    fontSize: '1.3rem'
+                    fontSize: '1rem',
+                    lineHeight: 1.8
                   }}>
                     তারিখ
                   </Box>
                   <Box sx={{ 
                     backgroundColor: '#1a237e', 
                     color: 'white', 
-                    p: 1, 
+                    py: 0.7,
+                    px: 0.2, 
                     fontWeight: 'bold', 
                     textAlign: 'center',
-                    fontSize: '1.3rem'
+                    fontSize: '1rem',
+                    lineHeight: 1.8
+                  }}>
+                    বিষয়
+                  </Box>
+                  <Box sx={{ 
+                    backgroundColor: '#1a237e', 
+                    color: 'white', 
+                    py: 0.7,
+                    px: 0.2, 
+                    fontWeight: 'bold', 
+                    textAlign: 'center',
+                    fontSize: '1rem',
+                    lineHeight: 1.8
+                  }}>
+                    তারিখ
+                  </Box>
+                  <Box sx={{ 
+                    backgroundColor: '#1a237e', 
+                    color: 'white', 
+                    py: 0.7,
+                    px: 0.2, 
+                    fontWeight: 'bold', 
+                    textAlign: 'center',
+                    fontSize: '1rem',
+                    lineHeight: 1.8
                   }}>
                     বিষয়
                   </Box>
                   
                   {/* Rows */}
-                  {filteredSlots.map((slot, idx) => (
-                    <>
-                      <Box key={`date-${slot.id}`} sx={{ 
-                        p: 1, 
-                        backgroundColor: idx % 2 === 0 ? 'white' : '#f8f9ff',
-                        textAlign: 'center'
-                      }}>
-                        <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '1.2rem' }}>
-                          {formatDate(slot.exam_date)} {formatTime(slot.start_time) ? `(${formatTime(slot.start_time)})` : ''}
-                        </Typography>
-                      </Box>
-                      <Box key={`subject-${slot.id}`} sx={{ 
-                        p: 1, 
-                        backgroundColor: idx % 2 === 0 ? 'white' : '#f8f9ff',
-                        textAlign: 'center'
-                      }}>
-                        <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '1.2rem' }}>
-                          {slot.subject_name || 'বিষয়'}
-                        </Typography>
-                      </Box>
-                    </>
-                  ))}
+                  {(() => {
+                    const rows = [];
+                    for (let i = 0; i < filteredSlots.length; i += 2) {
+                      const slot1 = filteredSlots[i];
+                      const slot2 = filteredSlots[i + 1];
+                      rows.push(
+                        <React.Fragment key={`row-${i}`}>
+                          <Box sx={{ 
+                            py: 0.5,
+                            px: 0.2, 
+                            backgroundColor: (i/2) % 2 === 0 ? 'white' : '#f8f9ff',
+                            textAlign: 'center'
+                          }}>
+                            <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '0.6rem', whiteSpace: 'nowrap', lineHeight: 1.8 }}>
+                              {slot1 ? formatDate(slot1.exam_date) + (formatTime(slot1.start_time) ? ` (${formatTime(slot1.start_time)})` : '') : ''}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ 
+                            py: 0.5,
+                            px: 0.2, 
+                            backgroundColor: (i/2) % 2 === 0 ? 'white' : '#f8f9ff',
+                            textAlign: 'center'
+                          }}>
+                            <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '0.6rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.8 }}>
+                              {slot1?.subject_name || ''}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ 
+                            py: 0.5,
+                            px: 0.2, 
+                            backgroundColor: (i/2) % 2 === 0 ? 'white' : '#f8f9ff',
+                            textAlign: 'center'
+                          }}>
+                            <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '0.6rem', whiteSpace: 'nowrap', lineHeight: 1.8 }}>
+                              {slot2 ? formatDate(slot2.exam_date) + (formatTime(slot2.start_time) ? ` (${formatTime(slot2.start_time)})` : '') : ''}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ 
+                            py: 0.5,
+                            px: 0.2, 
+                            backgroundColor: (i/2) % 2 === 0 ? 'white' : '#f8f9ff',
+                            textAlign: 'center'
+                          }}>
+                            <Typography variant="body1" sx={{ fontWeight: '500', fontSize: '0.6rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.8 }}>
+                              {slot2?.subject_name || ''}
+                            </Typography>
+                          </Box>
+                        </React.Fragment>
+                      );
+                    }
+                    return rows;
+                  })()}
                 </Box>
               );
             })()}
@@ -350,63 +414,60 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
       {/* Instructions Section */}
       <Box sx={{
-        mt: 2,
-        p: 2,
+        mt: 0.7,
+        p: 0.5,
         backgroundColor: '#f0f4ff',
         borderRadius: '6px'
       }}>
         <Typography variant="subtitle1" sx={{ 
-          fontWeight: 'bold', 
-          mb: 1,
-          color: '#1a237e',
-          textAlign: 'center',
-          fontSize: '1.2rem'
-        }}>
-          নির্দেশনা
-        </Typography>
-        <Box component="ol" sx={{ 
-          pl: 2,
-          m: 0,
-          '& li': {
-            mb: 0.8,
-            lineHeight: 1.4,
-            fontSize: '1.1rem',
-            color: '#333'
-          }
-        }}>
-          <li>প্রবেশপত্র আনুন।</li>
-          <li>সময়ে আগে আসুন।</li>
-          <li>শৃঙ্খলা রাখুন।</li>
-        </Box>
+            fontWeight: 'bold', 
+            mb: 0.3,
+            color: '#1a237e',
+            textAlign: 'center',
+            fontSize: '0.95rem',
+            lineHeight: 1.8
+          }}>
+            নির্দেশনা
+          </Typography>
+          <Box component="p" sx={{ 
+            pl: 0.5,
+            m: 0,
+            fontSize: '0.85rem',
+            lineHeight: 1.8,
+            color: '#333',
+            textAlign: 'center'
+          }}>
+            প্রবেশপত্র ছাড়া পরীক্ষার হলে প্রবেশ করতে পারবে না। পরীক্ষা শুরু হওয়ার কমপক্ষে ১৫ মিনিট আগে প্রবেশ করা আবশ্যক। নির্ধারিত বিষয় বাছাই করে পরীক্ষা দিতে হবে। প্রতিটি প্রশ্নের উত্তর সঠিকভাবে লিখতে হবে।
+          </Box>
       </Box>
 
       {/* Footer */}
       <Box sx={{
-        mt: 2,
-        pt: 2,
+        mt: 0.7,
+        pt: 0.8,
         borderTop: '2px dashed #d1d9ff'
       }}>
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'center',
           alignItems: 'flex-end',
-          gap: 2
+          gap: 1.5
         }}>
           {/* Principal's Signature */}
           <Box sx={{ 
             textAlign: 'center', 
             flex: 1,
-            maxWidth: '300px',
-            pt: 1
+            maxWidth: '280px',
+            pt: 0.5
           }}>
             <Box sx={{ 
-              height: '60px',
+              height: '50px',
               borderBottom: '2px solid #1a237e',
-              mb: 0.5,
+              mb: 0.3,
               display: 'flex',
               alignItems: 'flex-end',
               justifyContent: 'center',
-              pb: 0.5,
+              pb: 0.3,
               position: 'relative',
               '&::before': {
                 content: '""',
@@ -428,7 +489,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   src={signatureUrl} 
                   alt="Principal's Signature" 
                   style={{ 
-                    maxHeight: '50px',
+                    maxHeight: '45px',
                     maxWidth: '100%',
                     objectFit: 'contain',
                     position: 'relative',
@@ -443,7 +504,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
             </Box>
             <Typography variant="body1" sx={{ 
               fontWeight: 'bold',
-              fontSize: '1.2rem'
+              fontSize: '1rem',
+              lineHeight: 1.8
             }}>
               প্রধান শিক্ষক
             </Typography>

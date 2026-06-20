@@ -147,6 +147,7 @@ if USE_POSTGRES:
             'PASSWORD': PG_PASSWORD,
             'HOST': PG_HOST,
             'PORT': PG_PORT,
+            'CONN_MAX_AGE': 60,  # Keep connections alive for 60 seconds (connection pooling)
         }
     }
 else:
@@ -191,6 +192,20 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ============================
+# CACHING (Redis)
+# ============================
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_PREFIX': 'bdapp'
+    }
+}
 
 # ============================
 # REST FRAMEWORK & JWT

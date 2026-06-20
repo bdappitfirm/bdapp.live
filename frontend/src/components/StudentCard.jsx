@@ -90,6 +90,7 @@ export default function StudentCard({ student, onUploaded, onEdit, onDelete, onC
               <Typography variant="body2">রোল: {student.roll_number || 'N/A'}</Typography>
               {className && <Typography variant="body2">শ্রেণি: {className}</Typography>}
               {sectionName && <Typography variant="body2">সেকশন: {sectionName}</Typography>}
+              {student.gender && <Typography variant="body2">Gender: {student.gender}</Typography>}
               <Typography variant="body2">রক্তের গ্রুপ: {student.blood_group || 'N/A'}</Typography>
               {guardianName && <Typography variant="body2">অভিভাবক: {guardianName}</Typography>}
               <Typography variant="body2">ফোন: {student.user?.phone_number || student.phone_number || 'N/A'}</Typography>

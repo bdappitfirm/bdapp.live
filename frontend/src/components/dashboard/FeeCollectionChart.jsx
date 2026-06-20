@@ -64,7 +64,7 @@ const FeeCollectionChart = ({ feeData, feeDuesSummary, feeDuesByClass }) => {
               গত ৩০ দিনে মোট সংগ্রহ
             </Typography>
             <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
-              ৳{totalAmount.toLocaleString('bn-BD')}
+              ৳{totalAmount.toLocaleString()}
             </Typography>
           </Box>
           <TrendingUpIcon sx={{ fontSize: 40, opacity: 0.7 }} />
@@ -147,7 +147,7 @@ const FeeCollectionChart = ({ feeData, feeDuesSummary, feeDuesByClass }) => {
                   </TableCell>
                   <TableCell align="right" sx={{ py: 2 }}>
                     <Chip
-                      label={`৳${item.amount.toLocaleString('bn-BD')}`}
+                      label={`৳${item.amount.toLocaleString()}`}
                       size="small"
                       sx={{
                         bgcolor: '#e8f5e9',
@@ -181,19 +181,19 @@ const FeeCollectionChart = ({ feeData, feeDuesSummary, feeDuesByClass }) => {
           <Box textAlign="center">
             <Typography variant="body1" sx={{ opacity: 0.9, mb: 0.5 }}>মোট বকেয়া</Typography>
             <Typography variant="h3" sx={{ fontWeight: 700 }}>
-              ৳{Math.floor(Number(summary?.total_due || 0)).toLocaleString('bn-BD')}
+              ৳{Math.floor(Number(summary?.total_due || 0)).toLocaleString()}
             </Typography>
           </Box>
           <Box textAlign="center">
             <Typography variant="body1" sx={{ opacity: 0.9, mb: 0.5 }}>বেতন বকেয়া</Typography>
             <Typography variant="h4" sx={{ fontWeight: 600 }}>
-              ৳{Math.floor(Number(summary?.tuition_due_total || 0)).toLocaleString('bn-BD')}
+              ৳{Math.floor(Number(summary?.tuition_due_total || 0)).toLocaleString()}
             </Typography>
           </Box>
           <Box textAlign="center">
             <Typography variant="body1" sx={{ opacity: 0.9, mb: 0.5 }}>পরীক্ষার ফি বকেয়া</Typography>
             <Typography variant="h4" sx={{ fontWeight: 600 }}>
-              ৳{Math.floor(Number(summary?.exam_due_total || 0)).toLocaleString('bn-BD')}
+              ৳{Math.floor(Number(summary?.exam_due_total || 0)).toLocaleString()}
             </Typography>
           </Box>
         </Stack>
@@ -215,7 +215,7 @@ const FeeCollectionChart = ({ feeData, feeDuesSummary, feeDuesByClass }) => {
             {byClass.map((row, i) => (
               <Chip
                 key={i}
-                label={`${row.class_name} মোট বকেয়া: ৳${Math.round(Number(row.total_due || (row.tuition_due||0)+(row.exam_due||0))).toLocaleString('bn-BD')}`}
+                label={`${row.class_name} মোট বকেয়া: ৳${Math.round(Number(row.total_due || (row.tuition_due||0)+(row.exam_due||0))).toLocaleString()}`}
                 sx={{ bgcolor: '#f9fafb' }}
               />
             ))}
@@ -246,10 +246,10 @@ const FeeCollectionChart = ({ feeData, feeDuesSummary, feeDuesByClass }) => {
                 {byClass.map((row, i) => (
                   <TableRow key={i} hover>
                     <TableCell>{row.class_name}</TableCell>
-                    <TableCell align="right">৳{Math.round(Number(row.tuition_due || 0)).toLocaleString('bn-BD')}</TableCell>
-                    <TableCell align="right">৳{Math.round(Number(row.exam_due || 0)).toLocaleString('bn-BD')}</TableCell>
+                    <TableCell align="right">৳{Math.round(Number(row.tuition_due || 0)).toLocaleString()}</TableCell>
+                    <TableCell align="right">৳{Math.round(Number(row.exam_due || 0)).toLocaleString()}</TableCell>
                     <TableCell align="right">
-                      <Chip label={`৳${Math.round(Number(row.total_due || (row.tuition_due||0)+(row.exam_due||0))).toLocaleString('bn-BD')}`} size="small" />
+                      <Chip label={`৳${Math.round(Number(row.total_due || (row.tuition_due||0)+(row.exam_due||0))).toLocaleString()}`} size="small" />
                     </TableCell>
                   </TableRow>
                 ))}

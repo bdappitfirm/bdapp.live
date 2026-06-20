@@ -243,6 +243,7 @@ class ExaminationViewSet(viewsets.ModelViewSet):
             if not m:
                 return None
             return int(m.get("written", 0)) + int(m.get("mcq", 0)) + int(m.get("practical", 0))
+        
         total_obtained = sum(r.total_obtained for r in student_results)
         total_possible_list = []
         for r in student_results:
@@ -273,8 +274,72 @@ class ExaminationViewSet(viewsets.ModelViewSet):
         else:
             grade = 'F'
         
-        # Check if passed (all subjects must be passed)
-        is_passed = all(r.is_passed for r in student_results)
+        # Check if passed, but handle special case for Classes 9 and 10
+        is_passed = True
+        
+        # First check general check all subjects except Bangla 1/2 and English 1/2
+        classroom_name = getattr(examination.classroom, "name", "").lower()
+        is_class_9_or_10 = any(num in classroom_name for num in ["৯", "৯ম", "9", "10", "দশ", "১০", "দশম"])
+        
+        if is_class_9_or_10:
+            # Special case for Class 9-10: check Bangla and English pairs
+            # Helper to get result by subject name
+            def get_result_by_name(sub_name):
+                return next((r for r in student_results if sub_name.lower() in r.subject.name.lower()), None)
+            
+            # Check Bangla 1 + Bangla 2
+            bangla1 = get_result_by_name("বাংলা")
+            bangla2 = get_result_by_name("বাংলা ২")
+            if bangla1 or bangla2:
+                total_bangla = (bangla1.total_obtained if bangla1 else Decimal(0)) + (bangla2.total_obtained if bangla2 else Decimal(0))
+                max_bangla = Decimal(0)
+                if bangla1:
+                    max_val = _subject_total_max(classroom_name, bangla1.subject.name)
+                    if max_val:
+                        max_bangla += Decimal(max_val)
+                if bangla2:
+                    max_val = _subject_total_max(classroom_name, bangla2.subject.name)
+                    if max_val:
+                        max_bangla += Decimal(max_val)
+                if max_bangla > 0:
+                    bangla_passed = total_bangla >= Decimal(_round_half_up(max_bangla / 3))
+                else:
+                    bangla_passed = True
+                if not bangla_passed:
+                    is_passed = False
+            
+            # Check English 1 + English 2
+            english1 = get_result_by_name("ইংরেজি")
+            english2 = get_result_by_name("ইংরেজি ২")
+            if english1 or english2:
+                total_english = (english1.total_obtained if english1 else Decimal(0)) + (english2.total_obtained if english2 else Decimal(0))
+                max_english = Decimal(0)
+                if english1:
+                    max_val = _subject_total_max(classroom_name, english1.subject.name)
+                    if max_val:
+                        max_english += Decimal(max_val)
+                if english2:
+                    max_val = _subject_total_max(classroom_name, english2.subject.name)
+                    if max_val:
+                        max_english += Decimal(max_val)
+                if max_english > 0:
+                    english_passed = total_english >= Decimal(_round_half_up(max_english / 3))
+                else:
+                    english_passed = True
+                if not english_passed:
+                    is_passed = False
+            
+            # Now check all other subjects
+            for r in student_results:
+                sub_name = r.subject.name.lower()
+                if "বাংলা" not in sub_name and "ইংরেজি" not in sub_name:
+                    if not r.is_passed:
+                        is_passed = False
+                        break
+        else:
+            # For other classes: all subjects individually
+            is_passed = all(r.is_passed for r in student_results)
+        
         failed_subjects_count = sum(1 for r in student_results if not r.is_passed)
         
         # Create or update overall result

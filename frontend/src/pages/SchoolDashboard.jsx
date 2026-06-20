@@ -262,6 +262,8 @@ const SchoolDashboard = () => {
   useEffect(() => {
     if (!id || authLoading) return;
     let isMounted = true;
+    let intervalId = null;
+    
     const fetchStats = async () => {
       try {
         const data = await getDashboardStats(id);
@@ -270,8 +272,14 @@ const SchoolDashboard = () => {
         console.error('Dashboard stats fetch failed:', err);
       }
     };
+    
     fetchStats();
-    return () => { isMounted = false; };
+    intervalId = setInterval(fetchStats, 10000); // Auto-refresh every 10 seconds
+    
+    return () => { 
+      isMounted = false; 
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [id, authLoading]);
 
   // Handle mobile drawer toggle

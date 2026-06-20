@@ -1,7 +1,7 @@
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 
 # Start backend in a new PowerShell window
-$backendScript = Join-Path $PSScriptRoot 'start-backend.ps1'
+$backendScript = Join-Path $PSScriptRoot 'start-backend-global.ps1'
 Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy Bypass", "-File `"$backendScript`""
 
 Start-Sleep -Seconds 3

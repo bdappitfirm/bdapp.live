@@ -519,8 +519,7 @@ const FeePaymentReceipt = () => {
     const [manualAmounts, setManualAmounts] = useState({});
     const [fineAmount, setFineAmount] = useState(0);
     const toBnDigits = (val) => {
-      const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-      return String(val).replace(/\d/g, d => bn[d] ?? d);
+      return String(val);
     };
 
     const resolveMediaUrl = (url) => {

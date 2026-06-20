@@ -11,6 +11,7 @@ class School(models.Model):
     principal_name = models.CharField(max_length=255, blank=True, null=True)
     principal_signature = models.ImageField(upload_to='school_signatures/', blank=True, null=True, help_text="Principal's signature (PNG/JPG/JPEG)")
     school_seal = models.ImageField(upload_to='school_seals/', blank=True, null=True, help_text="School seal (PNG/JPG/JPEG)")
+    number_of_buildings = models.IntegerField(default=1, blank=True, null=True, verbose_name="Number of Buildings")
 
     def __str__(self):
         return self.name

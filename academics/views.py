@@ -1867,30 +1867,28 @@ class GenerateExamSeatPlanAPI(APIView):
         from .utils import generate_exam_seat_plan, generate_exam_buildings_and_rooms
         
         # Get required params
-        exam_slot_id = request.data.get('exam_slot_id')
+        examination_id = request.data.get('examination_id')
         school_id = request.data.get('school_id')
-        num_buildings = request.data.get('num_buildings', 1)
-        num_rooms_per_building = request.data.get('num_rooms_per_building', 5)
-        room_capacity = request.data.get('room_capacity', 40)
+        buildings = request.data.get('buildings', [])
         
-        if not exam_slot_id:
-            return Response({"detail": "exam_slot_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not examination_id:
+            return Response({"detail": "examination_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not buildings or len(buildings) == 0:
+            return Response({"detail": "At least one building is required"}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            from results.models import ExamSlot
-            exam_slot = ExamSlot.objects.get(pk=exam_slot_id)
+            from results.models import Examination
+            examination = Examination.objects.get(pk=examination_id)
             
-            # If school not provided, get from exam_slot
+            # If school not provided, get from examination
             if not school_id:
-                school_id = exam_slot.school_id or exam_slot.examination.school_id
+                school_id = examination.school_id
             
             school = School.objects.get(pk=school_id)
             
-            # Generate buildings/rooms if needed
-            generate_exam_buildings_and_rooms(school, num_buildings, num_rooms_per_building, room_capacity)
-            
             # Generate seat plan
-            seat_plans = generate_exam_seat_plan(exam_slot, num_buildings, num_rooms_per_building, room_capacity)
+            seat_plans = generate_exam_seat_plan(examination, school, buildings)
             
             # Return the seat plans
             from .serializers import ExamSeatPlanSerializer
@@ -1898,8 +1896,8 @@ class GenerateExamSeatPlanAPI(APIView):
                 "status": "ok", 
                 "seat_plans": ExamSeatPlanSerializer(seat_plans, many=True, context={'request': request}).data
             }, status=status.HTTP_200_OK)
-        except ExamSlot.DoesNotExist:
-            return Response({"detail": "ExamSlot not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Examination.DoesNotExist:
+            return Response({"detail": "Examination not found"}, status=status.HTTP_404_NOT_FOUND)
         except School.DoesNotExist:
             return Response({"detail": "School not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:

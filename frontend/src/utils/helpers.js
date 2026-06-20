@@ -9,6 +9,25 @@ export const getRoleColor = (role) => {
   }
 };
 
+// Convert Bengali numerals to English
+export const bengaliToEnglishNumber = (num) => {
+  if (num == null) return num;
+  const numStr = String(num);
+  const bengaliDigits = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+  };
+  
+  return numStr.split('').map(char => {
+    return bengaliDigits[char] || char;
+  }).join('');
+};
+
+// Convert any input (including mixed Bengali-English) to English digits
+export const normalizeNumberInput = (input) => {
+  return bengaliToEnglishNumber(input);
+};
+
 // Permission helpers
 export const canEdit = (user, itemUserId = null, itemRole = null) => {
   if (!user) return false;

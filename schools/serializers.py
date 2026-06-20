@@ -7,7 +7,7 @@ from .models import School, Advertisement
 class SchoolSerializer(serializers.ModelSerializer):
     class Meta:
         model = School
-        fields = ['id', 'name', 'ein', 'email', 'phone_number', 'address', 'principal_name', 'logo', 'principal_signature', 'school_seal']
+        fields = ['id', 'name', 'ein', 'email', 'phone_number', 'address', 'principal_name', 'logo', 'principal_signature', 'school_seal', 'number_of_buildings']
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

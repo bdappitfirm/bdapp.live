@@ -10,15 +10,23 @@ User = get_user_model()
 class ActivityLogSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     user_full_name = serializers.SerializerMethodField()
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    user_role = serializers.SerializerMethodField()
     school_name = serializers.CharField(source='school.name', read_only=True)
+    school_id = serializers.IntegerField(source='school.id', read_only=True)
     
     class Meta:
         model = ActivityLog
-        fields = ['id', 'user', 'username', 'user_full_name', 'school', 'school_name', 'action_type', 'details', 'ip_address', 'timestamp', 'cost']
+        fields = ['id', 'user', 'user_id', 'username', 'user_full_name', 'user_role', 'school', 'school_id', 'school_name', 'action_type', 'details', 'ip_address', 'timestamp', 'cost']
     
     def get_user_full_name(self, obj):
         if obj.user:
             return f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return "Unknown"
+    
+    def get_user_role(self, obj):
+        if obj.user and hasattr(obj.user, 'profile'):
+            return obj.user.profile.role
         return "Unknown"
 
 class UserSerializer(serializers.ModelSerializer):

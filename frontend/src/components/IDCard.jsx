@@ -290,16 +290,9 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
     customIdNumber = data?.index_number || data?.id_card_number || data?.id || '';
   }
   
-  // Generate QR code data - simplified for easier scanning
-  const qrData = JSON.stringify({
-    type: type,
-    id: data?.id,
-    customId: customIdNumber,
-    name: name,
-    school: school?.ein || school?.id || school?.name,
-    roll: isStudent ? data?.roll_number : null,
-    username: user.username
-  });
+  // Generate QR code data - simpler format for easier scanning
+  // Using a simpler format than JSON to make QR smaller and more reliable
+  const qrData = `STU|${data.id}|${customIdNumber}|${encodeURIComponent(name)}|${school?.ein || school?.id}`;
 
   const CARD_WIDTH = 250;
   const CARD_HEIGHT = 386;
@@ -817,7 +810,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
               </Typography>
             </Box>
 
-            {/* QR Code - Optimized for Screen-to-Screen Scanning */}
+            {/* QR Code - Optimized for Screen-to-Screen and Print Scanning */}
             <Box sx={{ 
               display: 'flex', 
               justifyContent: 'center',
@@ -825,17 +818,17 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
             }}>
               <Box sx={{
                 position: 'relative',
-                p: 1.5, // Even smaller padding
-                border: '2px solid #000000', // Thinner border
-                bgcolor: '#ffffff' // Pure white background
+                p: 2, 
+                border: '3px solid #000000', 
+                bgcolor: '#ffffff'
               }}>
                 <QRCodeCanvas 
                   value={qrData} 
-                  size={100} // Even smaller QR code
-                  level="H" // Maximum error correction (30%)
+                  size={150} 
+                  level="H" 
                   includeMargin={false}
-                  fgColor="#000000" // Pure black
-                  bgColor="#ffffff" // Pure white
+                  fgColor="#000000" 
+                  bgColor="#ffffff"
                 />
               </Box>
             </Box>

@@ -35,7 +35,8 @@ export default function SchoolSettings() {
     email: '',
     phone_number: '',
     address: '',
-    principal_name: ''
+    principal_name: '',
+    number_of_buildings: 1
   });
   
   const [logo, setLogo] = useState(null);
@@ -57,7 +58,8 @@ export default function SchoolSettings() {
         email: res.data.email || '',
         phone_number: res.data.phone_number || '',
         address: res.data.address || '',
-        principal_name: res.data.principal_name || ''
+        principal_name: res.data.principal_name || '',
+        number_of_buildings: res.data.number_of_buildings || 1
       });
     } catch (err) {
       console.error('Failed to fetch school data:', err);
@@ -68,9 +70,10 @@ export default function SchoolSettings() {
   };
 
   const handleInputChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: name === 'number_of_buildings' ? parseInt(value) || 1 : value
     });
   };
 
@@ -189,6 +192,15 @@ export default function SchoolSettings() {
                 fullWidth
                 multiline
                 rows={2}
+              />
+              <TextField
+                label="ভবন সংখ্যা (Number of Buildings)"
+                name="number_of_buildings"
+                type="number"
+                value={formData.number_of_buildings}
+                onChange={handleInputChange}
+                fullWidth
+                inputProps={{ min: 1, max: 10 }}
               />
             </Stack>
           </Paper>

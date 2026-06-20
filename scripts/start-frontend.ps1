@@ -1,24 +1,20 @@
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 
-# Check for Node.js
-if (!(Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Error 'Node.js not found. Install Node.js LTS from https://nodejs.org/'
-    exit 1
-}
+# Add Node.js to PATH
+$env:Path += ";C:\Program Files\nodejs"
 
+# Navigate to frontend directory
 $frontendDir = Join-Path $PSScriptRoot '..\frontend'
-if (!(Test-Path (Join-Path $frontendDir 'package.json'))) {
-    Write-Error 'frontend/package.json not found.'
-    exit 1
+Push-Location $frontendDir
+
+# Install dependencies if needed
+if (!(Test-Path 'node_modules')) {
+    Write-Host "Installing frontend dependencies..."
+    npm install
 }
 
-Push-Location $frontendDir
-try {
-    if (!(Test-Path (Join-Path $frontendDir 'node_modules'))) {
-        Write-Host 'Installing frontend dependencies (npm install)'
-        npm install
-    }
-    npm start
-} finally {
-    Pop-Location
-}
+# Start the frontend
+Write-Host "Starting frontend..."
+npm start
+
+Pop-Location

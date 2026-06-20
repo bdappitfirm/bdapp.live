@@ -62,6 +62,7 @@ if (-not $NoFrontend) {
     
     Write-Host "Building Frontend..." -ForegroundColor Yellow
     Set-Location "$PROJECT_ROOT\frontend"
+    $env:NODE_OPTIONS = "--max-old-space-size=4096"
     npm run build
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Frontend build failed! Aborting deployment."

@@ -34,7 +34,7 @@ $backendIncludes = @(
     "manage.py",
     "requirements.txt",
     "scripts/"
-)
+) -join " "
 
 $backendExcludes = @(
     "--exclude=.git/",
@@ -49,9 +49,10 @@ $backendExcludes = @(
     "--exclude=*.tar",
     "--exclude=*.tar.gz",
     "--exclude=*.log"
-)
+) -join " "
 
-$backendRsyncCmd = "rsync -avz --progress --delete " + ($backendExcludes -join " ") + " " + ($backendIncludes -join " ") + " ${USER}@${VPS_IP}:/var/www/bdapp/"
+$backendRsyncCmd = "rsync -avz --progress --delete $backendExcludes $backendIncludes ${USER}@${VPS_IP}:/var/www/bdapp/"
+Write-Host "Running: $backendRsyncCmd"
 Invoke-Expression $backendRsyncCmd
 
 Write-Host "`n📦 Building Frontend..." -ForegroundColor Yellow
@@ -72,6 +73,7 @@ Set-Location $PSScriptRoot
 Write-Host "`n📦 Syncing Frontend Files..." -ForegroundColor Yellow
 
 $frontendRsyncCmd = "rsync -avz --progress --delete frontend/build/ ${USER}@${VPS_IP}:/var/www/bdapp/frontend/build/"
+Write-Host "Running: $frontendRsyncCmd"
 Invoke-Expression $frontendRsyncCmd
 
 Write-Host "`n📦 Uploading VPS-side deployment script..." -ForegroundColor Yellow

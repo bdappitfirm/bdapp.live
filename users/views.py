@@ -302,9 +302,10 @@ class VerifyPasswordView(APIView):
 def send_sms_view(request):
     phone_number = request.data.get('phone_number')
     message = request.data.get('message')
+    sender_mobile = request.data.get('sender_mobile', '')
     if not phone_number or not message:
         return Response({"error": "phone_number and message are required"}, status=400)
-    success, result_message = send_sms(phone_number, message)
+    success, result_message = send_sms(phone_number, message, sender_mobile)
     return Response({"success": success, "message": result_message} if success else {"success": False, "error": result_message}, status=200 if success else 400)
 
 @api_view(['POST'])
@@ -312,9 +313,10 @@ def send_sms_view(request):
 def send_bulk_sms_view(request):
     phone_numbers = request.data.get('phone_numbers', [])
     message = request.data.get('message')
+    sender_mobile = request.data.get('sender_mobile', '')
     if not phone_numbers or not message:
         return Response({"error": "phone_numbers (array) and message are required"}, status=400)
-    results = send_bulk_sms(phone_numbers, message)
+    results = send_bulk_sms(phone_numbers, message, sender_mobile)
     success_count = sum(1 for r in results if r['success'])
     return Response({"success": True, "total": len(results), "sent": success_count, "failed": len(results)-success_count, "results": results})
 

@@ -162,30 +162,9 @@ class Result(models.Model):
             self.grade = 'F'
             self.gpa = 0.00
             
-        # Pass/fail calculation logic
-        if (wm or mm or pm):
-            req_written = (wm or 0) > 0
-            req_mcq = (mm or 0) > 0
-            req_practical = (pm or 0) > 0
-            
-            # Calculate 1/3 thresholds for each component
-            thr_w = Decimal(_round_half_up(Decimal(wm) / Decimal(3))) if req_written else Decimal(0)
-            thr_m = Decimal(_round_half_up(Decimal(mm) / Decimal(3))) if req_mcq else Decimal(0)
-            thr_p = Decimal(_round_half_up(Decimal(pm) / Decimal(3))) if req_practical else Decimal(0)
-            
-            # Check if student meets component-wise passing criteria
-            ok_w = (self.written_marks >= thr_w) if req_written else True
-            ok_m = (self.mcq_marks >= thr_m) if req_mcq else True
-            ok_p = (self.practical_marks >= thr_p) if req_practical else True
-            
-            # Student must pass all component-wise criteria
-            self.is_passed = bool(ok_w and ok_m and ok_p)
-        else:
-            # If no component marks, just check total marks
-            threshold = Decimal(self.examination.pass_marks or 0)
-            if threshold <= 0 or threshold > denom:
-                threshold = Decimal(_round_half_up(denom / Decimal(3)))
-            self.is_passed = self.total_obtained >= threshold
+        # New pass/fail calculation logic: total marks ≥ 1/3 (no component-wise check)
+        threshold = Decimal(_round_half_up(denom / Decimal(3))) if denom > 0 else Decimal(0)
+        self.is_passed = self.total_obtained >= threshold
         
         # Now override grade and GPA if failed!
         if not self.is_passed:

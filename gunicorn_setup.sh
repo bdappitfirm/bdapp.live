@@ -17,12 +17,14 @@ Requires=gunicorn.socket
 After=network.target
 
 [Service]
-User=root
+User=www-data
 Group=www-data
 WorkingDirectory=/var/www/bdapp
 ExecStart=/var/www/bdapp/.venv/bin/gunicorn \\
-          --access-logfile - \\
-          --workers 3 \\
+          --access-logfile /var/log/gunicorn-access.log \\
+          --error-logfile /var/log/gunicorn-error.log \\
+          --workers 17 \\
+          --timeout 120 \\
           --bind unix:/run/gunicorn.sock \\
           backend.wsgi:application
 

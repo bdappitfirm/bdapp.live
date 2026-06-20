@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 class SMSService:
     """Base SMS Service Class"""
     
-    def __init__(self):
+    def __init__(self, sender_mobile=None):
         self.provider = getattr(settings, 'SMS_PROVIDER', 'console')
         self.api_key = getattr(settings, 'SMS_API_KEY', '')
         self.api_secret = getattr(settings, 'SMS_API_SECRET', '')
-        self.sender_id = getattr(settings, 'SMS_SENDER_ID', 'School')
+        self.sender_id = sender_mobile or getattr(settings, 'SMS_SENDER_ID', 'School')
     
     def send_sms(self, phone_number, message):
         """Send SMS based on configured provider"""
@@ -236,16 +236,16 @@ class SMSTemplates:
 
 
 # Convenience function
-def send_sms(phone_number, message):
+def send_sms(phone_number, message, sender_mobile=None):
     """Quick function to send SMS"""
-    service = SMSService()
+    service = SMSService(sender_mobile)
     return service.send_sms(phone_number, message)
 
 
 # Bulk SMS function
-def send_bulk_sms(phone_numbers, message):
+def send_bulk_sms(phone_numbers, message, sender_mobile=None):
     """Send SMS to multiple recipients"""
-    service = SMSService()
+    service = SMSService(sender_mobile)
     results = []
     
     for phone in phone_numbers:

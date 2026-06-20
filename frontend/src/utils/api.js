@@ -4,8 +4,13 @@ import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './auth
 
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : ''),
-  timeout: 60000,
+  timeout: 15000,
   withCredentials: true,
+  headers: {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  },
 });
 
 // Request interceptor to add auth token and CSRF token

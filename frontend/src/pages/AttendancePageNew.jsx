@@ -539,7 +539,22 @@ export default function AttendancePageNew() {
 
   const handleQrScanSuccess = async (decodedText) => {
     try {
-      const data = JSON.parse(decodedText);
+      let data;
+      // Try to parse both new pipe-separated format and old JSON format
+      if (decodedText.startsWith('STU|')) {
+        const parts = decodedText.split('|');
+        data = {
+          type: 'student',
+          id: parseInt(parts[1]),
+          customId: parts[2],
+          name: decodeURIComponent(parts[3]),
+          school: parts[4]
+        };
+      } else {
+        // Fallback to old JSON format
+        data = JSON.parse(decodedText);
+      }
+      
       if (data.type === 'student' && data.id) {
         const studentId = data.id;
         const studentName = data.name || 'student';
@@ -592,12 +607,9 @@ export default function AttendancePageNew() {
           playBeep();
           toast.success(`হাজিরা সংরক্ষিত হয়েছে! ${studentName}`);
           
-          // If we have students loaded, update the state
-          if (students.length > 0 && student) {
-            setAttendance(prev => ({
-              ...prev,
-              [studentId]: true
-            }));
+          // Refresh attendance records
+          if (selectedClassroom) {
+            loadStudents();
           }
         } catch (err) {
           console.error('Failed to save attendance to server, but local backup exists:', err);
@@ -622,73 +634,110 @@ export default function AttendancePageNew() {
       return;
     }
     
-    // Create attendance record
-    const attendanceRecord = {
-      school: parseInt(id),
-      student: parseInt(manualStudentId),
-      student_name: 'Manual Entry',
-      date: date,
-      present: true,
-      timestamp: new Date().toISOString()
-    };
-    
-    // Save to localStorage backup FIRST
-    saveLocalBackup(attendanceRecord);
-    
     try {
-      // Try to find student or directly create attendance
+      // First, try to find the student by student_custom_id or id
+      let student = null;
+      
+      // First, check if we have the student in current list
+      if (students.length > 0) {
+        student = students.find(s => 
+          s.id === parseInt(manualStudentId) || 
+          s.student_custom_id === manualStudentId.trim()
+        );
+      }
+      
+      // If not found, try to fetch the student from API by custom ID or ID
+      if (!student) {
+        try {
+          // Try to get student list and search in that
+          const studentsRes = await scopedGet('/api/academics/students/', id, {});
+          const allStudents = Array.isArray(studentsRes.data) ? studentsRes.data : (studentsRes.data?.results || []);
+          student = allStudents.find(s => 
+            s.id === parseInt(manualStudentId) || 
+            s.student_custom_id === manualStudentId.trim()
+          );
+        } catch (err) {
+          console.error('Failed to fetch students:', err);
+        }
+      }
+      
+      if (!student) {
+        toast.error('আইডি দিয়ে কোনো শিক্ষার্থী পাওয়া যায়নি');
+        return;
+      }
+      
+      // Now create attendance record
+      const attendanceRecord = {
+        school: parseInt(id),
+        student: student.id,
+        student_name: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || 'Manual Entry',
+        date: date,
+        present: true,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Save to localStorage backup FIRST
+      saveLocalBackup(attendanceRecord);
+      
+      // Save to server
       await api.post('/api/attendance/records/bulk_save/', {
         records: [{
           school: parseInt(id),
-          student: parseInt(manualStudentId),
+          student: student.id,
           date: date,
           present: true,
           note: 'Manual entry'
         }]
       });
+      
       playBeep();
-      toast.success('হাজিরা সফলভাবে সংরক্ষিত হয়েছে');
+      toast.success(`হাজিরা সংরক্ষিত হয়েছে! ${attendanceRecord.student_name}`);
       setManualStudentId('');
+      
+      // Refresh attendance records
+      if (selectedClassroom) {
+        loadStudents();
+      }
     } catch (err) {
-      console.error('Failed to save manual attendance to server, but local backup exists:', err);
-      toast.error('সার্ভারে সংরক্ষণ ব্যর্থ, কিন্তু লোকাল ব্যাকআপ আছে!');
-      setManualStudentId('');
+      console.error('Failed to save manual attendance:', err);
+      toast.error('হাজিরা সংরক্ষণ ব্যর্থ হয়েছে');
     }
   };
 
   useEffect(() => {
     if (qrScannerOpen) {
       // Delay to ensure the dialog renders first
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         const scannerElement = document.getElementById('qr-scanner');
-        if (scannerElement && !qrScannerRef.current) {
+        if (scannerElement) {
+          // Clear any existing scanner before creating a new one
+          if (qrScannerRef.current) {
+            qrScannerRef.current.clear().catch(console.error);
+          }
           qrScannerRef.current = new Html5QrcodeScanner(
             'qr-scanner',
             { 
-              fps: 10, // Higher FPS for faster scanning
-              qrbox: { width: 250, height: 250 }, // Optimal scan area
+              fps: 10,
+              qrbox: { width: 250, height: 250 },
               rememberLastUsedCamera: true,
-              supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA, Html5Qrcode.SCAN_TYPE_IMAGE], // Support both camera and image upload
+              supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA, Html5Qrcode.SCAN_TYPE_IMAGE],
               aspectRatio: 1.0,
-              showTorchButtonIfSupported: true, // Add torch button for low light
-              showZoomSliderIfSupported: true // Add zoom control
+              showTorchButtonIfSupported: true,
+              showZoomSliderIfSupported: true
             },
             false
           );
           qrScannerRef.current.render(handleQrScanSuccess, handleQrScanError);
         }
       }, 400);
+      
+      return () => clearTimeout(timer);
     } else {
       if (qrScannerRef.current) {
         qrScannerRef.current.clear().catch(console.error);
         qrScannerRef.current = null;
       }
     }
-    return () => {
-      if (qrScannerRef.current) {
-        qrScannerRef.current.clear().catch(console.error);
-      }
-    };
   }, [qrScannerOpen]);
 
   return (

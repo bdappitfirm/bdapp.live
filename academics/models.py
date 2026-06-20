@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from schools.models import School
+from .number_utils import bengali_to_english_number
 
 # Use the project's custom user model
 User = settings.AUTH_USER_MODEL
@@ -73,9 +74,105 @@ class StudentProfile(models.Model):
         ('female', 'Female'),
         ('other', 'Other'),
     ], blank=True, null=True)
+    student_custom_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
     # Parent linkage
     guardian_name = models.CharField(max_length=255, blank=True, null=True)
     guardian = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='children')
+
+    def generate_custom_id(self):
+        """Generate custom ID like M6213 or F1022"""
+        if not self.gender or not self.classroom or not self.roll_number:
+            return None
+        
+        # Gender prefix
+        gender_prefix = 'M' if self.gender == 'male' else 'F' if self.gender == 'female' else 'O'
+        
+        # Class number: extract numeric part from classroom name (e.g., "Class 6" → 6, "Six" → 6, "Grade 10" → 10)
+        class_name = self.classroom.name
+        import re
+        class_match = re.search(r'\d+', class_name)
+        if class_match:
+            class_num = class_match.group()
+        else:
+            # Try to map word numbers (One, Two... Ten) to digits
+            word_to_num = {
+                'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+                'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
+                'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14', 'fifteen': '15',
+                'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19', 'twenty': '20'
+            }
+            lower_class_name = class_name.lower()
+            class_num = None
+            for word, num in word_to_num.items():
+                if word in lower_class_name:
+                    class_num = num
+                    break
+            if not class_num:
+                return None
+        
+        # Section/group code
+        section_code = '0'
+        if self.group:
+            if self.group == 'science':
+                section_code = '1'
+            elif self.group == 'arts':
+                section_code = '2'
+            elif self.group == 'commerce':
+                section_code = '3'
+        elif self.section:
+            # If no group, try to extract from section name
+            section_name = self.section.name.lower()
+            if 'বিজ্ঞান' in section_name or 'science' in section_name:
+                section_code = '1'
+            elif 'মানবিক' in section_name or 'arts' in section_name:
+                section_code = '2'
+            elif 'ব্যবসা' in section_name or 'commerce' in section_name:
+                section_code = '3'
+            else:
+                # Try to map section letters (A=1, B=2, etc.)
+                import string
+                section_char = section_name.strip()[0] if section_name.strip() else 'a'
+                if section_char.lower() in string.ascii_lowercase:
+                    section_code = str(string.ascii_lowercase.index(section_char.lower()) + 1)
+                else:
+                    # Try numeric
+                    section_match = re.search(r'\d+', section_name)
+                    if section_match:
+                        section_code = section_match.group()
+        
+        # Roll number (ensure it's at least 2 digits, pad with leading zero if needed)
+        roll_str = str(self.roll_number).zfill(2)
+        
+        # Combine all parts
+        return f"{gender_prefix}{class_num}{section_code}{roll_str}"
+
+    def save(self, *args, **kwargs):
+        # Convert roll number to English digits
+        if self.roll_number:
+            self.roll_number = bengali_to_english_number(self.roll_number)
+        # Check if we need to regenerate the custom ID
+        if self.pk:
+            # Get the existing data from the database
+            try:
+                old_student = StudentProfile.objects.get(pk=self.pk)
+                # Compare relevant fields
+                fields_changed = (
+                    old_student.gender != self.gender or
+                    old_student.classroom != self.classroom or
+                    old_student.group != self.group or
+                    old_student.section != self.section or
+                    old_student.roll_number != self.roll_number
+                )
+                if fields_changed:
+                    # Regenerate custom ID
+                    self.student_custom_id = self.generate_custom_id()
+            except StudentProfile.DoesNotExist:
+                # New student, generate ID
+                self.student_custom_id = self.generate_custom_id()
+        else:
+            # New student, generate ID
+            self.student_custom_id = self.generate_custom_id()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         # user may be AbstractUser
@@ -155,3 +252,60 @@ class VirtualClass(models.Model):
 
     def __str__(self):
         return f"{self.subject.name} - {self.teacher}"
+
+
+class Building(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='buildings')
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ('school', 'name')
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['school', 'name'], name='acad_building_school_name_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.school.name} - {self.name}"
+
+
+class Room(models.Model):
+    building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name='rooms')
+    name = models.CharField(max_length=100)  # e.g., "Room 101", "Room A-1"
+    capacity = models.IntegerField(default=40)
+
+    class Meta:
+        unique_together = ('building', 'name')
+        ordering = ['building', 'name']
+        indexes = [
+            models.Index(fields=['building', 'name'], name='acad_room_building_name_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.building.name} - {self.name}"
+
+
+class ExamSeatPlan(models.Model):
+    exam_slot = models.ForeignKey('results.ExamSlot', on_delete=models.CASCADE, related_name='seat_plans', null=True, blank=True)
+    examination = models.ForeignKey('results.Examination', on_delete=models.CASCADE, related_name='seat_plans', null=True, blank=True)
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='seat_plans')
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='seat_plans')
+    seat_number = models.CharField(max_length=50)
+    gender_segregated = models.BooleanField(default=True)
+    SESSION_CHOICES = [
+        ('morning', 'Morning'),
+        ('afternoon', 'Afternoon'),
+    ]
+    session = models.CharField(max_length=10, choices=SESSION_CHOICES, default='morning')
+
+    class Meta:
+        unique_together = ('exam_slot', 'student')
+        ordering = ['room', 'seat_number']
+        indexes = [
+            models.Index(fields=['exam_slot', 'room'], name='acad_seatplan_slot_room_idx'),
+            models.Index(fields=['examination', 'room'], name='acad_seatplan_exam_room_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.student} - {self.room} - {self.seat_number}"

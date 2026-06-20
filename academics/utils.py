@@ -167,101 +167,100 @@ def update_student_genders(school=None):
     return updated_count
 
 
-def generate_exam_buildings_and_rooms(school, num_buildings, num_rooms_per_building, room_capacity=40):
-    """Generate buildings and rooms for a school"""
-    buildings = []
-    for b in range(1, num_buildings + 1):
+def generate_exam_buildings_and_rooms(school, buildings_config):
+    """Generate buildings and rooms for a school from config"""
+    all_rooms = []
+    
+    for building_config in buildings_config:
+        building_num = building_config.get('building_number', 1)
         building, created = Building.objects.get_or_create(
             school=school,
-            name=f"ভবন {b}"
+            name=f"ভবন-{building_num}"
         )
-        buildings.append(building)
 
-        for r in range(1, num_rooms_per_building + 1):
-            room_name = f"কক্ষ {b}-{r}"
-            Room.objects.get_or_create(
+        rooms_config = building_config.get('rooms', [])
+        for room_config in rooms_config:
+            room_num = room_config.get('room_number', 1)
+            bench_count = room_config.get('bench_count', 10)
+            room_capacity = bench_count * 3  # 3 students per bench
+            
+            room_name = f"কক্ষ {building_num}-{room_num}"
+            room, _ = Room.objects.get_or_create(
                 building=building,
                 name=room_name,
                 defaults={'capacity': room_capacity}
             )
+            all_rooms.append(room)
 
-    return buildings
+    return all_rooms
 
 
-def generate_exam_seat_plan(exam_slot, num_buildings, num_rooms_per_building, room_capacity=40):
+def generate_exam_seat_plan(examination, school, buildings_config):
     """
-    Generate a gender-segregated exam seat plan for an exam slot
+    Generate a gender-segregated exam seat plan for an entire examination
     
     Args:
-        exam_slot: ExamSlot instance
-        num_buildings: Number of buildings to use/generate
-        num_rooms_per_building: Number of rooms per building
-        room_capacity: Capacity per room
+        examination: Examination instance
+        school: School instance
+        buildings_config: List of building configs with rooms and benches
     """
-    school = exam_slot.school or exam_slot.examination.school
-    if not school:
-        raise ValueError("Exam slot must be associated with a school")
-
-    # Generate buildings and rooms if needed
-    generate_exam_buildings_and_rooms(school, num_buildings, num_rooms_per_building, room_capacity)
-
-    # Get all students for this exam slot
-    if exam_slot.section:
-        students = StudentProfile.objects.filter(
-            school=school,
-            classroom=exam_slot.classroom,
-            section=exam_slot.section
-        )
-    else:
-        students = StudentProfile.objects.filter(
-            school=school,
-            classroom=exam_slot.classroom
-        )
-
-    # Separate boys and girls
-    male_students = list(students.filter(gender='male').order_by('roll_number'))
-    female_students = list(students.filter(gender='female').order_by('roll_number'))
-
-    # Get all rooms
-    rooms = Room.objects.filter(building__school=school).order_by('building__name', 'name')
-    if not rooms.exists():
+    # Generate buildings and rooms
+    rooms = generate_exam_buildings_and_rooms(school, buildings_config)
+    
+    if not rooms:
         raise ValueError("No rooms available for seat plan")
 
-    # Delete any existing seat plan for this slot
-    ExamSeatPlan.objects.filter(exam_slot=exam_slot).delete()
+    # Delete any existing seat plan for this examination
+    ExamSeatPlan.objects.filter(examination=examination).delete()
 
-    # Assign seats - first all male students, then all female students
-    current_room_idx = 0
-    current_seat_in_room = 1
+    # Get all students in the school
+    all_students = StudentProfile.objects.filter(school=school).order_by('roll_number')
+    
+    # Separate boys and girls
+    male_students = list(all_students.filter(gender='male'))
+    female_students = list(all_students.filter(gender='female'))
 
-    # Assign male students
-    for student in male_students:
-        room = rooms[current_room_idx]
-        ExamSeatPlan.objects.create(
-            exam_slot=exam_slot,
-            student=student,
-            room=room,
-            seat_number=str(current_seat_in_room),
-            gender_segregated=True
-        )
-        current_seat_in_room += 1
-        if current_seat_in_room > room.capacity:
-            current_seat_in_room = 1
-            current_room_idx = (current_room_idx + 1) % len(rooms)
+    # Split rooms: first half for boys, second half for girls (or as close as possible)
+    total_rooms = len(rooms)
+    male_room_count = (total_rooms + 1) // 2
+    male_rooms = rooms[:male_room_count]
+    female_rooms = rooms[male_room_count:]
 
-    # Assign female students
-    for student in female_students:
-        room = rooms[current_room_idx]
-        ExamSeatPlan.objects.create(
-            exam_slot=exam_slot,
-            student=student,
-            room=room,
-            seat_number=str(current_seat_in_room),
-            gender_segregated=True
-        )
-        current_seat_in_room += 1
-        if current_seat_in_room > room.capacity:
-            current_seat_in_room = 1
-            current_room_idx = (current_room_idx + 1) % len(rooms)
+    # Function to assign students to rooms
+    def assign_students(students, room_list, gender_prefix):
+        seat_plans = []
+        current_room_idx = 0
+        current_seat_num = 1
+        
+        for student in students:
+            if current_room_idx >= len(room_list):
+                break  # No more rooms available
+            
+            room = room_list[current_room_idx]
+            room_capacity = room.capacity
+            
+            seat_plan = ExamSeatPlan.objects.create(
+                examination=examination,
+                student=student,
+                room=room,
+                seat_number=str(current_seat_num),
+                gender_segregated=True,
+                session='morning' if gender_prefix == 'M' else 'afternoon'
+            )
+            seat_plans.append(seat_plan)
+            
+            current_seat_num += 1
+            if current_seat_num > room_capacity:
+                current_seat_num = 1
+                current_room_idx += 1
+                
+        return seat_plans
 
-    return ExamSeatPlan.objects.filter(exam_slot=exam_slot)
+    # Assign male students to male rooms (morning session)
+    male_plans = assign_students(male_students, male_rooms, 'M')
+    
+    # Assign female students to female rooms (afternoon session)
+    female_plans = assign_students(female_students, female_rooms, 'F')
+
+    # Return all seat plans
+    return male_plans + female_plans

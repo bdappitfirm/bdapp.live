@@ -60,6 +60,7 @@ import { useToast } from '../components/Toast';
 import PhotoUpload from '../components/PhotoUpload';
 import { scopedGet } from '../utils/schoolApi';
 import { useAuth } from '../context/AuthContext';
+import { normalizeNumberInput } from '../utils/helpers';
 
 export default function StudentsPage() {
   const { id } = useParams();
@@ -124,7 +125,9 @@ export default function StudentsPage() {
     roll_number: '',
     blood_group: '',
     guardian_id: '',
-    profile_picture: ''
+    guardian_name: '',
+    profile_picture: '',
+    gender: ''
   });
   const [photoFile, setPhotoFile] = useState(null);
   const [promoteDialogOpen, setPromoteDialogOpen] = useState(false);
@@ -519,7 +522,8 @@ export default function StudentsPage() {
     roll_number: '',
     blood_group: '',
     guardian_id: '',
-    guardian_name: ''
+    guardian_name: '',
+    gender: ''
   });
   const [newStudentErrors, setNewStudentErrors] = useState({});
   const [addFormSections, setAddFormSections] = useState([]);
@@ -772,7 +776,8 @@ export default function StudentsPage() {
         blood_group: selectedStudent.blood_group || '',
         guardian_id: selectedStudent.guardian?.id || '',
         profile_picture: selectedStudent.user?.photo_url || '',
-        guardian_name: (selectedStudent.guardian_name || `${(selectedStudent.guardian?.user?.first_name||'').trim()} ${(selectedStudent.guardian?.user?.last_name||'').trim()}`.trim()).trim()
+        guardian_name: (selectedStudent.guardian_name || `${(selectedStudent.guardian?.user?.first_name||'').trim()} ${(selectedStudent.guardian?.user?.last_name||'').trim()}`.trim()).trim(),
+        gender: selectedStudent.gender || ''
       });
       setEditPassword('');
       setEditPasswordConfirm('');
@@ -857,19 +862,23 @@ export default function StudentsPage() {
       }
       
       // Update student profile information (classroom, section, roll, guardian)
-      // Send empty string for empty values to let backend clear them
       const studentData = {
         classroom_id: editFormData.classroom_id || '',
         section_id: sectionIdForUpdate || '',
         group: editFormData.group || '',
         roll_number: editFormData.roll_number || '',
         blood_group: editFormData.blood_group || '',
-        guardian_id: guardianIdToUse || '',
         first_name: editFormData.first_name || '',
         last_name: editFormData.last_name || '',
         email: editFormData.email || '',
-        phone_number: editFormData.phone_number || ''
+        phone_number: editFormData.phone_number || '',
+        gender: editFormData.gender || ''
       };
+      
+      // Only include guardian_id if we actually have a value for it
+      if (guardianIdToUse) {
+        studentData.guardian_id = guardianIdToUse;
+      }
       
       // Use FormData for multipart/form-data content type
       const formData = new FormData();
@@ -1218,6 +1227,7 @@ export default function StudentsPage() {
       if (guardianToLink) form.append('guardian_id', guardianToLink);
       if (typedGuardianName) form.append('guardian_name', typedGuardianName);
       form.append('roll_number', newStudent.roll_number || '');
+      form.append('gender', newStudent.gender || '');
       form.append('blood_group', newStudent.blood_group || '');
       if (newStudent._photoFile) {
         try {
@@ -1357,6 +1367,7 @@ export default function StudentsPage() {
       blood_group: '',
       guardian_id: '',
       guardian_name: '',
+      gender: '',
       _photoFile: null
     });
   };
@@ -2246,7 +2257,7 @@ export default function StudentsPage() {
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
                 🖼️ প্রোফাইল ছবি (ঐচ্ছিক)
               </Typography>
-              <PhotoUpload currentPhoto={null} onPhotoChange={(f) => setNewStudent(ns => ({ ...ns, _photoFile: f }))} userName={newStudent.first_name || newStudent.username || 'User'} />
+              <PhotoUpload currentPhoto={null} onPhotoChange={(f) => setNewStudent(prev => ({ ...prev, _photoFile: f }))} userName={newStudent.first_name || newStudent.username || 'User'} />
             </Grid>
 
             {/* Account Information */}
@@ -2260,7 +2271,7 @@ export default function StudentsPage() {
               <TextField
                 label="ইউজারনেম"
                 value={newStudent.username}
-                onChange={(e) => setNewStudent({...newStudent, username: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, username: e.target.value}))}
                 fullWidth
                 error={usernameCheck.available === false}
                 helperText={usernameCheck.loading ? 'অ্যাভেইলেবিলিটি চেক হচ্ছে…' : usernameCheck.available === false ? 'ইউজারনেমটি ব্যবহারযোগ্য নয়' : 'ঐচ্ছিক — খালি রাখলে স্বয়ংক্রিয়ভাবে তৈরি হবে'}
@@ -2268,7 +2279,7 @@ export default function StudentsPage() {
               {usernameCheck.available === false && usernameCheck.suggestions?.length > 0 && (
                 <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                   {usernameCheck.suggestions.map((sug, i) => (
-                    <Chip key={i} label={sug} onClick={() => setNewStudent(ns => ({ ...ns, username: sug }))} clickable />
+                    <Chip key={i} label={sug} onClick={() => setNewStudent(prev => ({ ...prev, username: sug }))} clickable />
                   ))}
                 </Stack>
               )}
@@ -2279,7 +2290,7 @@ export default function StudentsPage() {
                 label="পাসওয়ার্ড"
                 type="password"
                 value={newStudent.password}
-                onChange={(e) => setNewStudent({...newStudent, password: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, password: e.target.value}))}
                 fullWidth
                 error={!!newStudentErrors.password}
                 helperText={newStudentErrors.password || 'ঐচ্ছিক — খালি থাকলে নিরাপদ পাসওয়ার্ড স্বয়ংক্রিয়ভাবে তৈরি হবে'}
@@ -2297,7 +2308,7 @@ export default function StudentsPage() {
               <TextField
                 label="নাম"
                 value={newStudent.first_name}
-                onChange={(e) => setNewStudent({...newStudent, first_name: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, first_name: e.target.value}))}
                 fullWidth
                 error={!!newStudentErrors.first_name}
                 helperText={newStudentErrors.first_name || 'ইউজারনেম বা নাম — যেকোনো একটি দিন'}
@@ -2308,7 +2319,7 @@ export default function StudentsPage() {
               <TextField
                 label="লাস্ট নেম"
                 value={newStudent.last_name}
-                onChange={(e) => setNewStudent({...newStudent, last_name: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, last_name: e.target.value}))}
                 fullWidth
                 error={!!newStudentErrors.last_name}
                 helperText={newStudentErrors.last_name || ''}
@@ -2320,7 +2331,7 @@ export default function StudentsPage() {
                 label="ইমেইল"
                 type="email"
                 value={newStudent.email}
-                onChange={(e) => setNewStudent({...newStudent, email: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, email: e.target.value}))}
                 fullWidth
                 error={!!newStudentErrors.email}
                 helperText={newStudentErrors.email || ''}
@@ -2331,7 +2342,7 @@ export default function StudentsPage() {
               <TextField
                 label="ফোন নম্বর"
                 value={newStudent.phone_number}
-                onChange={(e) => setNewStudent({...newStudent, phone_number: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, phone_number: e.target.value}))}
                 fullWidth
                 placeholder="+8801712345678"
                 error={!!newStudentErrors.phone_number}
@@ -2351,7 +2362,7 @@ export default function StudentsPage() {
                 select
                 label="শ্রেণি (ঐচ্ছিক)"
                 value={newStudent.classroom_id}
-                onChange={(e) => setNewStudent({...newStudent, classroom_id: e.target.value, section_id: ''})}
+                onChange={(e) => setNewStudent(prev => ({...prev, classroom_id: e.target.value, section_id: ''}))}
                 fullWidth
                 error={!!newStudentErrors.classroom_id}
                 helperText={newStudentErrors.classroom_id || ''}
@@ -2378,7 +2389,7 @@ export default function StudentsPage() {
                   const hasCurrent = sectionOptions.some(s => String(s.id) === String(newStudent.section_id));
                   return hasCurrent ? newStudent.section_id : '';
                 })()}
-                onChange={(e) => setNewStudent({...newStudent, section_id: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, section_id: e.target.value}))}
                 fullWidth
                 disabled={!newStudent.classroom_id || !requiresSection}
                 error={!!newStudentErrors.section_id}
@@ -2408,7 +2419,7 @@ export default function StudentsPage() {
                 select
                 label="গ্রুপ (ঐচ্ছিক)"
                 value={newStudent.group || ''}
-                onChange={(e) => setNewStudent({...newStudent, group: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, group: e.target.value}))}
                 fullWidth
               >
                 <MenuItem value="">কোনো গ্রুপ নেই</MenuItem>
@@ -2423,7 +2434,7 @@ export default function StudentsPage() {
                 label="রোল নম্বর (ঐচ্ছিক)"
                 type="text"
                 value={newStudent.roll_number}
-                onChange={(e) => setNewStudent({...newStudent, roll_number: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, roll_number: normalizeNumberInput(e.target.value)}))}
                 fullWidth
                 error={!!newStudentErrors.roll_number}
                 helperText={newStudentErrors.roll_number || 'শ্রেণিতে ইউনিক'}
@@ -2433,9 +2444,24 @@ export default function StudentsPage() {
             <Grid size={{ xs: 12, sm: 4 }}>
               <TextField
                 select
+                label="Gender"
+                value={newStudent.gender}
+                onChange={(e) => setNewStudent(prev => ({...prev, gender: e.target.value}))}
+                fullWidth
+              >
+                <MenuItem value="">Select</MenuItem>
+                <MenuItem value="male">Male</MenuItem>
+                <MenuItem value="female">Female</MenuItem>
+                <MenuItem value="other">Other</MenuItem>
+              </TextField>
+            </Grid>
+            
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <TextField
+                select
                 label="রক্তের গ্রুপ (ঐচ্ছিক)"
                 value={newStudent.blood_group}
-                onChange={(e) => setNewStudent({...newStudent, blood_group: e.target.value})}
+                onChange={(e) => setNewStudent(prev => ({...prev, blood_group: e.target.value}))}
                 fullWidth
               >
                 <MenuItem value="">নির্বাচন করুন</MenuItem>
@@ -2461,11 +2487,11 @@ export default function StudentsPage() {
               <Autocomplete
                 freeSolo
                 inputValue={newStudent.guardian_name}
-                onInputChange={(e, input) => setNewStudent({ ...newStudent, guardian_name: input || '', guardian_id: '' })}
+                onInputChange={(e, input) => setNewStudent(prev => ({ ...prev, guardian_name: input || '', guardian_id: '' }))}
                 options={(parents || []).filter(p => String(p.id) !== String(newStudent.guardian_id || ''))}
                 getOptionLabel={(p) => `${p?.user?.first_name || ''} ${p?.user?.last_name || ''} (${p?.user?.username || ''})`.trim()}
                 value={(parents || []).find(p => String(p.id) === String(newStudent.guardian_id)) || null}
-                onChange={(e, val) => setNewStudent({ ...newStudent, guardian_id: val ? val.id : '' })}
+                onChange={(e, val) => setNewStudent(prev => ({ ...prev, guardian_id: val ? val.id : '' }))}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -2544,7 +2570,7 @@ export default function StudentsPage() {
                     label="First Name"
                     fullWidth
                     value={editFormData.first_name}
-                    onChange={(e) => setEditFormData({...editFormData, first_name: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, first_name: e.target.value}))}
                   />
                 </Grid>
             
@@ -2553,7 +2579,7 @@ export default function StudentsPage() {
                     label="Last Name"
                     fullWidth
                     value={editFormData.last_name}
-                    onChange={(e) => setEditFormData({...editFormData, last_name: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, last_name: e.target.value}))}
                   />
                 </Grid>
                 
@@ -2563,7 +2589,7 @@ export default function StudentsPage() {
                     type="email"
                     fullWidth
                     value={editFormData.email}
-                    onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, email: e.target.value}))}
                   />
                 </Grid>
                 
@@ -2572,7 +2598,7 @@ export default function StudentsPage() {
                     label="Phone Number"
                     fullWidth
                     value={editFormData.phone_number}
-                    onChange={(e) => setEditFormData({...editFormData, phone_number: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, phone_number: e.target.value}))}
                     placeholder="+8801712345678"
                   />
                 </Grid>
@@ -2582,7 +2608,7 @@ export default function StudentsPage() {
                     label="Username"
                     fullWidth
                     value={editFormData.username}
-                    onChange={(e) => setEditFormData({...editFormData, username: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, username: e.target.value}))}
                     helperText="Username for login"
                   />
                 </Grid>
@@ -2618,7 +2644,7 @@ export default function StudentsPage() {
                     select
                     label="Class"
                     value={editFormData.classroom_id}
-                    onChange={(e) => setEditFormData({...editFormData, classroom_id: e.target.value, section_id: ''})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, classroom_id: e.target.value, section_id: ''}))}
                     fullWidth
                   >
                     <MenuItem value="">No Class</MenuItem>
@@ -2633,7 +2659,7 @@ export default function StudentsPage() {
                     select
                     label="Section"
                     value={editFormData.section_id}
-                    onChange={(e) => setEditFormData({...editFormData, section_id: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, section_id: e.target.value}))}
                     fullWidth
                     disabled={!editFormData.classroom_id}
                     helperText={
@@ -2662,7 +2688,7 @@ export default function StudentsPage() {
                     select
                     label="গ্রুপ"
                     value={editFormData.group}
-                    onChange={(e) => setEditFormData({...editFormData, group: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, group: e.target.value}))}
                     fullWidth
                   >
                     <MenuItem value="">কোনো গ্রুপ নেই</MenuItem>
@@ -2677,8 +2703,23 @@ export default function StudentsPage() {
                     label="Roll Number"
                     fullWidth
                     value={editFormData.roll_number}
-                    onChange={(e) => setEditFormData({...editFormData, roll_number: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, roll_number: normalizeNumberInput(e.target.value)}))}
                   />
+                </Grid>
+                
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    select
+                    label="Gender"
+                    value={editFormData.gender}
+                    onChange={(e) => setEditFormData(prev => ({...prev, gender: e.target.value}))}
+                    fullWidth
+                  >
+                    <MenuItem value="">Select</MenuItem>
+                    <MenuItem value="male">Male</MenuItem>
+                    <MenuItem value="female">Female</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                  </TextField>
                 </Grid>
                 
                 <Grid size={{ xs: 12, sm: 4 }}>
@@ -2686,7 +2727,7 @@ export default function StudentsPage() {
                     select
                     label="Blood Group"
                     value={editFormData.blood_group}
-                    onChange={(e) => setEditFormData({...editFormData, blood_group: e.target.value})}
+                    onChange={(e) => setEditFormData(prev => ({...prev, blood_group: e.target.value}))}
                     fullWidth
                   >
                     <MenuItem value="">Select</MenuItem>
@@ -2721,9 +2762,9 @@ export default function StudentsPage() {
                     })}
                     getOptionLabel={(p) => `${p?.user?.first_name || ''} ${p?.user?.last_name || ''} (${p?.user?.username || ''})`.trim()}
                     value={(parents || []).find(p => String(p.id) === String(editFormData.guardian_id)) || null}
-                    onChange={(e, val) => setEditFormData({ ...editFormData, guardian_id: val ? val.id : '' })}
+                    onChange={(e, val) => setEditFormData(prev => ({ ...prev, guardian_id: val ? val.id : '' }))}
                     inputValue={editFormData.guardian_name || ''}
-                    onInputChange={(e, input) => setEditFormData({ ...editFormData, guardian_name: input || '', guardian_id: '' })}
+                    onInputChange={(e, input) => setEditFormData(prev => ({ ...prev, guardian_name: input || '', guardian_id: '' }))}
                     renderInput={(params) => (
                       <TextField
                         {...params}

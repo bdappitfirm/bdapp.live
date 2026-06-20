@@ -60,14 +60,16 @@ export default function SMSPage() {
   const [message, setMessage] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [templateData, setTemplateData] = useState({});
+  const [senderMobile, setSenderMobile] = useState('');
   
   // Manual selection
   const [selectedRecipients, setSelectedRecipients] = useState([]);
   
-  // Class selection
+  // Class & Teacher selection
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [sections, setSections] = useState([]);
+  const [selectedTeachers, setSelectedTeachers] = useState([]);
   
   // Results
   const [sendResults, setSendResults] = useState(null);
@@ -145,6 +147,14 @@ export default function SMSPage() {
     }
   };
 
+  const toggleTeacherSelection = (teacherId) => {
+    if (selectedTeachers.includes(teacherId)) {
+      setSelectedTeachers(selectedTeachers.filter(t => t !== teacherId));
+    } else {
+      setSelectedTeachers([...selectedTeachers, teacherId]);
+    }
+  };
+
   const selectAll = (type) => {
     let phones = [];
     if (type === 'parents') {
@@ -176,6 +186,13 @@ export default function SMSPage() {
       .filter(s => s.guardian?.phone_number)
       .map(s => s.guardian.phone_number);
     return [...new Set(phones)];
+  };
+
+  const getSelectedTeacherPhones = () => {
+    return teachers
+      .filter(t => selectedTeachers.includes(t.id))
+      .map(t => t.phone_number)
+      .filter(Boolean);
   };
 
   const getAllSchoolPhones = () => {
@@ -256,12 +273,12 @@ export default function SMSPage() {
 
   const handleSendManual = async () => {
     if (selectedRecipients.length === 0) {
-      toast.warning('Please select at least one recipient');
+      toast.warning('কমপক্ষে একজন প্রাপক নির্বাচন করুন');
       return;
     }
     
     if (!message.trim() && !voiceMessage) {
-      toast.warning('Please enter a message or record a voice message');
+      toast.warning('মেসেজ লিখুন বা ভয়েস মেসেজ রেকর্ড করুন');
       return;
     }
 
@@ -275,7 +292,8 @@ export default function SMSPage() {
       } else {
         const res = await api.post('/api/users/sms/bulk/', {
           phone_numbers: selectedRecipients,
-          message: message
+          message: message,
+          sender_mobile: senderMobile
         });
         
         setSendResults(res.data);
@@ -287,25 +305,27 @@ export default function SMSPage() {
       setSelectedRecipients([]);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to send message');
+      toast.error('মেসেজ পাঠাতে ব্যর্থ হয়েছে');
     } finally {
       setSending(false);
     }
   };
 
   const handleSendToClass = async () => {
-    if (!selectedClass) {
-      toast.warning('Please select a class');
+    if (!selectedClass && selectedTeachers.length === 0) {
+      toast.warning('কোনো ক্লাস বা কিছু শিক্ষক নির্বাচন করুন');
       return;
     }
     if (!message.trim()) {
-      toast.warning('Please enter a message');
+      toast.warning('মেসেজ লিখুন');
       return;
     }
 
-    const phones = getClassParentPhones();
+    const parentPhones = getClassParentPhones();
+    const teacherPhones = getSelectedTeacherPhones();
+    const phones = [...new Set([...parentPhones, ...teacherPhones])];
     if (phones.length === 0) {
-      toast.warning('No parent phone numbers found for this class');
+      toast.warning('কোনো ফোন নম্বর পাওয়া যায়নি');
       return;
     }
 
@@ -313,16 +333,17 @@ export default function SMSPage() {
     try {
       const res = await api.post('/api/users/sms/bulk/', {
         phone_numbers: phones,
-        message: message
+        message: message,
+        sender_mobile: senderMobile
       });
       
       setSendResults(res.data);
       setResultsDialogOpen(true);
-      toast.success(`SMS sent to ${res.data.sent} parents!`);
+      toast.success(`SMS sent to ${res.data.sent} recipients!`);
       setMessage('');
     } catch (err) {
       console.error(err);
-      toast.error('Failed to send SMS');
+      toast.error('SMS পাঠাতে ব্যর্থ হয়েছে');
     } finally {
       setSending(false);
     }
@@ -330,13 +351,13 @@ export default function SMSPage() {
 
   const handleSendToSchool = async () => {
     if (!message.trim()) {
-      toast.warning('Please enter a message');
+      toast.warning('মেসেজ লিখুন');
       return;
     }
 
     const phones = getAllSchoolPhones();
     if (phones.length === 0) {
-      toast.warning('No phone numbers found');
+      toast.warning('কোনো ফোন নম্বর পাওয়া যায়নি');
       return;
     }
 
@@ -344,7 +365,8 @@ export default function SMSPage() {
     try {
       const res = await api.post('/api/users/sms/bulk/', {
         phone_numbers: phones,
-        message: message
+        message: message,
+        sender_mobile: senderMobile
       });
       
       setSendResults(res.data);
@@ -353,7 +375,7 @@ export default function SMSPage() {
       setMessage('');
     } catch (err) {
       console.error(err);
-      toast.error('Failed to send SMS');
+      toast.error('SMS পাঠাতে ব্যর্থ হয়েছে');
     } finally {
       setSending(false);
     }
@@ -465,6 +487,16 @@ export default function SMSPage() {
               ✍️ বার্তা লিখুন
             </Typography>
             
+            {/* Sender Mobile Number */}
+            <TextField
+              label="প্রেরকের মোবাইল নম্বর (ঐচ্ছিক)"
+              value={senderMobile}
+              onChange={(e) => setSenderMobile(e.target.value)}
+              fullWidth
+              sx={{ mb: 2 }}
+              placeholder="01712345678"
+            />
+
             {/* Template Selection */}
             <TextField
               select
@@ -653,18 +685,47 @@ export default function SMSPage() {
                     </TextField>
                   </Grid>
                 </Grid>
+
+                {/* Teacher Selection */}
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>শিক্ষক নির্বাচন করুন (ঐচ্ছিক):</Typography>
+                <Paper sx={{ mb: 2, maxHeight: 200, overflow: 'auto' }}>
+                  <List dense>
+                    {teachers.map((teacher) => (
+                      <ListItem
+                        key={teacher.id}
+                        button
+                        onClick={() => toggleTeacherSelection(teacher.id)}
+                      >
+                        <ListItemIcon>
+                          <Checkbox
+                            edge="start"
+                            checked={selectedTeachers.includes(teacher.id)}
+                            tabIndex={-1}
+                            disableRipple
+                          />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={`${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() || teacher.username}
+                          secondary={teacher.phone_number}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  এই শ্রেণির {getClassParentPhones().length} জন অভিভাবককে পাঠানো হবে
+                  মোট {getClassParentPhones().length + getSelectedTeacherPhones().length} জন প্রাপক
+                  ({getClassParentPhones().length} অভিভাবক, {getSelectedTeacherPhones().length} শিক্ষক)
                 </Typography>
                 <Button
                   variant="contained"
                   startIcon={<SendIcon />}
                   onClick={handleSendToClass}
-                  disabled={sending || !selectedClass || !message.trim()}
+                  disabled={sending || (!selectedClass && selectedTeachers.length === 0) || !message.trim()}
                   fullWidth
                   size="large"
                 >
-                  {sending ? 'পাঠানো হচ্ছে...' : `শ্রেণির অভিভাবকদের পাঠান`}
+                  {sending ? 'পাঠানো হচ্ছে...' : `পাঠান (${getClassParentPhones().length + getSelectedTeacherPhones().length} জন)`}
                 </Button>
               </Box>
             )}

@@ -25,8 +25,8 @@ if (!(Test-Path $venvPath)) {
 $activate = Join-Path $venvPath 'Scripts\Activate.ps1'
 . $activate
 
-Write-Host 'Upgrading pip'
-py -m pip install --upgrade pip
+Write-Host 'Skipping pip upgrade (to avoid issues)'
+# py -m pip install --upgrade pip
 
 Write-Host 'Installing backend requirements from requirements.txt'
 py -m pip install -r (Join-Path $PSScriptRoot '..\requirements.txt')

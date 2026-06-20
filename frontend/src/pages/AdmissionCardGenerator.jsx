@@ -250,11 +250,16 @@ export default function AdmissionCardGenerator() {
         const element = document.getElementById(`admission-card-${s.id}`);
         if (!element) continue;
         const canvas = await html2canvas(element, {
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff'
-        });
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                imageTimeout: 0,
+                removeContainer: true,
+                windowWidth: element.scrollWidth,
+                windowHeight: element.scrollHeight
+              });
         images.push(canvas.toDataURL('image/png'));
         if (!student && (idx + 1) % 6 === 0) {
           showSnackbar(`Preparing ${idx + 1}/${studentsToPrint.length}…`, 'info');
@@ -275,7 +280,7 @@ export default function AdmissionCardGenerator() {
           <head>
             <title>Admission Cards</title>
             <style>
-              @page { size: portrait; margin: 5mm; }
+              @page { size: landscape; margin: 8mm; }
               body {
                 margin: 0;
                 padding: 0;
@@ -291,16 +296,19 @@ export default function AdmissionCardGenerator() {
               }
               .print-container {
                 display: flex;
-                flex-direction: column;
+                flex-direction: row;
+                flex-wrap: nowrap;
                 gap: 5mm;
                 width: 100%;
                 box-sizing: border-box;
+                align-items: stretch;
               }
               .card-slot {
-                width: 100%;
+                width: 50%;
                 box-sizing: border-box;
                 break-inside: avoid;
                 page-break-inside: avoid;
+                height: 100%;
               }
               .card-slot img {
                 width: 100%;
@@ -377,49 +385,83 @@ export default function AdmissionCardGenerator() {
     
     try {
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4'
       });
       
-      const a4Width = 210; // A4 width in mm (portrait)
-      const a4Height = 297; // A4 height in mm (portrait)
+      const a4Width = 297; // A4 width in mm (landscape)
+      const a4Height = 210; // A4 height in mm (landscape)
       const margin = 5;
       const gap = 5;
-      const cardWidth = a4Width - (margin * 2);
+      const cardWidth = (a4Width - (margin * 3) - gap) / 2; // Two cards side-by-side
 
+      const canvasData = [];
       for (let i = 0; i < studentsToExport.length; i++) {
-        const student = studentsToExport[i];
-        const element = document.getElementById(`admission-card-${student.id}`);
+        const s = studentsToExport[i];
+        const element = document.getElementById(`admission-card-${s.id}`);
         
-        if (element) {
-          const canvas = await html2canvas(element, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: '#ffffff'
-          });
-          
-          const imgData = canvas.toDataURL('image/png');
-          const imgHeight = (canvas.height * cardWidth) / canvas.width;
-          const maxCardHeight = (a4Height - (margin * 3) - gap) / 2; // Half page minus margin and gap
-          const finalCardHeight = Math.min(imgHeight, maxCardHeight);
-          
-          // Check if we need to add a new page
-          const isFirstCard = i === 0;
-          const isNewPage = i % 2 === 0;
-          
-          if (!isFirstCard && isNewPage) {
-            // Add a new page for every 2nd card
-            pdf.addPage();
-          }
-          
-          // Calculate Y position
-          const positionX = margin;
-          const positionY = margin + ((i % 2) * (finalCardHeight + gap));
-          
-          pdf.addImage(imgData, 'PNG', positionX, positionY, cardWidth, finalCardHeight);
+        if (!element) continue;
+
+        // Show progress
+        if (!student && (i + 1) % 5 === 0) {
+          showSnackbar(`Generating PDF... ${i + 1}/${studentsToExport.length}`, 'info');
         }
+        
+        const canvas = await html2canvas(element, {
+                scale: 1.5, // Lower scale for better performance
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                imageTimeout: 0,
+                removeContainer: true,
+                windowWidth: element.scrollWidth,
+                windowHeight: element.scrollHeight,
+                onclone: (clonedDoc) => {
+                  const clonedElement = clonedDoc.getElementById(`admission-card-${s.id}`);
+                  if (clonedElement) {
+                    clonedElement.style.position = 'absolute';
+                    clonedElement.style.left = '-9999px';
+                    clonedElement.style.top = '0';
+                  }
+                }
+              });
+        canvasData.push({
+          imgData: canvas.toDataURL('image/png'),
+          width: canvas.width,
+          height: canvas.height
+        });
+      }
+
+      if (canvasData.length === 0) {
+        showSnackbar('No cards found to export', 'warning');
+        setLoading(false);
+        return;
+      }
+
+      // Add images to PDF
+      for (let i = 0; i < canvasData.length; i++) {
+        const { imgData, width, height } = canvasData[i];
+        
+        const imgHeight = (height * cardWidth) / width;
+        const maxCardHeight = a4Height - (margin * 3);
+        const finalCardHeight = Math.min(imgHeight, maxCardHeight);
+        
+        // Check if we need to add a new page
+        const isFirstCard = i === 0;
+        const isNewPage = i % 2 === 0;
+        
+        if (!isFirstCard && isNewPage) {
+          // Add a new page for every 2nd card
+          pdf.addPage();
+        }
+        
+        // Calculate position (X is left or right, Y is top)
+        const positionX = margin + ((i % 2) * (cardWidth + gap));
+        const positionY = margin;
+        
+        pdf.addImage(imgData, 'PNG', positionX, positionY, cardWidth, finalCardHeight);
       }
 
       pdf.save('admission-cards.pdf');

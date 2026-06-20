@@ -7,7 +7,7 @@ import api from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 import { getMediaUrl } from "../utils/media";
 import fallbackLogo from "../components/fallback_logo.png";
-import logo from "../components/bdapp_logo.png";
+import logo from "../components/bdschooapplogo.png";
 import welcomeBg from "../components/welcome_bg.jpg";
 
 const AdSlot = ({ items, getMediaUrl, slotIndex = 0 }) => {
@@ -109,6 +109,9 @@ const WelcomePage = () => {
       return [];
     }
   });
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
@@ -157,6 +160,71 @@ const WelcomePage = () => {
     });
   }, [ads]);
 
+  useEffect(() => {
+    // Check if app is already running in standalone mode
+    const isInStandaloneMode = () => 
+      (window.matchMedia('(display-mode: standalone)').matches) || 
+      (window.navigator.standalone === true);
+      
+    setIsStandalone(isInStandaloneMode());
+    
+    // Check if we've already hidden the prompt (but we won't use this - we'll show it every time!)
+    // We want to always show the prompt until the user installs the app!
+    
+    // Handle beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e) => {
+      console.log('beforeinstallprompt event fired!');
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      // Stash the event so it can be triggered later
+      setDeferredPrompt(e);
+      setShowInstallPrompt(true);
+    };
+    
+    // Handle appinstalled event
+    const handleAppInstalled = () => {
+      console.log('App was installed!');
+      setShowInstallPrompt(false);
+      setDeferredPrompt(null);
+    };
+    
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    
+    // If the event already fired before component mounted, show the prompt!
+    // And also show it if we're not in standalone mode!
+    if (!isInStandaloneMode()) {
+      setShowInstallPrompt(true);
+    }
+    
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) {
+      // If we don't have the deferred prompt, just hide the prompt for now
+      setShowInstallPrompt(false);
+      return;
+    }
+    
+    // Show the prompt
+    deferredPrompt.prompt();
+    
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
+    
+    if (outcome === 'accepted') {
+      setShowInstallPrompt(false);
+    }
+    
+    // We've used the prompt, and can't use it again; discard it
+    setDeferredPrompt(null);
+  };
+
   useEffect(() => {}, [navigate]);
 
   useEffect(() => {
@@ -180,7 +248,7 @@ const WelcomePage = () => {
         if (status) {
           setLoadError(`সার্ভার রেসপন্স কোড: ${status} — ব্যাকএন্ড পরীক্ষা করুন`);
         } else {
-          setLoadError('ব্যাকএন্ডে সংযোগ পাওয়া যাচ্ছে না — সার্ভার/নেটওয়ার্ক দেখুন');
+          setLoadError('ব্যাকএন্ডে সংযোগ পাওয়া যাচ্ছে না — সার্ভার/নেটওয়ার্ক দেখুন');
         }
       } finally {
         setLoading(false);
@@ -216,6 +284,59 @@ const WelcomePage = () => {
         overflowY: 'auto'
       }}
     >
+      {/* App Install Prompt - Persistent until installed! */}
+      {showInstallPrompt && !isStandalone && (
+        <Paper 
+          elevation={4}
+          sx={{ 
+            position: 'fixed',
+            bottom: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: { xs: '90%', sm: 450 },
+            zIndex: 1000,
+            borderRadius: 3,
+            p: 2.5,
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            animation: 'slideUp 0.3s ease-out'
+          }}
+        >
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                BD School App (Bdapp) ইনস্টল করুন!
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                দ্রুত অ্যাক্সেস এবং বেটার অভিজ্ঞতার জন্য অ্যাপটি এখনই ইনস্টল করুন।
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1}>
+              <Button 
+                variant="outlined" 
+                color="inherit" 
+                sx={{ borderRadius: 2, borderColor: 'rgba(255,255,255,0.5)' }}
+                onClick={() => setShowInstallPrompt(false)}
+              >
+                পরে
+              </Button>
+              <Button 
+                variant="contained" 
+                sx={{ 
+                  bgcolor: 'white', 
+                  color: '#667eea',
+                  borderRadius: 2,
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' }
+                }}
+                onClick={handleInstall}
+              >
+                ইনস্টল করুন
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+      )}
+
       {/* Top Controls - Search and User Info */}
       <Box 
         sx={{ 

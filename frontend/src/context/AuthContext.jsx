@@ -24,6 +24,7 @@ export const AuthProvider = ({ children }) => {
       }
       setLoading(false);
     };
+    // Only call initAuth once
     initAuth();
   }, []);
 
