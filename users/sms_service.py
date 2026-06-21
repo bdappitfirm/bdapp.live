@@ -91,7 +91,8 @@ class SMSService:
             elif d.startswith('0'):
                 d = f"880{d.lstrip('0')}"
             phone_number = d
-            url = "http://bulksmsbd.net/api/smsapi"
+            # Use HTTPS for security
+            url = "https://bulksmsbd.net/api/smsapi"
             
             params = {
                 'api_key': self.api_key,
@@ -101,23 +102,26 @@ class SMSService:
                 'message': message
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            logger.info(f"Sending BulkSMS to {phone_number} using senderid {self.sender_id}")
+            response = requests.get(url, params=params, timeout=15)
             
             if response.status_code == 200:
                 result = response.json()
-                if result.get('response_code') == 202:
-                    logger.info(f"SMS sent via BulkSMS to {phone_number}")
+                # BulkSMS BD returns response_code 202 for success
+                if str(result.get('response_code')) == '202':
+                    logger.info(f"SMS sent successfully to {phone_number}")
                     return True, "SMS sent successfully"
                 else:
-                    logger.error(f"BulkSMS error: {result}")
-                    return False, f"Failed: {result.get('error_message', 'Unknown error')}"
+                    error_msg = result.get('error_message') or result.get('msg') or "Unknown error"
+                    logger.error(f"BulkSMS API error: {result}")
+                    return False, f"BulkSMS Error: {error_msg}"
             else:
                 logger.error(f"BulkSMS HTTP error: {response.status_code}")
-                return False, f"HTTP Error: {response.status_code}"
+                return False, f"HTTP Error {response.status_code}"
                 
         except Exception as e:
-            logger.error(f"BulkSMS error: {str(e)}")
-            return False, f"Failed to send SMS: {str(e)}"
+            logger.error(f"BulkSMS service error: {str(e)}")
+            return False, f"Service error: {str(e)}"
     
     def _send_via_ssl_wireless(self, phone_number, message):
         """Send SMS via SSL Wireless Bangladesh"""

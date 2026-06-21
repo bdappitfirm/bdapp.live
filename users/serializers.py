@@ -66,7 +66,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = [
-            'id', 'user', 'school', 'role', 'effective_role', 'blood_group', 
+            'id', 'user', 'school', 'role', 'effective_role', 'gender', 'blood_group',
             'occupation', 'income', 'designation', 'index_number', 'joining_date',
             'assigned_subject', 'assigned_subject_name',
             'class_teacher_classroom', 'class_teacher_section',
@@ -221,7 +221,7 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 
             'email', 'phone_number', 'educational_qualification', 'photo', 
-            'school', 'school_id', 'role', 'designation', 'blood_group', 
+            'school', 'school_id', 'role', 'gender', 'designation', 'blood_group',
             'occupation', 'income', 'index_number', 'joining_date',
             'assigned_subject', 'assigned_subject_name',
             'class_teacher_classroom', 'class_teacher_section',

@@ -25,7 +25,7 @@ def check_sms_balance():
         return
 
     if provider == 'bulksms':
-        url = "http://bulksmsbd.net/api/balanceapi"
+        url = "https://bulksmsbd.net/api/balanceapi"
         params = {'api_key': api_key}
         try:
             response = requests.get(url, params=params, timeout=10)
@@ -33,6 +33,15 @@ def check_sms_balance():
                 result = response.json()
                 print(f"BulkSMS BD Balance: {result.get('balance', 'N/A')}")
                 print(f"Response: {result}")
+            elif response.status_code == 404:
+                print("Error: Balance API endpoint not found (404). Trying alternate URL...")
+                url = "http://bulksmsbd.net/api/balanceapi"
+                response = requests.get(url, params=params, timeout=10)
+                if response.status_code == 200:
+                    result = response.json()
+                    print(f"BulkSMS BD Balance: {result.get('balance', 'N/A')}")
+                else:
+                    print(f"HTTP {response.status_code} on alternate URL too.")
             else:
                 print(f"Error checking balance: HTTP {response.status_code}")
         except Exception as e:

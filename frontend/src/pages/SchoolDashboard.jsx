@@ -363,18 +363,14 @@ const SchoolDashboard = () => {
     if (isShamirOrUmor && String(id) === '16') return true;
 
     // Allowed for everyone
-    const commonKeys = ['', 'classes', 'teacher', 'student', 'subjects', 'assistant', 'support-live', 'profile', 'live-class', 'results', 'result-card', 'id-card'];
+    const commonKeys = ['', 'classes', 'teacher', 'student', 'subjects', 'assistant', 'support-live', 'profile', 'live-class', 'results', 'result-card', 'id-card', 'seat-allocation', 'admission-cards'];
     if (commonKeys.includes(item.key)) return true;
 
-    // Allowed for Teachers
-    // হাজিরা, রেজাল্ট সংশ্লিষ্ট পেজগুলো (results, class-results, result-card, rank-list, examinations)
-    if (isTeacher && role === 'teacher') {
-      const teacherKeys = ['attendance', 'results', 'class-results', 'result-card', 'rank-list', 'examinations', 'seat-allocation', 'fees', 'fee-receipt', 'receipt-book', 'promotion', 'year-report', 'parent', 'committee', 'sms'];
-      if (teacherKeys.includes(item.key)) return true;
+    // Allowed for Teachers and Admin
+    if (isTeacher || isSuperUser || role.includes('admin')) {
+      const teacherAdminKeys = ['attendance', 'results', 'class-results', 'result-card', 'rank-list', 'examinations', 'fees', 'fee-receipt', 'receipt-book', 'promotion', 'year-report', 'parent', 'committee', 'sms', 'certificate', 'credentials', 'settings'];
+      if (teacherAdminKeys.includes(item.key)) return true;
     }
-
-    // Principal (detected as admin) sees all admin menus
-    if (effectiveRole === 'admin' && item.key !== 'credentials') return true;
 
     // Default: hide everything else
     return false;
@@ -523,6 +519,8 @@ const SchoolDashboard = () => {
         .then(async data => {
           // Fallback enrichment if some fields are missing
           const enriched = { ...(data || {}) };
+          const now = new Date();
+          const currentMonthNo = now.getMonth() + 1;
           try {
             const needsCounts = !('students_count' in enriched) || !('teachers_count' in enriched) || !('parents_count' in enriched) || !('classes_count' in enriched) || !('subjects_count' in enriched);
             const needsClassDist = !Array.isArray(enriched.class_distribution);
@@ -649,7 +647,6 @@ const SchoolDashboard = () => {
                   const seenMonthlyByStudentMonth = new Set();
 
                   for (const a of (assignments || [])) {
-                    const currentMonthNo = new Date().getMonth() + 1;
                     const aid = String(a.id || a._id || a.assignment_id || a.assignment || '');
                     if (!aid) continue;
                     const feeObj = a.fee_structure || a.fee || {};
@@ -746,7 +743,6 @@ const SchoolDashboard = () => {
                   }
 
                   try {
-                    const currentMonthNo = new Date().getMonth() + 1;
                     const monthlyRateByClass = new Map();
                     for (const s of (feeStructs || [])) {
                       const freq = String(s.frequency || '').toLowerCase();
@@ -833,7 +829,6 @@ const SchoolDashboard = () => {
                 const attRes = results[idx++];
                 const records = attRes?.status === 'fulfilled' ? (attRes.value.data || []) : [];
                 const byDate = new Map();
-                const now = new Date();
                 const cutoff = new Date(now.getTime() - 7*24*60*60*1000);
                 for (const r of records) {
                   const ds = new Date(r.date || now);
@@ -908,20 +903,20 @@ const SchoolDashboard = () => {
             const simpleFlag = String(localStorage.getItem(`dashboardSimpleDue:${String(id)}`) || '').trim().toLowerCase();
             const useSimpleMode = ['on', '1', 'true', ''].includes(simpleFlag) || !Array.isArray(enriched?.fee_dues_by_class) || enriched.fee_dues_by_class.length === 0;
             if (useSimpleMode) {
-              const now = new Date();
               const currentMonthNo = now.getMonth() + 1;
-              // Load rate map from localStorage or defaults
+              // Updated rate map based on user feedback (8th grade = 150)
               let rateMap = {
-                1: 500,
-                2: 250,
-                3: 250,
-                4: 250,
-                5: 250,
-                6: 150,
-                7: 180,
-                8: 200,
-                9: 250,
-                10: 250
+                0: 80,   // শিশু
+                1: 100,  // ১ম
+                2: 100,  // ২য়
+                3: 100,  // ৩য়
+                4: 100,  // ৪র্থ
+                5: 120,  // ৫ম
+                6: 150,  // ষষ্ঠ
+                7: 150,  // সপ্তম
+                8: 150,  // অষ্টম
+                9: 200,  // নবম
+                10: 200  // দশম
               };
               try {
                 const raw = localStorage.getItem(`classRateMap:${String(id)}`);
@@ -933,20 +928,28 @@ const SchoolDashboard = () => {
                 }
               } catch (_) {}
               const bnToOrder = (name) => {
-                const map = { 'শিশু': 0, 'প্রথম': 1, 'দ্বিতীয়': 2, 'তৃতীয়': 3, '৪র্থ': 4, '৫ম': 5, 'ষষ্ঠ': 6, 'সপ্তম': 7, 'অষ্টম': 8, 'নবম': 9, 'দশম': 10, 'এসএসসি': 10, 'এসএসসি পরীক্ষার্থী': 10 };
+                const map = {
+                  'শিশু': 0, 'প্লে': 0, 'নার্সারি': 0,
+                  'প্রথম': 1, 'দ্বিতীয়': 2, 'তৃতীয়': 3, '৪র্থ': 4, '৫ম': 5,
+                  'ষষ্ঠ': 6, 'সপ্তম': 7, 'অষ্টম': 8, 'নবম': 9,
+                  'দশম': 10, 'এসএসসি': 10, 'শেণি': 10 // Handle typo 'দশম শেণি'
+                };
 
-                for (const k in map) { if (String(name).includes(k)) return map[k]; }
-                const m = String(name).match(/\d+/); return m ? parseInt(m[0], 10) : 0;
+                const s = String(name || '');
+                for (const k in map) { if (s.includes(k)) return map[k]; }
+                const m = s.match(/\d+/); return m ? parseInt(m[0], 10) : 0;
               };
               const dist = Array.isArray(enriched?.class_distribution) ? enriched.class_distribution : [];
               const monthsOverrideRaw = localStorage.getItem(`dashboardSimpleMonths:${String(id)}`);
               const monthsBase = parseInt(monthsOverrideRaw || '', 10);
+              // Calculate dues up to current month (January to June = 6 months)
               const months = Number.isFinite(monthsBase) && monthsBase > 0 ? monthsBase : currentMonthNo;
+
               const computedRows = dist.map(row => {
                 const cname = row.classroom__name || row.class_name || row.name || 'Unknown';
                 const count = Number(row.count || 0);
                 const order = bnToOrder(cname);
-                const rate = Number(rateMap[order] || 0);
+                const rate = Number(rateMap[order] || 150); // Default to 150 if not found
                 const tuitionDue = Math.round(count * rate * months);
                 return { class_name: cname, tuition_due: tuitionDue, exam_due: 0, total_due: tuitionDue };
               });
@@ -1478,6 +1481,17 @@ const SchoolDashboard = () => {
               onClick={() => navigate(`/school/${id}/subjects`)}
             />
           </Grid>
+          {(isTeacher || isSuperUser || role.includes('admin')) && (
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <StatCard
+                title="সিট বন্টন"
+                value="Exam"
+                icon={<EventSeatIcon fontSize="large" />}
+                color="#607d8b"
+                onClick={() => navigate(`/school/${id}/seat-allocation`)}
+              />
+            </Grid>
+          )}
         </Grid>
         <Grid size={12}>
           <Card>

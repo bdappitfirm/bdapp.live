@@ -259,9 +259,9 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
               const studentSectionId = data?.section?.id;
               const filteredSlots = examSlots.filter(slot => {
                 // Match classroom if set
-                const classroomMatch = !slot.classroom || slot.classroom === studentClassroomId;
+                const classroomMatch = !slot.classroom || String(slot.classroom) === String(studentClassroomId);
                 // Match section if set, else match any section (including null)
-                const sectionMatch = !slot.section || slot.section === studentSectionId;
+                const sectionMatch = !slot.section || String(slot.section) === String(studentSectionId);
                 return classroomMatch && sectionMatch;
               });
               
@@ -484,7 +484,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                 zIndex: 0
               }
             }}>
-              {signatureUrl && (
+              {signatureUrl && String(school?.id) !== '51' && (
                 <img 
                   src={signatureUrl} 
                   alt="Principal's Signature" 
@@ -502,13 +502,15 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                 />
               )}
             </Box>
-            <Typography variant="body1" sx={{ 
-              fontWeight: 'bold',
-              fontSize: '1rem',
-              lineHeight: 1.8
-            }}>
-              প্রধান শিক্ষক
-            </Typography>
+            {String(school?.id) !== '51' && (
+              <Typography variant="body1" sx={{
+                fontWeight: 'bold',
+                fontSize: '1rem',
+                lineHeight: 1.8
+              }}>
+                প্রধান শিক্ষক
+              </Typography>
+            )}
           </Box>
 
                   </Box>

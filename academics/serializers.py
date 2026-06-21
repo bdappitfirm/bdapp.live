@@ -10,7 +10,7 @@ User = get_user_model()
 class SchoolSerializer(serializers.ModelSerializer):
     class Meta:
         model = School
-        fields = ['id', 'name', 'address']
+        fields = ['id', 'name', 'address', 'logo', 'principal_signature', 'school_seal']
 
 class SimpleUserSerializer(serializers.ModelSerializer):
     photo_url = serializers.SerializerMethodField()
@@ -263,29 +263,59 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
         # If guardian not provided but guardian_name present, auto-create a parent profile and link
         if guardian is None and guardian_name:
-            g_first = str(guardian_name).strip()
-            if g_first:
-                g_base = g_first.lower().replace(' ', '') or 'parent'
-                g_username = g_base
-                g_idx = 1
-                while User.objects.filter(username=g_username).exists():
-                    g_idx += 1
-                    g_username = f"{g_base}{g_idx}"
-                g_password = '12345678'
-                g_user = User.objects.create_user(
-                    username=g_username,
-                    password=g_password,
-                    first_name=g_first,
-                    last_name=''
-                )
-                try:
-                    if phone_number and hasattr(g_user, 'phone_number'):
-                        g_user.phone_number = phone_number
-                        g_user.save(update_fields=['phone_number'])
-                except Exception:
-                    pass
-                Profile.objects.update_or_create(user=g_user, defaults={'school': school, 'role': 'parent'})
-                guardian = g_user
+            try:
+                g_first = str(guardian_name).strip()
+                if g_first:
+                    # 1. Try to find an existing parent with this exact name in this school
+                    from users.models import Profile as UserProfile
+                    # Split name for searching
+                    name_parts = g_first.split()
+                    first = name_parts[0] if name_parts else g_first
+                    last = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+
+                    existing_parent = UserProfile.objects.filter(
+                        school=school,
+                        role='parent',
+                        user__first_name__iexact=first[:150],
+                        user__last_name__iexact=last[:150]
+                    ).select_related('user').first()
+
+                    if existing_parent:
+                        guardian = existing_parent.user
+                    else:
+                        # 2. Create a new guardian user if not found
+                        g_base = g_first.lower().replace(' ', '') or 'parent'
+                        # Strip non-alphanumeric for username to avoid validation errors
+                        import re
+                        g_base = re.sub(r'[^a-z0-9]', '', g_base) or 'parent'
+                        g_username = g_base
+                        g_idx = 1
+                        while User.objects.filter(username__iexact=g_username).exists():
+                            g_idx += 1
+                            g_username = f"{g_base}{g_idx}"
+
+                        g_password = '12345678'
+                        g_user = User.objects.create_user(
+                            username=g_username,
+                            password=g_password,
+                            first_name=first[:150],
+                            last_name=last[:150]
+                        )
+
+                        if phone_number:
+                            try:
+                                if hasattr(g_user, 'phone_number'):
+                                    g_user.phone_number = phone_number
+                                    g_user.save(update_fields=['phone_number'])
+                            except Exception: pass
+
+                        # Ensure Profile exists with role parent
+                        UserProfile.objects.update_or_create(user=g_user, defaults={'school': school, 'role': 'parent'})
+                        guardian = g_user
+            except Exception as e:
+                # Log error but don't fail student creation
+                print(f"Auto-guardian creation failed: {e}")
+                pass
 
         # Auto-predict gender if not provided
         if 'gender' not in validated_data or validated_data['gender'] is None:

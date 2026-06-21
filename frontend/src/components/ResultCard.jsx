@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Divider, Grid } from '@mui/material';
+import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Divider, Grid, Stack } from '@mui/material';
 import './ResultCard.css';
 import ImageWithFallback from './ImageWithFallback';
 import api from '../utils/api';
@@ -193,7 +193,11 @@ export default function ResultCard({ studentData, results, overallResult, examin
     return resolvedSchool?.name || examination?.school?.name || student?.classroom?.school?.name || 'School Name';
   })();
   const headerSchoolAddress = (() => {
-    return resolvedSchool?.address || examination?.school?.address || student?.classroom?.school?.address || 'School Address';
+    let addr = resolvedSchool?.address || examination?.school?.address || student?.classroom?.school?.address || 'School Address';
+    if (typeof addr === 'string') {
+      return addr.replace(/লক্ষীপুর/g, 'লক্ষ্মীপুর');
+    }
+    return addr;
   })();
 
   const principalSignatureUrl = resolvedSchool?.principal_signature ? resolveMediaUrl(resolvedSchool.principal_signature) : null;
@@ -207,15 +211,15 @@ export default function ResultCard({ studentData, results, overallResult, examin
   
   const getGradeColor = (grade) => {
     const colors = {
-      'A+': '#4caf50',
-      'A': '#66bb6a',
-      'A-': '#81c784',
-      'B': '#29b6f6',
-      'C': '#ffa726',
-      'D': '#ff7043',
-      'F': '#ef5350'
+      'A+': '#1b5e20', // Darker Green
+      'A': '#2e7d32',  // Darker Green
+      'A-': '#388e3c', // Darker Green
+      'B': '#0277bd', // Darker Blue
+      'C': '#ef6c00', // Darker Orange
+      'D': '#d84315', // Darker Red-Orange
+      'F': '#c62828'  // Darker Red
     };
-    return colors[grade] || '#757575';
+    return colors[grade] || '#000000';
   };
   const isClassNineOrTen = () => {
     try {
@@ -433,8 +437,14 @@ export default function ResultCard({ studentData, results, overallResult, examin
   const overallGradeDisplay = anySubjectFailForOverall ? 'F' : computeGrade(overallPercentage);
   const overallGpaDisplay = anySubjectFailForOverall ? '0.00' : computeGpa(overallPercentage);
 
+  const formatMark = (val) => {
+    const n = parseFloat(val);
+    if (isNaN(n) || n === 0) return '--';
+    return n;
+  };
+
   return (
-    <Box className="result-card-container" sx={{ maxWidth: 900, mx: 'auto', bgcolor: 'white', p: { xs: 2, sm: 4 }, borderRadius: 2, boxShadow: 3 }}>
+    <Box className="result-card-container" sx={{ maxWidth: 900, mx: 'auto', bgcolor: 'white', p: { xs: 2, sm: 4 }, borderRadius: 2, boxShadow: 3, fontSize: '14px' }}>
       {/* Header */}
       <Box className="result-card-header" sx={{ position: 'relative', textAlign: 'center', mb: 3, borderBottom: '3px solid #1976d2', pb: 2 }}>
         {/* School Logo - Top Left */}
@@ -444,9 +454,9 @@ export default function ResultCard({ studentData, results, overallResult, examin
             position: 'absolute',
             top: 0,
             left: 0,
-            width: { xs: '56px', sm: '80px' },
-            height: { xs: '56px', sm: '80px' },
-            borderRadius: '50%',
+            width: { xs: '112px', sm: '160px' },
+            height: { xs: '112px', sm: '160px' },
+            borderRadius: '12px',
             border: '2px solid #1976d2',
             boxShadow: 2,
             overflow: 'hidden',
@@ -463,7 +473,7 @@ export default function ResultCard({ studentData, results, overallResult, examin
               <img
                 src={fallbackLogo}
                 alt="School Logo"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             }
           />
@@ -476,9 +486,9 @@ export default function ResultCard({ studentData, results, overallResult, examin
             position: 'absolute',
             top: 0,
             right: 0,
-            width: { xs: '56px', sm: '80px' },
-            height: { xs: '56px', sm: '80px' },
-            borderRadius: '50%',
+            width: { xs: '112px', sm: '160px' },
+            height: { xs: '112px', sm: '160px' },
+            borderRadius: '12px',
             border: '2px solid #1976d2',
             boxShadow: 2,
             overflow: 'hidden',
@@ -489,51 +499,67 @@ export default function ResultCard({ studentData, results, overallResult, examin
           <ImageWithFallback src={studentPhotoUrl} alt={studentName || 'Student Photo'} width="100%" height="100%" />
         </Box>
         
-        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1976d2', mb: 0.5, fontSize: { xs: '1.1rem', sm: '1.6rem' } }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1976d2', mb: 0.5, fontSize: '20px' }}>
           {headerSchoolName}
         </Typography>
         {headerSchoolAddress && (
-          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25, fontSize: '14px' }}>
             {headerSchoolAddress}
           </Typography>
         )}
-        <Typography variant="h5" sx={{ mt: 1, fontWeight: 'bold', color: '#424242', fontSize: { xs: '0.95rem', sm: '1.3rem' } }}>
+        <Typography variant="h5" sx={{ mt: 1, fontWeight: 'bold', color: '#424242', fontSize: '18px' }}>
           ACADEMIC RESULT CARD
         </Typography>
       </Box>
 
       {/* Student Information */}
-      <Grid className="result-card-info" container spacing={2} rowSpacing={2} sx={{ mb: 3, bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
-        <Grid size={{ xs: 6 }}>
-          <Typography variant="body2" color="text.secondary">Student Name:</Typography>
-          <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 0.25 }}>{studentName}</Typography>
-          {guardianName && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>অভিভাবক: {guardianName}</Typography>
-          )}
+      <Grid className="result-card-info" container spacing={2} rowSpacing={1} sx={{ mb: 3, bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
+        <Grid size={{ xs: 12 }}>
+          <Stack direction="row" spacing={4} sx={{ mb: 1 }}>
+            <Typography variant="body1" sx={{ fontSize: '14px', flex: 1 }}>
+              <strong>Student Name:</strong> {studentName}
+            </Typography>
+            <Typography variant="body1" sx={{ fontSize: '14px', flex: 1 }}>
+              <strong>রোলঃ</strong> {student.roll_number || 'N/A'}
+              {student.promoted_roll && student.promoted_roll !== student.roll_number && (
+                <span style={{ marginLeft: '8px', color: '#1976d2' }}>
+                  (নতুন রোল: {toBnDigits(student.promoted_roll)})
+                </span>
+              )}
+            </Typography>
+          </Stack>
         </Grid>
-        <Grid size={{ xs: 6 }}>
-          <Typography variant="body2" color="text.secondary">Roll Number:</Typography>
-          <Typography variant="body1" sx={{ fontWeight: 'bold', mt: 0.25 }}>
-            {student.roll_number || 'N/A'}
-            {student.promoted_roll && student.promoted_roll !== student.roll_number && (
-              <span style={{ marginLeft: '8px', color: '#1976d2' }}>
-                (নতুন রোল: {toBnDigits(student.promoted_roll)})
-              </span>
-            )}
-          </Typography>
+
+        <Grid size={{ xs: 12 }}>
+          <Stack direction="row" spacing={4}>
+            <Typography variant="body1" sx={{ fontSize: '14px', flex: 1 }}>
+              <strong>শ্রেণিঃ</strong> {student.classroom?.name || 'N/A'}
+            </Typography>
+            <Typography variant="body1" sx={{ fontSize: '14px', flex: 1 }}>
+              <strong>বিভাগঃ</strong> {(() => {
+                const g = String(student.group || '').toLowerCase();
+                if (g === 'science') return 'বিজ্ঞান';
+                if (g === 'commerce') return 'ব্যবসায় শিক্ষা';
+                if (g === 'arts') return 'মানবিক';
+                return student.section?.name || 'সাধারণ';
+              })()}
+            </Typography>
+          </Stack>
         </Grid>
-        <Grid size={{ xs: 6 }}>
-          <Typography variant="body2" color="text.secondary">Class:</Typography>
-          <Typography variant="body1" sx={{ fontWeight: 'bold', mt: 0.25 }}>
-            {student.classroom?.name || 'N/A'} {student.section?.name ? `(${student.section.name})` : ''}
-          </Typography>
-        </Grid>
-        <Grid size={{ xs: 6 }}>
-          <Typography variant="body2" color="text.secondary">Examination:</Typography>
-          <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-            {(() => {
-              const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-              const toBn = (v) => String(v ?? '').replace(/[0-9]/g, d => bn[d] ?? d);
+
+        {guardianName && (
+          <Grid size={{ xs: 12 }} sx={{ mt: 1 }}>
+            <Typography variant="body1" sx={{ fontSize: '14px' }}>
+              <strong>অভিভাবক:</strong> {guardianName}
+            </Typography>
+          </Grid>
+        )}
+
+        <Grid size={{ xs: 12 }} sx={{ mt: 1 }}>
+          <Typography variant="body1" sx={{ fontWeight: 'bold', fontSize: '14px' }}>
+            <strong>Examination:</strong> {(() => {
+              const bnDigits = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+              const toBn = (v) => String(v ?? '').replace(/[0-9]/g, d => bnDigits[d] ?? d);
               const map = {
                 test: 'বিশেষ মূল্যায়ন',
                 half_yearly: 'অর্ধবার্ষিক',
@@ -547,9 +573,8 @@ export default function ResultCard({ studentData, results, overallResult, examin
                 const txt = String(s || '');
                 const m = txt.match(/(19|20)\d{2}/);
                 if (m) return parseInt(m[0], 10);
-                const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-                const enMap = {'০':'0','১':'1','২':'2','৩':'3','৪':'4','৫':'5','৬':'6','৭':'7','৮':'8','৯':'9'};
-                const bnToEn = txt.replace(/[০-৯]/g, d => enMap[d] || d);
+                const enDigits = {'০':'0','১':'1','২':'2','৩':'3','৪':'4','৫':'5','৬':'6','৭':'7','৮':'8','৯':'9'};
+                const bnToEn = txt.split('').map(char => enDigits[char] || char).join('');
                 const m2 = bnToEn.match(/(19|20)\d{2}/);
                 return m2 ? parseInt(m2[0], 10) : null;
               };
@@ -573,13 +598,13 @@ export default function ResultCard({ studentData, results, overallResult, examin
         <Table size="small" sx={{ border: '2px solid #000', minWidth: 560 }}>
           <TableHead>
             <TableRow sx={{ bgcolor: '#1976d2' }}>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>Subject</TableCell>
-              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>CQ</TableCell>
-              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>MCQ</TableCell>
-              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>Practical</TableCell>
-              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>Total</TableCell>
-              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>Grade</TableCell>
-              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>GPA</TableCell>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: '14px' }}>Subject</TableCell>
+              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: '14px' }}>CQ</TableCell>
+              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: '14px' }}>MCQ</TableCell>
+              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: '14px' }}>Practical</TableCell>
+              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: '14px' }}>Total</TableCell>
+              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: '14px' }}>Grade</TableCell>
+              <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold', border: '1px solid #fff', fontSize: '14px' }}>GPA</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -588,7 +613,7 @@ export default function ResultCard({ studentData, results, overallResult, examin
               sortResultsBySubjectOrder(getDisplayResults()).map((result, idx) => {
                 return (
                   <TableRow key={idx}>
-                    <TableCell sx={{ fontWeight: 500, border: '1px solid #ddd' }}>
+                    <TableCell sx={{ fontWeight: 500, border: '1px solid #ddd', fontSize: '14px' }}>
                       {(() => {
                         const nm = result.subject?.name || result.subject_name || 'N/A';
                         if (isClassNineOrTen() && (isBanglaPaper(nm) || isEnglishPaper(nm))) {
@@ -601,10 +626,10 @@ export default function ResultCard({ studentData, results, overallResult, examin
                         return nm;
                       })()}
                     </TableCell>
-                    <TableCell align="center" sx={{ border: '1px solid #ddd' }}>{parseFloat(result.written_marks) || 0}</TableCell>
-                    <TableCell align="center" sx={{ border: '1px solid #ddd' }}>{parseFloat(result.mcq_marks) || 0}</TableCell>
-                    <TableCell align="center" sx={{ border: '1px solid #ddd' }}>{parseFloat(result.practical_marks) || 0}</TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>
+                    <TableCell align="center" sx={{ border: '1px solid #ddd', fontSize: '14px' }}>{formatMark(result.written_marks)}</TableCell>
+                    <TableCell align="center" sx={{ border: '1px solid #ddd', fontSize: '14px' }}>{formatMark(result.mcq_marks)}</TableCell>
+                    <TableCell align="center" sx={{ border: '1px solid #ddd', fontSize: '14px' }}>{formatMark(result.practical_marks)}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 'bold', border: '1px solid #ddd', fontSize: '14px' }}>
                       {(() => {
                         const w = (parseFloat(result.written_marks) || 0);
                         const m = (parseFloat(result.mcq_marks) || 0);
@@ -613,29 +638,32 @@ export default function ResultCard({ studentData, results, overallResult, examin
                         const hasComponent = sum > 0;
                         const hasObtained = result.total_obtained != null && result.total_obtained !== '';
                         const obtained = hasComponent ? sum : (hasObtained ? (parseFloat(result.total_obtained) || 0) : 0);
-                        return obtained;
+                        return obtained === 0 ? '--' : obtained;
                       })()}
                     </TableCell>
-                    <TableCell align="center" sx={{ border: '1px solid #ddd' }}>
+                    <TableCell align="center" sx={{ border: '1px solid #ddd', padding: '4px' }}>
                       <Box sx={{ 
-                        display: 'inline-block', 
-                        px: 1.5, 
+                        display: 'block',
+                        width: '100%',
                         py: 0.5, 
-                        borderRadius: 1, 
                         bgcolor: getGradeColor(result.grade),
-                        color: 'white',
-                        fontWeight: 'bold'
+                        color: 'white !important',
+                        fontWeight: 'bold',
+                        fontSize: '14px',
+                        textAlign: 'center',
+                        WebkitPrintColorAdjust: 'exact',
+                        printColorAdjust: 'exact'
                       }}>
                         {result.grade || 'N/A'}
                       </Box>
                     </TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>{result.gpa || '0.00'}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 'bold', border: '1px solid #ddd', fontSize: '14px' }}>{result.gpa || '0.00'}</TableCell>
                   </TableRow>
                 );
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary', fontSize: { xs: '0.9rem', sm: '1rem' } }}>
+                <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary', fontSize: '14px' }}>
                   No subject-wise results available for this examination
                 </TableCell>
               </TableRow>
@@ -644,27 +672,29 @@ export default function ResultCard({ studentData, results, overallResult, examin
             {/* Summary Row - Always show if overallResult exists */}
             {overallResult && (
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell colSpan={4} sx={{ fontWeight: 'bold', fontSize: { xs: '1rem', sm: '1.1rem' }, border: '2px solid #000' }}>
+                <TableCell colSpan={4} sx={{ fontWeight: 'bold', fontSize: '14px', border: '2px solid #000' }}>
                   TOTAL / OVERALL
                 </TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: { xs: '1rem', sm: '1.1rem' }, border: '2px solid #000' }}>
+                <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '14px', border: '2px solid #000' }}>
                   {toBnDigits(overallTotals.obtained)} / {toBnDigits(overallTotals.possible)}
                 </TableCell>
-                <TableCell align="center" sx={{ border: '2px solid #000' }}>
+                <TableCell align="center" sx={{ border: '2px solid #000', padding: '4px' }}>
                   <Box sx={{ 
-                    display: 'inline-block', 
-                    px: 2, 
+                    display: 'block',
+                    width: '100%',
                     py: 0.5, 
-                    borderRadius: 1, 
                     bgcolor: getGradeColor(overallGradeDisplay),
-                    color: 'white',
+                    color: 'white !important',
                     fontWeight: 'bold',
-                    fontSize: { xs: '1rem', sm: '1.1rem' }
+                    fontSize: '14px',
+                    textAlign: 'center',
+                    WebkitPrintColorAdjust: 'exact',
+                    printColorAdjust: 'exact'
                   }}>
                     {overallGradeDisplay}
                   </Box>
                 </TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: { xs: '1.1rem', sm: '1.2rem' }, color: getGradeColor(overallGradeDisplay), border: '2px solid #000' }}>
+                <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '14px', color: getGradeColor(overallGradeDisplay), border: '2px solid #000' }}>
                   {toBnDigits(overallGpaDisplay)}
                 </TableCell>
               </TableRow>
@@ -676,14 +706,14 @@ export default function ResultCard({ studentData, results, overallResult, examin
       {/* Overall Result Summary */}
       {overallResult && (
         <Box sx={{ bgcolor: '#e3f2fd', p: 2, borderRadius: 2, mb: 2, border: '2px solid #1976d2' }}>
-          <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1.5, textAlign: 'center' }}>
+          <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1.5, textAlign: 'center', fontSize: '12px' }}>
             OVERALL PERFORMANCE
           </Typography>
           <Grid container spacing={3} justifyContent="center">
             <Grid size={{ xs: 6, sm: 3 }}>
               <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">Percentage</Typography>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '12px' }}>Percentage</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '12px' }}>
                   {toBnDigits(
                     overallResult && overallResult.percentage != null
                       ? Math.round(parseFloat(overallResult.percentage))
@@ -694,19 +724,20 @@ export default function ResultCard({ studentData, results, overallResult, examin
             </Grid>
             <Grid size={{ xs: 6, sm: 3 }}>
               <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">Position/Rank</Typography>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '12px' }}>Position/Rank</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '12px' }}>
                   {overallResult.rank ? `${toBnDigits(overallResult.rank)}${getRankSuffix(overallResult.rank)}` : 'N/A'}
                 </Typography>
               </Box>
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">Final Result</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '12px' }}>Final Result</Typography>
                 <Typography variant="h5" sx={{ 
                   fontWeight: 'bold', 
                   color: isPassedDisplay ? '#4caf50' : '#ef5350',
-                  mt: 0.5
+                  mt: 0.5,
+                  fontSize: '16px'
                 }}>
                   {isPassedDisplay ? '✓ PASSED' : '✗ FAILED'}
                 </Typography>
@@ -715,49 +746,6 @@ export default function ResultCard({ studentData, results, overallResult, examin
           </Grid>
         </Box>
       )}
-
-      {/* Grading Scale */}
-      <Box className="result-card-grading" sx={{ mt: 2, p: 1.5, borderRadius: 1, border: '1px dashed #1976d2' }}>
-        <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign: 'center', mb: 1 }}>
-          নাম্বার বণ্টন ও গ্রেডিং স্কেল (GPA)
-        </Typography>
-        {(() => {
-          const gradeScale = [
-            { grade: 'A+', range: '80-100', gpa: '5.00' },
-            { grade: 'A',  range: '70-79',  gpa: '4.00' },
-            { grade: 'A-', range: '60-69',  gpa: '3.50' },
-            { grade: 'B',  range: '50-59',  gpa: '3.00' },
-            { grade: 'C',  range: '40-49',  gpa: '2.00' },
-            { grade: 'D',  range: '33-39',  gpa: '1.00' },
-            { grade: 'F',  range: '0-32',   gpa: '0.00' }
-          ];
-          return (
-            <Grid container spacing={1} justifyContent="center">
-              {gradeScale.map(item => (
-                <Grid key={item.grade} size={{ xs: 6, sm: 3, md: 2 }}>
-                  <Box sx={{ 
-                    textAlign: 'center',
-                    borderRadius: 1,
-                    p: 1,
-                    bgcolor: getGradeColor(item.grade),
-                    color: 'white',
-                    border: '1px solid rgba(255,255,255,0.7)'
-                  }}>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      {item.grade} • GPA {toBnDigits(item.gpa)}
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: 'block', opacity: 0.95 }}>
-                      {toBnDigits(item.range)}
-                    </Typography>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
-          );
-        })()}
-      </Box>
-
-
 
       {/* Footer */}
       <Box className="result-card-footer" sx={{ mt: 2, pt: 1.5, borderTop: '2px solid #e0e0e0' }}>
@@ -776,7 +764,7 @@ export default function ResultCard({ studentData, results, overallResult, examin
               />
             </Box>
             <Divider sx={{ mb: 0.5, borderColor: '#000', width: '70%', mx: 'auto' }} />
-            <Typography variant="caption">শ্রেণি শিক্ষক</Typography>
+            <Typography variant="caption" sx={{ fontSize: '12px' }}>শ্রেণি শিক্ষক</Typography>
           </Grid>
           <Grid size={{ xs: 4 }} sx={{ textAlign: 'center' }}>
             <Box sx={{ height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 0.5, position: 'relative' }}>
@@ -814,14 +802,14 @@ export default function ResultCard({ studentData, results, overallResult, examin
               />
             </Box>
             <Divider sx={{ mb: 0.5, borderColor: '#000', width: '70%', mx: 'auto' }} />
-            <Typography variant="caption">প্রধান শিক্ষক</Typography>
+            <Typography variant="caption" sx={{ fontSize: '12px' }}>প্রধান শিক্ষক</Typography>
           </Grid>
           <Grid size={{ xs: 4 }} sx={{ textAlign: 'center' }}>
             <Box sx={{ height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 0.25 }}>
               {/* School seal removed for guardian signature area */}
             </Box>
             <Divider sx={{ mb: 0.5, borderColor: '#000', width: '70%', mx: 'auto' }} />
-            <Typography variant="caption">অভিভাবকের স্বাক্ষর</Typography>
+            <Typography variant="caption" sx={{ fontSize: '12px' }}>অভিভাবকের স্বাক্ষর</Typography>
           </Grid>
         </Grid>
       </Box>

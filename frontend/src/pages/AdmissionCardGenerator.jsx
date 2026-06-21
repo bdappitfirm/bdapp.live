@@ -298,13 +298,14 @@ export default function AdmissionCardGenerator() {
                 display: flex;
                 flex-direction: row;
                 flex-wrap: nowrap;
-                gap: 5mm;
+                gap: 15mm;
                 width: 100%;
                 box-sizing: border-box;
                 align-items: stretch;
+                justify-content: center;
               }
               .card-slot {
-                width: 50%;
+                width: calc(50% - 10mm);
                 box-sizing: border-box;
                 break-inside: avoid;
                 page-break-inside: avoid;
@@ -392,9 +393,9 @@ export default function AdmissionCardGenerator() {
       
       const a4Width = 297; // A4 width in mm (landscape)
       const a4Height = 210; // A4 height in mm (landscape)
-      const margin = 5;
-      const gap = 5;
-      const cardWidth = (a4Width - (margin * 3) - gap) / 2; // Two cards side-by-side
+      const margin = 10;
+      const gap = 15;
+      const cardWidth = (a4Width - (margin * 2) - gap) / 2; // Two cards side-by-side
 
       const canvasData = [];
       for (let i = 0; i < studentsToExport.length; i++) {

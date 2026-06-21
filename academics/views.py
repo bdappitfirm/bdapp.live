@@ -1693,22 +1693,39 @@ class ImportStudentsAPI(APIView):
         # Prepare guardian user if provided
         guardian_user = None
         if guardian_name:
-            # Create or reuse a guardian user by generated username
-            base = guardian_name.replace(' ', '').lower() or 'parent'
-            candidate = base
-            idx = 1
-            from django.contrib.auth import get_user_model
-            U = get_user_model()
-            while U.objects.filter(username=candidate).exists():
-                idx += 1
-                candidate = f"{base}{idx}"
-            guardian_user, created_g = U.objects.get_or_create(username=candidate, defaults={
-                "first_name": guardian_name.split()[0] if guardian_name else "",
-                "last_name": ' '.join(guardian_name.split()[1:]) if guardian_name and len(guardian_name.split()) > 1 else "",
-            })
-            # Ensure Profile with role parent
+            # 1. Try to find an existing parent with this name in this school
             from users.models import Profile as UserProfile
-            UserProfile.objects.update_or_create(user=guardian_user, defaults={"school": school, "role": "parent"})
+            name_parts = guardian_name.split()
+            first = name_parts[0] if name_parts else guardian_name
+            last = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ""
+
+            existing_parent = UserProfile.objects.filter(
+                school=school,
+                role='parent',
+                user__first_name__iexact=first[:150],
+                user__last_name__iexact=last[:150]
+            ).select_related('user').first()
+
+            if existing_parent:
+                guardian_user = existing_parent.user
+            else:
+                # 2. Create or reuse a guardian user by generated username
+                base = guardian_name.replace(' ', '').lower() or 'parent'
+                import re
+                base = re.sub(r'[^a-z0-9]', '', base) or 'parent'
+                candidate = base
+                idx = 1
+                from django.contrib.auth import get_user_model
+                U = get_user_model()
+                while U.objects.filter(username__iexact=candidate).exists():
+                    idx += 1
+                    candidate = f"{base}{idx}"
+                guardian_user, created_g = U.objects.get_or_create(username=candidate, defaults={
+                    "first_name": first[:150],
+                    "last_name": last[:150],
+                })
+                # Ensure Profile with role parent
+                UserProfile.objects.update_or_create(user=guardian_user, defaults={"school": school, "role": "parent"})
 
         sp, created_profile = StudentProfile.objects.get_or_create(user=user, defaults={
             "school": school,
@@ -1788,6 +1805,7 @@ class VirtualClassViewSet(viewsets.ModelViewSet):
         vclass.save()
         return Response({'status': 'class ended'})
 
+from rest_framework.decorators import action
 
 # ---- Building, Room, ExamSeatPlan ViewSets ----
 class BuildingViewSet(viewsets.ModelViewSet):
@@ -1803,6 +1821,35 @@ class BuildingViewSet(viewsets.ModelViewSet):
         if school_id:
             queryset = queryset.filter(school_id=school_id)
         return queryset
+
+    @action(detail=False, methods=['post'], url_path='bulk-setup')
+    def bulk_setup(self, request):
+        """Setup multiple buildings and rooms for a school"""
+        school_id = request.data.get('school_id')
+        buildings_data = request.data.get('buildings', [])
+
+        if not school_id:
+            return Response({"detail": "school_id required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            school = School.objects.get(pk=school_id)
+
+            # Use the utility to generate/update buildings and rooms
+            from .utils import generate_exam_buildings_and_rooms
+            rooms = generate_exam_buildings_and_rooms(school, buildings_data)
+
+            # Update school's number_of_buildings field
+            school.number_of_buildings = len(buildings_data)
+            school.save(update_fields=['number_of_buildings'])
+
+            return Response({
+                "status": "ok",
+                "message": f"Successfully setup {len(buildings_data)} buildings and {len(rooms)} rooms."
+            })
+        except School.DoesNotExist:
+            return Response({"detail": "School not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class RoomViewSet(viewsets.ModelViewSet):

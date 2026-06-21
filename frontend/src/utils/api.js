@@ -4,7 +4,7 @@ import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './auth
 
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : ''),
-  timeout: 15000,
+  timeout: 60000,
   withCredentials: true,
   headers: {
     'Cache-Control': 'no-cache, no-store, must-revalidate',

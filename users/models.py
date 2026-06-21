@@ -22,6 +22,11 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     school = models.ForeignKey(School, on_delete=models.SET_NULL, null=True, blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
+    gender = models.CharField(max_length=10, choices=[
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('other', 'Other'),
+    ], blank=True, null=True)
     designation = models.CharField(max_length=100, blank=True, null=True, help_text='Designation/Role for committee members')
     blood_group = models.CharField(max_length=10, choices=[
         ('A+', 'A+'),
@@ -47,6 +52,20 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.role}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Sync gender to StudentProfile if this is a student
+        if self.role == 'student' and self.gender:
+            try:
+                from academics.models import StudentProfile
+                student_profile = StudentProfile.objects.get(user=self.user)
+                if student_profile.gender != self.gender:
+                    student_profile.gender = self.gender
+                    student_profile.save(update_fields=['gender'])
+            except Exception:
+                pass
+
     class Meta:
         indexes = [
             models.Index(fields=['school', 'role'], name='users_profile_school_role_idx'),

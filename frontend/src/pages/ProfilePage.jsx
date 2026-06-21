@@ -47,6 +47,7 @@ export default function ProfilePage() {
     last_name: '',
     email: '',
     phone_number: '',
+    gender: '',
     school: '',
     classroom: '',
     section: '',
@@ -108,6 +109,7 @@ export default function ProfilePage() {
         last_name: userData.last_name || '',
         email: userData.email || '',
         phone_number: userData.phone_number || '',
+        gender: profileData.gender || '',
         school: profileData.school?.id || userData.school || '',
         classroom: profileData.classroom?.id || '',
         section: profileData.section?.id || '',
@@ -273,6 +275,9 @@ export default function ProfilePage() {
         const ures = await api.patch('/api/users/me/', userPayload);
         const userData = ures.data.user || ures.data;
         setUser(userData);
+
+        // Update profile fields (gender etc)
+        await api.patch('/api/users/profile/', { gender: formData.gender });
 
         // Change password if provided
         if (passwordForm.new_password) {
@@ -642,6 +647,22 @@ export default function ProfilePage() {
 
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
+                  select
+                  label="Gender"
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleInputChange}
+                  fullWidth
+                  disabled={!editing}
+                >
+                  <MenuItem value="">Select Gender</MenuItem>
+                  <MenuItem value="male">Male</MenuItem>
+                  <MenuItem value="female">Female</MenuItem>
+                  <MenuItem value="other">Other</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
                   label="Category"
                   name="category"
                   value={formData.category}
@@ -675,6 +696,7 @@ export default function ProfilePage() {
                       school: profile?.school?.id || '',
                       classroom: profile?.classroom?.id || '',
                       section: profile?.section?.id || '',
+                      gender: profile?.gender || '',
                       category: profile?.category || ''
                     });
                     setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });

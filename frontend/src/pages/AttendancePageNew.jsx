@@ -705,40 +705,54 @@ export default function AttendancePageNew() {
   };
 
   useEffect(() => {
+    let scanner = null;
     if (qrScannerOpen) {
-      // Delay to ensure the dialog renders first
+      // Small delay to let the dialog animation finish
       const timer = setTimeout(() => {
-        const scannerElement = document.getElementById('qr-scanner');
-        if (scannerElement) {
-          // Clear any existing scanner before creating a new one
-          if (qrScannerRef.current) {
-            qrScannerRef.current.clear().catch(console.error);
+        const element = document.getElementById('qr-scanner');
+        if (element) {
+          try {
+            scanner = new Html5QrcodeScanner(
+              'qr-scanner',
+              {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                rememberLastUsedCamera: true,
+                supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA],
+                aspectRatio: 1.0,
+                showTorchButtonIfSupported: true,
+                showZoomSliderIfSupported: true,
+                verbose: false
+              },
+              false
+            );
+            scanner.render(handleQrScanSuccess, handleQrScanError);
+            qrScannerRef.current = scanner;
+          } catch (err) {
+            console.error('Scanner init error:', err);
           }
-          qrScannerRef.current = new Html5QrcodeScanner(
-            'qr-scanner',
-            { 
-              fps: 10,
-              qrbox: { width: 250, height: 250 },
-              rememberLastUsedCamera: true,
-              supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA, Html5Qrcode.SCAN_TYPE_IMAGE],
-              aspectRatio: 1.0,
-              showTorchButtonIfSupported: true,
-              showZoomSliderIfSupported: true
-            },
-            false
-          );
-          qrScannerRef.current.render(handleQrScanSuccess, handleQrScanError);
         }
-      }, 400);
+      }, 500);
       
-      return () => clearTimeout(timer);
-    } else {
-      if (qrScannerRef.current) {
-        qrScannerRef.current.clear().catch(console.error);
-        qrScannerRef.current = null;
-      }
+      return () => {
+        clearTimeout(timer);
+        if (scanner) {
+          scanner.clear().catch(e => console.warn('Failed to clear scanner:', e));
+          qrScannerRef.current = null;
+        }
+      };
     }
   }, [qrScannerOpen]);
+
+  const refreshScanner = async () => {
+    if (qrScannerRef.current) {
+      try {
+        await qrScannerRef.current.clear();
+      } catch (_) {}
+    }
+    setQrScannerOpen(false);
+    setTimeout(() => setQrScannerOpen(true), 300);
+  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -1380,9 +1394,14 @@ export default function AttendancePageNew() {
           <DialogTitle>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Typography variant="h6">QR কোড স্ক্যান করুন</Typography>
-              <IconButton onClick={() => setQrScannerOpen(false)}>
-                <CloseIcon />
-              </IconButton>
+              <Stack direction="row" spacing={1}>
+                <IconButton onClick={refreshScanner} title="রিফ্রেশ ক্যামেরা" color="primary">
+                  <RefreshIcon />
+                </IconButton>
+                <IconButton onClick={() => setQrScannerOpen(false)}>
+                  <CloseIcon />
+                </IconButton>
+              </Stack>
             </Stack>
           </DialogTitle>
           <DialogContent>

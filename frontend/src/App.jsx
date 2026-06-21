@@ -11,7 +11,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { isAuthenticated, clearTokens } from './utils/auth';
 import { CircularProgress, Box, Typography } from '@mui/material';
 
-const APP_VERSION = '1.0.2'; // Increment this to force cache clear on next load
+const APP_VERSION = '1.0.5'; // Increment this to force cache clear on next load
 const CACHE_VERSION_KEY = 'bdapp_cache_version';
 
 const CacheClearer = () => {

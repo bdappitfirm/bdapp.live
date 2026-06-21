@@ -122,7 +122,7 @@ export default function ResultsPage() {
   // Edit/Delete state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingResult, setEditingResult] = useState(null);
-  const [editMarks, setEditMarks] = useState({ written: 0, mcq: 0, practical: 0 });
+  const [editMarks, setEditMarks] = useState({ written: '', mcq: '', practical: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
   
@@ -196,9 +196,9 @@ export default function ResultsPage() {
     }
     setEditingResult(result);
     setEditMarks({
-      written: parseFloat(result.written_marks) || 0,
-      mcq: parseFloat(result.mcq_marks) || 0,
-      practical: parseFloat(result.practical_marks) || 0
+      written: parseFloat(result.written_marks) || '',
+      mcq: parseFloat(result.mcq_marks) || '',
+      practical: parseFloat(result.practical_marks) || ''
     });
     setEditDialogOpen(true);
   };
@@ -505,9 +505,9 @@ export default function ResultsPage() {
           const sid = r.subject?.id || r.subject;
           if (sid) {
             next[sid] = {
-              written: parseFloat(r.written_marks) || 0,
-              mcq: parseFloat(r.mcq_marks) || 0,
-              practical: parseFloat(r.practical_marks) || 0
+              written: parseFloat(r.written_marks) || '',
+              mcq: parseFloat(r.mcq_marks) || '',
+              practical: parseFloat(r.practical_marks) || ''
             };
           }
         }

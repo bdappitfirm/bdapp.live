@@ -1,143 +1,91 @@
 @media print {
   @page {
     size: A4;
-    margin: 5mm;
+    margin: 2mm 5mm 5mm 5mm;
   }
+
   body * {
     visibility: hidden;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
+
   .result-card-container,
   .result-card-container * {
     visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
+
   .result-card-container {
     position: static !important;
-    left: auto;
-    top: auto;
-    width: 176mm !important;
-    max-width: 100% !important;
+    width: 100% !important;
+    padding: 2mm 5mm !important;
+    margin: 0 !important;
     box-shadow: none !important;
-    padding: 8mm !important;
-    margin: 0 auto !important;
     page-break-after: always;
     break-after: page;
   }
+
   .result-card-header {
     position: relative !important;
-    min-height: 18mm !important;
-    padding-bottom: 1mm !important;
-    margin-bottom: 1mm !important;
-    border-bottom-width: 1px !important;
+    min-height: 25mm !important;
+    border-bottom: 2px solid #1976d2 !important;
   }
+
   .result-card-header .school-logo,
   .result-card-header .student-photo {
     position: absolute !important;
-    width: 15mm !important;
-    height: 15mm !important;
+    width: 30mm !important;
+    height: 30mm !important;
     top: 0mm !important;
-    z-index: 2 !important;
+    z-index: 10 !important;
   }
-  .result-card-header .school-logo { left: 5mm !important; }
-  .result-card-header .student-photo { right: 5mm !important; }
-  .result-card-header img {
+  .result-card-header .school-logo { left: 0mm !important; }
+  .result-card-header .student-photo { right: 0mm !important; }
+
+  /* EXTREME FIX FOR PRINT COLORS */
+  /* This targets any element with a background color and forces it to show */
+  .MuiBox-root[style*="background-color"],
+  div[style*="background-color"],
+  span[style*="background-color"],
+  td[style*="background-color"],
+  .result-card-table .MuiTableRow-root {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  .result-card-container .MuiTableHead-root .MuiTableCell-root {
+    background-color: #1976d2 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .result-card-container table {
+    border: 1.5px solid #000 !important;
     width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    display: block !important;
   }
-  .result-card-footer {
-    page-break-inside: avoid;
-    break-inside: avoid;
-    margin-top: 4mm !important;
+
+  .result-card-container .MuiTableCell-root {
+    padding: 4px 6px !important;
+    font-size: 12px !important;
+    border: 1px solid #000 !important;
+    color: #000 !important;
   }
-  .result-card-grading {
-    page-break-inside: avoid;
-    break-inside: avoid;
-    margin-top: 3mm !important;
+
+  /* Make sure the text inside colored boxes is readable (white) */
+  .result-card-container .MuiBox-root[style*="background-color"] {
+    color: white !important;
+    font-weight: bold !important;
+    border: 1px solid #000 !important;
   }
-  .result-card-grading .MuiTypography-body2 {
-    font-size: 0.7rem !important;
-  }
-  .result-card-grading .MuiTypography-caption {
-    font-size: 0.65rem !important;
-  }
-  .result-card-info {
-    margin-bottom: 3mm !important;
-    padding: 2mm !important;
-  }
-  .result-card-table {
-    page-break-inside: avoid;
-    break-inside: avoid;
-    margin-bottom: 3mm !important;
-    page-break-after: avoid;
-  }
+
   .no-print {
     display: none !important;
   }
-  .result-card-header,
-  .result-card-info,
-  .result-card-table {
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-  .result-card-container table {
-    min-width: 0 !important;
-    width: 100% !important;
-  }
-  .result-card-container .MuiTableCell-root {
-    padding: 3px 4px !important;
-    font-size: 0.65rem !important;
-    line-height: 1.2 !important;
-  }
-  .result-card-container .MuiTypography-h4 {
-    font-size: 1.1rem !important;
-    margin-bottom: 2px !important;
-  }
-  .result-card-container .MuiTypography-h5 {
-    font-size: 0.95rem !important;
-    margin-top: 2px !important;
-  }
-  .result-card-container .MuiTypography-h6 {
-    font-size: 0.95rem !important;
-  }
-  .result-card-container .MuiTypography-body1 {
-    font-size: 0.75rem !important;
-  }
-  .result-card-container .MuiTypography-body2 {
-    font-size: 0.7rem !important;
-  }
-  .result-card-container .MuiTypography-caption {
-    font-size: 0.7rem !important;
-  }
-  table {
-    page-break-inside: avoid;
-  }
-  tr {
-    page-break-inside: avoid;
-    page-break-after: auto;
-  }
-  * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .bulk-print-mode .bulk-sheet {
-    page-break-after: always;
-    break-after: page;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  .bulk-print-mode .bulk-card-wrap {
-    page-break-inside: avoid;
-    break-inside: avoid;
-    margin: 0;
-    padding: 0;
-  }
 }
+
 .result-card-container {
   font-family: 'Roboto', 'Arial', sans-serif;
-}
-@media screen {
-  .result-card-container {
-    margin: 20px auto;
-  }
 }

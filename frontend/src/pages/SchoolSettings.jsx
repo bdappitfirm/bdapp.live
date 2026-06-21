@@ -38,14 +38,37 @@ export default function SchoolSettings() {
     principal_name: '',
     number_of_buildings: 1
   });
-  
+
+  const [buildingRooms, setBuildingRooms] = useState({}); // { 1: 5, 2: 10 }
+
   const [logo, setLogo] = useState(null);
   const [signature, setSignature] = useState(null);
   const [seal, setSeal] = useState(null);
 
   useEffect(() => {
     fetchSchoolData();
+    fetchBuildingData();
   }, [id]);
+
+  const fetchBuildingData = async () => {
+    try {
+      const res = await api.get(`/api/academics/buildings/?school=${id}`);
+      const buildings = res.data || [];
+      const roomCounts = {};
+
+      for (const b of buildings) {
+        // Extract number from name "ভবন-1" -> 1
+        const match = b.name.match(/\d+/);
+        const bNum = match ? parseInt(match[0]) : null;
+        if (bNum) {
+          // Fetch rooms for this building to get count
+          const roomsRes = await api.get(`/api/academics/rooms/?building=${b.id}`);
+          roomCounts[bNum] = roomsRes.data.length || 0;
+        }
+      }
+      setBuildingRooms(roomCounts);
+    } catch (_) {}
+  };
 
   const fetchSchoolData = async () => {
     try {
@@ -71,10 +94,16 @@ export default function SchoolSettings() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: name === 'number_of_buildings' ? parseInt(value) || 1 : value
-    });
+    if (name === 'number_of_buildings') {
+      const count = parseInt(value) || 1;
+      setFormData({ ...formData, number_of_buildings: count });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
+  };
+
+  const handleRoomCountChange = (bNum, count) => {
+    setBuildingRooms({ ...buildingRooms, [bNum]: parseInt(count) || 0 });
   };
 
   const handleFileChange = (e, setter) => {
@@ -103,9 +132,29 @@ export default function SchoolSettings() {
           'Content-Type': 'multipart/form-data'
         }
       });
+
+      // Prepare building/room data for bulk setup
+      const buildingsPayload = [];
+      for (let i = 1; i <= formData.number_of_buildings; i++) {
+        const numRooms = buildingRooms[i] || 0;
+        const rooms = [];
+        for (let j = 1; j <= numRooms; j++) {
+          rooms.push({ room_number: j, bench_count: 10 }); // Default 10 benches
+        }
+        buildingsPayload.push({
+          building_number: i,
+          rooms: rooms
+        });
+      }
+
+      await api.post('/api/academics/buildings/bulk-setup/', {
+        school_id: id,
+        buildings: buildingsPayload
+      });
       
-      toast.success('স্কুলের তথ্য সফলভাবে আপডেট হয়েছে');
-      fetchSchoolData(); // Refresh data
+      toast.success('স্কুলের তথ্য ও ভবন/রুম কনফিগারেশন আপডেট হয়েছে');
+      fetchSchoolData();
+      fetchBuildingData();
     } catch (err) {
       console.error('Failed to update school:', err);
       toast.error('আপডেট ব্যর্থ হয়েছে। দয়া করে আবার চেষ্টা করুন।');
@@ -202,6 +251,24 @@ export default function SchoolSettings() {
                 fullWidth
                 inputProps={{ min: 1, max: 10 }}
               />
+
+              {/* Dynamic Building-Room Inputs */}
+              {Array.from({ length: formData.number_of_buildings }, (_, i) => i + 1).map(bNum => (
+                <Box key={bNum} sx={{ p: 2, border: '1px solid #eee', borderRadius: 1, bgcolor: '#fcfcfc' }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', color: 'primary.main' }}>
+                    ভবন - {bNum} কনফিগারেশন
+                  </Typography>
+                  <TextField
+                    label={`ভবন - ${bNum} এ রুমের সংখ্যা`}
+                    type="number"
+                    value={buildingRooms[bNum] || ''}
+                    onChange={(e) => handleRoomCountChange(bNum, e.target.value)}
+                    fullWidth
+                    size="small"
+                    placeholder="রুমের সংখ্যা লিখুন (যেমন: ১০)"
+                  />
+                </Box>
+              ))}
             </Stack>
           </Paper>
         </Grid>
