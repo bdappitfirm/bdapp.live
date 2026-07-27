@@ -40,7 +40,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import PhotoUpload from './PhotoUpload';
 import { useToast } from './Toast';
 import api from '../utils/api';
-import { canEdit, canDelete, normalizeNumberInput } from '../utils/helpers';
+import { canEdit, canDelete } from '../utils/helpers';
 import { getMediaUrl } from '../utils/media';
 
 /**
@@ -164,7 +164,8 @@ export default function ProfileCard({
       occupation: (profile?.occupation ?? profile?.user?.occupation ?? ''),
       income: (profile?.income ?? profile?.user?.income ?? '') !== '' ? String(profile?.income ?? profile?.user?.income ?? '') : '',
       designation: profile?.designation || '',
-      gender: profile?.gender || ''
+      gender: profile?.gender || '',
+      group: profile?.group || ''
     });
     setFormErrors({});
     setPhotoFile(null);
@@ -549,6 +550,9 @@ export default function ProfileCard({
       if ((roleLower === 'student' || localProfile?.classroom || localProfile?.roll_number || localProfile?.student_custom_id) && formData.gender) {
         fd.append('gender', formData.gender);
       }
+      if ((roleLower === 'student' || localProfile?.classroom || localProfile?.roll_number || localProfile?.student_custom_id) && formData.group) {
+        fd.append('group', formData.group);
+      }
       if (photoFile) fd.append('photo', photoFile);
 
       // Choose correct endpoint per role
@@ -581,6 +585,7 @@ export default function ProfileCard({
         occupation: formData.occupation || '',
         income: formData.income || '',
         gender: formData.gender || '',
+        group: formData.group || '',
         user: {
           ...(prev?.user || {}),
           blood_group: formData.blood_group || (prev?.user?.blood_group || ''),
@@ -743,6 +748,56 @@ export default function ProfileCard({
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
                       লিঙ্গ: {localProfile.gender === 'male' ? 'Male' : localProfile.gender === 'female' ? 'Female' : 'Other'}
+                    </Typography>
+                  </Stack>
+                )}
+                {roleLower === 'student' && localProfile?.group && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                      গ্রুপ: {localProfile.group === 'science' ? 'Science' : localProfile.group === 'arts' ? 'Arts' : 'Commerce'}
+                    </Typography>
+                  </Stack>
+                )}
+                {roleLower === 'student' && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <PersonIcon fontSize="small" color="secondary" />
+                    <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                      অভিভাবক: {(() => {
+                        // Try multiple possible guardian fields
+                        const guardian = 
+                          localProfile?.guardian ||
+                          localProfile?.guardian_profile ||
+                          localProfile?.parent;
+                        
+                        const guardianUser =
+                          localProfile?.guardian_user ||
+                          (guardian?.user ? guardian.user : guardian);
+
+                        // If linked object exists, get name from it
+                        if (guardian || guardianUser) {
+                          const firstName =
+                            guardianUser?.first_name ||
+                            guardian?.first_name ||
+                            guardianUser?.user?.first_name ||
+                            '';
+                          const lastName =
+                            guardianUser?.last_name ||
+                            guardian?.last_name ||
+                            guardianUser?.user?.last_name ||
+                            '';
+                          const username =
+                            guardianUser?.username ||
+                            guardian?.username ||
+                            guardianUser?.user?.username ||
+                            '';
+
+                          const fullName = `${firstName} ${lastName}`.trim();
+                          if (fullName || username) return fullName || username;
+                        }
+
+                        // Fallback to plain guardian_name text field
+                        return localProfile?.guardian_name || 'N/A';
+                      })()}
                     </Typography>
                   </Stack>
                 )}
@@ -913,6 +968,12 @@ export default function ProfileCard({
                     <Typography variant="body1">{localProfile?.gender ? (localProfile.gender === 'male' ? 'Male' : localProfile.gender === 'female' ? 'Female' : 'Other') : 'N/A'}</Typography>
                   </Grid>
                 )}
+                {roleLower === 'student' && localProfile?.group && (
+                  <Grid size={{ xs: 12 }}>
+                    <Typography variant="caption" color="text.secondary">Group</Typography>
+                    <Typography variant="body1">{localProfile.group === 'science' ? 'Science' : localProfile.group === 'arts' ? 'Arts' : 'Commerce'}</Typography>
+                  </Grid>
+                )}
                 <Grid size={{ xs: 12 }}>
                   <Typography variant="caption" color="text.secondary">Occupation</Typography>
                   <Typography variant="body1">{localProfile?.occupation ?? localProfile?.user?.occupation ?? 'N/A'}</Typography>
@@ -1070,14 +1131,24 @@ export default function ProfileCard({
                   </TextField>
                 </Grid>
                 {(roleLower === 'student' || localProfile?.classroom || localProfile?.roll_number || localProfile?.student_custom_id) && (
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField select label="Gender" value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} fullWidth>
-                      <MenuItem value="">Select</MenuItem>
-                      <MenuItem value="male">Male</MenuItem>
-                      <MenuItem value="female">Female</MenuItem>
-                      <MenuItem value="other">Other</MenuItem>
-                    </TextField>
-                  </Grid>
+                  <>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField select label="Gender" value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} fullWidth>
+                        <MenuItem value="">Select</MenuItem>
+                        <MenuItem value="male">Male</MenuItem>
+                        <MenuItem value="female">Female</MenuItem>
+                        <MenuItem value="other">Other</MenuItem>
+                      </TextField>
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField select label="Group" value={formData.group} onChange={(e) => setFormData({ ...formData, group: e.target.value })} fullWidth>
+                        <MenuItem value="">Select</MenuItem>
+                        <MenuItem value="science">Science</MenuItem>
+                        <MenuItem value="arts">Arts</MenuItem>
+                        <MenuItem value="commerce">Commerce</MenuItem>
+                      </TextField>
+                    </Grid>
+                  </>
                 )}
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField label="Occupation" value={formData.occupation} onChange={(e) => setFormData({ ...formData, occupation: e.target.value })} fullWidth />

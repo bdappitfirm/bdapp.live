@@ -1,91 +1,75 @@
 @media print {
   @page {
-    size: A4;
-    margin: 2mm 5mm 5mm 5mm;
+    size: A4 portrait;
+    margin: 5mm !important; /* Proper margin to prevent shadow box appearance */
   }
 
-  body * {
-    visibility: hidden;
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    background: #fff !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-scheme: light !important;
   }
 
-  .result-card-container,
-  .result-card-container * {
-    visibility: visible !important;
+  /* CRITICAL: Force remove shadows from ALL elements */
+  * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    border-radius: 0 !important;
   }
 
   .result-card-container {
-    position: static !important;
-    width: 100% !important;
-    padding: 2mm 5mm !important;
-    margin: 0 !important;
-    box-shadow: none !important;
-    page-break-after: always;
-    break-after: page;
-  }
-
-  .result-card-header {
     position: relative !important;
-    min-height: 25mm !important;
-    border-bottom: 2px solid #1976d2 !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    outline: none !important;
+    background: white !important;
+    background-color: white !important;
+    overflow: visible !important;
   }
 
-  .result-card-header .school-logo,
-  .result-card-header .student-photo {
-    position: absolute !important;
-    width: 30mm !important;
-    height: 30mm !important;
-    top: 0mm !important;
-    z-index: 10 !important;
-  }
-  .result-card-header .school-logo { left: 0mm !important; }
-  .result-card-header .student-photo { right: 0mm !important; }
-
-  /* EXTREME FIX FOR PRINT COLORS */
-  /* This targets any element with a background color and forces it to show */
-  .MuiBox-root[style*="background-color"],
-  div[style*="background-color"],
-  span[style*="background-color"],
-  td[style*="background-color"],
-  .result-card-table .MuiTableRow-root {
+  /* Force background colors on MUI elements */
+  .MuiBox-root,
+  .MuiPaper-root,
+  .MuiTableCell-root,
+  .MuiTableRow-root,
+  .MuiGrid-root {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    color-adjust: exact !important;
+    background-color: inherit !important;
+    box-shadow: none !important;
+    border-color: #1a237e !important;
   }
 
-  .result-card-container .MuiTableHead-root .MuiTableCell-root {
-    background-color: #1976d2 !important;
-    color: white !important;
+  /* Grade badge fix for print */
+  .MuiBox-root[style*="background-color"] {
     -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  .result-card-container table {
-    border: 1.5px solid #000 !important;
-    width: 100% !important;
+  /* Specific table border for clarity */
+  .MuiTableCell-root {
+    border: 0.5pt solid #1a237e !important;
   }
 
-  .result-card-container .MuiTableCell-root {
-    padding: 4px 6px !important;
-    font-size: 12px !important;
-    border: 1px solid #000 !important;
-    color: #000 !important;
-  }
-
-  /* Make sure the text inside colored boxes is readable (white) */
-  .result-card-container .MuiBox-root[style*="background-color"] {
-    color: white !important;
-    font-weight: bold !important;
-    border: 1px solid #000 !important;
-  }
-
-  .no-print {
+  .no-print, button, header, footer, nav, .MuiSnackbar-root {
     display: none !important;
   }
 }
 
 .result-card-container {
   font-family: 'Roboto', 'Arial', sans-serif;
+  box-shadow: none !important;
 }

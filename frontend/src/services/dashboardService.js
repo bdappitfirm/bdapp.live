@@ -12,21 +12,47 @@ const configureAxios = () => {
 };
 
 // Get dashboard statistics
-export const getDashboardStats = async (schoolId = null, year = null) => {
+export const getDashboardStats = async (schoolId = null, year = null, isSimple = false) => {
   try {
     console.log('getDashboardStats called with schoolId:', schoolId);
-    console.log('Making request to: /api/dashboard-stats/');
-    const response = await api.get('/api/dashboard-stats/', {
-      params: { school_id: schoolId || undefined, year: year || undefined, _t: Date.now() },
-      timeout: 45000
+    const endpoint = isSimple ? '/api/dashboard-stats/simple/' : '/api/dashboard-stats/';
+    console.log('Making request to:', endpoint);
+    const response = await api.get(endpoint, {
+      params: { school_id: schoolId || undefined, year: year || undefined },
+      timeout: 30000 // Increased timeout to 30s
     });
     console.log('Dashboard stats response:', response.data);
+    // Cache the stats
+    if (schoolId) {
+      localStorage.setItem(`dashboard_stats_${schoolId}`, JSON.stringify(response.data));
+    }
     return response.data;
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     console.error('Error details:', error.response?.data);
     console.error('Error status:', error.response?.status);
-    throw error;
+    // Return cached stats if available
+    if (schoolId) {
+      const cached = localStorage.getItem(`dashboard_stats_${schoolId}`);
+      if (cached) {
+        try {
+          return JSON.parse(cached);
+        } catch (e) {
+          console.error('Failed to parse cached stats:', e);
+        }
+      }
+    }
+    // Return default empty stats
+    return {
+      total_students: 0,
+      total_teachers: 0,
+      total_classes: 0,
+      class_distribution: [],
+      attendance_data: [],
+      fee_collection: [],
+      fee_dues_summary: null,
+      fee_dues_by_class: []
+    };
   }
 };
 

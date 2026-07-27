@@ -5,7 +5,6 @@ import StatCard from '../components/dashboard/StatCard';
 import AttendanceChart from '../components/dashboard/AttendanceChart';
 import ClassDistributionChart from '../components/dashboard/ClassDistributionChart';
 import FeeCollectionChart from '../components/dashboard/FeeCollectionChart';
-import api from '../utils/api';
 import { scopedGet } from '../utils/schoolApi';
 
 // Icons for stat cards (using simple text as placeholders)
@@ -13,6 +12,31 @@ const icons = {
   students: '👨‍🎓',
   teachers: '👨‍🏫',
   classes: '🏫'
+};
+
+const isBanglaFirst = (name) => {
+  const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+  return n.includes('বাংলা প্রথম') || n.includes('bangla first') || n.includes('বাংলা-১') || n.includes('1st');
+};
+const isBanglaSecond = (name) => {
+  const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+  return n.includes('বাংলা দ্বিত') || n.includes('bangla second') || n.includes('বাংলা-২') || n.includes('2nd');
+};
+const isBanglaPaper = (name) => isBanglaFirst(name) || isBanglaSecond(name);
+const isClassNineOrTenName = (className) => {
+  const lower = String(className || '').toLowerCase();
+  return /নবম|দশম|\b9\b|\b10\b/.test(lower);
+};
+const computeBanglaCombinedPass = (resultsForStudent, passMarks) => {
+  const banglaList = resultsForStudent.filter(r => isBanglaPaper(r.subject?.name || r.subject_name));
+  if (!banglaList.length) return false;
+  const sumCQ = banglaList.reduce((s, r) => s + (parseFloat(r.written_marks) || 0), 0);
+  const sumMCQ = banglaList.reduce((s, r) => s + (parseFloat(r.mcq_marks) || 0), 0);
+  return (sumCQ >= passMarks) && (sumMCQ >= passMarks);
+};
+const toBn = (val) => {
+  const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+  return String(val).replace(/\d/g, d => bn[d] ?? d);
 };
 
 const Dashboard = () => {
@@ -45,31 +69,7 @@ const Dashboard = () => {
     fetchDashboardData();
   }, [schoolId]);
 
-  const isBanglaFirst = (name) => {
-    const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-    return n.includes('বাংলা প্রথম') || n.includes('bangla first') || n.includes('বাংলা-১') || n.includes('1st');
-  };
-  const isBanglaSecond = (name) => {
-    const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-    return n.includes('বাংলা দ্বিত') || n.includes('bangla second') || n.includes('বাংলা-২') || n.includes('2nd');
-  };
-  const isBanglaPaper = (name) => isBanglaFirst(name) || isBanglaSecond(name);
-  const isClassNineOrTenName = (className) => {
-    const lower = String(className || '').toLowerCase();
-    return /নবম|দশম|\b9\b|\b10\b/.test(lower);
-  };
-  const computeBanglaCombinedPass = (resultsForStudent, passMarks) => {
-    const banglaList = resultsForStudent.filter(r => isBanglaPaper(r.subject?.name || r.subject_name));
-    if (!banglaList.length) return false;
-    const sumCQ = banglaList.reduce((s, r) => s + (parseFloat(r.written_marks) || 0), 0);
-    const sumMCQ = banglaList.reduce((s, r) => s + (parseFloat(r.mcq_marks) || 0), 0);
-    return (sumCQ >= passMarks) && (sumMCQ >= passMarks);
-  };
-  const toBn = (val) => {
-    const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-    return String(val).replace(/\d/g, d => bn[d] ?? d);
-  };
-  const generateSummary = async () => {
+  const generateSummary = React.useCallback(async () => {
     if (!schoolId) return;
     setSummaryLoading(true);
     try {
@@ -160,10 +160,11 @@ const Dashboard = () => {
     } finally {
       setSummaryLoading(false);
     }
-  };
+  }, [schoolId, summaryExamType, summaryYear]);
+
   useEffect(() => {
     generateSummary();
-  }, [schoolId, summaryExamType, summaryYear]);
+  }, [generateSummary]);
 
   if (loading) {
     return (

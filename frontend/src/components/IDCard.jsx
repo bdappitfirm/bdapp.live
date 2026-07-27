@@ -95,7 +95,6 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
     return sections.find(s => s.id === data.section || String(s.id) === String(data.section));
   };
   const section = getSection();
-  const defaultSignatureUrl = '/images/signatures/signature.png';
   const signatureUrl = (() => {
     if (propSignatureUrl) return propSignatureUrl;
     if (school?.principal_signature) {
@@ -104,13 +103,14 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
       if (sig.startsWith('http')) return sig;
       return `${base}/media/${sig.replace(/^\/+/, '')}`;
     }
+    // Hardcoded fallback for specific school 19 only if they requested it, else return null
     try {
       if (school?.id && String(school.id) === '19') {
         const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'');
         return `${base}/media/BHS/signature.png`;
       }
     } catch (_) {}
-    return defaultSignatureUrl;
+    return null; // Return null instead of a default signature
   })();
   
   const handlePrintSingle = () => {
@@ -169,6 +169,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                 box-shadow: none !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
+                font-family: 'Hind Siliguri', 'Arial', sans-serif !important;
               }
               
               .id-card-front { 
@@ -493,85 +494,93 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
               </Typography>
             )}
             
-            <Box sx={{ textAlign: 'left', mx: 'auto', minWidth: '130px' }}>
+            <Box sx={{ textAlign: 'left', mx: 'auto', minWidth: '145px' }}>
               {type === 'student' ? (
                 <>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '50px',
+                      fontSize: '0.85rem',
+                      width: '65px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Class :
+                      শ্রেণি :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {classroom?.name || data.classroom_name || data.class_name || 'N/A'}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '50px',
+                      fontSize: '0.85rem',
+                      width: '65px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Roll :
+                      রোল :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.roll_number || 'N/A'}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '50px',
+                      fontSize: '0.85rem',
+                      width: '65px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Section :
+                      শাখা :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {section?.name || 'N/A'}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '50px',
+                      fontSize: '0.85rem',
+                      width: '65px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Blood :
+                      রক্ত :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.blood_group || 'N/A'}
                     </Typography>
@@ -579,82 +588,90 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                 </>
               ) : type === 'teacher' ? (
                 <>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '70px',
+                      fontSize: '0.85rem',
+                      width: '80px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       পদবী :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.designation || 'Teacher'}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '70px',
+                      fontSize: '0.85rem',
+                      width: '80px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Subject :
+                      বিষয় :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.assigned_subject_name || data?.subject || 'N/A'}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '70px',
+                      fontSize: '0.85rem',
+                      width: '80px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Blood :
+                      রক্ত :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.blood_group || 'N/A'}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '70px',
+                      fontSize: '0.85rem',
+                      width: '80px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Join Date :
+                      যোগদান :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.joining_date || 'N/A'}
                     </Typography>
@@ -662,42 +679,46 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                 </>
               ) : (
                 <>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '70px',
+                      fontSize: '0.85rem',
+                      width: '80px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       পদবী :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.designation || 'Committee Member'}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', mb: 0.3, whiteSpace: 'nowrap' }}>
+                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      width: '70px',
+                      fontSize: '0.85rem',
+                      width: '80px',
                       flexShrink: 0,
                       textAlign: 'right',
-                      pr: 0.6, /* More space */
-                      color: '#0a4b94'
+                      pr: 0.8,
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
-                      Blood :
+                      রক্ত :
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontWeight: 'bold', 
-                      fontSize: '0.8rem',
-                      color: '#0a4b94'
+                      fontSize: '0.85rem',
+                      color: '#0a4b94',
+                      lineHeight: 1.4
                     }}>
                       {data?.blood_group || 'N/A'}
                     </Typography>
@@ -708,12 +729,13 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
 
             {/* Signature with School Seal Background */}
             <Box sx={{ 
-              mt: 0.2,
+              mt: -0.5, // Move UP to prevent cutting footer
               textAlign: 'right',
               pr: 0.6,
-              pt: 0.05,
+              pt: 0,
               position: 'relative',
-              flexShrink: 0
+              flexShrink: 0,
+              minHeight: '45px'
             }}>
               <Box sx={{ display: 'inline-block', textAlign: 'center', position: 'relative', zIndex: 1 }}>
                 {/* School Seal as Background */}
@@ -735,23 +757,24 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                     alt=""
                   />
                 )}
-                <img
-                  src={signatureUrl}
-                  alt="Authorized Signature"
-                  style={{ 
-                    width: '40px', 
-                    height: 'auto', 
-                    filter: 'brightness(0)',
-                    display: 'block',
-                    position: 'relative',
-                    zIndex: 1,
-                    margin: '0 auto'
-                  }}
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = '/images/signatures/headmaster.png';
-                  }}
-                />
+                {signatureUrl && (
+                  <img
+                    src={signatureUrl}
+                    alt="Authorized Signature"
+                    style={{
+                      width: '40px',
+                      height: 'auto',
+                      filter: 'brightness(0)',
+                      display: 'block',
+                      position: 'relative',
+                      zIndex: 1,
+                      margin: '0 auto'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                )}
               </Box>
             </Box>
           </Box>
@@ -824,7 +847,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
               }}>
                 <QRCodeCanvas 
                   value={qrData} 
-                  size={150} 
+                  size={160}
                   level="H" 
                   includeMargin={false}
                   fgColor="#000000" 
@@ -851,24 +874,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
               </Typography>
             </Box>
 
-            {/* School Seal/Logo - Smaller */}
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              {schoolLogo && (
-                <Avatar 
-                  src={schoolLogo} 
-                  sx={{ 
-                    width: 40, // Even smaller logo
-                    height: 40, 
-                    border: '2px solid #0a4b94',
-                    bgcolor: 'white'
-                  }} 
-                />
-              )}
-            </Box>
+            {/* School Seal/Logo Removed to save space */}
 
             {/* Bottom Section - Blue */}
             <Box sx={{ 

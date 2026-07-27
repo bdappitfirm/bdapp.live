@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Box,
@@ -14,1374 +14,254 @@ import {
   TableRow,
   TableCell,
   TableContainer,
-  Card,
-  CardContent,
   Stack,
   Divider,
   Chip,
   Alert,
-  CircularProgress,
-  Tooltip,
-  IconButton,
-  Collapse,
-  Box as MuiBox,
-  TableSortLabel
+  CircularProgress
 } from '@mui/material';
 import {
   Download as DownloadIcon,
   Print as PrintIcon,
   Visibility as VisibilityIcon,
-  CalendarMonth as CalendarIcon,
-  School as SchoolIcon,
-  Class as ClassIcon,
-  Person as PersonIcon,
-  ExpandMore as ExpandMoreIcon,
   CheckCircle as PresentIcon,
   Cancel as AbsentIcon,
-  Help as UnknownIcon
+  Analytics as AnalyticsIcon,
+  PictureAsPdf as PdfIcon
 } from '@mui/icons-material';
 import api from '../utils/api';
-import { getMediaUrl } from '../utils/media';
 import { scopedGet } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import dayjs from 'dayjs';
-import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import ImageWithFallback from '../components/ImageWithFallback';
+import html2canvas from 'html2canvas';
 
 export default function AttendanceReportCard() {
-  const { id } = useParams(); // School ID
+  const { id } = useParams();
   const toast = useToast();
-  const reportRef = useRef();
 
-  // State
+  const [reportType, setReportType] = useState('monthly');
+  const [category, setCategory] = useState('section');
+  const [selectedClassroom, setSelectedClassroom] = useState('');
+  const [selectedSection, setSelectedSection] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState('');
+  const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [selectedMonth, setSelectedMonth] = useState(dayjs().format('YYYY-MM'));
+  const [selectedYear, setSelectedYear] = useState(dayjs().format('YYYY'));
+
   const [schoolInfo, setSchoolInfo] = useState(null);
   const [classrooms, setClassrooms] = useState([]);
   const [sections, setSections] = useState([]);
-  const [selectedClassroom, setSelectedClassroom] = useState('');
-  const [selectedSection, setSelectedSection] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState(dayjs().format('YYYY-MM'));
+  const [students, setStudents] = useState([]);
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showReport, setShowReport] = useState(false);
-  const [photoMap, setPhotoMap] = useState({}); // student_id -> resolved photo URL
-  const [students, setStudents] = useState([]);
-  const studentsCacheRef = useRef(new Map());
-  const [guardianMap, setGuardianMap] = useState({}); // student_id -> guardian name
-  const [selectedStudent, setSelectedStudent] = useState(''); // optional
-  const [expandedRows, setExpandedRows] = useState({});
 
   useEffect(() => {
-    loadSchoolInfo();
-    loadClassrooms();
-
-    // Hydrate saved filters (class/section/month/student) so the UI remains consistent after navigation
-    try {
-      const key = `attendanceReportFilters_${id}`;
-      const saved = JSON.parse(localStorage.getItem(key) || 'null');
-      if (saved) {
-        if (saved.classroom) setSelectedClassroom(String(saved.classroom));
-        if (saved.section !== undefined) setSelectedSection(String(saved.section || ''));
-        if (saved.month) setSelectedMonth(String(saved.month));
-        if (saved.student !== undefined) setSelectedStudent(String(saved.student || ''));
-      }
-    } catch (_) {}
+    const loadInitial = async () => {
+      try {
+        const [schRes, clsRes] = await Promise.all([
+          api.get(`/api/schools/${id}/`),
+          scopedGet('/api/academics/classrooms/', id)
+        ]);
+        setSchoolInfo(schRes.data);
+        setClassrooms(Array.isArray(clsRes.data) ? clsRes.data : (clsRes.data?.results || []));
+      } catch (e) { console.error(e); }
+    };
+    if (id) loadInitial();
   }, [id]);
 
   useEffect(() => {
     if (selectedClassroom) {
-      loadSections(selectedClassroom);
-      loadStudents(selectedClassroom, selectedSection);
+      scopedGet('/api/academics/sections/', id, { classroom: selectedClassroom })
+        .then(res => setSections(Array.isArray(res.data) ? res.data : (res.data?.results || [])));
     } else {
       setSections([]);
+      setSelectedSection('');
+    }
+  }, [selectedClassroom, id]);
+
+  useEffect(() => {
+    if (selectedClassroom) {
+      scopedGet('/api/academics/students/', id, { classroom: selectedClassroom, section: selectedSection || undefined, page_size: 1000 })
+        .then(res => {
+          const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+          // Sort students numerically by roll
+          const sorted = [...data].sort((a, b) => {
+            const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+            const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+            if (!isNaN(ar) && !isNaN(br)) return ar - br;
+            return String(a?.roll_number || '').localeCompare(String(b?.roll_number || ''), undefined, { numeric: true });
+          });
+          setStudents(sorted);
+        });
+    } else {
       setStudents([]);
       setSelectedStudent('');
     }
-  }, [selectedClassroom]);
-
-  // Reload students when section changes
-  useEffect(() => {
-    if (selectedClassroom) {
-      loadStudents(selectedClassroom, selectedSection);
-    }
-  }, [selectedSection]);
-
-  // Persist filters on change so navigating away/back restores them
-  useEffect(() => {
-    try {
-      const key = `attendanceReportFilters_${id}`;
-      localStorage.setItem(key, JSON.stringify({
-        classroom: selectedClassroom ? parseInt(selectedClassroom) : '',
-        section: selectedSection ? parseInt(selectedSection) : '',
-        month: selectedMonth,
-        student: selectedStudent ? parseInt(selectedStudent) : ''
-      }));
-    } catch (_) {}
-  }, [id, selectedClassroom, selectedSection, selectedMonth, selectedStudent]);
-
-  const loadSchoolInfo = async () => {
-    try {
-      const res = await api.get(`/api/schools/${id}/`);
-      setSchoolInfo(res.data);
-    } catch (error) {
-      console.error('Failed to load school info:', error);
-    }
-  };
-
-  // Resolve photo URL similar to StudentCard logic
-  const resolvePhotoUrl = (raw) => getMediaUrl(raw);
-
-  const loadClassrooms = async () => {
-    try {
-      const res = await scopedGet('/api/academics/classrooms/', id, {}, { timeout: 15000 });
-      const data = Array.isArray(res.data) ? res.data : (res.data?.results || res.data || []);
-      setClassrooms(data);
-    } catch (error) {
-      console.error('Failed to load classrooms:', error);
-      toast.error('Failed to load classrooms');
-    }
-  };
-
-  const loadSections = async (classroomId) => {
-    try {
-      const res = await scopedGet('/api/academics/sections/', id, { classroom: classroomId }, { timeout: 15000 });
-      const data = Array.isArray(res.data) ? res.data : (res.data?.results || res.data || []);
-      setSections(data);
-    } catch (error) {
-      console.error('Failed to load sections:', error);
-      setSections([]);
-    }
-  };
-
-  // Load students for classroom/section (used for student filter and photos)
-  const loadStudents = async (classroomId, sectionId) => {
-    if (!classroomId) { setStudents([]); return; }
-    try {
-      const cacheKey = `${classroomId}|${sectionId || ''}`;
-      let items = studentsCacheRef.current.get(cacheKey);
-      if (!items) {
-        const res = await scopedGet('/api/academics/students/', id, { classroom: classroomId, section: sectionId || undefined }, { timeout: 15000 });
-        items = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-        studentsCacheRef.current.set(cacheKey, items);
-      }
-      const sorted = [...items].sort((a, b) => {
-        const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
-        const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-        const aNum = Number.isNaN(ar) ? null : ar;
-        const bNum = Number.isNaN(br) ? null : br;
-        if (aNum !== null && bNum !== null) return aNum - bNum;
-        const as = String(a?.roll_number ?? '');
-        const bs = String(b?.roll_number ?? '');
-        return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
-      });
-      setStudents(sorted);
-    } catch (error) {
-      console.error('Failed to load students:', error);
-      setStudents([]);
-    }
-  };
+  }, [selectedClassroom, selectedSection, id]);
 
   const generateReport = async () => {
-    if (!selectedClassroom) {
-      toast.warning('দয়া করে একটি শ্রেণি নির্বাচন করুন');
-      return;
-    }
+    if (!selectedClassroom) { toast.warning('দয়া করে একটি শ্রেণি নির্বাচন করুন'); return; }
+    if (category === 'student' && !selectedStudent) { toast.warning('দয়া করে একজন শিক্ষার্থী নির্বাচন করুন'); return; }
 
-    setLoading(true);
+    setLoading(true); setReportData([]); setShowReport(false);
     try {
-      const res = await scopedGet('/api/attendance/records/monthly_report/', id, { month: selectedMonth, classroom: selectedClassroom, section: selectedSection || undefined }, { timeout: 15000 });
-      let data = res.data || [];
-      // If a specific student is selected, filter to that student only
-      if (selectedStudent) {
-        const sid = parseInt(selectedStudent);
-        data = Array.isArray(data) ? data.filter(r => r.student_id === sid) : data;
-      }
-      setReportData(data);
-      setShowReport(true); // Show the report after data is loaded
+      let endpoint = '/api/attendance/records/monthly_report/';
+      let params = { school: id, classroom: selectedClassroom };
+      if (selectedSection) params.section = selectedSection;
 
-      // Also load student photos for this classroom/section
-      try {
-        // Build photo map from already loaded students list
-        const map = {};
-        const gmap = {};
-        (students || []).forEach(s => {
-          const u = s.user || {};
-          const raw = u.photo_url || u.photo || u.profile_picture || null;
-          const resolved = resolvePhotoUrl(raw);
-          map[s.id] = resolved;
-          const gname = s.guardian_name || s.parent_name || s.father_name || s.mother_name || s.guardian?.name || u.guardian_name || '';
-          if (gname) gmap[s.id] = gname;
+      if (reportType === 'daily') {
+        const res = await api.get(`/api/attendance/records/`, { params: { school: id, date: selectedDate, classroom: selectedClassroom, section: selectedSection || undefined, page_size: 1000 } });
+        const records = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        const data = students.map(s => {
+          const rec = records.find(r => r.student === s.id);
+          return { student_id: s.id, student_name: `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim(), roll_number: s.roll_number, present: rec ? rec.present : false, time: rec ? dayjs(rec.created_at).format('hh:mm A') : '-', note: rec?.note || '' };
         });
-        setPhotoMap(map);
-        setGuardianMap(gmap);
-      } catch (e) {
-        console.warn('Failed to build student photos map:', e?.response?.data || e);
-        setPhotoMap({});
-        setGuardianMap({});
-      }
+        setReportData(data);
+      } else if (reportType === 'monthly') {
+        params.month = selectedMonth;
+        const res = await scopedGet(endpoint, id, params);
+        let rawData = res.data || [];
+        if (category === 'student' && selectedStudent) rawData = rawData.filter(r => r.student_id === parseInt(selectedStudent));
 
-      if (res.data.length === 0) {
-        toast.info('No attendance data found for the selected period');
-      }
-    } catch (error) {
-      console.error('Failed to generate report:', error);
-      toast.error('Failed to generate report');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const downloadPDF = async () => {
-    const cards = document.querySelectorAll('.student-report-card');
-    const useLedger = showReport && reportRef?.current;
-    if (!cards.length && !useLedger) {
-      toast.warning('No report to download');
-      return;
-    }
-
-    toast.info('Generating PDF... Please wait (this may take a moment for many students)');
-
-    try {
-      const pdf = new jsPDF(useLedger ? 'l' : 'p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-
-      if (useLedger) {
-        const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-        const ratio = pdfWidth / canvas.width;
-        const pageHeightPx = pdfHeight / ratio;
-        const totalPages = Math.ceil(canvas.height / pageHeightPx);
-        for (let i = 0; i < totalPages; i++) {
-          if (i > 0) pdf.addPage();
-          const sliceHeight = Math.min(pageHeightPx, canvas.height - i * pageHeightPx);
-          const sliceCanvas = document.createElement('canvas');
-          sliceCanvas.width = canvas.width;
-          sliceCanvas.height = sliceHeight;
-          const ctx = sliceCanvas.getContext('2d');
-          ctx.drawImage(
-            canvas,
-            0, i * pageHeightPx,
-            canvas.width, sliceHeight,
-            0, 0,
-            canvas.width, sliceHeight
-          );
-          const imgData = sliceCanvas.toDataURL('image/png');
-          pdf.addImage(imgData, 'PNG', 0, 10, pdfWidth, sliceHeight * ratio);
-        }
-      } else {
-        for (let i = 0; i < cards.length; i++) {
-          if (i > 0) pdf.addPage();
-          const card = cards[i];
-          const canvas = await html2canvas(card, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff'
-          });
-          const imgData = canvas.toDataURL('image/png');
-          const ratio = pdfWidth / canvas.width;
-          pdf.addImage(imgData, 'PNG', 0, 10, pdfWidth, canvas.height * ratio);
-        }
-      }
-      
-      const fileName = `Attendance_Report_${selectedMonth}_${selectedClassroom}_ledger.pdf`;
-      pdf.save(fileName);
-      
-      toast.success('PDF downloaded successfully!');
-    } catch (error) {
-      console.error('Failed to generate PDF:', error);
-      toast.error('Failed to generate PDF');
-    }
-  };
-
-  const printReport = () => {
-    window.print();
-  };
-
-  const getAttendanceColor = (percentage) => {
-    if (percentage >= 90) return 'success';
-    if (percentage >= 75) return 'primary';
-    if (percentage >= 60) return 'warning';
-    return 'error';
-  };
-
-  const getAttendanceGrade = (percentage) => {
-    if (percentage >= 95) return 'চমৎকার';
-    if (percentage >= 85) return 'খুব ভালো';
-    if (percentage >= 75) return 'ভালো';
-    if (percentage >= 60) return 'সন্তোষজনক';
-    return 'উন্নতির প্রয়োজন';
-  };
-
-  // Get attendance status for a specific date
-  const getAttendanceStatus = (student, date) => {
-    if (!student.attendance_details || !Array.isArray(student.attendance_details)) {
-      return null;
-    }
-    
-    const attendance = student.attendance_details.find(a => a.date === date);
-    return attendance ? attendance.status : null;
-  };
-
-  // Render attendance status icon
-  const renderStatusIcon = (status) => {
-    switch (status) {
-      case 'present':
-        return <PresentIcon color="success" fontSize="small" />;
-      case 'absent':
-        return <AbsentIcon color="error" fontSize="small" />;
-      case 'late':
-        return <Typography color="warning.main" fontSize="small">L</Typography>;
-      case 'excused':
-        return <Typography color="info.main" fontSize="small">E</Typography>;
-      default:
-        return <UnknownIcon color="disabled" fontSize="small" />;
-    }
-  };
-
-  const classroomName = classrooms.find(c => c.id === parseInt(selectedClassroom))?.name || '';
-  const sectionName = sections.find(s => s.id === parseInt(selectedSection))?.name || 'All Sections';
-  const monthName = dayjs(selectedMonth).format('MMMM YYYY');
-
-  const principalSignatureUrl = schoolInfo?.principal_signature ? getMediaUrl(schoolInfo.principal_signature) : null;
-  const schoolSealUrl = schoolInfo?.school_seal ? getMediaUrl(schoolInfo.school_seal) : null;
-
-  const sortedReportData = useMemo(() => {
-    const parseRoll = (r) => {
-      const n = parseInt(String(r || '').replace(/\D/g, ''), 10);
-      return Number.isNaN(n) ? null : n;
-    };
-    const arr = Array.isArray(reportData) ? [...reportData] : [];
-    arr.sort((a, b) => {
-      const ar = parseRoll(a.roll_number);
-      const br = parseRoll(b.roll_number);
-      if (ar !== null && br !== null) return ar - br;
-      const as = String(a.roll_number || '');
-      const bs = String(b.roll_number || '');
-      return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
-    });
-    return arr;
-  }, [reportData]);
-  
-  useEffect(() => {
-    try {
-      let el = document.getElementById('print-ledger-style');
-      if (!el) {
-        el = document.createElement('style');
-        el.id = 'print-ledger-style';
-        el.innerHTML = `
-          @media print {
-            @page { size: A4 landscape; margin: 5mm; }
-            #attendance-ledger { page-break-inside: avoid; width: 100%; }
-            #attendance-ledger table { font-size: 10px; border-collapse: collapse; }
-            #attendance-ledger th, #attendance-ledger td { padding: 2px; }
-            #attendance-ledger .day-cell { width: 16px !important; }
-          }
-        `;
-        document.head.appendChild(el);
-      }
-    } catch (_) {}
-  }, []);
-  
-  // Generate all dates in the selected month
-  const daysInMonth = useMemo(() => {
-    if (!selectedMonth) return [];
-    const year = dayjs(selectedMonth).year();
-    const month = dayjs(selectedMonth).month();
-    const days = [];
-    const daysCount = new Date(year, month + 1, 0).getDate();
-    
-    for (let day = 1; day <= daysCount; day++) {
-      const date = new Date(year, month, day);
-      // Skip weekends (optional)
-      // if (date.getDay() === 0 || date.getDay() === 6) continue;
-      days.push({
-        date: dayjs(date).format('YYYY-MM-DD'),
-        day: day,
-        dayName: dayjs(date).format('dd'),
-        isWeekend: [0, 6].includes(date.getDay())
-      });
-    }
-    return days;
-  }, [selectedMonth]);
-
-  // Toggle row expansion
-  const toggleRow = (studentId) => {
-    setExpandedRows(prev => ({
-      ...prev,
-      [studentId]: !prev[studentId]
-    }));
-  };
-
-  // Get month name in Bengali
-  const monthNameBn = useMemo(() => {
-    const months = [
-      'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
-      'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
-    ];
-    const monthIndex = dayjs(selectedMonth).month();
-    return months[monthIndex] || '';
-  }, [selectedMonth]);
-
-  // Get classroom and section names for display
-  const { classroomName: classroomNameDisplay, sectionName: sectionNameDisplay } = useMemo(() => {
-    const classroom = classrooms.find(c => c.id === parseInt(selectedClassroom));
-    const section = sections.find(s => s.id === parseInt(selectedSection));
-    return {
-      classroomName: classroom ? classroom.name : 'নির্বাচিত শ্রেণি',
-      sectionName: section ? section.name : 'সকল শাখা'
-    };
-  }, [selectedClassroom, selectedSection, classrooms, sections]);
-
-  // Calculate class average attendance and other statistics
-  const { classAverage, attendanceStats } = useMemo(() => {
-    if (!reportData.length) return { classAverage: 0, attendanceStats: {} };
-    
-    const total = reportData.reduce((sum, student) => sum + (student.attendance_percentage || 0), 0);
-    const average = total / reportData.length;
-    
-    // Calculate attendance statistics by day of week
-    const stats = {
-      byDay: Array(7).fill(0).map(() => ({ present: 0, total: 0 })),
-      consecutiveAbsences: {}
-    };
-    
-    reportData.forEach(student => {
-      // Track consecutive absences
-      if (student.attendance_details) {
-        let currentStreak = 0;
-        let maxStreak = 0;
-        
-        student.attendance_details.forEach(day => {
-          const date = dayjs(day.date);
-          const dayOfWeek = date.day(); // 0 (Sunday) to 6 (Saturday)
-          
-          // Update day-wise stats
-          stats.byDay[dayOfWeek].total++;
-          if (day.status === 'present') {
-            stats.byDay[dayOfWeek].present++;
-            currentStreak = 0; // Reset absence streak
-          } else {
-            currentStreak++;
-            maxStreak = Math.max(maxStreak, currentStreak);
-          }
+        // Process monthly data to include stats
+        const data = rawData.map(r => {
+          const attValues = Object.values(r.attendance || {});
+          const present = attValues.filter(v => v === true).length;
+          const total = attValues.length;
+          return {
+            ...r,
+            student_name: r.name,
+            roll_number: r.roll,
+            present_days: present,
+            total_days: total,
+            attendance_percentage: total > 0 ? ((present / total) * 100).toFixed(1) : 0
+          };
         });
-        
-        if (maxStreak > 0) {
-          stats.consecutiveAbsences[student.student_id] = maxStreak;
-        }
+        setReportData(data);
+      } else if (reportType === 'yearly') {
+        const res = await api.get(`/api/attendance/records/`, { params: { school: id, student: category === 'student' ? selectedStudent : undefined, date__year: selectedYear, page_size: 5000 } });
+        const allRecords = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        const studentMap = new Map();
+        allRecords.forEach(r => {
+          if (!studentMap.has(r.student)) studentMap.set(r.student, { present: 0, total: 0 });
+          const stats = studentMap.get(r.student); stats.total += 1; if (r.present) stats.present += 1;
+        });
+        const data = students.filter(s => category !== 'student' || s.id === parseInt(selectedStudent)).map(s => {
+          const stats = studentMap.get(s.id) || { present: 0, total: 0 };
+          return { student_id: s.id, student_name: `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim(), roll_number: s.roll_number, present_days: stats.present, total_days: stats.total, attendance_percentage: stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(1) : 0 };
+        });
+        setReportData(data);
       }
-    });
-    
-    return {
-      classAverage: average,
-      attendanceStats: stats
-    };
-  }, [reportData]);
+      setShowReport(true);
+    } catch (error) { toast.error('প্রতিবেদন তৈরি করা যায়নি'); } finally { setLoading(false); }
+  };
+
+  const handleDownloadCSV = () => {
+    if (reportData.length === 0) return;
+    const headers = reportType === 'daily' ? ['রোল', 'নাম', 'অবস্থা', 'সময়', 'মন্তব্য'] : ['রোল', 'নাম', 'উপস্থিত দিন', 'মোট দিন', 'শতকরা (%)'];
+    const rows = reportData.map(r => reportType === 'daily' ? [r.roll_number, r.student_name, r.present ? 'উপস্থিত' : 'অনুপস্থিত', r.time, r.note] : [r.roll_number, r.student_name, r.present_days, r.total_days, r.attendance_percentage]);
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\r\n";
+    rows.forEach(row => { csvContent += row.map(c => `"${c}"`).join(",") + "\r\n"; });
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `Attendance_${reportType}_${dayjs().format('YYYY-MM-DD')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+  };
+
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById('printable-area');
+    if (!element) return;
+
+    toast.info('পিডিএফ তৈরি হচ্ছে...');
+    try {
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      pdf.save(`Attendance_Report_${reportType}_${dayjs().format('YYYY-MM-DD')}.pdf`);
+      toast.success('পিডিএফ ডাউনলোড সফল হয়েছে');
+    } catch (e) {
+      console.error(e);
+      toast.error('পিডিএফ তৈরি করা যায়নি');
+    }
+  };
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 3,
-          p: { xs: 2, sm: 3 },
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          borderRadius: 3,
-          display: { print: 'none' }
-        }}
-      >
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2}>
-          <CalendarIcon sx={{ fontSize: { xs: 32, sm: 40 } }} />
-          <Box>
-            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '১.৫rem', sm: '২.১২৫rem' } }}>
-              মাসিক হাজিরা প্রতিবেদন
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              মাসিক হাজিরা প্রতিবেদন তৈরি, দেখা ও ডাউনলোড করুন
-            </Typography>
-          </Box>
+    <Box sx={{ p: { xs: 1, sm: 3 } }}>
+      <Paper elevation={0} sx={{ mb: 3, p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #1b5e20 0%, #43a047 100%)', color: 'white' }} className="no-print">
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <AnalyticsIcon sx={{ fontSize: 40 }} />
+          <Box><Typography variant="h4" sx={{ fontWeight: 'bold' }}>হাজিরা প্রতিবেদন কেন্দ্র</Typography><Typography variant="body1">দৈনিক, মাসিক এবং বাৎসরিক রিপোর্ট দেখুন</Typography></Box>
         </Stack>
       </Paper>
 
-      {/* Filters */}
-      <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 3, borderRadius: 2, display: { print: 'none' } }}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-          প্রতিবেদন প্যারামিটার নির্বাচন করুন
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              select
-              fullWidth
-              label="শ্রেণি *"
-              value={selectedClassroom}
-              onChange={(e) => setSelectedClassroom(e.target.value)}
-            >
-              <MenuItem value="">-- শ্রেণি নির্বাচন করুন --</MenuItem>
-              {classrooms.map(classroom => (
-                <MenuItem key={classroom.id} value={classroom.id}>
-                  {classroom.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              select
-              fullWidth
-              label="শাখা (ঐচ্ছিক)"
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              disabled={!selectedClassroom}
-            >
-              <MenuItem value="">-- সব শাখা --</MenuItem>
-              {sections.map(section => (
-                <MenuItem key={section.id} value={section.id}>
-                  {section.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-
-          {/* Optional Student Filter */}
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              select
-              fullWidth
-              label="শিক্ষার্থী (ঐচ্ছিক)"
-              value={selectedStudent}
-              onChange={(e) => setSelectedStudent(e.target.value)}
-              disabled={!selectedClassroom || students.length === 0}
-            >
-              <MenuItem value="">-- সবাই --</MenuItem>
-              {students.map(stu => (
-                <MenuItem key={stu.id} value={stu.id}>
-                  {stu.user?.first_name} {stu.user?.last_name} ({stu.roll_number || '-'})
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              type="month"
-              fullWidth
-              label="মাস"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <VisibilityIcon />}
-              onClick={generateReport}
-              disabled={!selectedClassroom || loading}
-              sx={{ height: '56px' }}
-            >
-              {loading ? 'লোড হচ্ছে...' : 'প্রতিবেদন দেখুন'}
-            </Button>
-          </Grid>
+      <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: 2 }} className="no-print">
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 6 }}><Stack direction="row" spacing={1}><Button variant={reportType === 'daily' ? 'contained' : 'outlined'} onClick={() => setReportType('daily')} fullWidth>দৈনিক</Button><Button variant={reportType === 'monthly' ? 'contained' : 'outlined'} onClick={() => setReportType('monthly')} fullWidth>মাসিক</Button><Button variant={reportType === 'yearly' ? 'contained' : 'outlined'} onClick={() => setReportType('yearly')} fullWidth>বাৎসরিক</Button></Stack></Grid>
+          <Grid size={{ xs: 12, md: 6 }}><Stack direction="row" spacing={1}><Button variant={category === 'class' ? 'contained' : 'outlined'} color="secondary" onClick={() => { setCategory('class'); setSelectedSection(''); }} fullWidth>ক্লাস-ভিত্তিক</Button><Button variant={category === 'section' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('section')} fullWidth>শাখা-ভিত্তিক</Button><Button variant={category === 'student' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('student')} fullWidth>শিক্ষার্থী-ভিত্তিক</Button></Stack></Grid>
+          <Grid size={{ xs: 12, md: 3 }}><TextField select fullWidth label="শ্রেণি" value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>{classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</TextField></Grid>
+          {(category === 'section' || category === 'student') && <Grid size={{ xs: 12, md: 2 }}><TextField select fullWidth label="শাখা" value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}><MenuItem value="">সব শাখা</MenuItem>{sections.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}</TextField></Grid>}
+          {category === 'student' && <Grid size={{ xs: 12, md: 3 }}><TextField select fullWidth label="শিক্ষার্থী" value={selectedStudent} onChange={(e) => setSelectedStudent(e.target.value)}>{students.map(s => <MenuItem key={s.id} value={s.id}>{s.user?.first_name} {s.user?.last_name} ({s.roll_number})</MenuItem>)}</TextField></Grid>}
+          <Grid size={{ xs: 12, md: category === 'student' ? 2 : 4 }}>{reportType === 'daily' && <TextField type="date" fullWidth label="তারিখ" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'monthly' && <TextField type="month" fullWidth label="মাস" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'yearly' && <TextField select fullWidth label="বছর" value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>{[0,1,2].map(i => { const y = dayjs().subtract(i, 'year').format('YYYY'); return <MenuItem key={y} value={y}>{y}</MenuItem> })}</TextField>}</Grid>
+          <Grid size={{ xs: 12, md: 2 }}><Button variant="contained" fullWidth size="large" sx={{ height: '100%' }} startIcon={<VisibilityIcon />} onClick={generateReport} disabled={loading}>দেখুন</Button></Grid>
         </Grid>
       </Paper>
 
-      {/* Action Buttons */}
       {showReport && reportData.length > 0 && (
-        <Stack direction="row" spacing={2} sx={{ mb: 3, display: { print: 'none' } }} justifyContent="center">
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<DownloadIcon />}
-            onClick={downloadPDF}
-            size="large"
-          >
-            ডাউনলোড PDF
-          </Button>
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<PrintIcon />}
-            onClick={printReport}
-            size="large"
-          >
-            প্রিন্ট প্রতিবেদন
-          </Button>
+        <Stack direction="row" spacing={2} sx={{ mb: 3 }} className="no-print" justifyContent="center">
+          <Button variant="contained" color="info" startIcon={<DownloadIcon />} onClick={handleDownloadCSV}>CSV</Button>
+          <Button variant="contained" color="error" startIcon={<PdfIcon />} onClick={handleDownloadPDF}>PDF</Button>
+          <Button variant="contained" color="secondary" startIcon={<PrintIcon />} onClick={() => window.print()}>প্রিন্ট</Button>
         </Stack>
       )}
 
-      {/* Ledger View - placed above student cards */}
-      {showReport && reportData.length > 0 && (
-        <Paper sx={{ p: { xs: 1, sm: 2 }, borderRadius: 2, mb: 3 }} ref={reportRef} id="attendance-ledger">
-          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, textAlign: 'center' }}>
-            মাসিক হাজিরা খাতা • {monthName}
-          </Typography>
-          <Table size="small" sx={{ tableLayout: 'fixed' }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 'bold', width: 80 }}>রোল</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: 220 }}>নাম</TableCell>
-                {daysInMonth.map(d => (
-                  <TableCell key={d.date} align="center" className="day-cell" sx={{ fontWeight: 'bold', width: 20 }}>
-                    {dayjs(d.date).date()}
-                  </TableCell>
-                ))}
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: 60 }}>উপস্থিত</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: 60 }}>অনুপস্থিত</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: 80 }}>%</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sortedReportData.map((row) => {
-                const detailsMap = new Map((row.attendance_details || []).map(it => [it.date, it.status]));
-                return (
-                  <TableRow key={row.student_id}>
-                    <TableCell>{row.roll_number || '-'}</TableCell>
-                    <TableCell>{row.student_name}</TableCell>
-                    {daysInMonth.map(d => {
-                      const st = detailsMap.get(d.date);
-                      const mark = st === 'present' ? '✓' : (st === 'absent' ? '×' : '');
-                      const color = st === 'present' ? 'success.main' : (st === 'absent' ? 'error.main' : 'text.secondary');
-                      return (
-                        <TableCell key={d.date} align="center" sx={{ color }}>
-                          {mark}
-                        </TableCell>
-                      );
-                    })}
-                    <TableCell align="center">{row.present_days}</TableCell>
-                    <TableCell align="center">{row.absent_days}</TableCell>
-                    <TableCell align="center">{row.attendance_percentage}%</TableCell>
+      {loading ? <Box align="center" py={10}><CircularProgress /></Box> : showReport && (
+        <Box id="printable-area">
+          <Box className="print-only" sx={{ display: 'none', textAlign: 'center', mb: 4 }}>
+            <Typography variant="h3" sx={{ fontWeight: 'bold' }}>{schoolInfo?.name}</Typography>
+            <Typography variant="h5">হাজিরা প্রতিবেদন — {reportType === 'daily' ? 'দৈনিক' : reportType === 'monthly' ? 'মাসিক' : 'বাৎসরিক'}</Typography>
+            <Typography variant="h6">শ্রেণি: {classrooms.find(c=>c.id===parseInt(selectedClassroom))?.name} | শাখা: {sections.find(s=>s.id===parseInt(selectedSection))?.name || 'সব'}</Typography>
+            <Divider sx={{ my: 2, borderColor: 'black' }} />
+          </Box>
+          <TableContainer component={Paper}>
+            <Table size="small">
+              <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold' }}>রোল</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
+                  {reportType === 'daily' ? (<><TableCell align="center">অবস্থা</TableCell><TableCell align="center">সময়</TableCell></>) : (<><TableCell align="center">উপস্থিত</TableCell><TableCell align="center">মোট দিন</TableCell><TableCell align="center">শতকরা (%)</TableCell></>)}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {reportData.map((row, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{row.roll_number}</TableCell><TableCell sx={{ fontWeight: 'bold' }}>{row.student_name}</TableCell>
+                    {reportType === 'daily' ? (<><TableCell align="center">{row.present ? <PresentIcon color="success" /> : <AbsentIcon color="error" />}</TableCell><TableCell align="center">{row.time}</TableCell></>) : (<><TableCell align="center">{row.present_days}</TableCell><TableCell align="center">{row.total_days}</TableCell><TableCell align="center"><Chip label={`${row.attendance_percentage}%`} color={parseFloat(row.attendance_percentage) >= 80 ? 'success' : 'error'} size="small" /></TableCell></>)}
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Paper>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
       )}
-
-      {/* Report Card */}
-      {showReport && reportData.length > 0 && (
-        <Paper
-          sx={{
-            p: { xs: 2, sm: 4 },
-            borderRadius: 2,
-            '@media print': { display: 'none' }
-          }}
-          id="attendance-student-cards"
-        >
-          {/* Report Header - Hidden in Print (Each card has its own header) */}
-          <Box sx={{ mb: 4, display: 'block', '@media print': { display: 'none' } }}>
-            <Grid container spacing={2} alignItems="center" justifyContent="space-between">
-              {/* School Logo */}
-              <Grid item xs={3} sx={{ textAlign: 'left' }}>
-                {schoolInfo?.logo && (
-                  <Box sx={{ width: 80, height: 80, mb: 2 }}>
-                    <img 
-                      src={resolvePhotoUrl(schoolInfo.logo)} 
-                      alt="School Logo" 
-                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                    />
-                  </Box>
-                )}
-              </Grid>
-              
-              {/* School Info */}
-              <Grid item xs={6} sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                  {schoolInfo?.name || 'School Name'}
-                </Typography>
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
-                  {schoolInfo?.address || 'School Address'}
-                </Typography>
-                {schoolInfo?.phone && (
-                  <Typography variant="body2" color="text.secondary">
-                    ফোন: {schoolInfo.phone}
-                  </Typography>
-                )}
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
-                  মাসিক হাজিরা প্রতিবেদন
-                </Typography>
-              </Grid>
-              
-              {/* Report Info */}
-              <Grid item xs={3} sx={{ textAlign: 'right' }}>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  প্রতিবেদন নম্বর: {`REP-${dayjs().format('YYYYMMDD')}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  তারিখ: {dayjs().format('DD MMMM YYYY')}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  সময়: {dayjs().format('h:mm A')}
-                </Typography>
-              </Grid>
-            </Grid>
-            <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
-              <Chip
-                icon={<ClassIcon />}
-                label={`শ্রেণি: ${classroomName}`}
-                color="primary"
-                sx={{ fontWeight: 'bold' }}
-              />
-              <Chip
-                icon={<PersonIcon />}
-                label={`শাখা: ${sectionName}`}
-                color="secondary"
-                sx={{ fontWeight: 'bold' }}
-              />
-              <Chip
-                icon={<CalendarIcon />}
-                label={`মাস: ${monthName}`}
-                color="info"
-                sx={{ fontWeight: 'bold' }}
-              />
-              {selectedStudent && (
-                <Chip
-                  icon={<PersonIcon />}
-                  label={`শিক্ষার্থী: ${(() => { const s = students.find(x => x.id === parseInt(selectedStudent)); return s ? `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() : selectedStudent; })()}`}
-                  color="success"
-                  sx={{ fontWeight: 'bold' }}
-                />
-              )}
-            </Stack>
-          </Box>
-
-          {/* Summary Statistics */}
-          <Grid container spacing={2} sx={{ mb: 4, display: { print: 'none' } }}>
-            <Grid item xs={12} sm={3}>
-              <Card sx={{ bgcolor: 'primary.50', height: '100%' }}>
-                <CardContent>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                    {reportData.length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    মোট শিক্ষার্থী
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <Card sx={{ bgcolor: 'success.50', height: '100%' }}>
-                <CardContent>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                    {reportData.filter(r => r.attendance_percentage >= 75).length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    ভালো উপস্থিতি (≥৭৫%)
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <Card sx={{ bgcolor: 'warning.50', height: '100%' }}>
-                <CardContent>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
-                    {reportData.filter(r => r.attendance_percentage >= 60 && r.attendance_percentage < 75).length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    গড় উপস্থিতি (৬০–৭৪%)
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <Card sx={{ bgcolor: 'error.50', height: '100%' }}>
-                <CardContent>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'error.main' }}>
-                    {reportData.filter(r => r.attendance_percentage < 60).length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    দুর্বল উপস্থিতি (&lt;৬০%)
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-
-          {/* Main Report Card */}
-          <Grid container spacing={3}>
-            {reportData.map((student, index) => {
-              const presentDates = student.attendance_details
-                ?.filter(a => a.status === 'present')
-                .map(a => dayjs(a.date).date()) || [];
-              
-              // Get all days in the selected month
-              const daysInMonth = [];
-              const weekDays = ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহস্পতি', 'শুক্র', 'শনি'];
-              
-              if (selectedMonth) {
-                const year = dayjs(selectedMonth).year();
-                const month = dayjs(selectedMonth).month();
-                const daysCount = new Date(year, month + 1, 0).getDate();
-                const firstDay = new Date(year, month, 1).getDay();
-                
-                // Add empty cells for days before the 1st of the month
-                for (let i = 0; i < firstDay; i++) {
-                  daysInMonth.push({ day: '', isCurrentMonth: false });
-                }
-                
-                // Add all days of the month
-                for (let i = 1; i <= daysCount; i++) {
-                  daysInMonth.push({ 
-                    day: i, 
-                    isCurrentMonth: true,
-                    isPresent: presentDates.includes(i),
-                    date: new Date(year, month, i)
-                  });
-                }
-                
-                // Add empty cells to complete the last week
-                const remainingCells = (7 - ((daysCount + firstDay) % 7)) % 7;
-                for (let i = 0; i < remainingCells; i++) {
-                  daysInMonth.push({ day: '', isCurrentMonth: false });
-                }
-              }
-              
-              return (
-                <Grid item xs={12} key={student.student_id} className="student-report-card-wrapper">
-                  <Card 
-                    variant="outlined" 
-                    className="student-report-card"
-                    sx={{ 
-                      borderRadius: 2, 
-                      overflow: 'hidden',
-                      '@media print': {
-                        breakInside: 'avoid',
-                        pageBreakInside: 'avoid',
-                        mb: 4,
-                        border: '1px solid #000'
-                      }
-                    }}
-                  >
-                    {/* School Header */}
-                    <Box sx={{ 
-                      bgcolor: '#1976d2', 
-                      color: 'white', 
-                      p: 2,
-                      borderBottom: '1px solid #1565c0',
-                      position: 'relative',
-                      minHeight: '120px',
-                      '@media print': {
-                        bgcolor: '#1976d2 !important',
-                        color: 'white !important',
-                        WebkitPrintColorAdjust: 'exact',
-                        printColorAdjust: 'exact'
-                      }
-                    }}>
-                      {/* School Logo (Left) */}
-                      <Box sx={{ 
-                        position: 'absolute', 
-                        left: 16, 
-                        top: '50%', 
-                        transform: 'translateY(-50%)',
-                        width: 70,
-                        height: 70,
-                        borderRadius: '4px',
-                        border: '2px solid white',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'white',
-                        padding: '4px'
-                      }}>
-                        <Box 
-                          component="img"
-                          src="/logo.png"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzE5NzZkMiIgZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bTAgM2MxLjY2IDAgMyAxLjM0IDMgM3MtMS4zNCAzLTMgMy0zLTEuMzQtMy0zIDEuMzQtMyAzLTN6bTAgMTQuMmMtMi41IDAtNC43MS0xLjI4LTYtMy4yMi4wMy0xLjk5IDQtMy4wOCA2LTMuMDggMS45OSAwIDUuOTcgMS4wOSA2IDMuMDgtMS4yOSAxLjk0LTMuNSAzLjIyLTYgMy4yeiIvPjwvc3ZnPg==';
-                          }}
-                          sx={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'contain'
-                          }}
-                          alt="School Logo"
-                        />
-                      </Box>
-                      
-                      {/* School Info (Center) */}
-                      <Box sx={{ 
-                        textAlign: 'center',
-                        maxWidth: '60%',
-                        mx: 'auto',
-                        position: 'relative',
-                        zIndex: 1
-                      }}>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                          {schoolInfo?.name || 'স্কুল নাম'}
-                        </Typography>
-                        <Typography variant="subtitle2" sx={{ opacity: 0.9, mb: 0.5 }}>
-                          {schoolInfo?.address || ''}
-                        </Typography>
-                        <Typography variant="h6" sx={{ mt: 1, fontWeight: 'bold', mb: 0.5 }}>
-                          মাসিক হাজিরা প্রতিবেদন
-                        </Typography>
-                        <Typography variant="body2" sx={{ mt: 0.5 }}>
-                          {dayjs(selectedMonth).format('MMMM YYYY')} • {student.classroom} - {student.section}
-                        </Typography>
-                      </Box>
-                      
-                      {/* Student Photo (Right) */}
-                      <Box sx={{ 
-                        position: 'absolute', 
-                        right: 16, 
-                        top: '50%', 
-                        transform: 'translateY(-50%)',
-                        width: 80,
-                        height: 100,
-                        border: '2px solid white',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                        bgcolor: 'white'
-                      }}>
-                        <ImageWithFallback 
-                          src={photoMap[student.student_id]} 
-                          alt={student.student_name}
-                          width={80}
-                          height={100}
-                          style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'cover' 
-                          }}
-                        />
-                      </Box>
-                    </Box>
-
-                    
-                    {/* Student Info */}
-                    <Box sx={{ p: 3, borderBottom: '1px solid #e0e0e0' }}>
-                      <Grid container spacing={2}>
-                        {/* Student Photo */}
-                        <Grid item xs={12} sm={4} md={3}>
-                          <Box sx={{ 
-                            width: 100, 
-                            height: 100, 
-                            borderRadius: '50%', 
-                            overflow: 'hidden',
-                            border: '2px solid #e0e0e0',
-                            mx: 'auto'
-                          }}>
-                            <ImageWithFallback 
-                              src={photoMap[student.student_id]} 
-                              alt={student.student_name}
-                              width={100}
-                              height={100}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          </Box>
-                        </Grid>
-                        
-                        {/* Student Details */}
-                        <Grid item xs={12} sm={8} md={9}>
-                          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-                            {student.student_name}
-                          </Typography>
-                          <Typography variant="body1" sx={{ mb: 0.5 }}>
-                            <Box component="span" sx={{ fontWeight: 'medium' }}>রোল:</Box> {student.roll_number || 'N/A'}
-                          </Typography>
-                          {guardianMap[student.student_id] && (
-                            <Typography variant="body1" sx={{ mb: 2 }}>
-                              <Box component="span" sx={{ fontWeight: 'medium' }}>পিতার নাম:</Box> {guardianMap[student.student_id]}
-                            </Typography>
-                          )}
-                          
-                          {/* Attendance Summary */}
-                          <Grid container spacing={1} sx={{ mt: 1 }}>
-                            <Grid item xs={6} sm={3}>
-                              <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>{student.total_days}</Typography>
-                                <Typography variant="body2">মোট দিন</Typography>
-                              </Box>
-                            </Grid>
-                            <Grid item xs={6} sm={3}>
-                              <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#e8f5e9', borderRadius: 1 }}>
-                                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>{student.present_days}</Typography>
-                                <Typography variant="body2">উপস্থিত</Typography>
-                              </Box>
-                            </Grid>
-                            <Grid item xs={6} sm={3}>
-                              <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#ffebee', borderRadius: 1 }}>
-                                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#c62828' }}>{student.absent_days}</Typography>
-                                <Typography variant="body2">অনুপস্থিত</Typography>
-                              </Box>
-                            </Grid>
-                            <Grid item xs={6} sm={3}>
-                              <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#e3f2fd', borderRadius: 1 }}>
-                                <Typography variant="h6" sx={{ 
-                                  fontWeight: 'bold', 
-                                  color: '#1565c0'
-                                }}>
-                                  {student.attendance_percentage}%
-                                </Typography>
-                                <Typography variant="body2">শতকরা</Typography>
-                              </Box>
-                            </Grid>
-                          </Grid>
-                        </Grid>
-                      </Grid>
-                    </Box>
-
-                    {/* Calendar View */}
-                    <Box sx={{ p: 3 }}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2, textAlign: 'center' }}>
-                        {dayjs(selectedMonth).format('MMMM YYYY')}
-                      </Typography>
-                      
-                      {/* Day Headers */}
-                      <Grid container spacing={0} sx={{ mb: 1, borderBottom: '1px solid #e0e0e0', pb: 1 }}>
-                        {weekDays.map((day) => (
-                          <Grid 
-                            item 
-                            xs 
-                            key={day} 
-                            sx={{ 
-                              textAlign: 'center', 
-                              fontWeight: 'bold',
-                              py: 1,
-                              color: '#424242',
-                              fontSize: '0.9rem'
-                            }}
-                          >
-                            {day}
-                          </Grid>
-                        ))}
-                      </Grid>
-                      
-                      {/* Calendar Days */}
-                      <Grid container spacing={0}>
-                        {daysInMonth.map((dayObj, idx) => (
-                          <Grid 
-                            item 
-                            xs 
-                            key={idx}
-                            sx={{ 
-                              aspectRatio: '1',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              position: 'relative',
-                              border: '1px solid #f5f5f5',
-                              bgcolor: dayObj.isPresent ? '#e8f5e9' : 'white',
-                              '&:hover': {
-                                bgcolor: dayObj.isPresent ? '#c8e6c9' : '#f5f5f5',
-                              },
-                              ...(!dayObj.isCurrentMonth && {
-                                bgcolor: '#fafafa',
-                                color: '#bdbdbd'
-                              })
-                            }}
-                          >
-                            {dayObj.day || ''}
-                            {dayObj.isPresent && (
-                              <Box sx={{
-                                position: 'absolute',
-                                bottom: 2,
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                bgcolor: '#2e7d32'
-                              }} />
-                            )}
-                          </Grid>
-                        ))}
-                      </Grid>
-                      
-                      {/* Legend */}
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'center', 
-                        gap: 3, 
-                        mt: 3, 
-                        pt: 2, 
-                        borderTop: '1px dashed #e0e0e0',
-                        fontSize: '0.8rem'
-                      }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ width: 14, height: 14, bgcolor: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '2px' }} />
-                          <span>উপস্থিত</span>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ width: 14, height: 14, bgcolor: 'white', border: '1px solid #e0e0e0', borderRadius: '2px' }} />
-                          <span>অনুপস্থিত</span>
-                        </Box>
-                      </Box>
-                    </Box>
-                    
-                    {/* Footer */}
-                    <Box sx={{ p: 3, bgcolor: '#f5f5f5', borderTop: '1px solid #e0e0e0' }}>
-                      <Grid container spacing={2}>
-                        <Grid item xs={6}>
-                          <Box sx={{ textAlign: 'center' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
-                              প্রধান শিক্ষক
-                            </Typography>
-                            <Box sx={{ 
-                              width: '80%', 
-                              height: '60px', 
-                              mx: 'auto',
-                              mb: 0.5,
-                              position: 'relative',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <img 
-                                src={schoolSealUrl || '/images/signatures/seal.png'} 
-                                alt="Seal" 
-                                style={{ position: 'absolute', height: '100%', width: '100%', objectFit: 'contain', opacity: 0.3 }}
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                              <img 
-                                src={principalSignatureUrl || '/images/signatures/signature.png'} 
-                                alt="Signature" 
-                                style={{ position: 'relative', maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', zIndex: 1 }}
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            </Box>
-                            <Box sx={{ borderBottom: '1px solid #9e9e9e', width: '80%', mx: 'auto', mb: 0.5 }} />
-                            <Typography variant="caption" sx={{ color: '#616161' }}>
-                              স্বাক্ষর ও সীল
-                            </Typography>
-                          </Box>
-                        </Grid>
-                        <Grid item xs={6}>
-                          <Box sx={{ textAlign: 'center' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
-                              প্রতিবেদনের তারিখ
-                            </Typography>
-                            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-                              {dayjs().format('DD/MM/YYYY')}
-                            </Typography>
-                          </Box>
-                        </Grid>
-                      </Grid>
-                      
-                      {/* Class Comparison */}
-                      <Box sx={{ mt: 4, mb: 3, p: 2, bgcolor: 'white', borderRadius: 1, border: '1px solid #e0e0e0' }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, textAlign: 'center', color: '#424242' }}>
-                          শ্রেণির গড় উপস্থিতির তুলনা
-                        </Typography>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                          <Typography variant="body2">শ্রেণির গড়:</Typography>
-                          <Typography variant="body1" sx={{ fontWeight: 'bold', color: '#1565c0' }}>{classAverage}%</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="body2">{student.student_name.split(' ')[0]}:</Typography>
-                          <Typography variant="body1" sx={{ 
-                            fontWeight: 'bold',
-                            color: getAttendanceColor(student.attendance_percentage) === 'success' ? '#2e7d32' : 
-                                  getAttendanceColor(student.attendance_percentage) === 'warning' ? '#ef6c00' : '#c62828'
-                          }}>
-                            {student.attendance_percentage}%
-                          </Typography>
-                        </Box>
-                      </Box>
-                      
-                      {/* Signatures */}
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3, pt: 2, borderTop: '1px dashed #bdbdbd' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                          স্বাক্ষর, শ্রেণি শিক্ষক
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                          স্বাক্ষর, প্রধান শিক্ষক
-                        </Typography>
-                      </Box>
-                      
-                      {/* Report Info */}
-                      <Box sx={{ mt: 4, pt: 2, borderTop: '1px solid #e0e0e0', textAlign: 'center' }}>
-                        <Typography variant="caption" sx={{ color: '#757575', display: 'block', mb: 1 }}>
-                          প্রতিবেদন প্রস্তুত: {dayjs().format('DD MMMM YYYY, hh:mm A')}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#424242', fontWeight: 'medium' }}>
-                          {schoolInfo?.name || 'স্কুল নাম'} - সকল অধিকার সংরক্ষিত © {dayjs().year()}
-                        </Typography>
-                      </Box>
-                      
-                      {/* Grading System */}
-                      <Box sx={{ mt: 3, pt: 2, borderTop: '1px dashed #bdbdbd' }}>
-                        <Typography variant="overline" sx={{ 
-                          display: 'block', 
-                          textAlign: 'center', 
-                          fontWeight: 'bold',
-                          color: '#616161',
-                          mb: 1
-                        }}>
-                          হাজিরা গ্রেডিং ব্যবস্থা:
-                        </Typography>
-                        <Box sx={{ 
-                          display: 'flex', 
-                          justifyContent: 'center', 
-                          gap: 2, 
-                          flexWrap: 'wrap', 
-                          fontSize: '0.75rem',
-                          color: '#424242'
-                        }}>
-                          <span>চমৎকার (≥৯৫%)</span>
-                          <span>খুব ভালো (৮৫–৯৪%)</span>
-                          <span>ভালো (৭৫–৮৪%)</span>
-                          <span>সন্তোষজনক (৬০–৭৪%)</span>
-                          <span>উন্নতির প্রয়োজন (&lt;৬০%)</span>
-                        </Box>
-                      </Box>
-                    </Box>
-                  </Card>
-                </Grid>
-              );
-            })}
-          </Grid>
-
-          {/* Footer */}
-          <Box sx={{ mt: 4, pt: 2, color: 'text.secondary', fontSize: '0.875rem' }}>
-            <Grid container spacing={2}>
-              {/* Class Average Comparison */}
-              <Grid item xs={12} md={6}>
-                <Card variant="outlined" sx={{ p: 2, mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    শ্রেণির গড় উপস্থিতির তুলনা
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Box sx={{ width: '40%' }}>শ্রেণির গড়:</Box>
-                    <Box sx={{ width: '60%' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Box sx={{ width: '100%', mr: 1 }}>
-                          <Box 
-                            sx={{
-                              height: 20,
-                              borderRadius: 1,
-                              bgcolor: 'success.light',
-                              width: `${classAverage}%`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'flex-end',
-                              pr: 1,
-                              color: 'white',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            {classAverage.toFixed(1)}%
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Box>
-                  </Box>
-                  {reportData.map((student) => (
-                    <Box key={student.student_id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <Box sx={{ width: '40%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {student.student_name}
-                      </Box>
-                      <Box sx={{ width: '60%' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Box sx={{ width: '100%', mr: 1 }}>
-                            <Box 
-                              sx={{
-                                height: 20,
-                                borderRadius: 1,
-                                bgcolor: student.attendance_percentage >= 75 ? 'success.main' : 
-                                         student.attendance_percentage >= 60 ? 'warning.main' : 'error.main',
-                                width: `${student.attendance_percentage}%`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'flex-end',
-                                pr: 1,
-                                color: 'white',
-                                fontSize: '0.75rem',
-                                transition: 'width 0.5s ease-in-out'
-                              }}
-                            >
-                              {student.attendance_percentage.toFixed(1)}%
-                            </Box>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Box>
-                  ))}
-                </Card>
-              </Grid>
-              
-              {/* Signatures */}
-              <Grid item xs={12} md={6}>
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <Box sx={{ textAlign: 'center', mt: 4 }}>
-                      <Typography variant="body2" sx={{ borderTop: '1px solid', pt: 1, mt: 4, width: '80%', mx: 'auto' }}>
-                        স্বাক্ষর, শ্রেণি শিক্ষক
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Box sx={{ textAlign: 'center', mt: 4 }}>
-                      <Box sx={{ height: '60px', mb: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <img 
-                          src={schoolSealUrl || '/images/signatures/seal.png'} 
-                          alt="Seal" 
-                          style={{ position: 'absolute', height: '100%', width: '100%', objectFit: 'contain', opacity: 0.3 }}
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                        <img 
-                          src={principalSignatureUrl || '/images/signatures/signature.png'} 
-                          alt="Signature" 
-                          style={{ position: 'relative', maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', zIndex: 1 }}
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                      </Box>
-                      <Typography variant="body2" sx={{ borderTop: '1px solid', pt: 1, width: '80%', mx: 'auto' }}>
-                        স্বাক্ষর, প্রধান শিক্ষক
-                      </Typography>
-                      <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                        নাম: {schoolInfo?.principal_name || '________________'}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-                
-                <Box sx={{ mt: 4, textAlign: 'center' }}>
-                  <Typography variant="caption" display="block">
-                    প্রতিবেদন প্রস্তুত: {dayjs().format('DD MMMM YYYY, hh:mm A')}
-                  </Typography>
-                  <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                    {schoolInfo?.name} - সকল অধিকার সংরক্ষিত &copy; {new Date().getFullYear()}
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
-          </Box>
-
-          {/* Legend */}
-          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-              হাজিরা গ্রেডিং ব্যবস্থা:
-            </Typography>
-            <Stack direction="row" spacing={2} flexWrap="wrap">
-              <Chip label="চমৎকার (≥৯৫%)" color="success" size="small" />
-              <Chip label="খুব ভালো (৮৫–৯৪%)" color="primary" size="small" />
-              <Chip label="ভালো (৭৫–৮৪%)" color="info" size="small" />
-              <Chip label="সন্তোষজনক (৬০–৭৪%)" color="warning" size="small" />
-              <Chip label="উন্নতির প্রয়োজন (<৬০%)" color="error" size="small" />
-            </Stack>
-          </Box>
-        </Paper>
-      )}
-
-      {/* Ledger View removed here; moved above cards */}
-
-      {/* No Data Message */}
-      {showReport && reportData.length === 0 && (
-        <Alert severity="info" sx={{ mt: 3 }}>
-          No attendance records found for the selected classroom, section, and month.
-          Please ensure attendance has been marked for this period.
-        </Alert>
-      )}
+      <style>{`@media print { .no-print { display: none !important; } .print-only { display: block !important; } #printable-area { padding: 10mm; } }`}</style>
     </Box>
   );
 }

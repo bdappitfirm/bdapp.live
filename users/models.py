@@ -1,15 +1,47 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from schools.models import School
+from .image_utils import resize_image, create_thumbnail
 
 
 class User(AbstractUser):
     photo = models.ImageField(upload_to='user_photos/', null=True, blank=True)
+    thumbnail = models.ImageField(upload_to='user_thumbnails/', null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True, help_text='Phone number with country code (e.g., +8801712345678)')
     educational_qualification = models.CharField(max_length=200, blank=True, null=True, help_text='Educational qualification (e.g., B.A., M.A., B.Ed.)')
     
     def __str__(self):
         return self.username
+
+    def save(self, *args, **kwargs):
+        # Check if photo is new or changed
+        is_new_photo = False
+        if self.pk:
+            try:
+                old_user = User.objects.get(pk=self.pk)
+                if self.photo and old_user.photo != self.photo:
+                    is_new_photo = True
+            except User.DoesNotExist:
+                is_new_photo = True
+        elif self.photo:
+            is_new_photo = True
+
+        super().save(*args, **kwargs)
+
+        if is_new_photo and self.photo:
+            try:
+                # Resize original to max 800x800
+                resize_image(self.photo, size=(800, 800))
+                # Create thumbnail 150x150
+                thumb_content = create_thumbnail(self.photo, size=(150, 150))
+                if thumb_content:
+                    import os
+                    name = os.path.basename(self.photo.name)
+                    self.thumbnail.save(f"thumb_{name}", thumb_content, save=False)
+                    # Save again to store thumbnail path
+                    super().save(update_fields=['thumbnail'])
+            except Exception as e:
+                print(f"Image optimization error: {e}")
 
 class Profile(models.Model):
     ROLE_CHOICES = [
@@ -54,15 +86,29 @@ class Profile(models.Model):
         return f"{self.user.username} - {self.role}"
 
     def save(self, *args, **kwargs):
+        # 5. Automatically set role to 'admin' if designation is Principal/Headmaster
+        if self.designation:
+            desc = self.designation.lower()
+            if any(x in desc for x in ['head', 'principal', 'প্রধান শিক্ষক', 'headmaster']):
+                self.role = 'admin'
+
         super().save(*args, **kwargs)
-        # Sync gender to StudentProfile if this is a student
-        if self.role == 'student' and self.gender:
+        # Sync to StudentProfile if this is a student
+        if self.role == 'student':
             try:
                 from academics.models import StudentProfile
-                student_profile = StudentProfile.objects.get(user=self.user)
-                if student_profile.gender != self.gender:
-                    student_profile.gender = self.gender
-                    student_profile.save(update_fields=['gender'])
+                student_profile = StudentProfile.objects.filter(user=self.user).first()
+                if student_profile:
+                    updated_fields = []
+                    if self.gender and student_profile.gender != self.gender:
+                        student_profile.gender = self.gender
+                        updated_fields.append('gender')
+                    if self.blood_group and student_profile.blood_group != self.blood_group:
+                        student_profile.blood_group = self.blood_group
+                        updated_fields.append('blood_group')
+
+                    if updated_fields:
+                        student_profile.save(update_fields=updated_fields)
             except Exception:
                 pass
 
@@ -72,19 +118,29 @@ class Profile(models.Model):
             models.Index(fields=['school'], name='users_profile_school_idx'),
         ]
 
+class RoleManager(models.Manager):
+    def __init__(self, role):
+        super().__init__()
+        self.role = role
+    def get_queryset(self):
+        return super().get_queryset().filter(role=self.role)
+
 class AdminProfile(Profile):
+    objects = RoleManager('admin')
     class Meta:
         proxy = True
         verbose_name = 'Admin'
         verbose_name_plural = 'Admins'
 
 class ParentProfile(Profile):
+    objects = RoleManager('parent')
     class Meta:
         proxy = True
         verbose_name = 'Parent'
         verbose_name_plural = 'Parents'
 
 class CommitteeProfile(Profile):
+    objects = RoleManager('committee')
     class Meta:
         proxy = True
         verbose_name = 'Committee'

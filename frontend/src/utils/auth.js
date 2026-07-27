@@ -1,12 +1,10 @@
 // src/utils/auth.js
-import api from './api';
 import axios from 'axios';
 
 // Save tokens to localStorage
 export function saveTokens(access, refresh = null) {
   if (access) {
     localStorage.setItem('accessToken', access);
-    api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
   }
   if (refresh) {
     localStorage.setItem('refreshToken', refresh);
@@ -17,11 +15,10 @@ export function saveTokens(access, refresh = null) {
 export function clearTokens() {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
-  delete api.defaults.headers.common['Authorization'];
 }
 
 // Login function with fallback to session auth
-export async function login(username, password) {
+export async function login(username, password, schoolId = null) {
   try {
     clearTokens();
     const candidates = [
@@ -33,10 +30,13 @@ export async function login(username, password) {
     let lastErr;
     for (const origin of candidates) {
       try {
-        const resp = await axios.post(`${origin}/api/token/`, { username, password }, { withCredentials: true });
+        const payload = { username, password };
+        if (schoolId) payload.school_id = schoolId;
+
+        const resp = await axios.post(`${origin}/api/token/`, payload, { withCredentials: true });
         if (resp?.data?.access) {
           saveTokens(resp.data.access, resp.data.refresh);
-          api.defaults.baseURL = origin;
+          if (origin) localStorage.setItem('api_base_url', origin);
           return { success: true, data: resp.data };
         }
       } catch (e) {
@@ -64,7 +64,7 @@ export async function login(username, password) {
         try {
           const r = await axios.post(`${origin}/api/auth/login/`, params, { withCredentials: true, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' } });
           if (r?.data) {
-            api.defaults.baseURL = origin;
+            if (origin) localStorage.setItem('api_base_url', origin);
             okData = r.data;
             break;
           }
@@ -81,14 +81,8 @@ export async function login(username, password) {
 
 // Logout function
 export async function logout() {
-  try {
-    await api.post('/api/auth/logout/');
-  } catch (error) {
-    console.error('Logout error:', error);
-  } finally {
-    clearTokens();
-    window.location.href = '/login';
-  }
+  clearTokens();
+  window.location.href = '/login';
 }
 
 // Get CSRF token from cookies

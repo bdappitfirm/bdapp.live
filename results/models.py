@@ -24,6 +24,8 @@ class Examination(models.Model):
     classroom = models.ForeignKey(ClassRoom, on_delete=models.CASCADE, related_name='examinations')
     section = models.ForeignKey(Section, on_delete=models.SET_NULL, null=True, blank=True, related_name='examinations')
     exam_date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
     total_marks = models.IntegerField(default=100)
     pass_marks = models.IntegerField(default=33)
     written_max = models.IntegerField(null=True, blank=True)
@@ -162,14 +164,38 @@ class Result(models.Model):
             self.grade = 'F'
             self.gpa = 0.00
             
-        # New pass/fail calculation logic: total marks ≥ 1/3 (no component-wise check)
-        threshold = Decimal(_round_half_up(denom / Decimal(3))) if denom > 0 else Decimal(0)
-        self.is_passed = self.total_obtained >= threshold
+        # Pass/Fail calculation
+        group = _class_group(getattr(self.examination.classroom, "name", None))
+        is_nine_ten = group == 'nine_ten'
+
+        # Accurate Board Pass Rule: total_obtained >= round(denom * 0.33)
+        # This ensures 100->33, 70->23, 25->8 pass correctly.
+        pass_threshold = Decimal(str(round(float(denom) * 0.33)))
+        self.is_passed = self.total_obtained >= pass_threshold
         
-        # Now override grade and GPA if failed!
+        # STRICT RULE for Class 9-10: Separate pass for each component
+        if is_nine_ten and self.is_passed:
+            # Get component maxima to check individual pass
+            wm_max = float(maxima.get("written", 0))
+            mm_max = float(maxima.get("mcq", 0))
+            pm_max = float(maxima.get("practical", 0))
+
+            if wm_max > 0 and float(self.written_marks) < round(wm_max * 0.33):
+                self.is_passed = False
+            if mm_max > 0 and float(self.mcq_marks) < round(mm_max * 0.33):
+                self.is_passed = False
+            if pm_max > 0 and float(self.practical_marks) < round(pm_max * 0.33):
+                self.is_passed = False
+
+        # Override grade and GPA if failed
         if not self.is_passed:
             self.grade = 'F'
-            self.gpa = 0.00
+            self.gpa = Decimal('0.00')
+        else:
+            # Recalculate grade if it was wrongly set to F before due to total %
+            if self.grade == 'F':
+                if percentage >= 40: self.grade = 'C'
+                elif percentage >= 33: self.grade = 'D'
         
         super().save(*args, **kwargs)
     
@@ -181,7 +207,10 @@ class StudentOverallResult(models.Model):
     """Overall result summary for a student in an exam"""
     examination = models.ForeignKey(Examination, on_delete=models.CASCADE, related_name='overall_results')
     student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='overall_results')
-    
+
+    # New field to support year-based reporting
+    academic_year = models.IntegerField(null=True, blank=True, db_index=True)
+
     total_marks_obtained = models.DecimalField(max_digits=7, decimal_places=2, default=0)
     total_marks_possible = models.DecimalField(max_digits=7, decimal_places=2, default=0)
     percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)

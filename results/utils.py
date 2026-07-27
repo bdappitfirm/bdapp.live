@@ -53,6 +53,8 @@ SECTION_MAXIMA = {
         "ইংরেজি-১ম": DIST_100_NO_PRACTICAL,
         "ইংরেজি ১ম": DIST_100_NO_PRACTICAL,
         "ইংরেজী ১ম": DIST_100_NO_PRACTICAL,
+        "ইংরেজি-১ম পত্র": DIST_100_NO_PRACTICAL,
+        "ইংরেজী-১ম পত্র": DIST_100_NO_PRACTICAL,
         "english second paper": {"written": 50, "mcq": 0, "practical": 0}, # Total 50
         "ইংরেজি দ্বিতীয় পত্র": {"written": 50, "mcq": 0, "practical": 0},
         "ইংরেজী-২য়": {"written": 50, "mcq": 0, "practical": 0},
@@ -61,7 +63,12 @@ SECTION_MAXIMA = {
         "ইংরেজী ২য়": {"written": 50, "mcq": 0, "practical": 0},
         "ইংরেজি ২য়": {"written": 50, "mcq": 0, "practical": 0},
         "ইংরেজী ২য়": {"written": 50, "mcq": 0, "practical": 0},
-        
+        "ইংরেজি-২য় পত্র": {"written": 50, "mcq": 0, "practical": 0},
+        "ইংরেজী-২য় পত্র": {"written": 50, "mcq": 0, "practical": 0},
+        "ইংরেজি ২য় পত্র": {"written": 50, "mcq": 0, "practical": 0},
+        "ইংরেজি ২য় পত্র": {"written": 50, "mcq": 0, "practical": 0},
+        "ইংরেজী ২য় পত্র": {"written": 50, "mcq": 0, "practical": 0},
+
         # Math
         "mathematics": DIST_70_30,
         "গণিত": DIST_70_30,
@@ -92,11 +99,11 @@ SECTION_MAXIMA = {
         "তথ্য ও যোগাযোগ প্রযুক্তি": DIST_ICT_50,
         
         # Agriculture / Home Economics
-        "agriculture": {"written": 50, "mcq": 25, "practical": 25},
-        "কৃষি": {"written": 50, "mcq": 25, "practical": 25},
-        "কৃষি শিক্ষা": {"written": 50, "mcq": 25, "practical": 25},
-        "home economics": {"written": 50, "mcq": 25, "practical": 25},
-        "গার্হস্থ্য": {"written": 50, "mcq": 25, "practical": 25},
+        "agriculture": {"written": 35, "mcq": 15, "practical": 0}, # Total 50 as per JSC standard
+        "কৃষি": {"written": 35, "mcq": 15, "practical": 0},
+        "কৃষি শিক্ষা": {"written": 35, "mcq": 15, "practical": 0},
+        "home economics": {"written": 35, "mcq": 15, "practical": 0},
+        "গার্হস্থ্য": {"written": 35, "mcq": 15, "practical": 0},
         
         # Arts and Crafts
         "arts and crafts": {"written": 50, "mcq": 0, "practical": 0}, # Assumption
@@ -109,15 +116,15 @@ SECTION_MAXIMA = {
     },
     "nine_ten": {
         # Bangla
-        "bangla 1st paper": DIST_70_30, # Actually often 100 in 9-10? No, 70+30 is standard
+        "bangla 1st paper": DIST_70_30,
         "বাংলা প্রথম পত্র": DIST_70_30,
         "বাংলা-১ম": DIST_70_30,
         "বাংলা ১ম": DIST_70_30,
-        "bangla 2nd paper": DIST_100_NO_PRACTICAL, # Often grammar only
-        "বাংলা দ্বিতীয় পত্র": DIST_100_NO_PRACTICAL,
-        "বাংলা-২য়": DIST_100_NO_PRACTICAL,
-        "বাংলা ২য়": DIST_100_NO_PRACTICAL,
-        "বাংলা ২য়": DIST_100_NO_PRACTICAL,
+        "bangla 2nd paper": DIST_70_30, # Corrected to 70/30 as per standard boards
+        "বাংলা দ্বিতীয় পত্র": DIST_70_30,
+        "বাংলা-২য়": DIST_70_30,
+        "বাংলা ২য়": DIST_70_30,
+        "বাংলা ২য়": DIST_70_30,
         "bangla 1+2": {"written": 140, "mcq": 60, "practical": 0}, # Combined
         "বাংলা ১+২": {"written": 140, "mcq": 60, "practical": 0},
         
@@ -144,6 +151,7 @@ SECTION_MAXIMA = {
         "গণিত": DIST_70_30,
         "সাধারণ গণিত": DIST_70_30,
         "higher mathematics": DIST_50_25_25,
+        "higher math": DIST_50_25_25,
         "উচ্চতর গণিত": DIST_50_25_25,
         
         # Science Group
@@ -152,6 +160,7 @@ SECTION_MAXIMA = {
         "পদার্থবিজ্ঞান": DIST_50_25_25,
         "chemistry": DIST_50_25_25,
         "রসায়ন": DIST_50_25_25,
+        "রসায়ন": DIST_50_25_25,
         "biology": DIST_50_25_25,
         "জীববিজ্ঞান": DIST_50_25_25,
         
@@ -167,6 +176,9 @@ SECTION_MAXIMA = {
         "পৌরনীতি ও নাগরিকতা": DIST_70_30,
         "economics": DIST_70_30,
         "অর্থনীতি": DIST_70_30,
+        "bangladesh and global studies": DIST_70_30,
+        "বাংলাদেশ ও বিশ্বপরিচয়": DIST_70_30,
+        "বাংলাদেশ ও বিশ্বপরিচয়": DIST_70_30,
         "বাংলাদেশ ও বিশ্বপরিয়": DIST_70_30,
         
         # Business Group
@@ -181,9 +193,11 @@ SECTION_MAXIMA = {
         "ব্যবসায় শিক্ষা": DIST_70_30,
         
         # Common
-        "ict": DIST_ICT_50,
-        "আইসিটি": DIST_ICT_50,
-        "তথ্য ও যোগাযোগ প্রযুক্তি": DIST_ICT_50,
+        "science": DIST_70_30,
+        "বিজ্ঞান": DIST_70_30,
+        "ict": {"written": 0, "mcq": 25, "practical": 25},
+        "আইসিটি": {"written": 0, "mcq": 25, "practical": 25},
+        "তথ্য ও যোগাযোগ প্রযুক্তি": {"written": 0, "mcq": 25, "practical": 25},
         
         "religion": DIST_70_30,
         "ধর্ম": DIST_70_30,
@@ -198,7 +212,9 @@ SECTION_MAXIMA = {
         
         "career education": {"written": 50, "mcq": 0, "practical": 0},
         "ক্যারিয়ার শিক্ষা": {"written": 50, "mcq": 0, "practical": 0},
-        
+        "গার্হস্থ্য বিজ্ঞান": DIST_50_25_25,
+        "home economics": DIST_50_25_25,
+
         "physical education": {"written": 0, "mcq": 0, "practical": 50}, # Assumption
         "শারীরিক শিক্ষা": {"written": 0, "mcq": 0, "practical": 50},
         "শারীরিক শিক্ষা ও স্বাস্থ্য": {"written": 0, "mcq": 0, "practical": 50},
@@ -208,21 +224,76 @@ SECTION_MAXIMA = {
 def get_subject_maxima(group, subject_name):
     """
     Returns the maxima dictionary for a given subject in a class group.
+    Enhanced with priority matching for 2nd papers to ensure correct divisors.
     """
     if not group:
         return None
     raw = (subject_name or "").strip().lower()
+    # Remove contents inside parentheses
     s = re.sub(r"\s*\(.*?\)\s*", "", raw).strip()
+    # Normalize spaces and punctuation
+    s = re.sub(r"[-_.,]", " ", s).strip()
+    s = " ".join(s.split())
+
     group_maxima = SECTION_MAXIMA.get(group, {})
     
-    # Direct match
+    # 1. Exact match
     if s in group_maxima:
         return group_maxima[s]
-    
-    # Partial match heuristics (careful with these)
-    # e.g. "Biology (Opt)" -> "Biology"
+
+    # 2. Priority: Check for 2nd papers or specific complex names
+    if any(k in s for k in ["2nd", "second", "২য়", "২য়"]):
+        if "bangla" in s or "বাংলা" in s:
+            target = "bangla second paper"
+            if target in group_maxima: return group_maxima[target]
+        if "english" in s or "english" in s or "ইংরেজি" in s or "ইংরেজী" in s:
+            target = "english second paper"
+            if target in group_maxima: return group_maxima[target]
+
+    # Priority 2: Check for Agriculture/Home Economics (to avoid partial match with 'Science/বিজ্ঞান')
+    if any(k in s for k in ["কৃষি", "গার্হস্থ্য", "agri", "home ec"]):
+        if "কৃষি" in s or "agri" in s:
+            return group_maxima.get("কৃষি") or group_maxima.get("agriculture")
+        if "গার্হস্থ্য" in s or "home" in s:
+            return group_maxima.get("গার্হস্থ্য") or group_maxima.get("home economics")
+
+    # 3. Check for Paper 1
+    if any(k in s for k in ["1st", "first", "১ম"]):
+        if "bangla" in s or "বাংলা" in s:
+            target = "bangla first paper"
+            if target in group_maxima: return group_maxima[target]
+        if "english" in s or "english" in s or "ইংরেজি" in s or "ইংরেজী" in s:
+            target = "english first paper"
+            if target in group_maxima: return group_maxima[target]
+
+    # 4. Check for general keywords
+    keywords_map = {
+        'bangla': 'bangla first paper',
+        'বাংলা': 'বাংলা প্রথম পত্র',
+        'english': 'english first paper',
+        'ইংরেজি': 'ইংরেজি প্রথম পত্র',
+        'math': 'mathematics',
+        'গণিত': 'গণিত',
+        'science': 'science',
+        'বিজ্ঞান': 'বিজ্ঞান',
+        'religion': 'religion',
+        'ধর্ম': 'ধর্ম',
+        'ict': 'ict',
+        'তথ্য': 'তথ্য ও যোগাযোগ প্রযুক্তি',
+        'কৃষি': 'কৃষি',
+        'গার্হস্থ্য': 'গার্হস্থ্য',
+        'agriculture': 'agriculture',
+        'home economics': 'home economics'
+    }
+
+    for kw, target in keywords_map.items():
+        if kw in s:
+            if target in group_maxima:
+                return group_maxima[target]
+
+    # 5. Final fallback: check if any key in group_maxima is part of s or vice-versa
     for k, v in group_maxima.items():
-        if k == s:
+        if k in s or s in k:
             return v
     
     return None

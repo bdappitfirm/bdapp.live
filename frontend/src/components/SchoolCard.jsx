@@ -1,23 +1,33 @@
 import React from 'react';
-import { Card, CardContent, Typography, CardMedia, Box } from '@mui/material';
-import api from '../utils/api';
+import { Card, CardContent, Typography, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { getMediaUrl } from '../utils/media';
+import LazyImage from './LazyImage';
+
+import { isAuthenticated } from '../utils/auth';
 
 const SchoolCard = ({ school }) => {
   const navigate = useNavigate();
 
+  const handleCardClick = () => {
+    if (isAuthenticated()) {
+      navigate(`/school/${school.id}`);
+    } else {
+      navigate(`/login?next=${encodeURIComponent(`/school/${school.id}`)}`);
+    }
+  };
+
   // Handle both logo and img properties, with fallback to empty string
   const logoSrc = React.useMemo(() => {
-    return getMediaUrl(school?.logo || school?.img) || '';
-  }, [school?.logo, school?.img]);
+    return getMediaUrl(school?.logo_thumbnail_url || school?.logo_thumbnail || school?.logo || school?.img) || '';
+  }, [school?.logo_thumbnail_url, school?.logo_thumbnail, school?.logo, school?.img]);
 
   return (
     <Card
-      onClick={() => navigate(`/school/${school.id}`)}
+      onClick={handleCardClick}
       sx={{
         width: 250,
-        margin: 1,
+        margin: 0,
         borderRadius: 3,
         boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
         transition: 'transform 0.3s, box-shadow 0.3s',
@@ -32,16 +42,13 @@ const SchoolCard = ({ school }) => {
     >
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
         {logoSrc &&
-          <CardMedia
-            component="img"
-            height="120"
-            image={logoSrc}
+          <LazyImage
+            src={logoSrc}
             alt={school.name}
             sx={{
               width: '100px',
               height: '100px',
               borderRadius: '50%',
-              objectFit: 'cover',
               border: '2px solid white',
             }}
           />

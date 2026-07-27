@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -12,7 +12,6 @@ import {
   Avatar,
   Card,
   CardContent,
-  Alert,
   CircularProgress
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
@@ -39,38 +38,43 @@ export default function SchoolSettings() {
     number_of_buildings: 1
   });
 
-  const [buildingRooms, setBuildingRooms] = useState({}); // { 1: 5, 2: 10 }
+  const [buildingData, setBuildingData] = useState({}); // { 1: { count: 3, rooms: [{room_number: 1, room_name: "101"}, ...] } }
 
   const [logo, setLogo] = useState(null);
   const [signature, setSignature] = useState(null);
   const [seal, setSeal] = useState(null);
+  const [removeSignature, setRemoveSignature] = useState(false);
+  const [removeSeal, setRemoveSeal] = useState(false);
 
-  useEffect(() => {
-    fetchSchoolData();
-    fetchBuildingData();
-  }, [id]);
-
-  const fetchBuildingData = async () => {
+  const fetchBuildingData = useCallback(async () => {
     try {
       const res = await api.get(`/api/academics/buildings/?school=${id}`);
       const buildings = res.data || [];
-      const roomCounts = {};
+      const newBuildingData = {};
 
       for (const b of buildings) {
         // Extract number from name "ভবন-1" -> 1
         const match = b.name.match(/\d+/);
         const bNum = match ? parseInt(match[0]) : null;
         if (bNum) {
-          // Fetch rooms for this building to get count
+          // Fetch rooms for this building to get count and details
           const roomsRes = await api.get(`/api/academics/rooms/?building=${b.id}`);
-          roomCounts[bNum] = roomsRes.data.length || 0;
+          const rooms = roomsRes.data || [];
+          newBuildingData[bNum] = {
+            count: rooms.length,
+            rooms: rooms.map((r, idx) => ({
+              room_number: idx + 1,
+              room_name: r.name,
+              bench_count: Math.ceil(r.capacity / 3) || 10
+            }))
+          };
         }
       }
-      setBuildingRooms(roomCounts);
+      setBuildingData(newBuildingData);
     } catch (_) {}
-  };
+  }, [id]);
 
-  const fetchSchoolData = async () => {
+  const fetchSchoolData = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.get(`/api/schools/${id}/`);
@@ -90,7 +94,12 @@ export default function SchoolSettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, toast]);
+
+  useEffect(() => {
+    fetchSchoolData();
+    fetchBuildingData();
+  }, [fetchSchoolData, fetchBuildingData]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -103,13 +112,60 @@ export default function SchoolSettings() {
   };
 
   const handleRoomCountChange = (bNum, count) => {
-    setBuildingRooms({ ...buildingRooms, [bNum]: parseInt(count) || 0 });
+    setBuildingData(prev => {
+      const current = prev[bNum] || { count: 0, rooms: [] };
+      const newRooms = [...current.rooms];
+      const targetCount = parseInt(count) || 0;
+      
+      if (targetCount > newRooms.length) {
+        // Add new rooms
+        for (let i = newRooms.length; i < targetCount; i++) {
+          newRooms.push({
+            room_number: i + 1,
+            room_name: `${bNum * 100 + (i + 1)}`,
+            bench_count: 10
+          });
+        }
+      } else if (targetCount < newRooms.length) {
+        // Remove extra rooms
+        newRooms.splice(targetCount);
+      }
+      
+      return {
+        ...prev,
+        [bNum]: { count: targetCount, rooms: newRooms }
+      };
+    });
   };
 
-  const handleFileChange = (e, setter) => {
+  const handleRoomNameChange = (bNum, idx, name) => {
+    setBuildingData(prev => {
+      const current = prev[bNum] || { count: 0, rooms: [] };
+      const newRooms = [...current.rooms];
+      newRooms[idx] = { ...newRooms[idx], room_name: name };
+      return { ...prev, [bNum]: { ...current, rooms: newRooms } };
+    });
+  };
+
+  const handleBenchCountChange = (bNum, idx, count) => {
+    setBuildingData(prev => {
+      const current = prev[bNum] || { count: 0, rooms: [] };
+      const newRooms = [...current.rooms];
+      newRooms[idx] = { ...newRooms[idx], bench_count: parseInt(count) || 10 };
+      return { ...prev, [bNum]: { ...current, rooms: newRooms } };
+    });
+  };
+
+  const handleFileChange = (e, setter, removeSetter) => {
     if (e.target.files && e.target.files[0]) {
       setter(e.target.files[0]);
+      if (removeSetter) removeSetter(false);
     }
+  };
+
+  const handleRemoveFile = (setter, removeSetter) => {
+    setter(null);
+    if (removeSetter) removeSetter(true);
   };
 
   const handleSave = async () => {
@@ -124,8 +180,18 @@ export default function SchoolSettings() {
       
       // Append files if selected
       if (logo) fd.append('logo', logo);
-      if (signature) fd.append('principal_signature', signature);
-      if (seal) fd.append('school_seal', seal);
+
+      if (signature) {
+        fd.append('principal_signature', signature);
+      } else if (removeSignature) {
+        fd.append('principal_signature', '');
+      }
+
+      if (seal) {
+        fd.append('school_seal', seal);
+      } else if (removeSeal) {
+        fd.append('school_seal', '');
+      }
 
       await api.patch(`/api/schools/${id}/`, fd, {
         headers: {
@@ -136,17 +202,32 @@ export default function SchoolSettings() {
       // Prepare building/room data for bulk setup
       const buildingsPayload = [];
       for (let i = 1; i <= formData.number_of_buildings; i++) {
-        const numRooms = buildingRooms[i] || 0;
-        const rooms = [];
-        for (let j = 1; j <= numRooms; j++) {
-          rooms.push({ room_number: j, bench_count: 10 }); // Default 10 benches
+        const bData = buildingData[i] || { count: 0, rooms: [] };
+        const numRooms = bData.count || 0;
+        const rooms = bData.rooms.length > 0 ? bData.rooms.map(r => ({
+          room_number: r.room_number,
+          room_name: r.room_name,
+          bench_count: r.bench_count
+        })) : [];
+        
+        // If no data, use defaults
+        if (rooms.length === 0 && numRooms > 0) {
+          for (let j = 1; j <= numRooms; j++) {
+            rooms.push({ 
+              room_number: j, 
+              room_name: `${i * 100 + j}`, 
+              bench_count: 10 
+            });
+          }
         }
+        
         buildingsPayload.push({
           building_number: i,
           rooms: rooms
         });
       }
 
+      console.log('Sending bulk setup payload:', JSON.stringify(buildingsPayload, null, 2));
       await api.post('/api/academics/buildings/bulk-setup/', {
         school_id: id,
         buildings: buildingsPayload
@@ -157,7 +238,8 @@ export default function SchoolSettings() {
       fetchBuildingData();
     } catch (err) {
       console.error('Failed to update school:', err);
-      toast.error('আপডেট ব্যর্থ হয়েছে। দয়া করে আবার চেষ্টা করুন।');
+      console.error('Error response data:', err.response?.data);
+      toast.error('আপডেট ব্যর্থ হয়েছে। দয়া করে আবার চেষ্টা করুন।');
     } finally {
       setSaving(false);
     }
@@ -261,12 +343,34 @@ export default function SchoolSettings() {
                   <TextField
                     label={`ভবন - ${bNum} এ রুমের সংখ্যা`}
                     type="number"
-                    value={buildingRooms[bNum] || ''}
+                    value={buildingData[bNum]?.count || ''}
                     onChange={(e) => handleRoomCountChange(bNum, e.target.value)}
                     fullWidth
                     size="small"
                     placeholder="রুমের সংখ্যা লিখুন (যেমন: ১০)"
+                    sx={{ mb: 2 }}
                   />
+                  
+                  {/* Room name and bench count inputs */}
+                  {buildingData[bNum]?.rooms.map((room, idx) => (
+                    <Box key={idx} sx={{ mb: 1, display: 'flex', gap: 1 }}>
+                      <TextField
+                        label={`রুম ${idx + 1} নাম`}
+                        value={room.room_name}
+                        onChange={(e) => handleRoomNameChange(bNum, idx, e.target.value)}
+                        fullWidth
+                        size="small"
+                      />
+                      <TextField
+                        label="বেঞ্চ সংখ্যা"
+                        type="number"
+                        value={room.bench_count}
+                        onChange={(e) => handleBenchCountChange(bNum, idx, e.target.value)}
+                        size="small"
+                        sx={{ width: 120 }}
+                      />
+                    </Box>
+                  ))}
                 </Box>
               ))}
             </Stack>
@@ -311,7 +415,7 @@ export default function SchoolSettings() {
                   justifyContent: 'center',
                   bgcolor: '#fafafa'
                 }}>
-                  {(signature || school?.principal_signature) ? (
+                  {(!removeSignature && (signature || school?.principal_signature)) ? (
                     <img 
                       src={signature ? URL.createObjectURL(signature) : school?.principal_signature} 
                       alt="Signature" 
@@ -321,15 +425,27 @@ export default function SchoolSettings() {
                     <Typography variant="caption" color="text.secondary">No Signature Uploaded</Typography>
                   )}
                 </Box>
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={<PhotoCamera />}
-                  size="small"
-                >
-                  Upload Signature
-                  <input type="file" hidden accept="image/*" onChange={(e) => handleFileChange(e, setSignature)} />
-                </Button>
+                <Stack direction="row" spacing={1} justifyContent="center">
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<PhotoCamera />}
+                    size="small"
+                  >
+                    Upload
+                    <input type="file" hidden accept="image/*" onChange={(e) => handleFileChange(e, setSignature, setRemoveSignature)} />
+                  </Button>
+                  {(signature || (!removeSignature && school?.principal_signature)) && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      onClick={() => handleRemoveFile(setSignature, setRemoveSignature)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </Stack>
               </CardContent>
             </Card>
 
@@ -337,19 +453,39 @@ export default function SchoolSettings() {
             <Card elevation={3} sx={{ borderRadius: 2 }}>
               <CardContent sx={{ textAlign: 'center' }}>
                 <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>স্কুল সিল (Seal)</Typography>
-                <Avatar
-                  src={seal ? URL.createObjectURL(seal) : school?.school_seal}
-                  sx={{ width: 80, height: 80, mx: 'auto', mb: 2, border: '1px solid #ddd' }}
-                />
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={<PhotoCamera />}
-                  size="small"
-                >
-                  Upload Seal
-                  <input type="file" hidden accept="image/*" onChange={(e) => handleFileChange(e, setSeal)} />
-                </Button>
+                <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
+                  {(!removeSeal && (seal || school?.school_seal)) ? (
+                    <Avatar
+                      src={seal ? URL.createObjectURL(seal) : school?.school_seal}
+                      sx={{ width: 80, height: 80, border: '1px solid #ddd' }}
+                    />
+                  ) : (
+                    <Box sx={{ width: 80, height: 80, border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
+                      <Typography variant="caption" color="text.secondary">No Seal</Typography>
+                    </Box>
+                  )}
+                </Box>
+                <Stack direction="row" spacing={1} justifyContent="center">
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<PhotoCamera />}
+                    size="small"
+                  >
+                    Upload
+                    <input type="file" hidden accept="image/*" onChange={(e) => handleFileChange(e, setSeal, setRemoveSeal)} />
+                  </Button>
+                  {(seal || (!removeSeal && school?.school_seal)) && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      onClick={() => handleRemoveFile(setSeal, setRemoveSeal)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </Stack>
               </CardContent>
             </Card>
           </Stack>

@@ -8,15 +8,15 @@ from .views import (
 )
 
 router = DefaultRouter()
-router.register('classrooms', ClassRoomViewSet)
-router.register('sections', SectionViewSet)
-router.register('subjects', SubjectViewSet)
-router.register('students', StudentProfileViewSet)
-router.register('assignments', TeacherAssignmentViewSet)
-router.register('virtual-classes', VirtualClassViewSet)
-router.register('buildings', BuildingViewSet)
-router.register('rooms', RoomViewSet)
-router.register('exam-seat-plans', ExamSeatPlanViewSet)
+router.register('classrooms', ClassRoomViewSet, basename='classrooms')
+router.register('sections', SectionViewSet, basename='sections')
+router.register('subjects', SubjectViewSet, basename='subjects')
+router.register('students', StudentProfileViewSet, basename='students')
+router.register('assignments', TeacherAssignmentViewSet, basename='assignments')
+router.register('virtual-classes', VirtualClassViewSet, basename='virtual-classes')
+router.register('buildings', BuildingViewSet, basename='buildings')
+router.register('rooms', RoomViewSet, basename='rooms')
+router.register('exam-seat-plans', ExamSeatPlanViewSet, basename='exam-seat-plans')
 
 urlpatterns = [
     path('schools/', SchoolListAPI.as_view(), name='school-list'),

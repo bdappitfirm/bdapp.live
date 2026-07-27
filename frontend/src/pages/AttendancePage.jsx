@@ -11,7 +11,7 @@ export default function AttendancePage(){
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
 
   useEffect(()=>{
-    api.get(`/api/academics/students/?school=${id}`)
+    api.get(`/api/academics/students/?school=${id}&page_size=1000`)
       .then(res => {
         const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
         const sorted = [...data].sort((a, b) => {

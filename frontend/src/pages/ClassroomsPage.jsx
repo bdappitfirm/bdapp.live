@@ -79,21 +79,21 @@ export default function ClassroomsPage() {
     classroom: ''
   });
 
+  const [sectionEditMode, setSectionEditMode] = useState(false);
+  const [sectionDeleteOpen, setSectionDeleteOpen] = useState(false);
+
   useEffect(() => {
     // Data is automatically loaded by the AcademicsContext when schoolId changes
-    // We can refresh it if needed
-    if (id) {
-      refreshAll(id);
+    if (id && !initialLoadComplete) {
+      refreshAll(id, false);
+      setInitialLoadComplete(true);
     }
-  }, [id]); // Remove refreshAll from dependencies to prevent infinite loops
+  }, [id]); // Strictly only on ID change
 
   // Debug log and set initial load complete
   useEffect(() => {
-    console.log('Classrooms:', classrooms);
-    console.log('Sections:', sections);
-    
     // Set initial load complete when we have data and not loading
-    if (!loading && classrooms && sections) {
+    if (!loading && Array.isArray(classrooms) && Array.isArray(sections)) {
       setInitialLoadComplete(true);
     }
   }, [classrooms, sections, loading]);
@@ -130,12 +130,6 @@ export default function ClassroomsPage() {
   const handleDeleteClass = (classroom) => {
     setSelectedItem(classroom);
     setDeleteDialogOpen(true);
-  };
-
-  const handleAddSection = (classroom) => {
-    setSelectedClassroom(classroom);
-    setSectionFormData({ name: '', classroom: classroom.id });
-    setSectionDialogOpen(true);
   };
 
   const handleSaveClass = async () => {
@@ -191,6 +185,27 @@ export default function ClassroomsPage() {
     }
   };
 
+  const handleAddSection = (classroom) => {
+    setSelectedClassroom(classroom);
+    setSectionEditMode(false);
+    setSelectedItem(null);
+    setSectionFormData({ name: '', classroom: classroom.id });
+    setSectionDialogOpen(true);
+  };
+
+  const handleEditSection = (section, classroom) => {
+    setSelectedClassroom(classroom);
+    setSelectedItem(section);
+    setSectionEditMode(true);
+    setSectionFormData({ name: section.name, classroom: classroom.id });
+    setSectionDialogOpen(true);
+  };
+
+  const handleDeleteSection = (section) => {
+    setSelectedItem(section);
+    setSectionDeleteOpen(true);
+  };
+
   const handleSaveSection = async () => {
     if (!isAuthenticated()) {
       navigate('/login');
@@ -203,21 +218,45 @@ export default function ClassroomsPage() {
 
     setSaving(true);
     try {
-      await api.post('/api/academics/sections/', {
-        name: sectionFormData.name,
-        classroom_id: sectionFormData.classroom
-      });
-      toast.success('Section added successfully!');
+      if (sectionEditMode && selectedItem) {
+        await api.put(`/api/academics/sections/${selectedItem.id}/`, {
+          name: sectionFormData.name,
+          classroom_id: sectionFormData.classroom
+        });
+        toast.success('Section updated successfully!');
+      } else {
+        await api.post('/api/academics/sections/', {
+          name: sectionFormData.name,
+          classroom_id: sectionFormData.classroom
+        });
+        toast.success('Section added successfully!');
+      }
       setSectionDialogOpen(false);
-      refreshAll(id); // Use context's refresh function instead of loadData
+      refreshAll(id);
     } catch (err) {
       console.error(err);
       const errorMsg = 
         err.response?.data?.non_field_errors?.[0] || 
         err.response?.data?.name?.[0] || 
         err.response?.data?.detail || 
-        'Failed to add section';
+        'Failed to save section';
       toast.error(errorMsg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmSectionDelete = async () => {
+    if (!selectedItem) return;
+    setSaving(true);
+    try {
+      await api.delete(`/api/academics/sections/${selectedItem.id}/`);
+      toast.success('Section deleted successfully!');
+      setSectionDeleteOpen(false);
+      refreshAll(id);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete section. It may be in use.');
     } finally {
       setSaving(false);
     }
@@ -302,7 +341,8 @@ export default function ClassroomsPage() {
   };
 
   const getClassOrder = (className) => {
-    const lowerName = className.toLowerCase();
+    if (!className) return 999;
+    const lowerName = String(className).toLowerCase();
     
     // Check for specific keywords first (Play, Nursery, KG)
     if (lowerName.includes('play') || lowerName.includes('প্লে')) return -3;
@@ -311,13 +351,13 @@ export default function ClassroomsPage() {
     
     // Check for Bangla numbers
     for (const [bangla, num] of Object.entries(banglaNumberMap)) {
-      if (className.includes(bangla)) {
+      if (String(className).includes(bangla)) {
         return num;
       }
     }
     
     // Check for English numbers (Class 6, Class 7, etc.)
-    const match = className.match(/\d+/);
+    const match = String(className).match(/\d+/);
     if (match) {
       return parseInt(match[0]);
     }
@@ -327,14 +367,16 @@ export default function ClassroomsPage() {
   };
 
   const filtered = useMemo(() => {
-    return (classrooms || [])
+    const list = Array.isArray(classrooms) ? classrooms : [];
+    return list
       .filter(c => {
+        if (!c || !c.name) return false;
         const searchLower = searchQuery.toLowerCase();
-        return c.name.toLowerCase().includes(searchLower);
+        return String(c.name).toLowerCase().includes(searchLower);
       })
       .sort((a, b) => {
-        const orderA = getClassOrder(a.name);
-        const orderB = getClassOrder(b.name);
+        const orderA = a?.name ? getClassOrder(a.name) : 999;
+        const orderB = b?.name ? getClassOrder(b.name) : 999;
         return orderA - orderB;
       });
   }, [classrooms, searchQuery]);
@@ -536,7 +578,7 @@ export default function ClassroomsPage() {
 
                     {/* Sections */}
                     {getSectionsForClass(classroom.id).length > 0 ? (
-                      <Stack spacing={1}>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                         {getSectionsForClass(classroom.id).map(section => (
                           <Chip
                             key={section.id}
@@ -544,7 +586,14 @@ export default function ClassroomsPage() {
                             icon={<PeopleIcon />}
                             variant="outlined"
                             color="primary"
-                            sx={{ justifyContent: 'flex-start' }}
+                            onDelete={() => handleDeleteSection(section)}
+                            onClick={(e) => { e.stopPropagation(); handleEditSection(section, classroom); }}
+                            deleteIcon={<DeleteIcon fontSize="small" />}
+                            sx={{
+                              justifyContent: 'flex-start',
+                              mb: 1,
+                              '&:hover': { bgcolor: 'rgba(25, 118, 210, 0.08)' }
+                            }}
                           />
                         ))}
                       </Stack>
@@ -631,10 +680,10 @@ export default function ClassroomsPage() {
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                ➕ সেকশন যোগ
+                {sectionEditMode ? '✏️ সেকশন সম্পাদনা' : '➕ সেকশন যোগ'}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-              {selectedClassroom?.name} শ্রেণিতে নতুন সেকশন যোগ করুন
+              {selectedClassroom?.name} {sectionEditMode ? 'সেকশন আপডেট করুন' : 'শ্রেণিতে নতুন সেকশন যোগ করুন'}
               </Typography>
             </Box>
             <IconButton onClick={() => setSectionDialogOpen(false)}>
@@ -660,9 +709,45 @@ export default function ClassroomsPage() {
             variant="contained" 
             onClick={handleSaveSection}
             disabled={saving}
-            startIcon={<AddIcon />}
+            startIcon={sectionEditMode ? <EditIcon /> : <AddIcon />}
           >
-            {saving ? 'যোগ করা হচ্ছে...' : 'সেকশন যোগ করুন'}
+            {saving ? 'প্রক্রিয়াধীন...' : (sectionEditMode ? 'হালনাগাদ করুন' : 'সেকশন যোগ করুন')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Section Confirmation Dialog */}
+      <Dialog
+        open={sectionDeleteOpen}
+        onClose={() => setSectionDeleteOpen(false)}
+        TransitionComponent={Zoom}
+      >
+        <DialogTitle>
+          <Typography variant="h6" color="error" fontWeight="bold">
+            🗑️ সেকশন মুছবেন?
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না!
+          </Alert>
+          <Typography>
+            আপনি কি নিশ্চিত যে <strong>{selectedItem?.name}</strong> সেকশনটি মুছে ফেলতে চান?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            এই সেকশনের শিক্ষার্থীদের তথ্য পুনরায় অন্য সেকশনে স্থানান্তর করতে হতে পারে।
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setSectionDeleteOpen(false)}>বাতিল</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmSectionDelete}
+            disabled={saving}
+            startIcon={<DeleteIcon />}
+          >
+            {saving ? 'মুছা হচ্ছে...' : 'মুছে ফেলুন'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,13 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import {
   Box,
   Typography,
   Grid,
-  Card,
-  CardContent,
-  CardHeader,
   Avatar,
   Button,
   Stack,
@@ -22,61 +19,43 @@ import {
   Chip,
   Paper,
   Alert,
-  CardActions,
-  useMediaQuery,
   Autocomplete,
   Divider
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import ProtectedButton from '../components/ProtectedButton';
 import TeacherCard from '../components/TeacherCard';
-import PersonIcon from '@mui/icons-material/Person';
 import SchoolIcon from '@mui/icons-material/School';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EmptyState from '../components/EmptyState';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import PhotoUpload from '../components/PhotoUpload';
 import { useAuth } from '../context/AuthContext';
-import { canEdit, canDelete } from '../utils/helpers';
 import { getMediaUrl } from '../utils/media';
 
 export default function TeachersPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isXs = useMediaQuery(theme.breakpoints.down('sm'));
   const [assignments, setAssignments] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const toast = useToast();
-  const { user } = useAuth();
-  
+
   // Add Teacher Dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [subjects, setSubjects] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
   const [sections, setSections] = useState([]);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [selectedTeacherProfile, setSelectedTeacherProfile] = useState(null);
-  const [selectedTeacherAssignments, setSelectedTeacherAssignments] = useState([]);
-  const [selectedTeacherSubjects, setSelectedTeacherSubjects] = useState([]);
-  const [selectedTeacherClasses, setSelectedTeacherClasses] = useState([]);
-  const [editSelectedSubjectIds, setEditSelectedSubjectIds] = useState([]);
-  const [editSelectedClassroomIds, setEditSelectedClassroomIds] = useState([]);
-  const [editSelectedSectionId, setEditSelectedSectionId] = useState('');
-  const [editSections, setEditSections] = useState([]);
   const [editFormData, setEditFormData] = useState({
     first_name: '',
     last_name: '',
@@ -91,6 +70,7 @@ export default function TeachersPage() {
     joining_date: '',
     assigned_subject: '',
     role: '',
+    gender: '',
     class_teacher_classroom: '',
     class_teacher_section: '',
     _photoFile: null,
@@ -113,27 +93,54 @@ export default function TeachersPage() {
   };
 
   const addClassToEditAssignment = (assignIndex) => {
-    const newAssignments = [...editFormData.assignments];
-    newAssignments[assignIndex].classAssignments.push({ classroomId: '', sectionId: '' });
-    setEditFormData({ ...editFormData, assignments: newAssignments });
+    setEditFormData(prev => {
+      const newAssignments = [...prev.assignments];
+      newAssignments[assignIndex] = {
+        ...newAssignments[assignIndex],
+        classAssignments: [...newAssignments[assignIndex].classAssignments, { classroomId: '', sectionId: '' }]
+      };
+      return { ...prev, assignments: newAssignments };
+    });
   };
 
   const removeClassFromEditAssignment = (assignIndex, classIndex) => {
-    const newAssignments = [...editFormData.assignments];
-    newAssignments[assignIndex].classAssignments = newAssignments[assignIndex].classAssignments.filter((_, i) => i !== classIndex);
-    setEditFormData({ ...editFormData, assignments: newAssignments });
+    setEditFormData(prev => {
+      const newAssignments = [...prev.assignments];
+      const newClassAssignments = [...newAssignments[assignIndex].classAssignments];
+      newClassAssignments.splice(classIndex, 1);
+      newAssignments[assignIndex] = {
+        ...newAssignments[assignIndex],
+        classAssignments: newClassAssignments
+      };
+      return { ...prev, assignments: newAssignments };
+    });
   };
 
   const updateEditAssignment = (assignIndex, field, value) => {
-    const newAssignments = [...editFormData.assignments];
-    newAssignments[assignIndex][field] = value;
-    setEditFormData({ ...editFormData, assignments: newAssignments });
+    setEditFormData(prev => {
+      const newAssignments = [...prev.assignments];
+      newAssignments[assignIndex] = {
+        ...newAssignments[assignIndex],
+        [field]: value
+      };
+      return { ...prev, assignments: newAssignments };
+    });
   };
 
   const updateEditClassAssignment = (assignIndex, classIndex, field, value) => {
-    const newAssignments = [...editFormData.assignments];
-    newAssignments[assignIndex].classAssignments[classIndex][field] = value;
-    setEditFormData({ ...editFormData, assignments: newAssignments });
+    setEditFormData(prev => {
+      const newAssignments = [...prev.assignments];
+      const newClassAssignments = [...newAssignments[assignIndex].classAssignments];
+      newClassAssignments[classIndex] = {
+        ...newClassAssignments[classIndex],
+        [field]: value
+      };
+      newAssignments[assignIndex] = {
+        ...newAssignments[assignIndex],
+        classAssignments: newClassAssignments
+      };
+      return { ...prev, assignments: newAssignments };
+    });
   };
 
   const handleEdit = (e, teacher) => {
@@ -169,8 +176,10 @@ export default function TeachersPage() {
       index_number: profile?.index_number || '',
       joining_date: profile?.joining_date || '',
       assigned_subject: profile?.assigned_subject?.id || profile?.assigned_subject || '',
-      class_teacher_classroom: profile?.class_teacher_classroom || '',
-      class_teacher_section: profile?.class_teacher_section || '',
+      role: profile?.role || '',
+      gender: profile?.gender || '',
+      class_teacher_classroom: profile?.class_teacher_classroom?.id || profile?.class_teacher_classroom || '',
+      class_teacher_section: profile?.class_teacher_section?.id || profile?.class_teacher_section || '',
       _photoFile: null,
       assignments: Object.values(assignmentsBySubject).length > 0 
         ? Object.values(assignmentsBySubject) 
@@ -200,6 +209,8 @@ export default function TeachersPage() {
     index_number: '',
     joining_date: '',
     assigned_subject: '',
+    role: '',
+    gender: '',
     class_teacher_classroom: '',
     class_teacher_section: '',
     _photoFile: null,
@@ -221,7 +232,8 @@ export default function TeachersPage() {
       try {
         const res = await api.get('/api/users/username-availability/', { params: { q: uname } });
         if (cancelled) return;
-        setUsernameCheck({ loading: false, available: res.data.available, suggestions: res.data.suggestions || [], msg: '' });
+
+        setUsernameCheck({ loading: false, available: res.data.available, suggestions: [], msg: '' });
       } catch (e) {
         if (cancelled) return;
         setUsernameCheck({ loading: false, available: null, suggestions: [], msg: e?.response?.data?.error || 'Check failed' });
@@ -246,11 +258,9 @@ export default function TeachersPage() {
     return getMediaUrl(rawPhoto) || undefined;
   };
 
-  const buildAssignments = (assignDataRaw, teacherProfiles) => {
+  const buildAssignments = useCallback((assignDataRaw, teacherProfiles) => {
     const assignData = assignDataRaw || [];
     const profiles = teacherProfiles || [];
-
-    setTeachers(profiles);
 
     const userIdToProfile = new Map();
     const profileIdToProfile = new Map();
@@ -306,153 +316,59 @@ export default function TeachersPage() {
 
     const validAssignments = enrichedAssignments.filter(a => !!a.teacher);
     return [...validAssignments, ...placeholders];
-  };
+  }, []);
 
-  const loadAssignments = () => {
+  const loadAssignments = useCallback(async (quiet = true) => {
     if (!id) return;
     setLoading(true);
-    (async () => {
-      let rawAssignments = [];
-      let teacherProfiles = [];
-      try {
-        const assignRes = await api.get(`/api/academics/assignments/?classroom__school=${id}&_t=${Date.now()}`);
-        rawAssignments = Array.isArray(assignRes.data)
-          ? assignRes.data
-          : (assignRes.data?.results || []);
-      } catch (e) {
-        console.warn('Assignments fetch failed:', e?.response?.data || e?.message);
-        rawAssignments = [];
-      }
-      try {
-        const teacherRes = await api.get(`/api/users/teachers/?school=${id}&_t=${Date.now()}`);
-        const teacherData = teacherRes.data || [];
-        teacherProfiles = Array.isArray(teacherData) ? teacherData : (teacherData.results || []);
-      } catch (e) {
-        console.warn('Teachers fetch failed:', e?.response?.data || e?.message);
-        teacherProfiles = [];
-      }
-
-      const filteredAssignments = rawAssignments.filter(a => {
-          const schoolId =
-            a.classroom?.school?.id ||
-            a.classroom?.school_id ||
-            a.classroom?.school ||
-            a.school?.id ||
-            a.school_id ||
-            a.school;
-          if (!id) return true;
-          if (!schoolId) return true;
-          return String(schoolId) === String(id);
-        });
-
-      let filteredProfiles = (teacherProfiles || []).filter(p => {
-        const schoolId =
-          p.school?.id ||
-          p.school_id ||
-          p.school ||
-          p.user?.school?.id ||
-          p.user?.school_id ||
-          p.user?.school;
-        if (!id) return true;
-        if (!schoolId) return false;
-        return String(schoolId) === String(id);
-      });
-
-      // Fallback: ensure every assigned teacher has a profile attached
-      try {
-        const assignedUserIds = new Set(
-          filteredAssignments
-            .map(a => a?.teacher?.user?.id || a?.teacher?.id)
-            .filter(Boolean)
-        );
-        const presentUserIds = new Set(
-          (filteredProfiles || [])
-            .map(p => p?.user?.id)
-            .filter(Boolean)
-        );
-        if (assignedUserIds.size > presentUserIds.size) {
-          const missing = Array.from(assignedUserIds).filter(uid => !presentUserIds.has(uid));
-          if (missing.length > 0) {
-            const fillIns = (teacherProfiles || []).filter(p => missing.includes(p?.user?.id));
-            filteredProfiles = [...filteredProfiles, ...fillIns];
-          }
-        }
-      } catch (_) {}
-
-      // Build final assignments list
-      const combined = buildAssignments(filteredAssignments, filteredProfiles);
+    try {
+      const [assignRes, teacherRes] = await Promise.all([
+        api.get(`/api/academics/assignments/?school=${id}&_t=${Date.now()}`, { _skipCache: true }),
+        api.get(`/api/users/teachers/?school=${id}&_t=${Date.now()}`, { _skipCache: true })
+      ]);
       
-      // Update local state immediately
+      const rawAssignments = Array.isArray(assignRes.data) ? assignRes.data : (assignRes.data?.results || []);
+      const teacherProfiles = Array.isArray(teacherRes.data) ? teacherRes.data : (teacherRes.data?.results || []);
+
+      console.log(`Fetched ${rawAssignments.length} assignments and ${teacherProfiles.length} teachers`);
+
+      const combined = buildAssignments(rawAssignments, teacherProfiles);
       setAssignments(combined);
-      setTeachers(filteredProfiles);
-      
+      setTeachers(teacherProfiles);
+      if (!quiet) toast.success('শিক্ষক তালিকা রিফ্রেশ হয়েছে');
+    } catch (e) {
+      console.error('Fetch failed:', e);
+      if (!quiet) toast.error('শিক্ষক তালিকা লোড করতে সমস্যা হয়েছে');
+    } finally {
       setLoading(false);
-      if (combined.length > 0) {
-        toast.success(`Loaded ${combined.length} teacher${combined.length === 1 ? '' : 's'} (including unassigned)`);
-      } else {
-        toast.warning('No assignments found for this school');
-      }
-    })();
-  };
-
-  useEffect(() => {
-    loadAssignments();
-    loadFormData();
-  }, [id]);
-  
-  useEffect(() => {
-    if (selectedTeacher && editDialogOpen) {
-      // Check if data is in the teacher object or in teacher.user
-      const userData = selectedTeacher.user || selectedTeacher;
-      const userId = userData.id;
-      // Find profile to get designation
-      let prof = selectedTeacherProfile;
-      if (!prof && Array.isArray(teachers) && userId) {
-        prof = teachers.find(tp => tp.user?.id === userId) || null;
-      }
-      
-      // Filter current assignments for this teacher
-      const currentTeacherAssignments = assignments.filter(a => (a.teacher?.user?.id === userId || a.teacher?.id === userId));
-      
-      // Group by subject for the UI
-      const grouped = [];
-      const subjectMap = new Map();
-      currentTeacherAssignments.forEach(a => {
-        if (!a.subject?.id) return;
-        if (!subjectMap.has(a.subject.id)) {
-          subjectMap.set(a.subject.id, {
-            subjectId: a.subject.id,
-            classAssignments: []
-          });
-          grouped.push(subjectMap.get(a.subject.id));
-        }
-        subjectMap.get(a.subject.id).classAssignments.push({
-          classroomId: a.classroom?.id || '',
-          sectionId: a.section?.id || ''
-        });
-      });
-
-      setEditFormData({
-        first_name: userData.first_name || '',
-        last_name: userData.last_name || '',
-        email: userData.email || '',
-        username: userData.username || '',
-        password: '',
-        phone_number: userData.phone_number || '',
-        educational_qualification: userData.educational_qualification || '',
-        designation: prof?.designation || '',
-        blood_group: prof?.blood_group || '',
-        index_number: prof?.index_number || '',
-        joining_date: prof?.joining_date || '',
-        assigned_subject: prof?.assigned_subject?.id || prof?.assigned_subject || '',
-        role: prof?.role || '',
-        class_teacher_classroom: prof?.class_teacher_classroom?.id || prof?.class_teacher_classroom || '',
-        class_teacher_section: prof?.class_teacher_section?.id || prof?.class_teacher_section || '',
-        _photoFile: null,
-        assignments: grouped.length > 0 ? grouped : [{ subjectId: '', classAssignments: [{ classroomId: '', sectionId: '' }] }]
-      });
     }
-  }, [selectedTeacher, editDialogOpen, assignments, teachers]);
+  }, [id, buildAssignments]); // Removed toast
+
+  const loadFormData = useCallback(async () => {
+    try {
+      const [subjectsRes, classroomsRes, sectionsRes] = await Promise.all([
+        api.get(`/api/academics/subjects/?school=${id}`, { _skipCache: true }),
+        api.get(`/api/academics/classrooms/?school=${id}`, { _skipCache: true }),
+        api.get(`/api/academics/sections/?school=${id}`, { _skipCache: true })
+      ]);
+      const subjectsData = Array.isArray(subjectsRes.data) ? subjectsRes.data : (subjectsRes.data?.results || []);
+      const classroomsData = Array.isArray(classroomsRes.data) ? classroomsRes.data : (classroomsRes.data?.results || []);
+      const sectionsData = Array.isArray(sectionsRes.data) ? sectionsRes.data : (sectionsRes.data?.results || []);
+
+      setSubjects(subjectsData);
+      setClassrooms(classroomsData);
+      setSections(sectionsData);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [id]); // Removed toast
+
+  useEffect(() => {
+    loadAssignments(true);
+    loadFormData();
+  }, [id, loadAssignments, loadFormData]);
+  
+  // Removed redundant useEffect that was resetting editFormData
   
   const handleUpdateTeacher = async () => {
     if (!selectedTeacher) {
@@ -460,12 +376,16 @@ export default function TeachersPage() {
       return;
     }
     
+    setSaving(true);
+
     try {
-      // Robustly identify userId from various possible structures
-      const userId = selectedTeacher.id || selectedTeacher.user?.id;
+      // Use the actual User ID for assignments, falls back to profile ID if needed
+      // selectedTeacher here is the merged object from aggregated list
+      const userId = selectedTeacher.user?.id || selectedTeacher.id;
       
       if (!userId) {
         toast.error('Unable to update: User ID not found');
+        setSaving(false);
         return;
       }
       
@@ -477,13 +397,8 @@ export default function TeachersPage() {
         }) || null;
       }
       
-      if (!teacherProfile || !teacherProfile.id) {
-        toast.warning('Teacher profile not found. Assignments will still be linked.');
-      }
-      
       const formData = new FormData();
-      console.log('editFormData.password:', editFormData.password);
-      
+
       // Get original user data
       const originalUser = selectedTeacher.user || selectedTeacher;
       
@@ -493,7 +408,6 @@ export default function TeachersPage() {
       }
       
       if (editFormData.password) {
-        console.log('Appending password:', editFormData.password);
         formData.append('password', editFormData.password);
       }
       formData.append('first_name', editFormData.first_name || '');
@@ -507,8 +421,7 @@ export default function TeachersPage() {
       formData.append('joining_date', editFormData.joining_date || '');
       formData.append('assigned_subject', editFormData.assigned_subject || '');
       formData.append('role', editFormData.role || '');
-      
-      // Only append if they have a value, otherwise they will be handled by to_internal_value on backend
+      formData.append('gender', editFormData.gender || '');
       formData.append('class_teacher_classroom', editFormData.class_teacher_classroom || '');
       formData.append('class_teacher_section', editFormData.class_teacher_section || '');
       
@@ -516,141 +429,68 @@ export default function TeachersPage() {
         formData.append('photo', editFormData._photoFile);
       }
       
+      // 1. Update Profile & User details
       if (teacherProfile?.id) {
         try {
           const endpoint = `/api/users/teachers/${teacherProfile.id}/?school=${id}`;
-          const response = await api.patch(endpoint, formData);
-          // Update local state immediately with response data
-          if (response.data) {
-            setTeachers(prevTeachers =>
-              prevTeachers.map(tp =>
-                tp.id === response.data.id ? response.data : tp
-              )
-            );
-            setSelectedTeacherProfile(response.data);
-            
-            // IMPORTANT: Update assignments state to reflect the newly updated teacher data
-            // This ensures the teacher cards show the updated username immediately
-            const updatedProfile = response.data;
-            if (updatedProfile.user) {
-              const updatedUser = updatedProfile.user;
-              const updatedUserId = updatedUser.id;
-              setAssignments(prevAssignments =>
-                prevAssignments.map(a => {
-                  // If this assignment belongs to the updated teacher, update the nested teacher and profile data
-                  if ((a.teacher?.user?.id === updatedUserId || a.teacher?.id === updatedUserId)) {
-                    return {
-                      ...a,
-                      teacher: {
-                        ...a.teacher,
-                        ...updatedUser,
-                        // Preserve ID fields in case structure differs
-                        id: a.teacher?.id || updatedUserId,
-                        user: updatedUser
-                      },
-                      teacherProfile: updatedProfile
-                    };
-                  }
-                  return a;
-                })
-              );
-            }
-          }
+          await api.patch(endpoint, formData);
         } catch (e) {
           console.warn('Profile patch failed, proceeding with assignments', e?.response?.data || e?.message);
-          toast.warning('প্রোফাইল আপডেট হয়নি, তবুও অ্যাসাইনমেন্ট লিংক হবে');
         }
       } else if (userId) {
-        // Fallback: create teacher profile for this user if missing
         try {
           formData.append('user_id', userId);
           formData.append('school_id', id);
-          const response = await api.post('/api/users/teachers/', formData);
-          // Update local state with newly created profile
-          if (response.data) {
-            setTeachers(prevTeachers => [...prevTeachers, response.data]);
-            setSelectedTeacherProfile(response.data);
-          }
+          await api.post('/api/users/teachers/', formData);
         } catch (e) {
           console.warn('User profile creation failed', e?.response?.data || e?.message);
-          toast.error('শিক্ষক প্রোফাইল আপডেট বা তৈরি করতে ব্যর্থ');
         }
       }
-      // Bulk Update assignments
+
+      // 2. Sync Assignments
       const assignmentsPayload = editFormData.assignments.map(a => {
         const subjectId = a.subjectId;
         const classAssignments = a.classAssignments || [];
         
         return {
           subject_id: subjectId,
-          classroom_ids: classAssignments.map(ca => ca.classroomId).filter(Boolean),
-          section_ids: classAssignments.map(ca => ca.sectionId).filter(s => s !== null && s !== undefined && s !== '')
+          pairs: classAssignments
+            .filter(ca => ca.classroomId)
+            .map(ca => ({
+              classroom_id: ca.classroomId,
+              section_id: ca.sectionId || null
+            }))
         };
-      }).filter(a => a.subject_id && a.classroom_ids.length > 0);
+      }).filter(a => a.subject_id && a.pairs.length > 0);
 
-      console.log('Bulk assign payload:', { teacher_id: userId, school_id: id, assignments: assignmentsPayload });
+      console.log('Sending Bulk assign payload:', JSON.stringify({ teacher_id: userId, school_id: id, assignments: assignmentsPayload }, null, 2));
 
-      // ALWAYS call bulk_assign if we are in the edit flow to sync assignments
-      // even if the payload is empty (means all assignments were removed)
-      try {
-        await api.post('/api/academics/assignments/bulk_assign/', {
-          teacher_id: userId,
-          school_id: id,
-          assignments: assignmentsPayload
-        });
-        toast.success('অ্যাসাইনমেন্ট আপডেট হয়েছে');
-      } catch (e) {
-        console.error('Bulk assignment error', e.response?.data || e.message);
-        toast.error('অ্যাসাইনমেন্ট আপডেট করতে ব্যর্থ: ' + (e.response?.data?.detail || e.message));
-      }
-      
-      toast.success('Changes saved')
+      const bulkRes = await api.post('/api/academics/assignments/bulk_assign/', {
+        teacher_id: userId,
+        school_id: id,
+        assignments: assignmentsPayload
+      }, { _skipCache: true });
+
+      console.log('Bulk assign response:', bulkRes.data);
+
+      toast.success('শিক্ষক তথ্য ও অ্যাসাইনমেন্ট আপডেট হয়েছে');
       setEditDialogOpen(false);
-      setEditFormData({
-        first_name: '',
-        last_name: '',
-        email: '',
-        username: '',
-        password: '',
-        phone_number: '',
-        educational_qualification: '',
-        designation: '',
-        blood_group: '',
-        index_number: '',
-        joining_date: '',
-        assigned_subject: '',
-        class_teacher_classroom: '',
-        class_teacher_section: '',
-        _photoFile: null,
-        assignments: []
-      });
-      setSelectedTeacher(null);
-      // Short delay to allow DB sync before reload
+      
+      // Reload list to reflect changes - with a bit more delay for DB sync
       setTimeout(() => {
-        loadAssignments();
-      }, 500);
+        loadAssignments(false); // Show refresh toast to confirm reload
+      }, 800);
+
     } catch (error) {
-      let errorMsg = 'Failed to update teacher profile';
+      console.error('Update error:', error);
+      let errorMsg = 'Failed to update teacher';
       if (error.response?.data) {
         const data = error.response.data;
-        if (typeof data === 'string') {
-          errorMsg = data;
-        } else if (data.detail) {
-          errorMsg = data.detail;
-        } else if (data.message) {
-          errorMsg = data.message;
-        } else {
-          const fieldErrors = Object.entries(data)
-            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
-            .join('; ');
-          if (fieldErrors) {
-            errorMsg = fieldErrors;
-          }
-        }
-      } else if (error.message) {
-        errorMsg = error.message;
+        errorMsg = data.detail || data.message || (typeof data === 'string' ? data : 'Validation error');
       }
       toast.error(errorMsg);
+    } finally {
+      setSaving(false);
     }
   };
   
@@ -679,7 +519,7 @@ export default function TeachersPage() {
 
       // 1. Delete all assignments for this teacher in this school first
       try {
-        const resp = await api.get(`/api/academics/assignments/?classroom__school=${id}&teacher=${userId}`);
+        const resp = await api.get(`/api/academics/assignments/?school=${id}&teacher=${userId}`);
         const assignmentsToDelete = Array.isArray(resp.data) ? resp.data : (resp.data?.results || []);
         
         console.log(`Found ${assignmentsToDelete.length} assignments to delete for user ${userId}`);
@@ -757,44 +597,12 @@ export default function TeachersPage() {
     }
   };
 
-  const loadFormData = async () => {
-    try {
-      const [subjectsRes, classroomsRes, sectionsRes] = await Promise.all([
-        api.get(`/api/academics/subjects/?school=${id}`),
-        api.get(`/api/academics/classrooms/?school=${id}`),
-        api.get(`/api/academics/sections/?school=${id}`)
-      ]);
-      const subjectsData = Array.isArray(subjectsRes.data) ? subjectsRes.data : (subjectsRes.data?.results || []);
-      const classroomsData = Array.isArray(classroomsRes.data) ? classroomsRes.data : (classroomsRes.data?.results || []);
-      const sectionsData = Array.isArray(sectionsRes.data) ? sectionsRes.data : (sectionsRes.data?.results || []);
-      
-      setSubjects(subjectsData);
-      setClassrooms(classroomsData);
-      setSections(sectionsData);
-      
-      // Show warning if no data
-      if (subjectsData.length === 0) {
-        toast.warning('No subjects found for this school. Please add subjects first.');
-      }
-      if (classroomsData.length === 0) {
-        toast.warning('No classes found for this school. Please add classes first.');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load form data (subjects/classes). Please refresh the page.');
-    }
-  };
 
   // Handle classroom change for new teacher (for assignments)
   useEffect(() => {
     // If we wanted to load only sections for this classroom, we could do it here
     // but now we load all sections for the school in loadFormData and filter in the UI
   }, [newTeacher.classroom_id]);
-
-  // Handle classroom change for edit assignments
-  useEffect(() => {
-    // We already have sections from loadFormData
-  }, [editSelectedClassroomIds]);
 
   const handleAddTeacher = async () => {
     // Validation & auto-generate
@@ -849,6 +657,7 @@ export default function TeachersPage() {
         fd.append('joining_date', newTeacher.joining_date || '');
         fd.append('assigned_subject', newTeacher.assigned_subject || '');
         fd.append('role', newTeacher.role || 'teacher');
+        fd.append('gender', newTeacher.gender || '');
         if (newTeacher.class_teacher_classroom) fd.append('class_teacher_classroom', newTeacher.class_teacher_classroom);
         if (newTeacher.class_teacher_section) fd.append('class_teacher_section', newTeacher.class_teacher_section);
         if (newTeacher._photoFile) {
@@ -1043,10 +852,11 @@ export default function TeachersPage() {
       }
       g.assignmentCount += 1;
     });
+    console.log('Grouped assignments:', grouped);
     return grouped;
   };
 
-  const aggregated = groupAssignments(assignments);
+  const aggregated = useMemo(() => groupAssignments(assignments), [assignments]);
 
   const normalizeClassBase = (name) => {
     const s = String(name || '').toLowerCase();
@@ -1071,21 +881,51 @@ export default function TeachersPage() {
     return `${single} শ্রেণি`;
   };
 
-  const filtered = aggregated
-    .filter(g => {
-      const teacherName = g.teacher?.username || '';
-      const subjJoined = Array.from(g.subjects).join(', ');
-      const classJoined = Array.from(g.classes).join(', ');
-      const q = searchQuery.toLowerCase();
-      return teacherName.toLowerCase().includes(q) ||
-             subjJoined.toLowerCase().includes(q) ||
-             classJoined.toLowerCase().includes(q);
-    })
-    .sort((a, b) => {
-      const teacherIdA = a.teacher?.user?.id || a.teacher?.id || 0;
-      const teacherIdB = b.teacher?.user?.id || b.teacher?.id || 0;
-      return teacherIdA - teacherIdB;
-    });
+  const getDesignationRank = (designation) => {
+    const d = String(designation || '').toLowerCase();
+    if (d.includes('প্রধান শিক্ষক') || d.includes('principal') || d.includes('headmaster')) return 1;
+    if (d.includes('সহকারী প্রধান') || d.includes('assistant principal') || d.includes('assistant head')) return 2;
+    if (d.includes('সিনিয়র') || d.includes('senior')) return 3;
+    if (d.includes('সহকারী শিক্ষক') || d.includes('assistant teacher')) return 4;
+    if (d.includes('কম্পিউটার') || d.includes('computer') || d.includes('lab') || d.includes('operator')) return 5;
+    return 6;
+  };
+
+  const filtered = useMemo(() => {
+    return aggregated
+      .filter(g => {
+        const teacherName = g.teacher?.username || '';
+        const firstName = g.teacher?.first_name || '';
+        const lastName = g.teacher?.last_name || '';
+        const fullName = `${firstName} ${lastName}`.toLowerCase();
+        const subjJoined = Array.from(g.subjects).join(', ');
+        const classJoined = Array.from(g.classes).join(', ');
+        const q = searchQuery.toLowerCase();
+        return teacherName.toLowerCase().includes(q) ||
+               fullName.includes(q) ||
+               subjJoined.toLowerCase().includes(q) ||
+               classJoined.toLowerCase().includes(q);
+      })
+      .sort((a, b) => {
+        const usernameA = a.teacher?.username || '';
+        const usernameB = b.teacher?.username || '';
+
+        // Prioritize specific usernames
+        if (usernameA === 'shamir') return -1;
+        if (usernameB === 'shamir') return 1;
+        if (usernameA === 'Omor') return -1;
+        if (usernameB === 'Omor') return 1;
+
+        const rankA = getDesignationRank(a.teacher?.designation || a.teacherProfile?.designation);
+        const rankB = getDesignationRank(b.teacher?.designation || b.teacherProfile?.designation);
+
+        if (rankA !== rankB) return rankA - rankB;
+
+        const nameA = (a.teacher?.first_name || a.teacher?.username || '').toLowerCase();
+        const nameB = (b.teacher?.first_name || b.teacher?.username || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+  }, [aggregated, searchQuery]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -1114,7 +954,7 @@ export default function TeachersPage() {
             <Button 
               variant="contained" 
               startIcon={<AddIcon />} 
-              onClick={() => window.location.assign(`/school/${id}/teacher/add`)}
+              onClick={() => navigate(`/school/${id}/teacher/add`)}
               sx={{ 
                 bgcolor: 'rgba(255,255,255,0.2)', 
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
@@ -1124,7 +964,7 @@ export default function TeachersPage() {
             </Button>
             <Button 
               variant="contained"
-              onClick={() => window.location.assign(`/school/${id}/teacher/cards`)}
+              onClick={() => navigate(`/school/${id}/teacher/cards`)}
               sx={{ 
                 bgcolor: 'rgba(255,255,255,0.2)', 
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
@@ -1135,7 +975,7 @@ export default function TeachersPage() {
             <Button 
               variant="outlined" 
               startIcon={<RefreshIcon />} 
-              onClick={loadAssignments}
+              onClick={() => loadAssignments(false)}
               sx={{ 
                 borderColor: 'rgba(255,255,255,0.5)', 
                 color: 'white',
@@ -1183,23 +1023,6 @@ export default function TeachersPage() {
       {!loading && filtered.length > 0 && (
         <Grid container spacing={2}>
           {filtered
-            .sort((a, b) => {
-              const usernameA = a.teacher?.username || '';
-              const usernameB = b.teacher?.username || '';
-              const nameA = a.teacher?.first_name || usernameA;
-              const nameB = b.teacher?.first_name || usernameB;
-
-              // Prioritize "shamir"
-              if (usernameA === 'shamir') return -1;
-              if (usernameB === 'shamir') return 1;
-
-              // Then "Omor"
-              if (usernameA === 'Omor') return -1;
-              if (usernameB === 'Omor') return 1;
-
-              // Default sort by name
-              return nameA.localeCompare(nameB);
-            })
             .map(g => {
               const a = g; // aggregated item
               const qualification = a.teacher?.educational_qualification || '';
@@ -1207,12 +1030,8 @@ export default function TeachersPage() {
               const classTextRaw = formatClassRange(a.classes) || Array.from(a.classes).join(', ');
               const hasHyphen = classTextRaw.includes('-');
               const classParts = hasHyphen ? classTextRaw.split('-').map(s => s.trim()) : [classTextRaw, ''];
-              // Debug log
-              console.log('Teacher data:', a.teacher);
-              console.log('Educational qualification:', qualification);
-              
-              return (
-              <Grid item xs={12} sm={6} md={4} key={(a.teacher?.user?.id || a.teacher?.id || Math.random())}>
+                    return (
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={(a.teacher?.user?.id || a.teacher?.id || Math.random())}>
                 <TeacherCard 
                   teacher={{
                     ...a.teacher,
@@ -1228,78 +1047,6 @@ export default function TeachersPage() {
         </Grid>
       )}
 
-      {/* Teacher Detail Dialog */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {`${selectedTeacher?.first_name || ''} ${selectedTeacher?.last_name || ''}`.trim() || selectedTeacher?.username || 'Teacher'} Details
-        </DialogTitle>
-        <DialogContent dividers>
-          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-            <Avatar src={getPhotoUrl(selectedTeacher)} sx={{ width: 96, height: 96 }}>
-              {!getPhotoUrl(selectedTeacher) ? (selectedTeacher?.first_name?.[0] || selectedTeacher?.username?.[0] || '?') : null}
-            </Avatar>
-            <Box>
-              <Typography variant="h6">{`${selectedTeacher?.first_name || ''} ${selectedTeacher?.last_name || ''}`.trim() || selectedTeacher?.username}</Typography>
-              <Typography variant="body2" color="text.secondary">{selectedTeacher?.email || ''}</Typography>
-            </Box>
-          </Stack>
-          <Stack spacing={1.5}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              {selectedTeacherProfile?.designation && (
-                <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }}>
-                  {selectedTeacherProfile.designation}
-                </Typography>
-              )}
-              <Typography variant="body1" color="secondary" sx={{ fontWeight: 600 }}>
-                {(selectedTeacher?.educational_qualification || '').replace(/\s*,\s*/g, ' ও ') || ''}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-              {selectedTeacherSubjects.length > 0
-                ? selectedTeacherSubjects.map((s, i) => (
-                    <Chip
-                      key={`${s}-${i}`}
-                      label={s}
-                      color={['primary','secondary','success','warning','info','error'][i % 6]}
-                      size="medium"
-                      sx={{ '& .MuiChip-label': { fontSize: '0.95rem', fontWeight: 600 } }}
-                    />
-                  ))
-                : <Chip label="No subjects" size="medium" sx={{ '& .MuiChip-label': { fontSize: '0.9rem' } }} />}
-            </Box>
-            {(() => {
-              const classTextRaw = formatClassRange(new Set(selectedTeacherClasses)) || selectedTeacherClasses.join(', ');
-              const hasHyphen = classTextRaw.includes('-');
-              const parts = hasHyphen ? classTextRaw.split('-').map(s => s.trim()) : [classTextRaw, ''];
-              return (
-                <Typography variant="body1" sx={{ wordBreak: 'break-word', overflowWrap: 'anywhere', fontWeight: 600 }}>
-                  {hasHyphen ? (
-                    <>
-                      <Box component="span" sx={{ color: 'primary.main' }}>{parts[0]}</Box>
-                      <Box component="span" sx={{ color: 'primary.main' }}>{' - '}</Box>
-                      <Box component="span" sx={{ color: 'secondary.main' }}>{parts[1]}</Box>
-                    </>
-                  ) : (
-                    <Box component="span" sx={{ color: 'info.main' }}>{classTextRaw}</Box>
-                  )}
-                </Typography>
-              );
-            })()}
-            <Typography variant="body1" color="textSecondary">
-              <strong>Mobile:</strong> {selectedTeacher?.phone_number || selectedTeacher?.mobile_number || 'Not available'}
-            </Typography>
-            {selectedTeacherProfile?.blood_group && (
-              <Typography variant="body1" color="textSecondary">
-                <strong>Blood Group:</strong> {selectedTeacherProfile.blood_group}
-              </Typography>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-      
       {/* Edit Teacher Dialog */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
@@ -1429,6 +1176,19 @@ export default function TeachersPage() {
               <MenuItem value="admin">Admin</MenuItem>
             </TextField>
 
+            <TextField
+              select
+              label="লিঙ্গ (Gender)"
+              fullWidth
+              value={editFormData.gender || ''}
+              onChange={(e) => setEditFormData({...editFormData, gender: e.target.value})}
+            >
+              <MenuItem value="">নির্বাচন করুন</MenuItem>
+              <MenuItem value="male">পুরুষ (Male)</MenuItem>
+              <MenuItem value="female">নারী (Female)</MenuItem>
+              <MenuItem value="other">অন্যান্য (Other)</MenuItem>
+            </TextField>
+
             <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 2 }}>👨‍🏫 শ্রেণি শিক্ষক তথ্য (Class Teacher Info)</Typography>
             <Stack direction="row" spacing={2}>
               <Autocomplete
@@ -1541,8 +1301,9 @@ export default function TeachersPage() {
             variant="contained" 
             color="primary" 
             onClick={handleUpdateTeacher}
+            disabled={saving}
           >
-            Save Changes
+            {saving ? 'Saving...' : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1753,6 +1514,21 @@ export default function TeachersPage() {
               >
                 <MenuItem value="teacher">Teacher</MenuItem>
                 <MenuItem value="admin">Admin</MenuItem>
+              </TextField>
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                select
+                label="লিঙ্গ (Gender)"
+                value={newTeacher.gender || ''}
+                onChange={(e) => setNewTeacher({...newTeacher, gender: e.target.value})}
+                fullWidth
+              >
+                <MenuItem value="">নির্বাচন করুন</MenuItem>
+                <MenuItem value="male">পুরুষ (Male)</MenuItem>
+                <MenuItem value="female">নারী (Female)</MenuItem>
+                <MenuItem value="other">অন্যান্য (Other)</MenuItem>
               </TextField>
             </Grid>
 

@@ -365,6 +365,7 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             defaults={k: v for k, v in {
                 'school': school,
                 'role': role,
+                'gender': validated_data.get('gender') if 'gender' in validated_data else None,
                 'designation': designation,
                 'blood_group': validated_data.get('blood_group') if 'blood_group' in validated_data else None,
                 'occupation': validated_data.get('occupation') if 'occupation' in validated_data else None,

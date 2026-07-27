@@ -319,11 +319,10 @@ class FeeSlip(models.Model):
 @receiver(post_save, sender=FeeStructure)
 def generate_slips_for_class(sender, instance: FeeStructure, created: bool, **kwargs):
     """Auto-generate slips from January to current month when a monthly fee structure is created."""
+    if not created or instance.frequency != 'monthly' or not instance.is_active:
+        return
+
     try:
-        if not created:
-            return
-        if instance.frequency != 'monthly' or not instance.is_active:
-            return
         school = instance.school
         classroom = instance.classroom
         if not classroom:
@@ -334,40 +333,38 @@ def generate_slips_for_class(sender, instance: FeeStructure, created: bool, **kw
         current_month = today.month
 
         # Fetch current students in this classroom
-        students = list(StudentProfile.objects.filter(classroom=classroom, school=school))
-        if not students:
+        students = StudentProfile.objects.filter(classroom=classroom, school=school)
+        if not students.exists():
             return
 
-        # Prepare slips for Jan..current_month
+        # Pre-fetch existing assignments to avoid N+1 inside the loop
+        assignments = {
+            a.student_id: a for a in StudentFeeAssignment.objects.filter(
+                student__in=students,
+                fee_structure=instance
+            )
+        }
+
         slips = []
+        due_day = int(instance.due_day or 10)
+
         for student in students:
-            # Determine amount for student (use assignment if exists else structure amount)
-            assignment = None
-            try:
-                assignment = StudentFeeAssignment.objects.filter(student=student, fee_structure=instance).first()
-            except Exception:
-                assignment = None
-            base_amount = instance.amount
-            if assignment:
-                try:
-                    base_amount = assignment.get_payable_amount()
-                except Exception:
-                    base_amount = instance.amount
+            assignment = assignments.get(student.id)
+            base_amount = assignment.get_payable_amount() if assignment else instance.amount
 
             for m in range(1, current_month + 1):
-                # Compute due date for each month
-                due_day = int(instance.due_day or 10)
-                # Clamp day to last day of month
-                last_day = 28
-                for d in (31, 30, 29, 28):
-                    try:
-                        datetime.date(current_year, m, d)
-                        last_day = d
-                        break
-                    except Exception:
-                        continue
-                due_d = min(due_day, last_day)
-                due_date = datetime.date(current_year, m, due_d)
+                # Calculate due date safely
+                try:
+                    # Simple way to get last day of month
+                    if m == 12:
+                        next_month = datetime.date(current_year + 1, 1, 1)
+                    else:
+                        next_month = datetime.date(current_year, m + 1, 1)
+                    last_day_of_month = (next_month - datetime.timedelta(days=1)).day
+                    due_d = min(due_day, last_day_of_month)
+                    due_date = datetime.date(current_year, m, due_d)
+                except Exception:
+                    due_date = datetime.date(current_year, m, 10)
 
                 slips.append(FeeSlip(
                     school=school,
@@ -380,23 +377,10 @@ def generate_slips_for_class(sender, instance: FeeStructure, created: bool, **kw
                     due_date=due_date,
                 ))
 
-        # Bulk create with ignore_conflicts to avoid duplicates on re-run
+        # Bulk create in chunks to avoid large memory usage or DB limits
         if slips:
-            try:
-                FeeSlip.objects.bulk_create(slips, ignore_conflicts=True)
-            except TypeError:
-                # For older Django versions without ignore_conflicts
-                existing = set(
-                    FeeSlip.objects.filter(
-                        student__in=[s.student for s in slips],
-                        fee_structure=instance,
-                        year=current_year,
-                        month__in=range(1, current_month + 1)
-                    ).values_list('student_id', 'month')
-                )
-                to_create = [s for s in slips if (getattr(s.student, 'pk', None), s.month) not in existing]
-                if to_create:
-                    FeeSlip.objects.bulk_create(to_create)
-    except Exception:
-        # Fail softly to not block FeeStructure creation
-        pass
+            FeeSlip.objects.bulk_create(slips, ignore_conflicts=True, batch_size=500)
+
+    except Exception as e:
+        # Log error instead of silent failure
+        print(f"Error in generate_slips_for_class: {e}")

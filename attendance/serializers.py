@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import AttendanceRecord
-
+from django.db import connection
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
@@ -14,47 +14,62 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'id','school','student',
             'student_name','classroom_name','section_name',
             'date','present','note',
-            'taken_by','taken_by_name','created_at'
+            'taken_by','taken_by_name',
+            'device_id', 'scan_time', 'session', 'operator_log',
+            'created_at'
         ]
-    
+
+    def __init__(self, *args, **kwargs):
+        # Dynamic field filtering based on DB schema
+        super().__init__(*args, **kwargs)
+        try:
+            with connection.cursor() as cursor:
+                db_cols = {c.name for c in connection.introspection.get_table_description(cursor, 'attendance_attendancerecord')}
+
+            allowed = set(self.fields.keys())
+            # Check model fields that are actual DB columns
+            model_fields = {f.name for f in AttendanceRecord._meta.get_fields() if not f.is_relation}
+            for mf in model_fields:
+                if mf not in db_cols and mf in self.fields:
+                    self.fields.pop(mf)
+        except Exception:
+            pass
+
     def get_student_name(self, obj):
-        return f"{obj.student.user.first_name} {obj.student.user.last_name}".strip() or obj.student.user.username
+        try:
+            stu = getattr(obj, 'student', None)
+            if stu:
+                user = getattr(stu, 'user', None)
+                if user:
+                    fn = getattr(user, 'first_name', '') or ''
+                    ln = getattr(user, 'last_name', '') or ''
+                    return f"{fn} {ln}".strip() or getattr(user, 'username', 'Unknown')
+        except Exception: pass
+        return "Unknown Student"
     
     def get_classroom_name(self, obj):
-        return obj.student.classroom.name if obj.student.classroom else 'N/A'
+        try:
+            stu = getattr(obj, 'student', None)
+            if stu and stu.classroom:
+                return stu.classroom.name
+        except Exception: pass
+        return 'N/A'
     
     def get_section_name(self, obj):
-        return obj.student.section.name if obj.student.section else 'N/A'
+        try:
+            stu = getattr(obj, 'student', None)
+            if stu and stu.section:
+                return stu.section.name
+        except Exception: pass
+        return 'N/A'
     
     def get_taken_by(self, obj):
-        u = getattr(obj, 'taken_by_user', None)
-        if not u:
-            return None
-        return {
-            'id': getattr(u, 'id', None),
-            'username': getattr(u, 'username', None),
-            'name': (f"{getattr(u, 'first_name', '')} {getattr(u, 'last_name', '')}".strip() or getattr(u, 'username', None))
-        }
-
-class AttendanceSummarySerializer(serializers.Serializer):
-    """Serializer for attendance summary/report"""
-    date = serializers.DateField()
-    classroom = serializers.CharField()
-    section = serializers.CharField()
-    total_students = serializers.IntegerField()
-    present_count = serializers.IntegerField()
-    absent_count = serializers.IntegerField()
-    attendance_percentage = serializers.FloatField()
-
-class MonthlyAttendanceSerializer(serializers.Serializer):
-    """Serializer for monthly attendance report"""
-    student_id = serializers.IntegerField()
-    student_name = serializers.CharField()
-    classroom = serializers.CharField()
-    section = serializers.CharField()
-    roll_number = serializers.CharField(required=False, allow_blank=True)
-    total_days = serializers.IntegerField()
-    present_days = serializers.IntegerField()
-    absent_days = serializers.IntegerField()
-    attendance_percentage = serializers.FloatField()
-    attendance_details = serializers.ListField(child=serializers.DictField(), required=False)
+        try:
+            u = getattr(obj, 'taken_by_user', None)
+            if not u: return None
+            return {
+                'id': u.id,
+                'username': u.username,
+                'name': f"{u.first_name} {u.last_name}".strip() or u.username
+            }
+        except Exception: return None

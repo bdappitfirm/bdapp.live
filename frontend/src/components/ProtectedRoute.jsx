@@ -61,7 +61,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
 
     if (!loading) checkAuth();
-  }, [navigate, user, loading, location.pathname, location.search, schoolId, userSchoolId, isSuperUser]);
+  }, [navigate, user, loading, location.pathname, location.search, schoolId, userSchoolId, isSuperUser, allowedRoles, role]);
 
   if (isChecking || loading) {
     return (

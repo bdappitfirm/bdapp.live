@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import api from '../utils/api';
@@ -45,28 +45,31 @@ export default function AddTeacherPage() {
   const [usernameCheck, setUsernameCheck] = useState({ loading: false, available: null, suggestions: [], msg: '' });
   const username = form.username.trim();
 
+  const loadData = useCallback(async () => {
+    try {
+      const [subj, classes, secs] = await Promise.all([
+        api.get(`/api/academics/subjects/?school=${id}`),
+        api.get(`/api/academics/classrooms/?school=${id}`),
+        api.get(`/api/academics/sections/?school=${id}`)
+      ]);
+      const subjectsData = Array.isArray(subj.data) ? subj.data : (subj.data?.results || []);
+      const classroomsData = Array.isArray(classes.data) ? classes.data : (classes.data?.results || []);
+      const sectionsData = Array.isArray(secs.data) ? secs.data : (secs.data?.results || []);
+
+      setSubjects(subjectsData || []);
+      setClassrooms(classroomsData || []);
+      setSections(sectionsData || []);
+    } catch (e) {
+      console.error("Error loading dropdown data:", e);
+      setError("Failed to load subjects, classes, or sections. Please refresh the page.");
+    }
+  }, [id]);
+
   useEffect(() => {
-    // Load subjects, classrooms, and all sections for the school
-    const load = async () => {
-      try {
-        const [subj, classes, secs] = await Promise.all([
-          api.get(`/api/academics/subjects/?school=${id}`),
-          api.get(`/api/academics/classrooms/?school=${id}`),
-          api.get(`/api/academics/sections/?school=${id}`)
-        ]);
-        const subjectsData = Array.isArray(subj.data) ? subj.data : (subj.data?.results || []);
-        const classroomsData = Array.isArray(classes.data) ? classes.data : (classes.data?.results || []);
-        const sectionsData = Array.isArray(secs.data) ? secs.data : (secs.data?.results || []);
-        
-        setSubjects(subjectsData || []);
-        setClassrooms(classroomsData || []);
-        setSections(sectionsData || []);
-      } catch (e) {
-        console.error("Error loading dropdown data:", e);
-        setError("Failed to load subjects, classes, or sections. Please refresh the page.");
-      }
-    };
-    load();
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
     if (!username) {
       setUsernameCheck({ loading: false, available: null, suggestions: [], msg: '' });
       return;
@@ -77,7 +80,8 @@ export default function AddTeacherPage() {
       try {
         const res = await api.get(`/api/users/username-availability/`, { params: { q: username } });
         if (cancelled) return;
-        setUsernameCheck({ loading: false, available: res.data.available, suggestions: res.data.suggestions || [], msg: '' });
+
+        setUsernameCheck({ loading: false, available: res.data.available, suggestions: [], msg: '' });
       } catch (e) {
         if (cancelled) return;
         setUsernameCheck({ loading: false, available: null, suggestions: [], msg: e?.response?.data?.error || 'Check failed' });
@@ -85,11 +89,6 @@ export default function AddTeacherPage() {
     }, 400);
     return () => { cancelled = true; clearTimeout(h); };
   }, [username]);
-
-  // Reset section when classrooms selection changes
-  useEffect(() => {
-    // No longer needed with the new dynamic structure
-  }, []);
 
   const addAssignmentRow = () => {
     setAssignments([...assignments, { subjectId: '', classAssignments: [{ classroomId: '', sectionId: '' }] }]);
@@ -222,10 +221,8 @@ export default function AddTeacherPage() {
               currentPhoto={null} 
               onPhotoChange={(file) => {
                 setPhotoFile(file);
-                // Create preview URL if file exists
                 if (file) {
                   const previewUrl = URL.createObjectURL(file);
-                  // Clean up the URL when component unmounts
                   return () => URL.revokeObjectURL(previewUrl);
                 }
               }} 
@@ -241,13 +238,7 @@ export default function AddTeacherPage() {
             error={!!formErrors.username || usernameCheck.available === false}
           />
 
-          {usernameCheck.available === false && usernameCheck.suggestions?.length > 0 && (
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {usernameCheck.suggestions.map((sug, i) => (
-                <Chip key={i} label={sug} onClick={() => applySuggestion(sug)} clickable />
-              ))}
-            </Stack>
-          )}
+          {/* Removed username suggestions chip stack */}
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField label="Password" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} helperText={formErrors.password || 'Optional — generated if blank'} error={!!formErrors.password} fullWidth />

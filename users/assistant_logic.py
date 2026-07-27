@@ -216,16 +216,29 @@ class AssistantLogic:
             
             if (('মেনু' in ql or 'menu' in ql) and any(w in ql for w in ['স্কুল', 'school'])) or any(w in ql for w in ['স্কুল মেনু', 'school menu']): return 'school_menu'
             
-            # --- FOLLOW-UP QUERY DETECTION (FIRST!) ---
+            # --- FOLLOW-UP QUERY DETECTION (ENHANCED) ---
             session_id = params.get('session_id')
             if session_id:
                 last_assistant_msg = AIChatMessage.objects.filter(session_id=session_id, role='assistant').order_by('-timestamp').first()
                 if last_assistant_msg:
                     last_content = last_assistant_msg.content.lower()
+
                     # If last message was about blood group, and user asks for name/mobile
                     if any(phrase in last_content for phrase in ['রক্তের গ্রুপ', 'blood group']) and any(w in ql for w in ['নাম', 'মোবাইল', 'mobile', 'phone', 'ফোন', 'তথ্য', 'বিস্তারিত']):
                         return 'entity_details_followup'
-            
+
+                    # NEW: Context Inheritance for Data Analysis
+                    has_class_spec = resolve_classroom()[0] or resolve_section()[0]
+                    is_very_short = len(ql.split()) <= 3
+
+                    if is_very_short and has_class_spec:
+                        if any(w in last_content for w in ['বকেয়া', 'বাকি', 'due', 'বেতন', 'ফি']):
+                            return 'fees_due'
+                        if any(w in last_content for w in ['উপস্থিতি', 'হাজিরা', 'attendance']):
+                            return 'attendance_daily'
+                        if any(w in last_content for w in ['রেজাল্ট', 'পরীক্ষা', 'result', 'exam']):
+                            return 'results'
+
             # Check for result-related queries even without explicit "পরীক্ষা" word
             if any(w in ql for w in ['ফেল', 'নাম্বার', 'নম্বর', 'marks', 'top', 'টপ', 'সর্বোচ্চ', 'নিম্নতম', 'lowest', 'সবচেয়ে', 'বেশি', 'কম']):
                 if any(w in ql for w in ['বেশি', 'সর্বাধিক', 'most', 'highest', 'সবচেয়ে']) and any(w in ql for w in ['নাম্বার', 'নম্বর', 'marks']):
@@ -240,12 +253,16 @@ class AssistantLogic:
             # Only do name search if no other intents matched AND it really looks like a name
             if len(ql.split()) <= 3:
                 # Check if it looks like a name (not in our stop words and not result/subject related)
-                stop_words = ['হ্যালো', 'হাই', 'কেমন', 'ধন্যবাদ', 'বিদায়', 'সালাম', 'আদাব', 'হ্যাঁ', 'না', 'বলো', 'দাও', 'কি', 'কী', 'কে', 'কই', 'বাংলা', 'ইংরেজি', 'গণিত', 'বিজ্ঞান', 'নাম্বার', 'নম্বর', 'marks', 'ফেল', 'বেশি', 'কম', 'সবচেয়ে', 'সর্বশেষ', 'শেষ', 'নাম', 'মোবাইল', 'ফোন', 'তথ্য', 'বিস্তারিত', 'সবজেক্ট', 'বিষয়', 'ইনপুট', 'বাকি', 'সাল', 'বছর']
+                stop_words = ['হ্যালো', 'হাই', 'কেমন', 'ধন্যবাদ', 'বিদায়', 'সালাম', 'আদাব', 'হ্যাঁ', 'না', 'বলো', 'দাও', 'কি', 'কী', 'কে', 'কই', 'বাংলা', 'ইংরেজি', 'গণিত', 'বিজ্ঞান', 'নাম্বার', 'নম্বর', 'marks', 'ফেল', 'বেশি', 'কম', 'সবচেয়ে', 'সর্বশেষ', 'শেষ', 'নাম', 'মোবাইল', 'ফোন', 'তথ্য', 'বিস্তারিত', 'সবজেক্ট', 'বিষয়', 'ইনপুট', 'বাকি', 'সাল', 'বছর', 'আর', 'এবং', 'ও', 'সেভেনে', 'সিক্সে', 'এইটে', 'নাইনে', 'টেনে', 'ক্লাস', 'ক্লাসে', 'শ্রেণি', 'শ্রেণী']
                 subject_words = ['বাংলা', 'ইংরেজি', 'গণিত', 'বিজ্ঞান', 'আরবি', 'ধর্ম', 'ইতিহাস', 'ভূগোল', 'বাংলার', 'ইংরেজির', 'গণিতের', 'বিজ্ঞানের']
                 # Also check for question words - questions are probably not name searches
-                question_words = ['কি', 'কী', 'কে', 'কারা', 'কাদের', 'কত', 'কয়', 'কোন']
+                question_words = ['কি', 'কী', 'কে', 'কারা', 'কাদের', 'কত', 'কয়', 'কোন', 'কোথায়']
                 has_question_word = any(w in ql for w in question_words)
-                if not has_question_word and not any(w in ql for w in stop_words) and not any(w in ql for w in subject_words):
+
+                # If query contains a classroom name and it's short, it's likely NOT a name search
+                has_class_resolved = resolve_classroom()[0]
+
+                if not has_question_word and not any(w in ql for w in stop_words) and not any(w in ql for w in subject_words) and not has_class_resolved:
                     return 'student_search_name'
             
             if any(w in ql for w in ['দুদু', 'খাও', 'পাগল', 'গাধা', 'বলদ', 'stupid', 'mad', 'eat']): return 'chat_weird'
@@ -529,13 +546,22 @@ class AssistantLogic:
             slips = FeeSlip.objects.filter(year=year)
             if school_id: slips = slips.filter(school_id=school_id)
             if not slips.exists(): return {'text': f"দুঃখিত, {year} সালের ফি সংক্রান্ত কোনো তথ্য আমার ডাটাবেসে পাওয়া যায়নি।"}
+
+            cid, cname = resolve_classroom()
+            if cid:
+                slips = slips.filter(classroom_id=cid)
+                if not slips.exists(): return {'text': f"**{cname}** শ্রেণিতে {year} সালের কোনো ফি সংক্রান্ত তথ্য পাওয়া যায়নি।"}
+
             due_data = slips.aggregate(total_assigned=Sum('amount'), total_paid=Sum('amount_paid'))
             total_assigned = due_data['total_assigned'] or 0
             paid = due_data['total_paid'] or 0
             due = total_assigned - paid
-            if any(w in ql for w in ['পরিশোধ', 'কালেকশন', 'paid']): return {'text': f"{year} সালে মোট **{paid:,.2f}** টাকা ফি পরিশোধ করা হয়েছে।"}
-            if any(w in ql for w in ['বাকি', 'বকেয়া', 'due']): return {'text': f"{year} সালে মোট বকেয়া ফি এর পরিমাণ **{due:,.2f}** টাকা।"}
-            return {'text': f"{year} সালে মোট পরিশোধিত ফি: **{paid:,.2f}** টাকা এবং মোট বকেয়া: **{due:,.2f}** টাকা।"}
+
+            loc_suffix = f" (**{cname}** শ্রেণিতে)" if cid else ""
+
+            if any(w in ql for w in ['পরিশোধ', 'কালেকশন', 'paid']): return {'text': f"{year} সালে মোট **{paid:,.2f}** টাকা ফি পরিশোধ করা হয়েছে{loc_suffix}।"}
+            if any(w in ql for w in ['বাকি', 'বকেয়া', 'due']): return {'text': f"{year} সালে মোট বকেয়া ফি এর পরিমাণ **{due:,.2f}** টাকা{loc_suffix}।"}
+            return {'text': f"{year} সালে মোট পরিশোধিত ফি: **{paid:,.2f}** টাকা এবং মোট বকেয়া: **{due:,.2f}** টাকা{loc_suffix}।"}
 
         if it == 'fees_due_max_class':
             year = datetime.date.today().year

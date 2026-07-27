@@ -20,7 +20,7 @@ class ExaminationSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Examination
-        fields = ['id', 'school', 'name', 'exam_type', 'classroom', 'classroom_name', 'section', 'section_name', 'exam_date', 'total_marks', 'pass_marks', 'written_max', 'mcq_max', 'practical_max', 'slots']
+        fields = ['id', 'school', 'name', 'exam_type', 'classroom', 'classroom_name', 'section', 'section_name', 'exam_date', 'start_time', 'end_time', 'total_marks', 'pass_marks', 'written_max', 'mcq_max', 'practical_max', 'slots']
 
 
 class ResultSerializer(serializers.ModelSerializer):

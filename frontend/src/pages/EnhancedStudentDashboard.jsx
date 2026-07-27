@@ -59,30 +59,74 @@ const StudentProfile = ({ student }) => {
   const user = student.user || {};
   
   return (
-    <Paper sx={{ p: 3, mt: 2 }}>
-      <Typography variant="h6" gutterBottom>Student Profile</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          <Typography variant="body2" color="text.secondary">User ID</Typography>
-          <Typography variant="body1">{user.id ?? 'N/A'}</Typography>
+    <Paper sx={{ p: 3, mt: 2, borderRadius: 2 }}>
+      <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', borderBottom: '2px solid #eee', pb: 1, mb: 2 }}>
+        শিক্ষার্থীর তথ্য (Profile Details)
+      </Typography>
+      <Grid container spacing={3}>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">ইউজার আইডি</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{user.username ?? 'N/A'}</Typography>
         </Grid>
-        <Grid item xs={12} sm={6}>
-          <Typography variant="body2" color="text.secondary">Name</Typography>
-          <Typography variant="body1">
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">নাম</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
             {`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username}
           </Typography>
         </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">জেন্ডার</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.gender || 'N/A'}</Typography>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">পিতার নাম</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.father_name || 'N/A'}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">মাতার নাম</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.mother_name || 'N/A'}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">ফোন</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{user.phone_number || 'N/A'}</Typography>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">রোল নম্বর</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.roll_number || 'N/A'}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">শ্রেণি ও শাখা</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+            {student.classroom?.name || 'N/A'} {student.section?.name ? `(${student.section.name})` : ''}
+          </Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">গ্রুপ</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.student_group || student.group || 'N/A'}</Typography>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">জন্ম তারিখ</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.birth_date ? dayjs(student.birth_date).format('DD/MM/YYYY') : 'N/A'}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">ভর্তির তারিখ</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.admission_date ? dayjs(student.admission_date).format('DD/MM/YYYY') : 'N/A'}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography variant="body2" color="text.secondary">রক্তের গ্রুপ</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.blood_group || 'N/A'}</Typography>
+        </Grid>
+
         <Grid item xs={12} sm={6}>
-          <Typography variant="body2" color="text.secondary">Email</Typography>
-          <Typography variant="body1">{user.email || 'N/A'}</Typography>
+          <Typography variant="body2" color="text.secondary">ঠিকানা</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.address || 'N/A'}</Typography>
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Typography variant="body2" color="text.secondary">Phone</Typography>
-          <Typography variant="body1">{user.phone_number || 'N/A'}</Typography>
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Typography variant="body2" color="text.secondary">Roll Number</Typography>
-          <Typography variant="body1">{student.roll_number || 'N/A'}</Typography>
+          <Typography variant="body2" color="text.secondary">মন্তব্য</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.remarks || 'N/A'}</Typography>
         </Grid>
       </Grid>
     </Paper>

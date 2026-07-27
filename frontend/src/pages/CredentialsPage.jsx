@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box, Paper, Stack, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  Chip, CircularProgress
+  Chip, CircularProgress, TextField, MenuItem, Grid
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import PrintIcon from '@mui/icons-material/Print';
@@ -10,14 +10,26 @@ import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { useAcademics } from '../context/AcademicsContext';
 
 export default function CredentialsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { classrooms, sections, refreshAll } = useAcademics();
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [resetApplied, setResetApplied] = useState(false);
+
+  // Filters
+  const [classFilter, setClassFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+
+  useEffect(() => {
+    if (id) refreshAll(id);
+  }, [id, refreshAll]);
 
   const loadList = async (withPasswords = false) => {
     if (!id) return;
@@ -65,7 +77,25 @@ export default function CredentialsPage() {
     }
   };
 
-  const printableRows = useMemo(() => rows, [rows]);
+  const filteredRows = useMemo(() => {
+    return rows.filter(r => {
+      if (roleFilter && String(r.role).toLowerCase() !== roleFilter.toLowerCase()) return false;
+
+      // Class/Section filtering logic for students and parents
+      if (classFilter) {
+          const cid = String(r.classroom_id || r.child_classroom_id || '');
+          if (cid !== String(classFilter)) return false;
+      }
+      if (sectionFilter) {
+          const sid = String(r.section_id || r.child_section_id || '');
+          if (sid !== String(sectionFilter)) return false;
+      }
+
+      return true;
+    });
+  }, [rows, roleFilter, classFilter, sectionFilter]);
+
+  const printableRows = filteredRows;
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%' }}>
@@ -99,6 +129,57 @@ export default function CredentialsPage() {
             </Button>
           </Stack>
         </Stack>
+      </Paper>
+
+      <Paper elevation={2} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={4}>
+            <TextField
+              select
+              fullWidth
+              label="রোল (Role)"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              size="small"
+            >
+              <MenuItem value="">সব রোল</MenuItem>
+              <MenuItem value="student">শিক্ষার্থী (Student)</MenuItem>
+              <MenuItem value="parent">অভিভাবক (Parent)</MenuItem>
+              <MenuItem value="teacher">শিক্ষক (Teacher)</MenuItem>
+              <MenuItem value="admin">এডমিন (Admin)</MenuItem>
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              select
+              fullWidth
+              label="শ্রেণি"
+              value={classFilter}
+              onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}
+              size="small"
+              disabled={roleFilter === 'teacher' || roleFilter === 'admin'}
+            >
+              <MenuItem value="">সব শ্রেণি</MenuItem>
+              {classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              select
+              fullWidth
+              label="সেকশন"
+              value={sectionFilter}
+              onChange={(e) => setSectionFilter(e.target.value)}
+              size="small"
+              disabled={!classFilter || roleFilter === 'teacher' || roleFilter === 'admin'}
+            >
+              <MenuItem value="">সব সেকশন</MenuItem>
+              {sections.filter(s => String(s.classroom?.id || s.classroom) === String(classFilter)).map(s => (
+                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+        </Grid>
       </Paper>
 
       <Paper elevation={2} sx={{ p: 2, borderRadius: 2 }}>

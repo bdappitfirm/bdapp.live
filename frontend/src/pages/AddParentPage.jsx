@@ -80,8 +80,7 @@ export default function AddParentPage() {
       try {
         const res = await api.get(`/api/users/username-availability/`, { 
           params: { 
-            q: username,
-            school_id: id  // Add school_id to check username uniqueness within school
+            q: username
           },
           headers: { 
             'X-Requested-With': 'XMLHttpRequest',
@@ -90,10 +89,10 @@ export default function AddParentPage() {
           }
         });
         if (!cancelled) {
-          setUsernameCheck({ 
+          setUsernameCheck({
             loading: false, 
             available: res.data.available, 
-            suggestions: res.data.suggestions || [], 
+            suggestions: [],
             msg: '' 
           });
         }
@@ -355,13 +354,7 @@ export default function AddParentPage() {
             fullWidth
           />
 
-          {usernameCheck.available === false && usernameCheck.suggestions?.length > 0 && (
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {usernameCheck.suggestions.map((sug, i) => (
-                <Chip key={i} label={sug} onClick={() => applySuggestion(sug)} clickable />
-              ))}
-            </Stack>
-          )}
+          {/* Removed username suggestions chip stack */}
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField 

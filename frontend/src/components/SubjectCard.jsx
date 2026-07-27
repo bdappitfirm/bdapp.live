@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -16,7 +16,6 @@ import {
   DialogActions,
   TextField,
   MenuItem,
-  Grid,
   Divider,
   Zoom,
   Tooltip
@@ -68,23 +67,43 @@ export default function SubjectCard({
   const [classrooms, setClassrooms] = useState([]);
   const [sections, setSections] = useState([]);
 
+  // Get assigned teachers for this subject (prefer class-scoped list if present)
+  const assignedTeachers = subject.teachers || subject.assigned_teachers || [];
+
+  const loadClassrooms = useCallback(async () => {
+    try {
+      const res = await api.get(`/api/academics/classrooms/?school=${schoolId}`);
+      setClassrooms(res.data || []);
+    } catch (err) {
+      console.error('Failed to load classrooms:', err);
+      toast.error('Failed to load classrooms');
+    }
+  }, [schoolId, toast]);
+
+  const loadSections = useCallback(async (classId) => {
+    try {
+      const res = await api.get(`/api/academics/sections/?classroom=${classId}&school=${schoolId}`);
+      setSections(res.data || []);
+    } catch (err) {
+      console.error('Failed to load sections:', err);
+      setSections([]);
+    }
+  }, []);
+
   // Pre-fill selection when dialog opens if classroomId/sectionId are provided
   useEffect(() => {
     if (linkTeacherDialogOpen) {
       if (classroomId && !selectedClassroomId) setSelectedClassroomId(classroomId);
       if (sectionId && !selectedSectionId) setSelectedSectionId(sectionId);
     }
-  }, [linkTeacherDialogOpen, classroomId, sectionId]);
-
-  // Get assigned teachers for this subject (prefer class-scoped list if present)
-  const assignedTeachers = subject.teachers || subject.assigned_teachers || [];
+  }, [linkTeacherDialogOpen, classroomId, sectionId, selectedClassroomId, selectedSectionId]);
 
   // Load classrooms when dialog opens
   useEffect(() => {
     if (linkTeacherDialogOpen && schoolId) {
       loadClassrooms();
     }
-  }, [linkTeacherDialogOpen, schoolId]);
+  }, [linkTeacherDialogOpen, schoolId, loadClassrooms]);
 
   // Load sections when classroom changes
   useEffect(() => {
@@ -93,27 +112,7 @@ export default function SubjectCard({
     } else {
       setSections([]);
     }
-  }, [selectedClassroomId]);
-
-  const loadClassrooms = async () => {
-    try {
-      const res = await api.get(`/api/academics/classrooms/?school=${schoolId}`);
-      setClassrooms(res.data || []);
-    } catch (err) {
-      console.error('Failed to load classrooms:', err);
-      toast.error('Failed to load classrooms');
-    }
-  };
-
-  const loadSections = async (classroomId) => {
-    try {
-      const res = await api.get(`/api/academics/sections/?classroom=${classroomId}`);
-      setSections(res.data || []);
-    } catch (err) {
-      console.error('Failed to load sections:', err);
-      setSections([]);
-    }
-  };
+  }, [selectedClassroomId, loadSections]);
 
   const handleEdit = () => {
     setFormData({
@@ -132,7 +131,7 @@ export default function SubjectCard({
 
     setSaving(true);
     try {
-      await api.put(`/api/academics/subjects/${subject.id}/`, {
+      await api.put(`/api/academics/subjects/${subject.id}/?school=${schoolId}`, {
         ...formData,
         school_id: schoolId
       });
@@ -163,11 +162,12 @@ export default function SubjectCard({
     setSaving(true);
     try {
       // Link teacher to subject using the assignments endpoint
-      await api.post('/api/academics/assignments/', {
+      await api.post(`/api/academics/assignments/?school=${schoolId}`, {
         teacher_id: selectedTeacherId,
         subject_id: subject.id,
         classroom_id: selectedClassroomId,
-        section_id: selectedSectionId || null
+        section_id: selectedSectionId || null,
+        school_id: schoolId
       });
       toast.success('Teacher linked successfully!');
       setLinkTeacherDialogOpen(false);
@@ -195,7 +195,7 @@ export default function SubjectCard({
     }
 
     try {
-      await api.delete(`/api/academics/assignments/${assignmentId}/`);
+      await api.delete(`/api/academics/assignments/${assignmentId}/?school=${schoolId}`);
       toast.success(`${teacherName} removed from subject`);
       if (onUpdate) onUpdate();
     } catch (err) {

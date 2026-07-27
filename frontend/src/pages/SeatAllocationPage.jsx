@@ -13,6 +13,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import QRCode from 'qrcode.react';
 
 const SeatAllocationPage = () => {
   const { id: schoolId } = useParams();
@@ -23,9 +24,22 @@ const SeatAllocationPage = () => {
   const [selectedBuildings, setSelectedBuildings] = useState([]);
   const [buildingRooms, setBuildingRooms] = useState({});
   const [roomBenches, setRoomBenches] = useState({});
+  const [buildingRoomDetails, setBuildingRoomDetails] = useState({}); // { 1: [{room_number: 1, room_name: "101", bench_count: 15}, ...] }
   const [seatPlans, setSeatPlans] = useState([]);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
+  const [examSlots, setExamSlots] = useState([]);
+
+  const toBnDigits = (num) => {
+    const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+    return String(num).replace(/\d/g, d => bn[d]);
+  };
+
+  const formatBnDate = (dateStr) => {
+    if (!dateStr) return '---';
+    const [y, m, d] = dateStr.split('-');
+    return `${toBnDigits(d)}/${toBnDigits(m)}/${toBnDigits(y)}`;
+  };
 
   const benchOptions = [5, 10, 15, 20, 25, 30, 35, 40, 50];
   const DEFAULT_BENCH_COUNT = 15;
@@ -45,7 +59,7 @@ const SeatAllocationPage = () => {
           const buildingsRes = await api.get(`/api/academics/buildings/?school=${schoolId}`);
           const buildingsData = buildingsRes.data || [];
           if (buildingsData.length > 0) {
-            const bNums = []; const bRooms = {}; const rBenches = {};
+            const bNums = []; const bRooms = {}; const rBenches = {}; const bRoomDetails = {};
             for (const b of buildingsData) {
               const match = b.name.match(/\d+/);
               const bNum = match ? parseInt(match[0]) : null;
@@ -54,14 +68,23 @@ const SeatAllocationPage = () => {
                 const roomsRes = await api.get(`/api/academics/rooms/?building=${b.id}`);
                 const roomsData = roomsRes.data || [];
                 bRooms[bNum] = roomsData.length;
+                const roomDetails = [];
                 roomsData.forEach((room, idx) => {
-                  rBenches[`${bNum}-${idx + 1}`] = Math.ceil(room.capacity / 3) || DEFAULT_BENCH_COUNT;
+                  // Always default to 15 benches for any room
+                  rBenches[`${bNum}-${idx + 1}`] = 15;
+                  roomDetails.push({
+                    room_number: idx + 1,
+                    room_name: room.name,
+                    bench_count: 15
+                  });
                 });
+                bRoomDetails[bNum] = roomDetails;
               }
             }
             setSelectedBuildings(bNums);
             setBuildingRooms(bRooms);
             setRoomBenches(rBenches);
+            setBuildingRoomDetails(bRoomDetails);
           }
         } catch (_) {}
 
@@ -73,6 +96,10 @@ const SeatAllocationPage = () => {
         });
         setExams(targetExams);
         if (targetExams.length > 0) setSelectedExam(targetExams[0].id);
+
+        // Fetch all slots to get dates
+        const slotsRes = await api.get(`/api/results/exam-slots/?school=${schoolId}`);
+        setExamSlots(slotsRes.data.results || slotsRes.data || []);
       } catch (error) {
         setMessage('তথ্য লোড করতে সমস্যা হয়েছে!');
         setMessageType('error');
@@ -89,7 +116,17 @@ const SeatAllocationPage = () => {
   };
 
   const handleRoomCountChange = (buildingNum, count) => {
-    setBuildingRooms(prev => ({ ...prev, [buildingNum]: parseInt(count) || 1 }));
+    const num = parseInt(count) || 1;
+    setBuildingRooms(prev => ({ ...prev, [buildingNum]: num }));
+
+    // Automatically set default 15 benches for all rooms in this building
+    const newBenches = { ...roomBenches };
+    for (let i = 1; i <= num; i++) {
+      if (!newBenches[`${buildingNum}-${i}`]) {
+        newBenches[`${buildingNum}-${i}`] = 15;
+      }
+    }
+    setRoomBenches(newBenches);
   };
 
   const handleBenchCountChange = (buildingNum, roomNum, count) => {
@@ -101,8 +138,16 @@ const SeatAllocationPage = () => {
     selectedBuildings.forEach(bNum => {
       const numRooms = buildingRooms[bNum] || 1;
       const rooms = [];
+      const savedRooms = buildingRoomDetails[bNum] || [];
       for (let rNum = 1; rNum <= numRooms; rNum++) {
-        rooms.push({ room_number: rNum, bench_count: roomBenches[`${bNum}-${rNum}`] || DEFAULT_BENCH_COUNT });
+        const savedRoom = savedRooms[rNum - 1];
+        const roomName = savedRoom?.room_name || `${bNum * 100 + rNum}`;
+        const benchCount = savedRoom?.bench_count || roomBenches[`${bNum}-${rNum}`] || DEFAULT_BENCH_COUNT;
+        rooms.push({ 
+          room_number: rNum, 
+          room_name: roomName, 
+          bench_count: benchCount 
+        });
       }
       buildings.push({ building_number: bNum, rooms });
     });
@@ -116,17 +161,27 @@ const SeatAllocationPage = () => {
       return;
     }
     setLoading(true);
+    setSeatPlans([]); // Clear old data
     try {
       const response = await api.post('/api/academics/generate-seat-plan/', {
         examination_id: selectedExam,
         school_id: schoolId,
         buildings: prepareBuildingData()
       });
-      setSeatPlans(response.data.seat_plans || []);
-      setMessage('সিট প্ল্যান সফলভাবে তৈরি হয়েছে!');
-      setMessageType('success');
+
+      const plans = response.data.seat_plans || response.data || [];
+      setSeatPlans(plans);
+
+      if (plans.length > 0) {
+        setMessage(`সিট প্ল্যান সফলভাবে তৈরি হয়েছে! (${plans.length} জন শিক্ষার্থী)`);
+        setMessageType('success');
+      } else {
+        setMessage('নির্বাচিত পরীক্ষা বা ভবনের জন্য কোনো শিক্ষার্থী পাওয়া যায়নি।');
+        setMessageType('warning');
+      }
     } catch (error) {
-      setMessage('সিট প্ল্যান তৈরি করতে সমস্যা হয়েছে!');
+      console.error("Seat plan error:", error);
+      setMessage(error.response?.data?.detail || 'সিট প্ল্যান তৈরি করতে সমস্যা হয়েছে!');
       setMessageType('error');
     } finally {
       setLoading(false);
@@ -169,56 +224,62 @@ const SeatAllocationPage = () => {
     const u = s.user || {};
     const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
     const photo = getMediaUrl(u.photo_url || u.photo || s.photo);
+    const benchNum = Math.floor((parseInt(plan.seat_number) - 1) / 3) + 1;
+    const qrData = `STU|${s.id}|${name}|${schoolId}`;
 
     return (
       <Box sx={{
         width: '65mm',
-        height: '64mm',
-        border: '1.5px solid #1a237e',
-        borderRadius: '8px',
+        height: '49mm', // Slightly less than 50mm to be safe
+        border: '1px solid #000',
+        borderRadius: '3px',
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'white',
         position: 'relative',
         breakInside: 'avoid',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        p: '3px' // Minimal padding
       }}>
-        {/* Header - No School Name */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
-          <img src={schoolLogo} alt="L" style={{ width: 35, height: 35, objectFit: 'contain' }} />
-          <Box sx={{ textAlign: 'center', flex: 1 }}>
-             <Typography sx={{ fontSize: '10px', fontWeight: 'bold', color: '#000' }}>{examName}</Typography>
+        {/* Header - Very Compact */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.2, borderBottom: '0.5px solid #eee', pb: 0.1 }}>
+          <Box sx={{ border: '0.5px solid #000', p: 0.1, bgcolor: '#fff' }}>
+             <QRCode value={qrData} size={22} level="L" />
           </Box>
-          <Avatar src={photo} variant="rounded" sx={{ width: 38, height: 45, border: '1px solid #ddd' }} />
+          <Typography sx={{ fontSize: '8px', fontWeight: 'bold', color: '#000', textAlign: 'center', flex: 1, px: 0.1, lineHeight: 1 }}>{examName}</Typography>
+          <Avatar src={photo} variant="rounded" sx={{ width: 28, height: 32, border: '1px solid #eee' }} />
         </Box>
 
         {/* Student Info */}
-        <Box sx={{ textAlign: 'center', py: 0.3 }}>
-          <Typography sx={{ fontSize: '13px', fontWeight: 'bold', color: '#000', lineHeight: 1.1 }}>{name}</Typography>
-          <Typography sx={{ fontSize: '11px', color: '#000' }}>শ্রেণি: {s.classroom?.name}</Typography>
-          <Typography sx={{ fontSize: '11px', color: '#000' }}>রোল: {normalizeNumberInput(s.roll_number)} | সেকশন: {s.section?.name || 'N/A'}</Typography>
+        <Box sx={{ textAlign: 'center', flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <Typography sx={{ fontSize: '10.5px', fontWeight: 'bold', color: '#000', lineHeight: 1 }}>{name}</Typography>
+          <Typography sx={{ fontSize: '8.5px', color: '#333', lineHeight: 1 }}>শ্রেণি: {s.classroom?.name}</Typography>
+          <Typography sx={{ fontSize: '8.5px', color: '#333', lineHeight: 1 }}>রোল:{normalizeNumberInput(s.roll_number)} | শাখা:{s.section?.name || 'N/A'}</Typography>
         </Box>
 
-        {/* Location Info - Full Width & Black Text */}
+        {/* Footer - FORCED SINGLE LINE */}
         <Box sx={{
-          flexGrow: 1,
           display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          textAlign: 'center',
-          bgcolor: '#f5f5f5',
-          color: '#000',
-          border: '1.5px solid #000',
-          borderRadius: '4px',
-          mt: 0.5,
-          p: 1
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          px: '5px',
+          bgcolor: '#000',
+          color: '#fff',
+          borderRadius: '2px',
+          py: '2px',
+          mt: 0.1,
+          width: '100%',
+          boxSizing: 'border-box'
         }}>
-          <Typography sx={{ fontSize: '15px', fontWeight: 'bold' }}>
-            রুম: {plan.room?.name}
+          <Typography sx={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+            {plan.session === 'morning' ? 'সকাল' : 'বিকাল'}
           </Typography>
-          <Typography sx={{ fontSize: '18px', fontWeight: '900' }}>
-            বেঞ্চ: {Math.floor((parseInt(plan.seat_number) - 1) / 3) + 1}
+          <Typography sx={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+            রুম:{plan.room?.name}
+          </Typography>
+          <Typography sx={{ fontSize: '11px', fontWeight: '900', whiteSpace: 'nowrap' }}>
+            বেঞ্চ:{benchNum}
           </Typography>
         </Box>
       </Box>
@@ -230,21 +291,55 @@ const SeatAllocationPage = () => {
   const principalSig = getMediaUrl(school?.principal_signature);
   const schoolSeal = getMediaUrl(school?.school_seal);
 
-  const SeatPlanTable = ({ session }) => {
+  const StickerGrid = ({ session }) => {
     const plans = seatPlans.filter(p => p.session === session);
     if (plans.length === 0) return null;
+
+    return (
+      <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 65mm)',
+        gap: '2mm',
+        justifyContent: 'center',
+        pageBreakAfter: 'always'
+      }} className="stickers-only">
+        {plans.map(plan => (
+          <BenchSticker key={plan.id} plan={plan} />
+        ))}
+      </Box>
+    );
+  };
+
+  const SeatPlanTable = ({ session }) => {
+    // Robust filtering: handle case-insensitivity and potential missing session field
+    const plans = seatPlans.filter(p => {
+        const s = String(p.session || '').toLowerCase();
+        // If p.session is missing, we might want to include it in the default session
+        if (!s) return session === 'morning';
+        return s === session.toLowerCase();
+    });
+
+    if (plans.length === 0) return null;
+
+    const selectedExamData = exams.find(exam => String(exam.id) === String(selectedExam)) || {};
+    const routineDate = selectedExamData?.exam_date || selectedExamData?.start_date || '';
+
+    // QR Code for school/verification
+    const schoolQR = `SCHOOL|${schoolId}|${school?.name}`;
 
     return (
       <Box sx={{ mb: 6, pageBreakAfter: 'always' }} className="door-list-section">
         {/* Header inside table area for print consistency */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, mb: 2, borderBottom: '2px solid #1a237e', pb: 1 }}>
-          {schoolLogo && <img src={schoolLogo} alt="Logo" style={{ width: 80, height: 80, objectFit: 'contain' }} />}
+          <Box sx={{ border: '1px solid #1a237e', p: 0.5, bgcolor: '#fff' }}>
+             <QRCode value={schoolQR} size={80} level="M" />
+          </Box>
           <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1a237e' }}>{school?.bn_name || school?.name}</Typography>
-            <Typography variant="body2">{school?.address}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1a237e', fontSize: '1.8rem' }}>{school?.bn_name || school?.name}</Typography>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem' }}>{school?.address}</Typography>
             <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between', bgcolor: '#1a237e', color: 'white', px: 3, py: 0.5, borderRadius: 5, minWidth: 500 }}>
-              <Typography sx={{ fontWeight: 'bold' }}>{session === 'morning' ? 'সকাল' : 'বিকাল'} - সিট প্ল্যান ({examName})</Typography>
-              <Typography sx={{ fontWeight: 'bold' }}>তারিখঃ ২৮/০৬/২০২৬</Typography>
+              <Typography sx={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{session === 'morning' ? 'সকাল' : 'বিকাল'} - সিট প্ল্যান ({examName})</Typography>
+              <Typography sx={{ fontWeight: 'bold', fontSize: '1.2rem' }}>তারিখঃ {formatBnDate(routineDate)}</Typography>
             </Box>
           </Box>
         </Box>
@@ -279,7 +374,11 @@ const SeatAllocationPage = () => {
           </Table>
         </TableContainer>
 
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mt: 4 }}>
+          <Typography sx={{ fontWeight: 'bold', fontSize: '15px', color: '#000' }}>
+            {session === 'morning' ? 'যাদের সকাল তাদের সকাল' : 'যাদের বিকাল তাদের বিকাল'}
+          </Typography>
+
           <Box sx={{ textAlign: 'center', position: 'relative', minWidth: 200 }}>
             {schoolSeal && <img src={schoolSeal} alt="Seal" style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', width: 80, opacity: 0.5 }} />}
             {principalSig && <img src={principalSig} alt="Sig" style={{ height: 50, position: 'relative', zIndex: 1 }} />}
@@ -295,18 +394,17 @@ const SeatAllocationPage = () => {
       <style>{`
         @media print {
           @page {
-            margin: 0;
+            margin: 8mm 5mm; /* Apply margin to EVERY page */
             size: A4;
           }
-          body * { visibility: hidden; }
-          #printable-area, #printable-area * { visibility: visible; }
+          body { margin: 0; padding: 0; }
           #printable-area {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
             margin: 0;
-            padding: 10mm 5mm;
+            padding: 0;
             box-sizing: border-box;
           }
           .no-print { display: none !important; }
@@ -314,13 +412,15 @@ const SeatAllocationPage = () => {
           /* Show/Hide based on which button was clicked */
           body.printing-stickers .door-list-only { display: none !important; }
           body:not(.printing-stickers) .stickers-only { display: none !important; }
+
+          /* Fixed grid for stickers */
           body.printing-stickers .stickers-only {
             display: grid !important;
-            grid-template-columns: 65mm 65mm 65mm !important;
-            column-gap: 2mm !important;
-            row-gap: 2mm !important;
-            width: 100% !important;
+            grid-template-columns: repeat(3, 65mm) !important;
+            grid-auto-rows: 49mm !important;
+            gap: 1.5mm !important;
             justify-content: center !important;
+            margin: 0 auto !important;
           }
         }
       `}</style>
@@ -381,7 +481,7 @@ const SeatAllocationPage = () => {
         <Box sx={{ mt: 5 }}>
           <Stack direction="row" spacing={2} sx={{ mb: 3 }} className="no-print">
             <Button variant="contained" color="secondary" startIcon={<PrintIcon />} onClick={handlePrint}>হল রুম ভিত্তিক শিক্ষার্থী তালিকা</Button>
-            <Button variant="contained" color="success" startIcon={<PrintIcon />} onClick={handlePrintStickers}>বেঞ্চ ভিত্তিক স্টুডেন্ট তালিকা</Button>
+            <Button variant="contained" color="success" startIcon={<PrintIcon />} onClick={handlePrintStickers}>বেঞ্চ ভিত্তিক শিক্ষার্থী তালিকা</Button>
             <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownloadPDF}>ডাউনলোড PDF</Button>
           </Stack>
 
@@ -391,10 +491,9 @@ const SeatAllocationPage = () => {
               <SeatPlanTable session="afternoon" />
             </Box>
 
-            <Box className="stickers-only" sx={{ display: 'none', '@media print': { display: 'flex' }, flexWrap: 'wrap', gap: '2%', bgcolor: 'white' }}>
-              {seatPlans.map(plan => (
-                <BenchSticker key={plan.id} plan={plan} />
-              ))}
+            <Box sx={{ display: 'none', '@media print': { display: 'block' } }}>
+              <StickerGrid session="morning" />
+              <StickerGrid session="afternoon" />
             </Box>
           </Box>
         </Box>

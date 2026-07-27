@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
 import { Box, Typography, TextField, Grid, Paper } from '@mui/material';
@@ -8,16 +8,19 @@ export default function AttendanceRecordsPage(){
   const [date, setDate] = useState('');
   const [records, setRecords] = useState([]);
 
-  const load = () => {
+  const load = useCallback(() => {
     const params = new URLSearchParams();
     if (id) params.append('school', id);
     if (date) params.append('date', date);
     api.get(`/api/attendance/records/?${params.toString()}`)
-      .then(r => setRecords(r.data))
+      .then(r => {
+        const data = Array.isArray(r.data) ? r.data : (r.data?.results || []);
+        setRecords(data);
+      })
       .catch(console.error);
-  };
+  }, [id, date]);
 
-  useEffect(()=>{ load(); }, [id, date]);
+  useEffect(()=>{ load(); }, [load]);
 
   return (
     <Box sx={{ p:3 }}>

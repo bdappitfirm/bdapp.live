@@ -6,7 +6,7 @@
 }
 
 .id-card {
-  font-family: 'Roboto', 'Arial', sans-serif;
+  font-family: 'Hind Siliguri', 'Roboto', 'Arial', sans-serif;
   border-radius: 6px;
 }
 
@@ -49,15 +49,9 @@
 /* Print Styles */
 @media print {
   body {
-    visibility: hidden !important;
     background: none !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-  
-  .id-card-container,
-  .id-card-container * {
-    visibility: visible !important;
   }
   
   .id-card-container {

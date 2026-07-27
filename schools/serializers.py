@@ -2,18 +2,52 @@ from rest_framework import serializers
 from django.core.files.base import ContentFile
 import base64
 import re
-from .models import School, Advertisement
+from .models import School, Advertisement, BanbeisInfo
+
+class BanbeisInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BanbeisInfo
+        fields = '__all__'
 
 class SchoolSerializer(serializers.ModelSerializer):
+    logo_thumbnail_url = serializers.SerializerMethodField()
+    student_count = serializers.SerializerMethodField()
+
     class Meta:
         model = School
-        fields = ['id', 'name', 'ein', 'email', 'phone_number', 'address', 'principal_name', 'logo', 'principal_signature', 'school_seal', 'number_of_buildings']
+        fields = ['id', 'name', 'ein', 'email', 'phone_number', 'address', 'principal_name', 'logo', 'logo_thumbnail', 'logo_thumbnail_url', 'principal_signature', 'school_seal', 'number_of_buildings', 'student_count']
+    
+    def get_student_count(self, obj):
+        try:
+            if hasattr(obj, 'student_count_annotated'):
+                return obj.student_count_annotated
+            return obj.studentprofile_set.count()
+        except Exception:
+            return 0
+
+    def get_logo_thumbnail_url(self, obj):
+        try:
+            if obj.logo_thumbnail:
+                return obj.logo_thumbnail.url
+            if obj.logo:
+                return obj.logo.url
+        except Exception:
+            pass
+        return None
+
+    def to_internal_value(self, data):
+        # Allow clearing image fields by sending an empty string
+        ret = super().to_internal_value(data)
+        for field in ['logo', 'principal_signature', 'school_seal']:
+            if field in data and data[field] == '':
+                ret[field] = None
+        return ret
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request')
         
-        for field in ['logo', 'principal_signature', 'school_seal']:
+        for field in ['logo', 'logo_thumbnail', 'principal_signature', 'school_seal']:
             try:
                 img = getattr(instance, field, None)
                 if img:

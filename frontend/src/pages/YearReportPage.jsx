@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Paper, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextField, Chip, TableContainer, Table, TableHead, TableRow, TableCell, TableBody, Stack, CircularProgress, Alert, Button } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAcademics } from '../context/AcademicsContext';
-import { scopedGet } from '../utils/schoolApi';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
+import InputGuidance from '../components/InputGuidance';
 
 export default function YearReportPage() {
   const { id } = useParams();
@@ -23,10 +23,35 @@ export default function YearReportPage() {
   const [syncing, setSyncing] = useState(false);
   const [trendLoading, setTrendLoading] = useState(false);
   const [trendData, setTrendData] = useState([]);
+  const [activeStep, setActiveStep] = useState(0);
+
+  const guidanceSteps = [
+    { selector: '#yrp-class', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
+    { selector: '#yrp-section', text: 'সেকশন নির্বাচন করুন', autoNext: false },
+    { selector: '#yrp-year', text: 'সাল নির্বাচন করুন', autoNext: false },
+    { selector: '#sync-button', text: 'এখানে ক্লিক করুন', autoNext: true }
+  ];
 
   useEffect(() => {
-    refreshAll(id);
-  }, [id]);
+    if (!selectedClass) {
+      setActiveStep(0);
+    } else if (!selectedYear) {
+      setActiveStep(2); // Jump to year
+    } else if (!summary) {
+      setActiveStep(3);
+    } else {
+      setActiveStep(4);
+    }
+  }, [selectedClass, selectedYear, summary]);
+
+  const refreshRef = useRef(false);
+
+  useEffect(() => {
+    if (id && !refreshRef.current) {
+        refreshRef.current = true;
+        refreshAll(id);
+    }
+  }, [id, refreshAll]);
 
   const sectionsForClass = useMemo(() => {
     if (!selectedClass) return [];
@@ -34,29 +59,33 @@ export default function YearReportPage() {
     return (contextSections || []).filter(sec => parseInt(String(sec.classroom?.id ?? sec.classroom), 10) === cid);
   }, [selectedClass, contextSections]);
 
-  const loadReport = async () => {
+  const loadReport = useCallback(async (quiet = true) => {
+    if (!id) return;
     setLoading(true);
     try {
       const params = { school: id, year: String(selectedYear) };
       if (selectedClass) params.classroom = parseInt(String(selectedClass), 10);
       if (selectedSection) params.section = parseInt(String(selectedSection), 10);
+
       const res = await api.get('/api/academics/students/year_report/', { params });
       const data = res.data || {};
       setSummary(data.summary || null);
       setRecords(Array.isArray(data.records) ? data.records : []);
-      if (!Array.isArray(data.records) || data.records.length === 0) {
-        toast.info(`দুঃখিত ${selectedYear} সালের রিপোর্টে কোনো তথ্য পাওয়া যায়নি`);
+
+      if (!quiet && (!Array.isArray(data.records) || data.records.length === 0)) {
+        toast.info(`${selectedYear} সালের রিপোর্টে কোনো তথ্য পাওয়া যায়নি`);
       }
     } catch (e) {
-      toast.error('রিপোর্ট লোড ব্যর্থ হয়েছে');
+      console.error("Year report fetch error:", e);
+      if (!quiet) toast.error('রিপোর্ট লোড ব্যর্থ হয়েছে। তথ্য নাও থাকতে পারে।');
       setSummary(null);
       setRecords([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, selectedClass, selectedSection, selectedYear]); // Removed toast from dependencies
 
-  const handleSync = async () => {
+  const handleSync = useCallback(async () => {
     setSyncing(true);
     try {
       await api.post('/api/academics/students/sync_year_records/', {
@@ -64,17 +93,54 @@ export default function YearReportPage() {
         year: String(selectedYear)
       });
       toast.success('ডাটা সিঙ্ক সম্পন্ন হয়েছে');
-      loadReport();
+      loadReport(false);
     } catch (e) {
       toast.error('সিঙ্ক ব্যর্থ হয়েছে');
     } finally {
       setSyncing(false);
     }
-  };
+  }, [id, selectedYear, loadReport, toast]);
 
   useEffect(() => {
-    loadReport();
-  }, [selectedClass, selectedSection, selectedYear]);
+    if (id) loadReport(true);
+  }, [id, loadReport]);
+
+  const loadTrend = useCallback(async () => {
+    setTrendLoading(true);
+    try {
+      const span = 5;
+      const base = parseInt(String(selectedYear), 10) || new Date().getFullYear();
+      // Ensure we don't fetch too far into the future if it causes errors
+      const currentYear = new Date().getFullYear();
+      const effectiveBase = Math.min(base, currentYear);
+
+      const years = Array.from({ length: span }, (_, i) => effectiveBase - (span - 1 - i));
+      const data = [];
+      for (const y of years) {
+        const params = { school: id, year: String(y) };
+        if (selectedClass) params.classroom = parseInt(String(selectedClass), 10);
+        if (selectedSection) params.section = parseInt(String(selectedSection), 10);
+        try {
+          const res = await api.get('/api/academics/students/year_report/', { params });
+          const s = res.data?.summary || {};
+          data.push({
+            year: String(y),
+            avg_cgpa: s.avg_cgpa ?? null,
+            promoted_rate: s.total ? Math.round(((s.promoted || 0) / s.total) * 100) : 0
+          });
+        } catch (_) {
+          data.push({ year: String(y), avg_cgpa: null, promoted_rate: 0 });
+        }
+      }
+      setTrendData(data);
+    } finally {
+      setTrendLoading(false);
+    }
+  }, [id, selectedClass, selectedSection, selectedYear]);
+
+  useEffect(() => {
+    loadTrend();
+  }, [loadTrend]);
 
   const computePercentageBuckets = () => {
     const buckets = [
@@ -111,39 +177,6 @@ export default function YearReportPage() {
     return Array.from(map.values()).sort((a, b) => String(a.className).localeCompare(String(b.className)));
   };
 
-  const loadTrend = async () => {
-    setTrendLoading(true);
-    try {
-      const span = 5;
-      const base = parseInt(String(selectedYear), 10) || new Date().getFullYear();
-      const years = Array.from({ length: span }, (_, i) => base - (span - 1 - i));
-      const data = [];
-      for (const y of years) {
-        const params = { school: id, year: String(y) };
-        if (selectedClass) params.classroom = parseInt(String(selectedClass), 10);
-        if (selectedSection) params.section = parseInt(String(selectedSection), 10);
-        try {
-          const res = await api.get('/api/academics/students/year_report/', { params });
-          const s = res.data?.summary || {};
-          data.push({
-            year: String(y),
-            avg_cgpa: s.avg_cgpa ?? null,
-            promoted_rate: s.total ? Math.round(((s.promoted || 0) / s.total) * 100) : 0
-          });
-        } catch (_) {
-          data.push({ year: String(y), avg_cgpa: null, promoted_rate: 0 });
-        }
-      }
-      setTrendData(data);
-    } finally {
-      setTrendLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadTrend();
-  }, [selectedClass, selectedSection, selectedYear]);
-
   return (
     <Box sx={{ p: 2 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
@@ -151,7 +184,8 @@ export default function YearReportPage() {
           <AssessmentIcon /> বছরভিত্তিক রিপোর্ট
         </Typography>
         <Button 
-          variant="contained" 
+          id="sync-button"
+          variant="contained"
           color="secondary" 
           startIcon={syncing ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
           onClick={handleSync}
@@ -162,10 +196,11 @@ export default function YearReportPage() {
       </Stack>
       <Paper sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2}>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <FormControl fullWidth>
               <InputLabel id="yrp-class-label">শ্রেণি</InputLabel>
               <Select
+                id="yrp-class"
                 labelId="yrp-class-label"
                 value={String(selectedClass)}
                 label="শ্রেণি"
@@ -180,10 +215,11 @@ export default function YearReportPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <FormControl fullWidth disabled={!selectedClass}>
               <InputLabel id="yrp-section-label">সেকশন</InputLabel>
               <Select
+                id="yrp-section"
                 labelId="yrp-section-label"
                 value={String(selectedSection)}
                 label="সেকশন"
@@ -196,8 +232,9 @@ export default function YearReportPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <TextField
+              id="yrp-year"
               type="number"
               label="সাল"
               value={selectedYear}
@@ -365,6 +402,12 @@ export default function YearReportPage() {
           </Table>
         </TableContainer>
       </Paper>
+
+      <InputGuidance
+        steps={guidanceSteps}
+        activeStep={activeStep}
+        onStepComplete={() => setActiveStep(prev => prev + 1)}
+      />
     </Box>
   );
 }

@@ -1,1434 +1,614 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box,
-  Typography,
-  Button,
-  TextField,
-  MenuItem,
-  Paper,
-  Grid,
-  Card,
-  CardContent,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  TableContainer,
-  Checkbox,
-  Chip,
-  Stack,
-  Divider,
-  IconButton,
-  Tooltip,
-  Alert,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
+  Box, Typography, Button, TextField, MenuItem, Paper, Grid,
+  Table, TableHead, TableBody, TableRow, TableCell, TableContainer,
+  Checkbox, Stack, IconButton, CircularProgress, Dialog,
+  DialogTitle, DialogContent, Avatar, Zoom
 } from '@mui/material';
 import {
-  Save as SaveIcon,
-  Refresh as RefreshIcon,
-  Download as DownloadIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
-  Assessment as AssessmentIcon,
-  CalendarMonth as CalendarIcon,
-  School as SchoolIcon,
-  Class as ClassIcon,
-  Group as GroupIcon,
-  Description as DescriptionIcon,
-  Print as PrintIcon,
-  QrCodeScanner as QrCodeScannerIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  FlashOn as FlashOnIcon,
+  FlashOff as FlashOffIcon
 } from '@mui/icons-material';
-import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import api from '../utils/api';
-import { scopedGet } from '../utils/schoolApi';
+import { scopedGet, scopedPost } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
+import { useSchool } from '../context/SchoolContext';
 import dayjs from 'dayjs';
-import { isAuthenticated } from '../utils/auth';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import { queueRequest, db, getCachedApiResponse } from '../utils/offlineDb';
+import { getMediaUrl } from '../utils/media';
+import InputGuidance from '../components/InputGuidance';
+
+// --- HELPERS ---
+
+// Get or generate Device ID
+const getDeviceId = () => {
+    let id = localStorage.getItem('bdapp_device_id');
+    if (!id) {
+        id = 'DEV-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+        localStorage.setItem('bdapp_device_id', id);
+    }
+    return id;
+};
+
+// Play Beep Sound
+const playBeep = (freq = 800, duration = 200) => {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration / 1000);
+    } catch (e) {
+        console.warn('Audio feedback failed:', e);
+    }
+};
 
 export default function AttendancePageNew() {
-  const { id } = useParams(); // School ID
+  const { id } = useParams(); // school ID
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user: currentUser } = useAuth();
+  const { school: schoolInfo } = useSchool();
   const toast = useToast();
-  const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [manualStudentId, setManualStudentId] = useState('');
-  const [showBackup, setShowBackup] = useState(false);
+
+  // SCANNER & DEVICE
+  const deviceId = useMemo(() => getDeviceId(), []);
   const qrScannerRef = useRef(null);
-  const wakeLockRef = useRef(null);
-  
-  // Check user role - only admin and teacher can access
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      navigate('/login', { replace: true });
-      return;
-    }
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        const allowedRoles = ['admin', 'teacher'];
-        if (!allowedRoles.includes(user.role?.toLowerCase())) {
-          toast.error('Access denied');
-          navigate('/');
-        }
-      } catch (_) {
-        navigate('/login', { replace: true });
-      }
-    }
-  }, []);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const scannerRunningRef = useRef(false);
 
-  // Keep screen awake
-  useEffect(() => {
-    const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLockRef.current = await navigator.wakeLock.request('screen');
-        }
-      } catch (err) {
-        console.error('Wake Lock error:', err);
-      }
-    };
-
-    requestWakeLock();
-
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && wakeLockRef.current === null) {
-        try {
-          if ('wakeLock' in navigator) {
-            wakeLockRef.current = await navigator.wakeLock.request('screen');
-          }
-        } catch (err) {
-          console.error('Wake Lock error:', err);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (wakeLockRef.current) {
-        wakeLockRef.current.release().catch(console.error);
-      }
-    };
-  }, []);
-
-  // Open QR scanner immediately on page load
-  useEffect(() => {
-    setQrScannerOpen(true);
-  }, []);
-  
-  // State management
+  // FILTERS
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [classrooms, setClassrooms] = useState([]);
-  const [sections, setSections] = useState([]);
   const [selectedClassroom, setSelectedClassroom] = useState('');
+  const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState('');
+  const [manualStudentId, setManualStudentId] = useState('');
+
+  // DATA
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
-  const [dailySummary, setDailySummary] = useState([]);
-  const [monthlyReport, setMonthlyReport] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState(dayjs().format('YYYY-MM'));
-  const [selectedYear, setSelectedYear] = useState(dayjs().format('YYYY'));
-  const [selectedStudent, setSelectedStudent] = useState('');
-  const autoSaveTimerRef = useRef(null);
-  const [autoSaving, setAutoSaving] = useState(false);
-  const [takenByInfo, setTakenByInfo] = useState(null);
-  const [schoolInfo, setSchoolInfo] = useState(null);
+  const [activeStep, setActiveStep] = useState(0);
 
-  // Load classrooms on mount
+  const guidanceSteps = [
+    { selector: '#attendance-date-picker', text: 'তারিখ নির্বাচন করুন', autoNext: false },
+    { selector: '#attendance-class-select', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
+    { selector: '#attendance-section-select', text: 'সেকশন নির্বাচন করুন', autoNext: false },
+    { selector: '#attendance-save-btn', text: 'হাজিরা সেভ করুন', autoNext: false }
+  ];
+
   useEffect(() => {
-    loadClassrooms();
-    loadSchoolInfo();
+    if (!date) {
+      setActiveStep(0);
+    } else if (!selectedClassroom) {
+      setActiveStep(1);
+    } else if (sections.length > 0 && !selectedSection) {
+      setActiveStep(2);
+    } else {
+      setActiveStep(3);
+    }
+  }, [date, selectedClassroom, selectedSection, sections]);
+
+  // CACHE FOR UNIVERSAL SCANNING
+  const allStudentsCacheRef = useRef([]);
+
+  // SUCCESS OVERLAY
+  const [scanSuccess, setScanSuccess] = useState(null); // { name, roll, photo, class, section, schoolName }
+  const successTimerRef = useRef(null);
+
+  // URL Sync
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const cls = params.get('classroom');
+    const sec = params.get('section');
+    const d = params.get('date');
+    if (cls) setSelectedClassroom(cls);
+    if (sec) setSelectedSection(sec);
+    if (d) setDate(d);
+  }, [location.search]);
+
+  const updateUrl = useCallback((cls, sec, d) => {
+    const params = new URLSearchParams();
+    if (cls) params.set('classroom', cls);
+    if (sec) params.set('section', sec);
+    if (d) params.set('date', d);
+    navigate(`${location.pathname}?${params.toString()}`);
+  }, [location.pathname, navigate]);
+
+  // Auth Guard
+  const role = String(currentUser?.role || currentUser?.profile?.effective_role || currentUser?.profile?.role || '').toLowerCase();
+  const designation = String(currentUser?.profile?.designation || '').toLowerCase();
+  const isAuthorized = role === 'admin' || role === 'teacher' || currentUser?.is_superuser || designation.includes('প্রধান') || designation.includes('principal') || designation.includes('headmaster');
+
+  useEffect(() => {
+    if (currentUser && !isAuthorized) {
+        toast.error('আপনি এই পেজটি দেখার জন্য অনুমোদিত নন।');
+        navigate(`/school/${id}`);
+    }
+  }, [isAuthorized, id, navigate, toast, currentUser]);
+
+  // Load Metadata (Offline Friendly)
+  const fetchInitial = useCallback(async () => {
+    try {
+      const classRes = await scopedGet('/api/academics/classrooms/', id, {});
+      const data = Array.isArray(classRes.data) ? classRes.data : classRes.data.results || [];
+      setClassrooms(data);
+    } catch (err) {
+      console.error(err);
+      const cached = await db.classrooms.where({ 'school.id': parseInt(id) }).toArray();
+      if (cached.length) {
+        setClassrooms(cached);
+      }
+    }
   }, [id]);
 
-  const loadSchoolInfo = async () => {
-    try {
-      const res = await api.get(`/api/schools/${id}/`);
-      setSchoolInfo(res.data);
-    } catch (error) {
-      console.error('Failed to load school info:', error);
-    }
-  };
+  useEffect(() => { if (id) fetchInitial(); }, [id, fetchInitial]);
 
-  // Load sections when classroom changes
-  useEffect(() => {
-    if (selectedClassroom) {
-      loadSections(selectedClassroom);
-    } else {
-      setSections([]);
-      setSelectedSection('');
-    }
-  }, [selectedClassroom]);
-
-  // Load students when classroom or section changes
-  useEffect(() => {
-    if (selectedClassroom) {
-      loadStudents();
-    }
-  }, [selectedClassroom, selectedSection]);
-
-  const loadClassrooms = async () => {
+  const fetchSections = useCallback(async () => {
+    if (!selectedClassroom) return;
     try {
-      const res = await scopedGet('/api/academics/classrooms/', id, {}, { timeout: 15000 });
-      const data = Array.isArray(res.data) ? res.data : (res.data?.results || res.data || []);
-      setClassrooms(data);
-    } catch (error) {
-      console.error('Failed to load classrooms:', error);
-      toast.error('Failed to load classrooms');
-    }
-  };
-
-  const [yearlyReport, setYearlyReport] = useState([]);
-  const loadYearlyReport = async () => {
-    try {
-      const months = Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`);
-      const aggregate = new Map();
-      for (const m of months) {
-        let url = `/api/attendance/records/monthly_report/?school=${id}&month=${m}`;
-        if (selectedClassroom) url += `&classroom=${selectedClassroom}`;
-        if (selectedSection) url += `&section=${selectedSection}`;
-        const res = await api.get(url);
-        const rows = res.data || [];
-        for (const r of rows) {
-          if (selectedStudent && String(r.student_id) !== String(selectedStudent)) continue;
-          const key = r.student_id;
-          const prev = aggregate.get(key) || {
-            student_id: r.student_id,
-            student_name: r.student_name,
-            classroom: r.classroom,
-            section: r.section,
-            total_days: 0,
-            present_days: 0,
-            absent_days: 0
-          };
-          prev.total_days += (parseInt(r.total_days, 10) || 0);
-          prev.present_days += (parseInt(r.present_days, 10) || 0);
-          prev.absent_days += (parseInt(r.absent_days, 10) || 0);
-          aggregate.set(key, prev);
-        }
-      }
-      const out = Array.from(aggregate.values()).map(r => ({
-        ...r,
-        attendance_percentage: r.total_days > 0 ? Math.round((r.present_days / r.total_days) * 100) : 0
-      }));
-      setYearlyReport(out);
-      toast.success('বাৎসরিক রিপোর্ট লোড হয়েছে');
-    } catch (error) {
-      console.error('Failed to load yearly report:', error);
-      toast.error('বাৎসরিক রিপোর্ট লোড ব্যর্থ');
-    }
-  };
-  const loadSections = async (classroomId) => {
-    try {
-      const res = await scopedGet('/api/academics/sections/', id, { classroom: classroomId }, { timeout: 15000 });
-      const data = Array.isArray(res.data) ? res.data : (res.data?.results || res.data || []);
+      const res = await scopedGet('/api/academics/sections/', id, { classroom: selectedClassroom });
+      const data = Array.isArray(res.data) ? res.data : res.data.results || [];
       setSections(data);
-    } catch (error) {
-      console.error('Failed to load sections:', error);
-      setSections([]);
+    } catch (err) {
+      console.error(err);
+      const cached = await db.sections.where({ 'classroom.id': parseInt(selectedClassroom) }).toArray();
+      if (cached.length) {
+        setSections(cached);
+      }
     }
-  };
+  }, [selectedClassroom, id]);
 
-  const loadStudents = async () => {
+  useEffect(() => { fetchSections(); }, [fetchSections]);
+
+  // UNIVERSAL STUDENT FETCH (For cross-class scanning)
+  const fetchAllStudents = useCallback(async () => {
+    try {
+        const res = await scopedGet('/api/academics/students/', id, { page_size: 1000 });
+        allStudentsCacheRef.current = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+    } catch (e) {
+        console.warn('Universal student fetch failed, falling back to local DB');
+        const cached = await db.students.toArray();
+        if (cached.length) allStudentsCacheRef.current = cached;
+    }
+  }, [id]);
+
+  useEffect(() => { fetchAllStudents(); }, [fetchAllStudents]);
+
+  // Load Students and Attendance (Offline-First Optimized)
+  const loadStudents = useCallback(async () => {
+    if (!selectedClassroom) {
+      setStudents([]);
+      setAttendance({});
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await scopedGet('/api/academics/students/', id, { classroom: selectedClassroom, section: selectedSection || undefined }, { timeout: 15000 });
-      const raw = Array.isArray(res.data) ? res.data : (res.data?.results || res.data?.data || []);
-      const studentList = [...raw].sort((a, b) => {
+      // 1. Fetch Students (with large page size)
+      const studentRes = await scopedGet('/api/academics/students/', id, {
+        classroom: selectedClassroom,
+        section: selectedSection || undefined,
+        page_size: 1000
+      });
+
+      const rawStudents = Array.isArray(studentRes.data) ? studentRes.data : (studentRes.data?.results || []);
+
+      // 2. Fetch Attendance Records for the selected date
+      let records = [];
+      try {
+        const attendanceRes = await api.get(`/api/attendance/records/`, { params: { school: id, date, page_size: 1000 } });
+        records = Array.isArray(attendanceRes.data) ? attendanceRes.data : (attendanceRes.data?.results || []);
+      } catch (attErr) {
+        console.error('Attendance records fetch failed. Status:', attErr.response?.status);
+        console.error('Error Response Data:', attErr.response?.data);
+        toast.error('হাজিরা রেকর্ড লোড করা যায়নি: ' + (attErr.response?.data?.detail || attErr.message || 'Server Error'));
+      }
+
+      const attMap = {};
+      records.forEach(r => {
+        if (r.student) attMap[r.student] = r.present;
+      });
+
+      const initialAtt = {};
+      rawStudents.forEach(s => {
+        initialAtt[s.id] = attMap[s.id] || false;
+      });
+
+      // Sort by roll number numerically
+      const sortedStudents = [...rawStudents].sort((a, b) => {
         const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
         const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-        const aNum = Number.isNaN(ar) ? null : ar;
-        const bNum = Number.isNaN(br) ? null : br;
-        if (aNum !== null && bNum !== null) return aNum - bNum;
-        const as = String(a?.roll_number ?? '');
-        const bs = String(b?.roll_number ?? '');
-        return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
+        if (!isNaN(ar) && !isNaN(br) && ar !== br) return ar - br;
+        return String(a?.roll_number || '').localeCompare(String(b?.roll_number || ''), undefined, { numeric: true });
       });
-      setStudents(studentList);
 
-      // Load existing attendance for the date
-      const attendanceRes = await scopedGet('/api/attendance/records/', id, { date }, { timeout: 15000 });
-      const studentIdSet = new Set(studentList.map(s => s.id));
-      const filteredRecords = (Array.isArray(attendanceRes.data) ? attendanceRes.data : []).filter(rec => studentIdSet.has(rec.student));
-      const attendanceMap = {};
-      filteredRecords.forEach(record => {
-        attendanceMap[record.student] = record.present;
-      });
-      const withMeta = filteredRecords.filter(r => r.taken_by || r.taken_by_name);
-      let info = null;
-      if (withMeta.length > 0) {
-        withMeta.sort((a, b) => {
-          const ta = new Date(a.created_at || a.date).getTime();
-          const tb = new Date(b.created_at || b.date).getTime();
-          return tb - ta;
-        });
-        const r = withMeta[0];
-        info = {
-          name: (r.taken_by && r.taken_by.name) ? r.taken_by.name : (r.taken_by_name || ''),
-          username: (r.taken_by && r.taken_by.username) ? r.taken_by.username : '',
-          date: r.date,
-          created_at: r.created_at
-        };
-      }
-      setTakenByInfo(info);
-
-      // Initialize attendance state
-      const initialAttendance = {};
-      studentList.forEach(student => {
-        initialAttendance[student.id] = attendanceMap[student.id] !== undefined 
-          ? attendanceMap[student.id] 
-          : true; // Default to present
-      });
-      
-      setAttendance(initialAttendance);
-    } catch (error) {
-      console.error('Failed to load students:', error);
-      toast.error('Failed to load students');
+      setStudents(sortedStudents);
+      setAttendance(initialAtt);
+    } catch (err) {
+        console.error('Load students failed:', err);
+        toast.error('শিক্ষার্থী তালিকা লোড করা যায়নি');
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+  }, [id, selectedClassroom, selectedSection, date, toast]);
 
-  // Refresh attendance when date changes without reloading students list
-  useEffect(() => {
-    (async () => {
-      if (!selectedClassroom || students.length === 0) return;
-      try {
-        const attendanceRes = await scopedGet('/api/attendance/records/', id, { date }, { timeout: 15000 });
-        const studentIdSet = new Set(students.map(s => s.id));
-        const filteredRecords = (Array.isArray(attendanceRes.data) ? attendanceRes.data : []).filter(rec => studentIdSet.has(rec.student));
-        const attendanceMap = {};
-        filteredRecords.forEach(record => {
-          attendanceMap[record.student] = record.present;
-        });
-        const initialAttendance = {};
-        students.forEach(student => {
-          initialAttendance[student.id] = attendanceMap[student.id] !== undefined 
-            ? attendanceMap[student.id] 
-            : true;
-        });
-        setAttendance(initialAttendance);
-      } catch (_) {}
-    })();
-  }, [date]);
+  useEffect(() => { loadStudents(); }, [loadStudents]);
 
-  const toggleAttendance = (studentId) => {
-    setAttendance(prev => ({
-      ...prev,
-      [studentId]: !prev[studentId]
-    }));
-    scheduleAutoSave();
-  };
+  // --- SCAN LOGIC ---
 
-  const markAllPresent = () => {
-    const newAttendance = {};
-    students.forEach(student => {
-      newAttendance[student.id] = true;
-    });
-    setAttendance(newAttendance);
-    toast.success('All students marked present');
-    scheduleAutoSave();
-  };
-
-  const markAllAbsent = () => {
-    const newAttendance = {};
-    students.forEach(student => {
-      newAttendance[student.id] = false;
-    });
-    setAttendance(newAttendance);
-    toast.success('All students marked absent');
-    scheduleAutoSave();
-  };
-
-  const scheduleAutoSave = () => {
+  const handleQrScanSuccess = useCallback(async (text) => {
     try {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-      setAutoSaving(true);
-      autoSaveTimerRef.current = setTimeout(async () => {
-        await saveAttendance(true);
-        setAutoSaving(false);
-      }, 800);
-    } catch (_) {
-      setAutoSaving(false);
-    }
-  };
-
-  const saveAttendance = async (silentOrEvent = false) => {
-    const silent = typeof silentOrEvent === 'boolean' ? silentOrEvent : false;
-    if (!isAuthenticated()) {
-      navigate('/login');
-      return;
-    }
-    if (students.length === 0) {
-      if (!silent) toast.warning('No students to save attendance for');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const records = students.map(student => ({
-        school: parseInt(id),
-        student: student.id,
-        date: date,
-        present: attendance[student.id] !== undefined ? attendance[student.id] : true,
-        note: ''
-      }));
-
-      // Use bulk save endpoint
-      const response = await api.post('/api/attendance/records/bulk_save/', {
-        records: records
-      });
-
-      if (response.data.success) {
-        if (!silent) toast.success(`Attendance saved successfully! ${response.data.saved} records saved.`);
-        
-        // Update takenByInfo with current user if it was a manual save
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          try {
-            const user = JSON.parse(storedUser);
-            setTakenByInfo({
-              name: (user.first_name || user.last_name) ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : user.username,
-              username: user.username,
-              date: date,
-              created_at: new Date().toISOString()
-            });
-          } catch (_) {}
-        }
-
-        if (response.data.errors && response.data.errors.length > 0) {
-          console.warn('Some records had errors:', response.data.errors);
-        }
-        if (!silent) {
-          loadDailySummary();
-        }
+      let studentId;
+      if (text.startsWith('STU|')) {
+        const parts = text.split('|');
+        studentId = parseInt(parts[1]);
       } else {
-        if (!silent) toast.error('Failed to save some attendance records');
-      }
-    } catch (error) {
-      console.error('Failed to save attendance:', error);
-      const errorMsg = error.response?.data?.error || error.response?.data?.detail || 'Failed to save attendance';
-      if (!silent) toast.error(errorMsg);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const loadDailySummary = async () => {
-    try {
-      const res = await api.get(
-        `/api/attendance/records/daily_summary/?school=${id}&date=${date}`
-      );
-      setDailySummary(res.data || []);
-      setSummaryDialogOpen(true);
-    } catch (error) {
-      console.error('Failed to load daily summary:', error);
-      toast.error('Failed to load attendance summary');
-    }
-  };
-
-  const loadMonthlyReport = async () => {
-    try {
-      let url = `/api/attendance/records/monthly_report/?school=${id}&month=${selectedMonth}`;
-      if (selectedClassroom) {
-        url += `&classroom=${selectedClassroom}`;
-      }
-      if (selectedSection) {
-        url += `&section=${selectedSection}`;
+        const data = JSON.parse(text);
+        studentId = data.id || data.student_id;
       }
 
-      const res = await api.get(url);
-      const data = res.data || [];
-      setMonthlyReport(
-        selectedStudent ? data.filter(r => String(r.student_id) === String(selectedStudent)) : data
-      );
-    } catch (error) {
-      console.error('Failed to load monthly report:', error);
-      toast.error('Failed to load monthly report');
-    }
-  };
+      if (!studentId) return;
 
-  const presentCount = Object.values(attendance).filter(p => p).length;
-  const absentCount = students.length - presentCount;
-  const attendancePercentage = students.length > 0 
-    ? ((presentCount / students.length) * 100).toFixed(1) 
-    : 0;
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleDownloadReport = async () => {
-    // Generate PDF using html2canvas and jspdf
-    if (students.length === 0) return;
-    
-    setSaving(true);
-    try {
-      // Create a temporary element for PDF generation to ensure it looks good
-      const element = document.getElementById('attendance-printable-area');
-      if (!element) return;
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pdfWidth - 20; // 10mm margins
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
-      pdf.save(`attendance_${date}.pdf`);
-      toast.success('Report downloaded as PDF');
-    } catch (error) {
-      console.error('Failed to download report:', error);
-      toast.error('Failed to download report');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Function to play beep sound
-  const playBeep = () => {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.value = 1000;
-      oscillator.type = 'sine';
-      gainNode.gain.value = 0.5;
-      
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.1);
-    } catch (error) {
-      console.error('Failed to play beep sound:', error);
-    }
-  };
-
-  // Save attendance to localStorage as backup
-  const saveLocalBackup = (attendanceData) => {
-    const backupKey = `attendance_backup_${id}_${date}`;
-    const existingBackup = JSON.parse(localStorage.getItem(backupKey) || '[]');
-    const updatedBackup = [...existingBackup, attendanceData];
-    localStorage.setItem(backupKey, JSON.stringify(updatedBackup));
-    console.log('Attendance backed up to localStorage:', updatedBackup);
-  };
-
-  const handleQrScanSuccess = async (decodedText) => {
-    try {
-      let data;
-      // Try to parse both new pipe-separated format and old JSON format
-      if (decodedText.startsWith('STU|')) {
-        const parts = decodedText.split('|');
-        data = {
-          type: 'student',
-          id: parseInt(parts[1]),
-          customId: parts[2],
-          name: decodeURIComponent(parts[3]),
-          school: parts[4]
-        };
-      } else {
-        // Fallback to old JSON format
-        data = JSON.parse(decodedText);
-      }
-      
-      if (data.type === 'student' && data.id) {
-        const studentId = data.id;
-        const studentName = data.name || 'student';
-        
-        // First, try to find the student across all classes
-        let student = null;
-        
-        // Check if we have the student in current list
-        if (students.length > 0) {
-          student = students.find(s => s.id === studentId);
-        }
-        
-        // If not found, try to fetch the student directly
-        if (!student) {
-          try {
-            const res = await api.get(`/api/academics/students/${studentId}/`);
-            student = res.data;
-          } catch (err) {
-            console.error('Failed to fetch student:', err);
-            toast.error('Failed to get student details');
-            return;
-          }
-        }
-        
-        // Create attendance record
-        const attendanceRecord = {
-          school: parseInt(id),
-          student: studentId,
-          student_name: studentName,
-          date: date,
-          present: true,
-          timestamp: new Date().toISOString()
-        };
-        
-        // Save to localStorage backup FIRST
-        saveLocalBackup(attendanceRecord);
-        
-        // Now save the attendance to server
-        try {
-          await api.post('/api/attendance/records/bulk_save/', {
-            records: [{
-              school: parseInt(id),
-              student: studentId,
-              date: date,
-              present: true,
-              note: ''
-            }]
-          });
-          
-          playBeep();
-          toast.success(`হাজিরা সংরক্ষিত হয়েছে! ${studentName}`);
-          
-          // Refresh attendance records
-          if (selectedClassroom) {
-            loadStudents();
-          }
-        } catch (err) {
-          console.error('Failed to save attendance to server, but local backup exists:', err);
-          toast.error('সার্ভারে সংরক্ষণ ব্যর্থ, কিন্তু লোকাল ব্যাকআপ আছে!');
-        }
-      } else {
-        toast.error('অবৈধ QR কোড');
-      }
-    } catch (error) {
-      console.error('QR parse error:', error);
-      toast.error('QR কোড পার্স করতে ব্যর্থ');
-    }
-  };
-
-  const handleQrScanError = (error) => {
-    console.error('QR scan error:', error);
-  };
-
-  const handleManualEntry = async () => {
-    if (!manualStudentId.trim()) {
-      toast.error('আইডি নম্বর দিন');
-      return;
-    }
-    
-    try {
-      // First, try to find the student by student_custom_id or id
-      let student = null;
-      
-      // First, check if we have the student in current list
-      if (students.length > 0) {
-        student = students.find(s => 
-          s.id === parseInt(manualStudentId) || 
-          s.student_custom_id === manualStudentId.trim()
-        );
-      }
-      
-      // If not found, try to fetch the student from API by custom ID or ID
-      if (!student) {
-        try {
-          // Try to get student list and search in that
-          const studentsRes = await scopedGet('/api/academics/students/', id, {});
-          const allStudents = Array.isArray(studentsRes.data) ? studentsRes.data : (studentsRes.data?.results || []);
-          student = allStudents.find(s => 
-            s.id === parseInt(manualStudentId) || 
-            s.student_custom_id === manualStudentId.trim()
-          );
-        } catch (err) {
-          console.error('Failed to fetch students:', err);
-        }
-      }
-      
-      if (!student) {
-        toast.error('আইডি দিয়ে কোনো শিক্ষার্থী পাওয়া যায়নি');
+      // Duplicate Check (Local State)
+      if (attendance[studentId]) {
+        playBeep(400, 300);
+        toast.info('ইতিমধ্যে উপস্থিতি নেওয়া হয়েছে', { autoClose: 1000, position: 'top-center' });
         return;
       }
-      
-      // Now create attendance record
-      const attendanceRecord = {
-        school: parseInt(id),
-        student: student.id,
-        student_name: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || 'Manual Entry',
-        date: date,
-        present: true,
-        timestamp: new Date().toISOString()
-      };
-      
-      // Save to localStorage backup FIRST
-      saveLocalBackup(attendanceRecord);
-      
-      // Save to server
-      await api.post('/api/attendance/records/bulk_save/', {
-        records: [{
-          school: parseInt(id),
-          student: student.id,
-          date: date,
-          present: true,
-          note: 'Manual entry'
-        }]
-      });
-      
-      playBeep();
-      toast.success(`হাজিরা সংরক্ষিত হয়েছে! ${attendanceRecord.student_name}`);
-      setManualStudentId('');
-      
-      // Refresh attendance records
-      if (selectedClassroom) {
-        loadStudents();
+
+      // UNIVERSAL SEARCH (In current list OR in entire school cache)
+      let student = students.find(s => s.id === studentId);
+      if (!student) {
+          student = allStudentsCacheRef.current.find(s => s.id === studentId);
       }
-    } catch (err) {
-      console.error('Failed to save manual attendance:', err);
-      toast.error('হাজিরা সংরক্ষণ ব্যর্থ হয়েছে');
+
+      if (!student) {
+          playBeep(300, 500);
+          toast.error('শিক্ষার্থী খুঁজে পাওয়া যায়নি');
+          return;
+      }
+
+      // Success!
+      playBeep(1000, 200);
+
+      // Update local state if the student is in current view
+      if (students.some(s => s.id === studentId)) {
+          setAttendance(prev => ({ ...prev, [studentId]: true }));
+      }
+
+      // SHOW OVERLAY IMMEDIATELY (Attractive 3-line format)
+      setScanSuccess({
+          name: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username,
+          roll: student.roll_number,
+          class: student.classroom?.name || student.classroom,
+          section: student.section?.name || student.section || 'N/A',
+          photo: getMediaUrl(student.user?.photo || student.photo),
+          schoolName: schoolInfo?.bn_name || schoolInfo?.name || ''
+      });
+
+      // Faster auto-hide to prevent queue jam
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setScanSuccess(null), 1500);
+
+      // SAVE RECORD
+      const currentYear = dayjs(date).format('YYYY');
+      const rec = {
+          school: parseInt(id),
+          student: studentId,
+          date,
+          present: true,
+          note: 'Universal QR Scan',
+          device_id: deviceId,
+          scan_time: new Date().toISOString(),
+          session: currentYear
+      };
+
+      try {
+        await scopedPost('/api/attendance/records/bulk_save/', id, { records: [rec] });
+        console.log('QR Attendance saved successfully');
+      } catch (saveErr) {
+        console.error('Failed to save QR attendance immediately:', saveErr);
+        // Interceptor in api.js will handle queuing if it was a network error
+      }
+
+    } catch (e) {
+        console.error('Scan error:', e);
+        toast.error('অবৈধ কোড');
+    }
+  }, [attendance, date, id, toast, students, deviceId, schoolInfo]);
+
+  useEffect(() => {
+    let html5QrCode;
+    if (qrScannerOpen) {
+      const startScanner = async () => {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const devices = await Html5Qrcode.getCameras().catch(() => []);
+          html5QrCode = new Html5Qrcode("qr-reader");
+          qrScannerRef.current = html5QrCode;
+          const config = { fps: 25, qrbox: { width: 300, height: 300 }, aspectRatio: 1.0 };
+          await html5QrCode.start({ facingMode: "environment" }, config, handleQrScanSuccess).catch(async () => {
+            await html5QrCode.start({ facingMode: "user" }, config, handleQrScanSuccess);
+          });
+          scannerRunningRef.current = true;
+        } catch (err) {
+          toast.error("ক্যামেরা চালু করা যায়নি।");
+          setQrScannerOpen(false);
+        }
+      };
+      startScanner();
+      return () => {
+        if (qrScannerRef.current && scannerRunningRef.current) {
+          try {
+            qrScannerRef.current.stop().catch(() => {});
+          } catch (e) {
+            // Ignore any errors when stopping
+          } finally {
+            qrScannerRef.current = null;
+            scannerRunningRef.current = false;
+          }
+        }
+      };
+    }
+  }, [qrScannerOpen, handleQrScanSuccess, toast]);
+
+  const toggleTorch = async () => {
+    if (qrScannerRef.current && scannerRunningRef.current && qrScannerRef.current.isScanning) {
+      try {
+        const state = !torchOn;
+        await qrScannerRef.current.applyVideoConstraints({ advanced: [{ torch: state }] });
+        setTorchOn(state);
+      } catch (err) { console.warn("Torch not supported"); }
     }
   };
 
-  useEffect(() => {
-    let scanner = null;
-    if (qrScannerOpen) {
-      // Small delay to let the dialog animation finish
-      const timer = setTimeout(() => {
-        const element = document.getElementById('qr-scanner');
-        if (element) {
-          try {
-            scanner = new Html5QrcodeScanner(
-              'qr-scanner',
-              {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                rememberLastUsedCamera: true,
-                supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA],
-                aspectRatio: 1.0,
-                showTorchButtonIfSupported: true,
-                showZoomSliderIfSupported: true,
-                verbose: false
-              },
-              false
-            );
-            scanner.render(handleQrScanSuccess, handleQrScanError);
-            qrScannerRef.current = scanner;
-          } catch (err) {
-            console.error('Scanner init error:', err);
-          }
-        }
-      }, 500);
-      
-      return () => {
-        clearTimeout(timer);
-        if (scanner) {
-          scanner.clear().catch(e => console.warn('Failed to clear scanner:', e));
-          qrScannerRef.current = null;
-        }
-      };
-    }
-  }, [qrScannerOpen]);
+  const handleBulkSave = async () => {
+    if (students.length === 0) return;
+    setSaving(true);
+    try {
+      const records = students.map(s => ({
+        school: parseInt(id),
+        student: s.id,
+        date,
+        present: !!attendance[s.id],
+        note: 'Manual Save',
+        device_id: deviceId,
+        scan_time: new Date().toISOString(),
+        session: dayjs(date).format('YYYY')
+      }));
 
-  const refreshScanner = async () => {
-    if (qrScannerRef.current) {
-      try {
-        await qrScannerRef.current.clear();
-      } catch (_) {}
+      const response = await scopedPost('/api/attendance/records/bulk_save/', id, { records });
+
+      if (response.data?.offline) {
+        toast.success('অফলাইন মোড: হাজিরা সংরক্ষিত হয়েছে এবং অনলাইনে ফিরলে সিঙ্ক হবে।');
+      } else {
+        toast.success('সফলভাবে সংরক্ষিত হয়েছে');
+      }
+    } catch (err) {
+        console.error('Bulk Save Error Response:', err.response?.data);
+        const serverMsg = err.response?.data?.error || err.response?.data?.detail || 'সংরক্ষণ করা যায়নি';
+        toast.error(serverMsg);
     }
-    setQrScannerOpen(false);
-    setTimeout(() => setQrScannerOpen(true), 300);
+    finally { setSaving(false); }
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Printable Area (hidden on screen) */}
-      <Box 
-        id="attendance-printable-area"
-        sx={{ 
-          display: 'none', 
-          '@media print': { 
-            display: 'block',
-            p: 4
-          } 
-        }}
-      >
-        <Typography variant="h4" align="center" gutterBottom sx={{ fontWeight: 'bold' }}>
-          {schoolInfo?.name || 'স্কুল হাজিরা রিপোর্ট'}
-        </Typography>
-        <Typography variant="h6" align="center" gutterBottom>
-          দৈনিক হাজিরা তালিকা - {date}
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6}>
-            <Typography variant="body1"><strong>শ্রেণি:</strong> {classrooms.find(c => String(c.id) === String(selectedClassroom))?.name || 'N/A'}</Typography>
-            <Typography variant="body1"><strong>সেকশন:</strong> {sections.find(s => String(s.id) === String(selectedSection))?.name || 'সব'}</Typography>
+    <Box sx={{ p: { xs: 1, sm: 3 } }}>
+      {/* FILTER PANEL */}
+      <Paper sx={{ p: 2, mb: 3, borderRadius: 2, border: '1px solid #e0e0e0' }} className="no-print">
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={3}>
+              <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold', ml: 1 }}>তারিখ নির্বাচন করুন</Typography>
+              <TextField id="attendance-date-picker" type="date" fullWidth value={date} size="small" onChange={(e) => { setDate(e.target.value); updateUrl(selectedClassroom, selectedSection, e.target.value); }} />
           </Grid>
-          <Grid item xs={6} sx={{ textAlign: 'right' }}>
-            <Typography variant="body1"><strong>হাজিরা দিয়েছেন:</strong> {takenByInfo?.name || 'N/A'}</Typography>
-            <Typography variant="body1"><strong>তারিখ ও সময়:</strong> {dayjs(takenByInfo?.created_at || new Date()).format('YYYY-MM-DD HH:mm')}</Typography>
-          </Grid>
-        </Grid>
-        
-        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #ddd' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>রোল</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">অবস্থা</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>শ্রেণি</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>সেকশন</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {students.map((student, index) => (
-                <TableRow key={student.id}>
-                  <TableCell>{student.roll_number || index + 1}</TableCell>
-                  <TableCell>{student.user?.first_name} {student.user?.last_name}</TableCell>
-                  <TableCell align="center">
-                    {attendance[student.id] ? 'উপস্থিত' : 'অনুপস্থিত'}
-                  </TableCell>
-                  <TableCell>{student.classroom?.name || 'N/A'}</TableCell>
-                  <TableCell>{student.section?.name || 'N/A'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        
-        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
-          <Box sx={{ borderTop: '1px solid black', width: '150px', textAlign: 'center', pt: 1 }}>
-            <Typography variant="caption">শ্রেণি শিক্ষকের স্বাক্ষর</Typography>
-          </Box>
-          <Box sx={{ borderTop: '1px solid black', width: '150px', textAlign: 'center', pt: 1 }}>
-            <Typography variant="caption">প্রধান শিক্ষকের স্বাক্ষর</Typography>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Header */}
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 3,
-          p: 3,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          borderRadius: 3,
-          display: 'print-none'
-        }}
-      >
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <SchoolIcon sx={{ fontSize: 40 }} />
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                হাজিরা ব্যবস্থাপনা
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                শ্রেণি ও সেকশন অনুযায়ী শিক্ষার্থীদের হাজিরা চিহ্নিত ও ব্যবস্থাপনা করুন
-              </Typography>
-            </Box>
-          </Stack>
-          <Button
-            variant="contained"
-            startIcon={<DescriptionIcon />}
-            onClick={() => navigate(`/school/${id}/attendance/report-card`)}
-            sx={{
-              bgcolor: 'white',
-              color: 'primary.main',
-              '&:hover': {
-                bgcolor: 'grey.100'
-              }
-            }}
-          >
-            হাজিরা রিপোর্ট কার্ড
-          </Button>
-        </Stack>
-      </Paper>
-
-      {/* Filters */}
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 2, display: 'print-none' }}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-          শ্রেণি ও তারিখ নির্বাচন
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold', ml: 1 }}>শ্রেণি নির্বাচন</Typography>
             <TextField
+              id="attendance-class-select"
               select
               fullWidth
-              label="শ্রেণি *"
-              value={selectedClassroom}
-              onChange={(e) => setSelectedClassroom(e.target.value)}
+              value={classrooms.some(c => String(c.id) === String(selectedClassroom)) ? selectedClassroom : ''}
+              size="small"
+              onChange={(e) => { setSelectedClassroom(e.target.value); setSelectedSection(''); updateUrl(e.target.value, '', date); }}
             >
-              <MenuItem value="">-- শ্রেণি নির্বাচন করুন --</MenuItem>
-              {classrooms.map(classroom => (
-                <MenuItem key={classroom.id} value={classroom.id}>
-                  {classroom.name}
-                </MenuItem>
-              ))}
+              <MenuItem value="">নির্বাচন করুন</MenuItem>
+              {classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
             </TextField>
           </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={2}>
+            <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold', ml: 1 }}>সেকশন</Typography>
             <TextField
+              id="attendance-section-select"
               select
               fullWidth
-              label="সেকশন (ঐচ্ছিক)"
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              disabled={!selectedClassroom}
-              helperText="সেকশন না দিলে এই শ্রেণির সব সেকশনের শিক্ষার্থী লোড হবে"
+              value={sections.some(s => String(s.id) === String(selectedSection)) ? selectedSection : ''}
+              size="small"
+              onChange={(e) => { setSelectedSection(e.target.value); updateUrl(selectedClassroom, e.target.value, date); }}
             >
-              <MenuItem value="">-- সব সেকশন --</MenuItem>
-              {sections.map(section => (
-                <MenuItem key={section.id} value={section.id}>
-                  {section.name}
-                </MenuItem>
-              ))}
+              <MenuItem value="">নির্বাচন করুন</MenuItem>
+              {sections.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
             </TextField>
           </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              type="date"
-              fullWidth
-              label="তারিখ"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              select
-              fullWidth
-              label="শিক্ষার্থী (ঐচ্ছিক)"
-              value={selectedStudent}
-              onChange={(e) => setSelectedStudent(e.target.value)}
-              disabled={!selectedClassroom || students.length === 0}
-            >
-              <MenuItem value="">-- শিক্ষার্থী নির্বাচন করুন --</MenuItem>
-              {students.map(s => (
-                <MenuItem key={s.id} value={s.id}>
-                  {s.user?.first_name} {s.user?.last_name} ({s.roll_number || 'N/A'})
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Button
-              fullWidth
-              variant="contained"
-              startIcon={<RefreshIcon />}
-              onClick={loadStudents}
-              disabled={!selectedClassroom}
-              sx={{ height: '56px' }}
-            >
-              শিক্ষার্থী লোড করুন
-            </Button>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Button
-              fullWidth
-              variant="contained"
-              color="secondary"
-              startIcon={<QrCodeScannerIcon />}
-              onClick={() => setQrScannerOpen(true)}
-              sx={{ height: '56px' }}
-            >
-              QR স্ক্যান করুন
-            </Button>
-          </Grid>
-        </Grid>
-      </Paper>
-      {takenByInfo && (
-        <Paper sx={{ p: 2, mb: 2, borderRadius: 2, borderLeft: '4px solid', borderColor: 'primary.main', display: 'flex', flexDirection: 'column' }}>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <CalendarIcon color="primary" />
-            <Box>
-              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                হাজিরা রিপোর্ট - {date}
-              </Typography>
-              <Typography variant="body1">
-                আজকের হাজিরা দিয়েছেন: {takenByInfo.name || takenByInfo.username || 'N/A'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ display: 'print-none' }}>
-                সময়: {dayjs(takenByInfo.created_at || takenByInfo.date).format('YYYY-MM-DD HH:mm')}
-              </Typography>
-            </Box>
-          </Stack>
-        </Paper>
-      )}
-
-      {/* Statistics Cards */}
-      {students.length > 0 && (
-        <Grid container spacing={2} sx={{ mb: 3, display: 'print-none' }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-              <CardContent>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {students.length}
-                    </Typography>
-                    <Typography variant="body2">মোট শিক্ষার্থী</Typography>
-                  </Box>
-                  <GroupIcon sx={{ fontSize: 48, opacity: 0.5 }} />
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', color: 'white' }}>
-              <CardContent>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {presentCount}
-                    </Typography>
-                    <Typography variant="body2">উপস্থিত</Typography>
-                  </Box>
-                  <CheckCircleIcon sx={{ fontSize: 48, opacity: 0.5 }} />
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white' }}>
-              <CardContent>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {absentCount}
-                    </Typography>
-                    <Typography variant="body2">অনুপস্থিত</Typography>
-                  </Box>
-                  <CancelIcon sx={{ fontSize: 48, opacity: 0.5 }} />
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: 'white' }}>
-              <CardContent>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {attendancePercentage}%
-                    </Typography>
-                    <Typography variant="body2">হাজিরার হার</Typography>
-                  </Box>
-                  <AssessmentIcon sx={{ fontSize: 48, opacity: 0.5 }} />
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      )}
-
-      {/* Attendance Table */}
-      <Paper sx={{ p: 3, borderRadius: 2 }}>
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : students.length === 0 ? (
-          <Alert severity="info">
-            হাজিরা দেওয়ার জন্য প্রথমে শ্রেণি নির্বাচন করে "শিক্ষার্থী লোড করুন" বাটনে ক্লিক করুন
-          </Alert>
-        ) : (
-          <>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2} sx={{ display: 'print-none' }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                শিক্ষার্থীদের হাজিরার তালিকা
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="success"
-                  onClick={markAllPresent}
-                >
-                  সবাইকে উপস্থিত করুন
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="error"
-                  onClick={markAllAbsent}
-                >
-                  সবাইকে অনুপস্থিত করুন
-                </Button>
-              </Stack>
+          <Grid item xs={12} sm={4}>
+            <Stack direction="row" spacing={1} sx={{ mt: { xs: 1, sm: 2.5 } }}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() => setQrScannerOpen(true)}
+                sx={{ height: 40, fontWeight: 'bold', bgcolor: '#1a237e' }}
+              >
+                স্ক্যানার
+              </Button>
+              <Button
+                id="attendance-save-btn"
+                variant="contained"
+                fullWidth
+                color="success"
+                onClick={handleBulkSave}
+                disabled={saving || !selectedClassroom}
+                sx={{ height: 40, fontWeight: 'bold' }}
+              >
+                {saving ? <CircularProgress size={24} /> : 'সেভ করুন'}
+              </Button>
             </Stack>
+          </Grid>
+        </Grid>
+      </Paper>
 
-            <Divider sx={{ mb: 2, display: 'print-none' }} />
-
-            <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
-              <Table size="small">
+      {/* STUDENT LIST */}
+      {students.length === 0 && loading ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 10 }}>
+              <CircularProgress />
+              <Typography sx={{ mt: 2 }}>লোড হচ্ছে...</Typography>
+          </Box>
+      ) : (
+        <Box sx={{ width: '100%', overflow: 'hidden' }}>
+          {students.length > 0 ? (
+            <TableContainer component={Paper} sx={{ boxShadow: 3, borderRadius: 2, overflowX: 'auto' }}>
+                <Table size="small" sx={{ minWidth: 400 }}>
                 <TableHead>
-                  <TableRow sx={{ bgcolor: 'grey.100' }}>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>রোল</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }} align="center">উপস্থিত</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }} align="center">অবস্থা</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>শিক্ষার্থীর নাম</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>শ্রেণি</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>সেকশন</TableCell>
-                  </TableRow>
+                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                        <TableCell sx={{ fontWeight: 'bold' }}>রোল</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>নাম</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 'bold' }}>হাজিরা</TableCell>
+                    </TableRow>
                 </TableHead>
                 <TableBody>
-                  {students.map((student, index) => (
-                    <TableRow 
-                      key={student.id}
-                      sx={{
-                        '&:hover': { bgcolor: 'grey.50' },
-                        bgcolor: attendance[student.id] ? 'success.50' : 'error.50'
-                      }}
-                    >
-                      <TableCell>{student.roll_number || index + 1}</TableCell>
-                      <TableCell align="center">
-                        <Checkbox
-                          checked={attendance[student.id] || false}
-                          onChange={() => toggleAttendance(student.id)}
-                          color="success"
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        {attendance[student.id] ? (
-                          <Chip
-                            label="উপস্থিত"
-                            color="success"
-                            size="small"
-                            icon={<CheckCircleIcon />}
-                          />
-                        ) : (
-                          <Chip
-                            label="অনুপস্থিত"
-                            color="error"
-                            size="small"
-                            icon={<CancelIcon />}
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                          {student.user?.first_name} {student.user?.last_name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {student.user?.username}
-                        </Typography>
-                      </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{student.classroom?.name || 'N/A'}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{student.section?.name || 'N/A'}</TableCell>
+                    {students.map(s => (
+                    <TableRow key={s.id} sx={{ bgcolor: attendance[s.id] ? '#e8f5e9' : 'inherit', transition: 'background 0.3s' }}>
+                        <TableCell sx={{ fontWeight: attendance[s.id] ? 'bold' : 'normal' }}>{s.roll_number}</TableCell>
+                        <TableCell>{s.user?.first_name} {s.user?.last_name}</TableCell>
+                        <TableCell align="center">
+                            <Checkbox
+                                checked={!!attendance[s.id]}
+                                color="success"
+                                onChange={() => setAttendance(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                            />
+                        </TableCell>
                     </TableRow>
-                  ))}
+                    ))}
                 </TableBody>
-              </Table>
+                </Table>
             </TableContainer>
-
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3, display: 'print-none', justifyContent: 'center' }}>
-              <Button
-                variant="contained"
-                size="medium"
-                startIcon={<SaveIcon />}
-                onClick={saveAttendance}
-                disabled={saving}
-              >
-                {saving ? 'সংরক্ষণ হচ্ছে...' : 'হাজিরা সংরক্ষণ করুন'}
-              </Button>
-              {autoSaving && (
-                <Chip label="অটো-সেভ হচ্ছে..." color="info" size="small" />
-              )}
-              <Button
-                variant="outlined"
-                size="medium"
-                startIcon={<AssessmentIcon />}
-                onClick={loadDailySummary}
-              >
-                সারাংশ
-              </Button>
-              <Button
-                variant="outlined"
-                size="medium"
-                startIcon={<PrintIcon />}
-                onClick={handlePrint}
-              >
-                প্রিন্ট
-              </Button>
-              <Button
-                variant="outlined"
-                size="medium"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadReport}
-              >
-                ডাউনলোড
-              </Button>
-              <Button
-                variant="outlined"
-                size="medium"
-                startIcon={<CalendarIcon />}
-                onClick={loadMonthlyReport}
-              >
-                মাসিক
-              </Button>
-              <TextField
-                select
-                size="small"
-                sx={{ minWidth: 100 }}
-                label="সাল"
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-              >
-                {Array.from({ length: 6 }, (_, i) => String(dayjs().year() - i)).map(y => (
-                  <MenuItem key={y} value={y}>{y}</MenuItem>
-                ))}
-              </TextField>
-              <Button
-                variant="outlined"
-                size="medium"
-                startIcon={<CalendarIcon />}
-                onClick={loadYearlyReport}
-              >
-                বাৎসরিক
-              </Button>
-            </Stack>
-          </>
-        )}
-      </Paper>
-
-      {/* Daily Summary Dialog */}
-      <Dialog
-        open={summaryDialogOpen}
-        onClose={() => setSummaryDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-            📊 দৈনিক হাজিরা সারাংশ - {date}
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          {dailySummary.length === 0 ? (
-            <Alert severity="info">এই তারিখের জন্য কোনো হাজিরার তথ্য নেই</Alert>
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 'bold' }}>শ্রেণি</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }}>সেকশন</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }} align="center">মোট</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }} align="center">উপস্থিত</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }} align="center">অনুপস্থিত</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }} align="center">%</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {dailySummary.map((summary, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{summary.classroom}</TableCell>
-                    <TableCell>{summary.section}</TableCell>
-                    <TableCell align="center">{summary.total_students}</TableCell>
-                    <TableCell align="center">
-                      <Chip label={summary.present_count} color="success" size="small" />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip label={summary.absent_count} color="error" size="small" />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip 
-                        label={`${summary.attendance_percentage}%`} 
-                        color={summary.attendance_percentage >= 75 ? 'success' : 'warning'}
-                        size="small"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          ) : selectedClassroom && (
+            <Box sx={{ textAlign: 'center', p: 5, bgcolor: '#fff', borderRadius: 2, border: '1px dashed #ccc' }}>
+                <Typography color="text.secondary">এই ক্লাসে কোনো শিক্ষার্থী খুঁজে পাওয়া যায়নি</Typography>
+            </Box>
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSummaryDialogOpen(false)}>বন্ধ করুন</Button>
-          <Button variant="contained" startIcon={<DownloadIcon />}>
-            রিপোর্ট ডাউনলোড
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Monthly Report Section */}
-      {monthlyReport.length > 0 && (
-        <Paper sx={{ p: 3, mt: 3, borderRadius: 2 }}>
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-            📅 মাসিক হাজিরা রিপোর্ট - {selectedMonth}
-          </Typography>
-          <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-            <TextField
-              type="month"
-              label="মাস পরিবর্তন করুন"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              size="small"
-            />
-            <Button variant="outlined" size="small" onClick={loadMonthlyReport} startIcon={<CalendarIcon />}>
-              রিফ্রেশ
-            </Button>
-          </Stack>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.100' }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>শ্রেণি</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>সেকশন</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">মোট দিন</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">উপস্থিত</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">অনুপস্থিত</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">হাজিরা %</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {monthlyReport.map((report) => (
-                <TableRow key={report.student_id}>
-                  <TableCell>{report.student_name}</TableCell>
-                  <TableCell>{report.classroom}</TableCell>
-                  <TableCell>{report.section}</TableCell>
-                  <TableCell align="center">{report.total_days}</TableCell>
-                  <TableCell align="center">
-                    <Chip label={report.present_days} color="success" size="small" />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip label={report.absent_days} color="error" size="small" />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={`${report.attendance_percentage}%`}
-                      color={
-                        report.attendance_percentage >= 75 ? 'success' :
-                        report.attendance_percentage >= 50 ? 'warning' : 'error'
-                      }
-                      size="small"
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Paper>
-      )}
-      {yearlyReport.length > 0 && (
-        <Paper sx={{ p: 3, mt: 3, borderRadius: 2 }}>
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-            📅 বাৎসরিক হাজিরা রিপোর্ট - {selectedYear}
-          </Typography>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.100' }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>শ্রেণি</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>সেকশন</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">মোট দিন</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">উপস্থিত</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">অনুপস্থিত</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }} align="center">হাজিরা %</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {yearlyReport.map((report) => (
-                <TableRow key={report.student_id}>
-                  <TableCell>{report.student_name}</TableCell>
-                  <TableCell>{report.classroom}</TableCell>
-                  <TableCell>{report.section}</TableCell>
-                  <TableCell align="center">{report.total_days}</TableCell>
-                  <TableCell align="center">
-                    <Chip label={report.present_days} color="success" size="small" />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip label={report.absent_days} color="error" size="small" />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={`${report.attendance_percentage}%`}
-                      color={
-                        report.attendance_percentage >= 75 ? 'success' :
-                        report.attendance_percentage >= 50 ? 'warning' : 'error'
-                      }
-                      size="small"
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Paper>
+        </Box>
       )}
 
-      {/* QR Scanner Dialog */}
-        <Dialog
-          open={qrScannerOpen}
-          onClose={() => setQrScannerOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="h6">QR কোড স্ক্যান করুন</Typography>
-              <Stack direction="row" spacing={1}>
-                <IconButton onClick={refreshScanner} title="রিফ্রেশ ক্যামেরা" color="primary">
-                  <RefreshIcon />
-                </IconButton>
-                <IconButton onClick={() => setQrScannerOpen(false)}>
-                  <CloseIcon />
-                </IconButton>
-              </Stack>
+      {/* SCANNER DIALOG */}
+      <Dialog open={qrScannerOpen} onClose={() => setQrScannerOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>হাজিরা স্ক্যানার</Typography>
+            <Stack direction="row" spacing={1}>
+              <IconButton onClick={toggleTorch} color={torchOn ? "warning" : "default"}>
+                {torchOn ? <FlashOnIcon /> : <FlashOffIcon />}
+              </IconButton>
+              <IconButton onClick={() => setQrScannerOpen(false)}><CloseIcon /></IconButton>
             </Stack>
-          </DialogTitle>
-          <DialogContent>
-            <Box id="qr-scanner" sx={{ mt: 1 }} />
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-              QR স্ক্যান না হলে ম্যানুয়ালি আইডি নম্বর দিন:
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                label="Student ID"
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0, position: 'relative' }}>
+          <Box id="qr-reader" sx={{ width: '100%', minHeight: '350px', bgcolor: '#000' }} />
+
+          {/* SUCCESS OVERLAY (Attractive 3-line format) */}
+          {scanSuccess && (
+              <Zoom in={!!scanSuccess}>
+                <Box sx={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    zIndex: 10,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: 'rgba(232, 245, 233, 0.98)', // Light green semi-transparent
+                    py: 6, // Increased vertical padding to prevent clipping
+                    px: 3,
+                    textAlign: 'center',
+                    border: '10px solid #2e7d32', // Strong green border
+                    overflow: 'hidden'
+                }}>
+                    {/* Line 1: Roll, Section, Class */}
+                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1b5e20', mb: 1, letterSpacing: 1 }}>
+                        রোল: {scanSuccess.roll} | শাখা: {scanSuccess.section} | শ্রেণি: {scanSuccess.class}
+                    </Typography>
+
+                    {/* Student Photo */}
+                    <Avatar
+                        src={scanSuccess.photo}
+                        sx={{ width: 130, height: 130, mb: 2, border: '5px solid #2e7d32', boxShadow: 6 }}
+                    >
+                        {scanSuccess.name[0]}
+                    </Avatar>
+
+                    {/* Line 2: Student Name */}
+                    <Typography variant="h3" sx={{
+                        fontWeight: '900',
+                        color: '#000',
+                        mb: 1.5,
+                        textShadow: '1px 1px 2px rgba(0,0,0,0.1)',
+                        fontSize: { xs: '1.8rem', sm: '3rem' } // Responsive name font
+                    }}>
+                        {scanSuccess.name}
+                    </Typography>
+
+                    {/* Status Badge */}
+                    <Box sx={{ mb: 2, px: 4, py: 1, borderRadius: 10, bgcolor: '#2e7d32', color: 'white', boxShadow: 3 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>উপস্থিতি নেওয়া হয়েছে</Typography>
+                    </Box>
+
+                    {/* Line 3: School Name */}
+                    <Typography variant="h4" sx={{
+                        fontWeight: '900',
+                        color: '#1a237e',
+                        mt: 'auto', // Push to bottom but within padding
+                        fontSize: { xs: '1.4rem', sm: '2.4rem' },
+                        textTransform: 'uppercase',
+                        lineHeight: 1.1
+                    }}>
+                        {scanSuccess.schoolName}
+                    </Typography>
+                </Box>
+              </Zoom>
+          )}
+
+          <Box sx={{ p: 2, display: 'flex', gap: 1, bgcolor: '#f9f9f9' }}>
+            <TextField
+                label="ম্যানুয়াল আইডি"
                 fullWidth
-                placeholder="Student ID লিখুন"
+                size="small"
                 value={manualStudentId}
                 onChange={(e) => setManualStudentId(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleManualEntry()}
-              />
-              <Button
-                variant="contained"
-                onClick={handleManualEntry}
-                disabled={!manualStudentId}
-              >
-                সেভ
-              </Button>
-            </Box>
-          </DialogContent>
-        </Dialog>
+                onKeyPress={(e) => e.key === 'Enter' && handleQrScanSuccess(manualStudentId)}
+            />
+            <Button variant="contained" onClick={() => handleQrScanSuccess(manualStudentId)}>যোগ</Button>
+          </Box>
+        </DialogContent>
+      </Dialog>
+
+      <InputGuidance
+        steps={guidanceSteps}
+        activeStep={activeStep}
+        onStepComplete={(step) => setActiveStep(step)}
+      />
     </Box>
   );
 }

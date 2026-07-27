@@ -188,6 +188,6 @@ class RoomAdmin(admin.ModelAdmin):
 
 @admin.register(ExamSeatPlan)
 class ExamSeatPlanAdmin(admin.ModelAdmin):
-    list_display = ['id', 'exam_slot', 'student', 'room', 'seat_number']
-    list_filter = ['exam_slot', 'room']
+    list_display = ['id', 'examination', 'student', 'room', 'seat_number']
+    list_filter = ['examination', 'room']
     search_fields = ['student__user__username', 'student__roll_number']

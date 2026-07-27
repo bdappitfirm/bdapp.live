@@ -5,7 +5,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -16,15 +16,29 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     // You can also log the error to an error reporting service
     console.error("Uncaught error:", error, errorInfo);
+    this.setState({ errorInfo });
+    
+    // Auto-reload on chunk load errors
+    if (error.name === 'ChunkLoadError' || error.message?.includes('Loading chunk')) {
+      console.log('Chunk load error detected - reloading page...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null });
-    window.location.href = '/';
+    this.setState({ hasError: false, error: null, errorInfo: null });
+    // Optional: redirect to home, or just reset
+    if (this.props.redirectOnReset !== false) {
+      window.location.href = '/';
+    }
   };
 
   render() {
     if (this.state.hasError) {
+      const isChunkError = this.state.error?.name === 'ChunkLoadError' || this.state.error?.message?.includes('Loading chunk');
+      
       // You can render any custom fallback UI
       return (
         <Box
@@ -48,19 +62,39 @@ class ErrorBoundary extends React.Component {
           >
             <ErrorOutlineIcon sx={{ fontSize: 64, color: '#d32f2f', mb: 2 }} />
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
-              দুঃখিত এটি করা সম্ভব নয়
+              {isChunkError ? 'লোডিং সমস্যা!' : 'দুঃখিত, কিছু ভুল হয়েছে'}
             </Typography>
             <Typography variant="body1" color="text.secondary" paragraph>
-              দয়া করে আপনার বিদ্যালয়ের প্রধান শিক্ষকের সাথে যোগযোগ করুন, ধন্যবাদ।
+              {isChunkError 
+                ? 'অ্যাপটি আপডেট হয়েছে, স্বয়ংক্রিয়ভাবে রিফ্রেশ হয়ে যাচ্ছে...' 
+                : 'দয়া করে রিফ্রেশ করুন বা ড্যাশবোর্ডে ফিরে যান।'
+              }
             </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={this.handleReset}
-              sx={{ mt: 2, borderRadius: 2, px: 4 }}
-            >
-              ড্যাশবোর্ডে ফিরে যান
-            </Button>
+            {process.env.NODE_ENV === 'development' && this.state.error && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: '#ffebee', borderRadius: 2, textAlign: 'left' }}>
+                <Typography variant="caption" color="error" component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {this.state.error.toString()}
+                </Typography>
+              </Box>
+            )}
+            <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={() => window.location.reload()}
+                sx={{ borderRadius: 2, px: 3 }}
+              >
+                রিফ্রেশ করুন
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={this.handleReset}
+                sx={{ borderRadius: 2, px: 4 }}
+              >
+                ড্যাশবোর্ডে ফিরে যান
+              </Button>
+            </Box>
           </Paper>
         </Box>
       );

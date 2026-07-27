@@ -19,7 +19,7 @@ const normalizeColor = (color) => {
   return color;
 };
 
-const StatCard = ({ title, value, icon, color = '#1976d2', onClick }) => {
+const StatCard = ({ title, value, icon, color = '#1976d2', onClick, sx = {} }) => {
   const base = normalizeColor(color);
   return (
     <Card
@@ -33,6 +33,7 @@ const StatCard = ({ title, value, icon, color = '#1976d2', onClick }) => {
         '&:focus-visible': { outline: '3px solid rgba(25,118,210,0.6)' },
         background: `linear-gradient(135deg, ${base} 0%, #90caf9 100%)`,
         color: 'white',
+        ...sx
       }}
       onClick={onClick}
       role={onClick ? 'button' : undefined}

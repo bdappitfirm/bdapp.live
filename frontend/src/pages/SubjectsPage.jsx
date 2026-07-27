@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useParams, useNavigate } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
@@ -43,8 +43,79 @@ import SubjectCard from '../components/SubjectCard';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 
-  const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
-  const checkedIcon = <CheckBoxIcon fontSize="small" />;
+const banglaNumberMap = {
+  'প্লে': -3,
+  'Play': -3,
+  'play': -3,
+  'নার্সারি': -2,
+  'Nursery': -2,
+  'nursery': -2,
+  'কেজি': -1,
+  'KG': -1,
+  'kg': -1,
+  'কে.জি': -1,
+  'কে.জি.': -1,
+  '১ম': 1,
+  '২য়': 2,
+  '৩য়': 3,
+  '৪র্থ': 4,
+  '৫ম': 5,
+  '৬ষ্ঠ': 6,
+  '৭ম': 7,
+  '৮ম': 8,
+  '৯ম': 9,
+  '১০ম': 10,
+  'প্রথম': 1,
+  'দ্বিতীয়': 2,
+  'দ্বিতীয়': 2,
+  'তৃতীয়': 3,
+  'তৃতীয়': 3,
+  'চতুর্থ': 4,
+  'পঞ্চম': 5,
+  'ষষ্ঠ': 6,
+  'সপ্তম': 7,
+  'অষ্টম': 8,
+  'নবম': 9,
+  'দশম': 10,
+  'একাদশ': 11,
+  'দ্বাদশ': 12
+};
+
+const subjectOrderMap = {
+  'বাংলা-১ম': 1, 'বাংলা ১ম': 1, 'Bangla 1st': 1,
+  'বাংলা-২য়': 2, 'বাংলা ২য়': 2, 'বাংলা-দ্বিতীয়': 2, 'Bangla 2nd': 2,
+  'ইংরেজী-১ম': 3, 'ইংরেজি-১ম': 3, 'ইংরেজী ১ম': 3, 'ইংরেজি ১ম': 3, 'English 1st': 3, 'English-1st': 3,
+  'ইংরেজি-২য়': 4, 'ইংরেজী-২য়': 4, 'ইংরেজি ২য়': 4, 'ইংরেজী ২য়': 4, 'English 2nd': 4, 'English-2nd': 4,
+  'গণিত': 5, 'Math': 5, 'Mathematics': 5,
+  'বিজ্ঞান': 6, 'Science': 6,
+  'বাংলাদেশ ও বিশ্বপরিচয়': 7, 'বাংলাদেশ ও বিশ্ব পরিচয়': 7, 'BGS': 7,
+  'ICT': 8, 'আইসিটি': 8, 'তথ্য ও যোগাযোগ প্রযুক্তি': 8,
+  'ধর্ম': 9, 'Religion': 9, 'Islam': 9, 'Hindu': 9
+};
+
+const getSubjectOrder = (name) => {
+  if (subjectOrderMap[name]) return subjectOrderMap[name];
+  for (const [key, order] of Object.entries(subjectOrderMap)) {
+    if (name.includes(key)) return order;
+  }
+  return 999;
+};
+
+const getClassOrder = (className) => {
+  const lowerName = String(className || '').toLowerCase();
+  if (lowerName.includes('play') || lowerName.includes('প্লে')) return -3;
+  if (lowerName.includes('nursery') || lowerName.includes('নার্সারি') || lowerName.includes('শিশু')) return -2;
+  if (lowerName.includes('kg') || lowerName.includes('কেজি') || lowerName.includes('কে.জি')) return -1;
+  for (const [bangla, num] of Object.entries(banglaNumberMap)) {
+    if (String(className || '').includes(bangla)) return num;
+  }
+  const match = String(className || '').match(/\d+/);
+  if (match) return parseInt(match[0]);
+  return 999;
+};
+
+const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
+const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
 export default function SubjectsPage() {
   const { id } = useParams();
@@ -76,101 +147,16 @@ export default function SubjectsPage() {
   });
   const [formErrors, setFormErrors] = useState({});
 
-  useEffect(() => {
-    loadSubjects();
-    loadTeachers();
-    loadSections();
-  }, [id]);
-
-  const banglaNumberMap = {
-    'প্লে': -3,
-    'Play': -3,
-    'play': -3,
-    'নার্সারি': -2,
-    'Nursery': -2,
-    'nursery': -2,
-    'কেজি': -1,
-    'KG': -1,
-    'kg': -1,
-    'কে.জি': -1,
-    'কে.জি.': -1,
-    '১ম': 1,
-    '২য়': 2,
-    '৩য়': 3,
-    '৪র্থ': 4,
-    '৫ম': 5,
-    '৬ষ্ঠ': 6,
-    '৭ম': 7,
-    '৮ম': 8,
-    '৯ম': 9,
-    '১০ম': 10,
-    'প্রথম': 1,
-    'দ্বিতীয়': 2,
-    'দ্বিতীয়': 2,
-    'তৃতীয়': 3,
-    'তৃতীয়': 3,
-    'চতুর্থ': 4,
-    'পঞ্চম': 5,
-    'ষষ্ঠ': 6,
-    'সপ্তম': 7,
-    'অষ্টম': 8,
-    'নবম': 9,
-    'দশম': 10,
-    'একাদশ': 11,
-    'দ্বাদশ': 12
-  };
-
-  // Subject order mapping based on user request
-  const subjectOrderMap = {
-    'বাংলা-১ম': 1, 'বাংলা ১ম': 1, 'Bangla 1st': 1,
-    'বাংলা-২য়': 2, 'বাংলা ২য়': 2, 'বাংলা-দ্বিতীয়': 2, 'Bangla 2nd': 2,
-    'ইংরেজী-১ম': 3, 'ইংরেজি-১ম': 3, 'ইংরেজী ১ম': 3, 'ইংরেজি ১ম': 3, 'English 1st': 3, 'English-1st': 3,
-    'ইংরেজি-২য়': 4, 'ইংরেজী-২য়': 4, 'ইংরেজি ২য়': 4, 'ইংরেজী ২য়': 4, 'English 2nd': 4, 'English-2nd': 4,
-    'গণিত': 5, 'Math': 5, 'Mathematics': 5,
-    'বিজ্ঞান': 6, 'Science': 6,
-    'বাংলাদেশ ও বিশ্বপরিচয়': 7, 'বাংলাদেশ ও বিশ্ব পরিচয়': 7, 'BGS': 7,
-    'ICT': 8, 'আইসিটি': 8, 'তথ্য ও যোগাযোগ প্রযুক্তি': 8,
-    'ধর্ম': 9, 'Religion': 9, 'ইসলাম ধর্ম': 9, 'হিন্দু ধর্ম': 9, 'Islam': 9, 'Hindu': 9
-  };
-
-  const getSubjectOrder = (name) => {
-    // Try exact match first
-    if (subjectOrderMap[name]) return subjectOrderMap[name];
-    
-    // Try fuzzy match (if name contains the key)
-    for (const [key, order] of Object.entries(subjectOrderMap)) {
-      if (name.includes(key)) return order;
-    }
-    
-    return 999;
-  };
-
-  const getClassOrder = (className) => {
-    const lowerName = String(className || '').toLowerCase();
-    if (lowerName.includes('play') || lowerName.includes('প্লে')) return -3;
-    if (lowerName.includes('nursery') || lowerName.includes('নার্সারি') || lowerName.includes('শিশু')) return -2;
-    if (lowerName.includes('kg') || lowerName.includes('কেজি') || lowerName.includes('কে.জি')) return -1;
-    for (const [bangla, num] of Object.entries(banglaNumberMap)) {
-      if (String(className || '').includes(bangla)) return num;
-    }
-    const match = String(className || '').match(/\d+/);
-    if (match) return parseInt(match[0]);
-    return 999;
-  };
-
-  const loadSubjects = async () => {
+  const loadSubjects = useCallback(async (quiet = true) => {
     setLoading(true);
     try {
-      // Load subjects first (school-wide)
       const subjectRes = await api.get(`/api/academics/subjects/?school=${id}`);
       const subjectsData = Array.isArray(subjectRes.data) ? subjectRes.data : subjectRes.data.results || [];
       setSubjects(subjectsData);
 
-      // Load classes and derive counts based on assignments/linkage
       const classRes = await api.get(`/api/academics/classrooms/?school=${id}`);
       let classesData = Array.isArray(classRes.data) ? classRes.data : classRes.data.results || [];
       
-      // Sort classes
       classesData = classesData.sort((a, b) => {
         return getClassOrder(a.name) - getClassOrder(b.name);
       });
@@ -178,40 +164,41 @@ export default function SubjectsPage() {
       setClassrooms(classesData);
 
       const summary = classesData.map(classroom => {
-        const classSubjects = subjectsData.filter(s => {
+        const classSubjs = subjectsData.filter(s => {
           const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
           return cls.includes(classroom.id);
         });
         return {
           id: classroom.id,
           name: classroom.name,
-          subjectCount: classSubjects.length,
-          subjects: classSubjects
+          subjectCount: classSubjs.length,
+          subjects: classSubjs
         };
       });
       setClassSummary(summary);
 
-      if (subjectsData.length > 0) {
+      if (!quiet && subjectsData.length > 0) {
         toast.success(`Loaded ${subjectsData.length} subjects`);
       }
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load subjects');
+      if (!quiet) toast.error('Failed to load subjects');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, toast]);
 
-  const loadTeachers = async () => {
+  const loadTeachers = useCallback(async () => {
     try {
       const res = await api.get(`/api/users/teachers/?school=${id}`);
-      setTeachers(res.data);
+      const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setTeachers(data);
     } catch (err) {
       console.error('Failed to load teachers:', err);
     }
-  };
+  }, [id]);
 
-  const loadSections = async () => {
+  const loadSections = useCallback(async () => {
     try {
       const res = await api.get(`/api/academics/sections/?school=${id}`);
       const data = Array.isArray(res.data) ? res.data : res.data.results || [];
@@ -219,42 +206,26 @@ export default function SubjectsPage() {
     } catch (err) {
       console.error('Failed to load sections:', err);
     }
-  };
-  
-  const handleClassSelect = (classroom) => {
-    setSelectedClass(classroom);
-    setSelectedSection(null);
-    try {
-      if (classroom && classroom.id) {
-        loadClassSubjects(classroom.id);
-        loadClassSections(classroom.id);
-      }
-    } catch (_) {}
-  };
-  
-  const handleBackToClasses = () => {
-    setSelectedClass(null);
-    setSelectedSection(null);
-  };
+  }, [id]);
 
-  const loadClassSections = async (classroomId) => {
+  const loadClassSections = useCallback(async (classroomId) => {
     try {
-      const res = await api.get(`/api/academics/sections/?classroom=${classroomId}`);
+      const res = await api.get(`/api/academics/sections/?classroom=${classroomId}&school=${id}`);
       const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
       setClassSections(data);
     } catch (err) {
       console.error('Failed to load sections:', err);
       setClassSections([]);
     }
-  };
+  }, []);
 
-  const loadClassSubjects = async (classroomId, sectionId = null) => {
+  const loadClassSubjects = useCallback(async (classroomId, sectionId = null) => {
     if (!classroomId) return;
     try {
       setClassSubjectsLoading(true);
-      let url = `/api/academics/classrooms/${classroomId}/subjects/`;
+      let url = `/api/academics/classrooms/${classroomId}/subjects/?school=${id}`;
       if (sectionId) {
-        url += `?section=${sectionId}`;
+        url += `&section=${sectionId}`;
       }
       const res = await api.get(url);
       const data = Array.isArray(res.data) ? res.data : res.data.results || [];
@@ -265,6 +236,26 @@ export default function SubjectsPage() {
     } finally {
       setClassSubjectsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    loadSubjects(true);
+    loadTeachers();
+    loadSections();
+  }, [loadSubjects, loadTeachers, loadSections]);
+
+  const handleClassSelect = (classroom) => {
+    setSelectedClass(classroom);
+    setSelectedSection(null);
+    if (classroom && classroom.id) {
+      loadClassSubjects(classroom.id);
+      loadClassSections(classroom.id);
+    }
+  };
+
+  const handleBackToClasses = () => {
+    setSelectedClass(null);
+    setSelectedSection(null);
   };
 
   const handleSectionSelect = (section) => {
@@ -279,7 +270,6 @@ export default function SubjectsPage() {
       navigate('/login');
       return;
     }
-    // Pre-select the current class if one is selected
     setFormData({
       name: '',
       code: '',
@@ -289,6 +279,12 @@ export default function SubjectsPage() {
     setFormErrors({});
     setDialogOpen(true);
   };
+
+  // Get sections for selected classrooms
+  const availableSections = useMemo(() => {
+    const selectedClassroomIds = new Set(formData.classrooms.map(c => c.id));
+    return sections.filter(s => selectedClassroomIds.has(s.classroom?.id || s.classroom_id));
+  }, [formData.classrooms, sections]);
 
   const handleDelete = (subject) => {
     if (!isAuthenticated()) {
@@ -307,22 +303,15 @@ export default function SubjectsPage() {
 
     setSaving(true);
     try {
-      // If we have a selected class, we want to add the subject to THIS class
-      // The backend logic I implemented checks for 'classroom_id' in body
       const payload = {
         name: formData.name,
         code: formData.code,
-        school_id: id,
+        school_id: parseInt(id),
         classrooms: formData.classrooms.map(c => c.id),
         sections: formData.sections.map(s => s.id)
       };
       
-      // Keep classroom_id for backward compatibility if needed, but 'classrooms' list should be primary
-      if (selectedClass) {
-        payload.classroom_id = selectedClass.id;
-      }
-
-      await api.post('/api/academics/subjects/', payload);
+      await api.post(`/api/academics/subjects/?school=${id}`, payload);
       toast.success('Subject added successfully!');
       setDialogOpen(false);
       loadSubjects();
@@ -354,45 +343,36 @@ export default function SubjectsPage() {
 
   const baseList = (selectedClass && classSubjects.length > 0) ? classSubjects : subjects;
   const isClassScoped = !!(selectedClass && classSubjects.length > 0);
-  const filtered = baseList
-    .filter(s => {
-      // First filter by selected class if any
-      if (selectedClass) {
-        // Prefer class-scoped list; when using school-wide list, ensure subject is assigned to the selected class
-        if (!isClassScoped) {
-          const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
-          if (!cls.includes(selectedClass.id) && !s.teachers) return false;
+  const filtered = useMemo(() => {
+    return baseList
+      .filter(s => {
+        if (selectedClass) {
+          if (!isClassScoped) {
+            const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
+            if (!cls.includes(selectedClass.id) && !s.teachers) return false;
+          }
         }
-      }
-      
-      // Then filter by search query
-      const searchLower = searchQuery.toLowerCase();
-      return s.name.toLowerCase().includes(searchLower) ||
-             s.code.toLowerCase().includes(searchLower);
-    })
-    .filter(s => {
-      if (selectedClass && !isClassScoped) {
-        const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
-        return cls.includes(selectedClass.id);
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      // Sort by defined order first
-      const orderA = getSubjectOrder(a.name);
-      const orderB = getSubjectOrder(b.name);
-      
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-
-      // Then sort by ID (ascending) as fallback
-      return a.id - b.id;
-    });
+        const searchLower = searchQuery.toLowerCase();
+        return s.name.toLowerCase().includes(searchLower) ||
+               s.code.toLowerCase().includes(searchLower);
+      })
+      .filter(s => {
+        if (selectedClass && !isClassScoped) {
+          const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
+          return cls.includes(selectedClass.id);
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const orderA = getSubjectOrder(a.name);
+        const orderB = getSubjectOrder(b.name);
+        if (orderA !== orderB) return orderA - orderB;
+        return a.id - b.id;
+      });
+  }, [baseList, isClassScoped, searchQuery, selectedClass]);
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', overflow: 'hidden' }}>
-      {/* Header */}
       <Fade in timeout={500}>
         <Paper 
           elevation={0}
@@ -424,10 +404,6 @@ export default function SubjectsPage() {
                   ? `${selectedClass.name} শ্রেণির বিষয়সমূহ পরিচালনা করুন`
                   : 'বিষয় যোগ, সম্পাদনা এবং শিক্ষকদের সংযুক্ত করুন'}
               </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.7, mt: 1 }}>
-                স্কুল আইডি: {id} | মোট বিষয়: {subjects.length} | শিক্ষক: {teachers.length}
-                {selectedClass && ` | শ্রেণির বিষয়: ${filtered.length}`}
-              </Typography>
             </Box>
             <Stack direction="row" spacing={1} flexWrap="wrap">
               {selectedClass && (
@@ -435,398 +411,108 @@ export default function SubjectsPage() {
                   variant="outlined" 
                   startIcon={<ArrowBackIcon />} 
                   onClick={handleBackToClasses}
-                  sx={{ 
-                    borderColor: 'rgba(255,255,255,0.5)', 
-                    color: 'white',
-                    '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' }
-                  }}
+                  sx={{ borderColor: 'rgba(255,255,255,0.5)', color: 'white' }}
                 >
                   শ্রেণি তালিকা
                 </Button>
               )}
-              <Button 
-                variant="contained" 
-                startIcon={<AddIcon />} 
-                onClick={() => {
-                  if (!isAuthenticated()) {
-                    navigate('/login');
-                    return;
-                  }
-                  handleAdd();
-                }}
-                sx={{ 
-                  bgcolor: 'rgba(255,255,255,0.2)', 
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                বিষয় যোগ করুন
-              </Button>
-              <Button 
-                variant="outlined" 
-                startIcon={<RefreshIcon />} 
-                onClick={() => {
-                  loadSubjects();
-                  loadTeachers();
-                }}
-                sx={{ 
-                  borderColor: 'rgba(255,255,255,0.5)', 
-                  color: 'white',
-                  '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' }
-                }}
-              >
-                রিফ্রেশ
-              </Button>
+              <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd} sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>বিষয় যোগ করুন</Button>
+              <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => loadSubjects(false)} sx={{ borderColor: 'rgba(255,255,255,0.5)', color: 'white' }}>রিফ্রেশ</Button>
             </Stack>
           </Stack>
         </Paper>
       </Fade>
 
-      {/* Search Bar and Section Filter - Only show when a class is selected */}
       {selectedClass && (
         <Zoom in timeout={600}>
           <Paper elevation={2} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={selectedClass ? 6 : 12}>
+              <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
                   placeholder="নাম বা কোড দিয়ে বিষয় খুঁজুন..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                    }
-                  }}
+                  InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon /></InputAdornment>) }}
                 />
               </Grid>
-              {selectedClass && (
-                <Grid item xs={12} md={6}>
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Typography variant="body2" sx={{ fontWeight: 'bold', mr: 1 }}>শাখা (Section):</Typography>
-                    <Chip
-                      label="সব শাখা"
-                      onClick={() => handleSectionSelect(null)}
-                      color={selectedSection === null ? "primary" : "default"}
-                      variant={selectedSection === null ? "filled" : "outlined"}
-                    />
-                    {classSections.map((section) => (
-                      <Chip
-                        key={section.id}
-                        label={section.name}
-                        onClick={() => handleSectionSelect(section)}
-                        color={selectedSection?.id === section.id ? "primary" : "default"}
-                        variant={selectedSection?.id === section.id ? "filled" : "outlined"}
-                      />
-                    ))}
-                  </Stack>
-                </Grid>
-              )}
+              <Grid item xs={12} md={6}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                  <Chip label="সব শাখা" onClick={() => handleSectionSelect(null)} color={selectedSection === null ? "primary" : "default"} />
+                  {classSections.map((sec) => (
+                    <Chip key={sec.id} label={sec.name} onClick={() => handleSectionSelect(sec)} color={selectedSection?.id === sec.id ? "primary" : "default"} />
+                  ))}
+                </Stack>
+              </Grid>
             </Grid>
           </Paper>
         </Zoom>
       )}
 
-      {/* Content */}
       {loading ? (
-        <Grid container spacing={2}>
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={i}>
-              <CardSkeleton />
-            </Grid>
-          ))}
-        </Grid>
+        <Grid container spacing={2}>{[1,2,3,4].map(i => (<Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={i}><CardSkeleton /></Grid>))}</Grid>
       ) : !selectedClass ? (
-        // Class Summary View
-        classSummary.length === 0 ? (
-          <EmptyState
-            icon={ClassIcon}
-            title="No classes yet"
-            message="Start by adding classes to organize your subjects"
-          />
-        ) : (
-          <Fade in timeout={700}>
-            <Grid container spacing={2}>
-              {classSummary.map((classroom) => (
-                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={classroom.id}>
-                  <Card 
-                    sx={{ 
-                      height: '100%', 
-                      display: 'flex', 
-                      flexDirection: 'column',
-                      transition: 'transform 0.2s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 4
-                      }
-                    }}
-                  >
-                    <CardActionArea 
-                      onClick={() => handleClassSelect(classroom)}
-                      sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', height: '100%' }}
-                    >
-                      <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-                        <Typography variant="h5" component="div" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                          <ClassIcon sx={{ mr: 1, color: 'primary.main' }} />
-                          {classroom.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          {classroom.subjectCount} {classroom.subjectCount === 1 ? 'Subject' : 'Subjects'} assigned
-                        </Typography>
-                        <Box sx={{ mt: 'auto', pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                          <Chip 
-                            label={`View ${classroom.subjectCount} Subjects`} 
-                            color="primary" 
-                            size="small" 
-                            variant="outlined"
-                          />
-                        </Box>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-          </Fade>
-        )
-      ) : classSubjectsLoading ? (
         <Grid container spacing={2}>
-          {[1, 2, 3, 4].map(i => (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={`cls-skel-${i}`}>
-              <CardSkeleton />
+          {classSummary.map((classroom) => (
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={classroom.id}>
+              <Card sx={{ height: '100%', transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 4 } }}>
+                <CardActionArea onClick={() => handleClassSelect(classroom)} sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h5" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}><ClassIcon sx={{ mr: 1, color: 'primary.main' }} />{classroom.name}</Typography>
+                    <Typography variant="body2" color="text.secondary">{classroom.subjectCount} Subjects assigned</Typography>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
             </Grid>
           ))}
         </Grid>
-      ) : filtered.length === 0 ? (
-        // Empty state for selected class with no subjects
-        <EmptyState
-          icon={BookIcon}
-          title={searchQuery ? "No subjects found" : `No subjects in ${selectedClass.name}`}
-          message={searchQuery ? "Try a different search term" : "Start by adding subjects to this class"}
-          actionText="Add Subject"
-          onAction={handleAdd}
-        />
       ) : (
-        // Subject cards for selected class
-        <Fade in timeout={700}>
-          <Grid container spacing={2}>
-            {filtered.map((subject) => (
-              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={subject.id}>
-                <SubjectCard
-                  subject={subject}
-                  teachers={teachers}
-                  onUpdate={() => {
-                    loadSubjects();
-                    if (selectedClass?.id) loadClassSubjects(selectedClass.id, selectedSection?.id);
-                  }}
-                  onDelete={() => handleDelete(subject)}
-                  schoolId={id}
-                  classroomId={selectedClass?.id}
-                  sectionId={selectedSection?.id}
-                />
-              </Grid>
-            ))}
-          </Grid>
-        </Fade>
+        <Grid container spacing={2}>
+          {filtered.map((subject) => (
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={subject.id}>
+              <SubjectCard
+                subject={subject}
+                teachers={teachers}
+                onUpdate={() => {
+                  loadSubjects();
+                  if (selectedClass?.id) loadClassSubjects(selectedClass.id, selectedSection?.id);
+                }}
+                onDelete={() => handleDelete(subject)}
+                schoolId={id}
+                classroomId={selectedClass?.id}
+                sectionId={selectedSection?.id}
+              />
+            </Grid>
+          ))}
+        </Grid>
       )}
 
-      {/* Add Dialog */}
-      <Dialog 
-        open={dialogOpen} 
-        onClose={() => setDialogOpen(false)} 
-        maxWidth="sm" 
-        fullWidth
-        TransitionComponent={Zoom}
-      >
-        <DialogTitle>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                ➕ Add New Subject
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Create a new subject for your school
-              </Typography>
-            </Box>
-            <IconButton onClick={() => setDialogOpen(false)}>
-              <CloseIcon />
-            </IconButton>
-          </Stack>
-        </DialogTitle>
-        
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add New Subject</DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={3}>
-            <TextField
-              label="Subject Name *"
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
-              fullWidth
-              placeholder="e.g., Mathematics, বাংলা, English"
-              error={!!formErrors.name}
-              helperText={formErrors.name || 'Enter the full name of the subject'}
-            />
-            
-            <TextField
-              label="Subject Code *"
-              value={formData.code}
-              onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
-              fullWidth
-              placeholder="e.g., MATH, BANG, ENG"
-              error={!!formErrors.code}
-              helperText={formErrors.code || 'Short code for the subject (will be uppercase)'}
-              inputProps={{ style: { textTransform: 'uppercase' } }}
-            />
-
-            <Autocomplete
-              multiple
-              options={classrooms}
-              disableCloseOnSelect
-              getOptionLabel={(option) => option.name}
-              value={formData.classrooms}
-              onChange={(event, newValue) => {
-                setFormData({ ...formData, classrooms: newValue });
-              }}
-              renderOption={(props, option, { selected }) => (
-                <li {...props}>
-                  <Checkbox
-                    icon={icon}
-                    checkedIcon={checkedIcon}
-                    style={{ marginRight: 8 }}
-                    checked={selected}
-                  />
-                  {option.name}
-                </li>
-              )}
-              renderInput={(params) => (
-                <TextField 
-                  {...params} 
-                  label="Assign to Classes" 
-                  placeholder="Select classes"
-                  helperText="Select one or more classes for this subject"
-                />
-              )}
-            />
-
-            {formData.classrooms.length > 0 && (
-              <Autocomplete
-                multiple
-                options={sections.filter(sec => 
-                  formData.classrooms.some(c => c.id === (sec.classroom?.id || sec.classroom))
-                )}
-                disableCloseOnSelect
-                getOptionLabel={(option) => `${option.classroom?.name || ''} - ${option.name}`}
-                value={formData.sections}
-                onChange={(event, newValue) => {
-                  setFormData({ ...formData, sections: newValue });
-                }}
-                renderOption={(props, option, { selected }) => (
-                  <li {...props}>
-                    <Checkbox
-                      icon={icon}
-                      checkedIcon={checkedIcon}
-                      style={{ marginRight: 8 }}
-                      checked={selected}
-                    />
-                    {(option.classroom?.name || '') + ' - ' + option.name}
-                  </li>
-                )}
-                renderInput={(params) => (
-                  <TextField 
-                    {...params} 
-                    label="Assign to Sections" 
-                    placeholder="Select sections"
-                    helperText="Select one or more sections (optional)"
-                  />
-                )}
-              />
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <TextField label="Subject Name *" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} fullWidth error={!!formErrors.name} helperText={formErrors.name} />
+            <TextField label="Subject Code *" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})} fullWidth error={!!formErrors.code} helperText={formErrors.code} />
+            <Autocomplete multiple options={classrooms} disableCloseOnSelect getOptionLabel={(o) => o.name} value={formData.classrooms} onChange={(e, v) => setFormData({ ...formData, classrooms: v, sections: [] })} renderOption={(props, option, { selected }) => (<li {...props}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{option.name}</li>)} renderInput={(p) => (<TextField {...p} label="Assign to Classes (for all sections)" />)} />
+            {availableSections.length > 0 && (
+              <Autocomplete multiple options={availableSections} disableCloseOnSelect getOptionLabel={(o) => o.name} value={formData.sections} onChange={(e, v) => setFormData({ ...formData, sections: v })} renderOption={(props, option, { selected }) => (<li {...props}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{option.name}</li>)} renderInput={(p) => (<TextField {...p} label="Assign to Specific Sections (optional)" />)} />
             )}
           </Stack>
         </DialogContent>
-        
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleSave}
-            disabled={saving}
-            startIcon={<AddIcon />}
-          >
-            {saving ? 'Saving...' : 'Add Subject'}
-          </Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Add Subject'}</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog 
-        open={deleteDialogOpen} 
-        onClose={() => setDeleteDialogOpen(false)}
-        TransitionComponent={Zoom}
-      >
-        <DialogTitle>
-          <Typography variant="h6" color="error" fontWeight="bold">
-            🗑️ Delete Subject?
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            This action cannot be undone!
-          </Alert>
-          <Typography>
-            Are you sure you want to delete <strong>{selectedSubject?.name}</strong>?
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            This may affect teachers and students assigned to this subject.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Delete Subject?</DialogTitle>
+        <DialogContent><Typography>Are you sure you want to delete <strong>{selectedSubject?.name}</strong>?</Typography></DialogContent>
+        <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            color="error"
-            onClick={confirmDelete}
-            disabled={saving}
-            startIcon={<DeleteIcon />}
-          >
-            {saving ? 'Deleting...' : 'Delete'}
-          </Button>
+          <Button variant="contained" color="error" onClick={confirmDelete} disabled={saving}>{saving ? 'Deleting...' : 'Delete'}</Button>
         </DialogActions>
       </Dialog>
-
-      {/* Stats Footer */}
-      {!loading && (
-        <Fade in timeout={800}>
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              mt: 3, 
-              p: 2, 
-              bgcolor: 'primary.light',
-              borderRadius: 2,
-              textAlign: 'center'
-            }}
-          >
-            <Typography variant="h6" color="primary.dark">
-              {selectedClass ? (
-                <>
-                  📊 {selectedClass.name} বিষয়: <strong>{filtered.length}</strong> / মোট {subjects.length}
-                  {searchQuery && ` | অনুসন্ধান ফলাফল: ${filtered.length}`}
-                </>
-              ) : (
-                <>
-                  📊 মোট শ্রেণি: <strong>{classSummary.length}</strong> | মোট বিষয়: <strong>{subjects.length}</strong>
-                </>
-              )}
-            </Typography>
-          </Paper>
-        </Fade>
-      )}
     </Box>
   );
 }

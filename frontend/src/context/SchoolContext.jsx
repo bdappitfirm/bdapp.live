@@ -31,7 +31,7 @@ export function SchoolProvider({ children }) {
     if (idFromUrl && idFromUrl !== schoolId) {
       setSchoolId(idFromUrl);
     }
-  }, [location.pathname]);
+  }, [location.pathname, schoolId]);
 
   // Load school data when schoolId changes
   useEffect(() => {
@@ -46,13 +46,15 @@ export function SchoolProvider({ children }) {
     })();
   }, [schoolId]);
 
-  const refreshSchool = async () => {
+  const refreshSchool = React.useCallback(async () => {
     if (!schoolId) return;
-    const res = await api.get(`/api/schools/${schoolId}/`);
-    setSchool(res.data);
-  };
+    try {
+      const res = await api.get(`/api/schools/${schoolId}/`);
+      setSchool(res.data);
+    } catch (e) {}
+  }, [schoolId]);
 
-  const value = useMemo(() => ({ schoolId, school, setSchoolId, refreshSchool }), [schoolId, school]);
+  const value = useMemo(() => ({ schoolId, school, setSchoolId, refreshSchool }), [schoolId, school, refreshSchool]);
   return (
     <SchoolContext.Provider value={value}>{children}</SchoolContext.Provider>
   );

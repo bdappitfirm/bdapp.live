@@ -1,0 +1,324 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { isAuthenticated } from '../utils/auth';
+import api from '../utils/api';
+import { Box, Paper, Typography, TextField, Stack, Button, Alert, Chip, MenuItem, Grid, Divider, Autocomplete, CircularProgress } from '@mui/material';
+import SaveIcon from '@mui/icons-material/Save';
+import PhotoUpload from '../components/PhotoUpload';
+import { normalizeApiError } from '../utils/errorUtils';
+import { useToast } from '../components/Toast';
+import InputGuidance from '../components/InputGuidance';
+
+export default function AddStudentPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const shownSuggestionsRef = React.useRef(new Set());
+
+  const [form, setForm] = useState({
+    username: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone_number: '',
+    roll_number: '',
+    classroom_id: '',
+    section_id: '',
+    group: '',
+    blood_group: '',
+    gender: '',
+    guardian_name: '',
+    father_name: '',
+    mother_name: '',
+    birth_date: '',
+    optional_subject_id: '',
+    admission_date: new Date().toISOString().split('T')[0],
+    address: '',
+    remarks: '',
+    voter_number: ''
+  });
+
+  const [photoFile, setPhotoFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [formErrors, setFormErrors] = useState({});
+
+  const [classrooms, setClassrooms] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [usernameCheck, setUsernameCheck] = useState({ loading: false, available: null, suggestions: [], msg: '' });
+  const [tourStep, setTourStep] = useState(0);
+
+  const selectedClassObj = classrooms.find(c => String(c.id) === String(form.classroom_id));
+  const isNineTen = selectedClassObj ? /নবম|দশম|nine|ten|ix|x|\b9\b|\b10\b/i.test(selectedClassObj.name) : false;
+
+  const guidanceSteps = [
+    { selector: '#student-photo-box', text: 'প্রথমে শিক্ষার্থীর ছবি আপলোড করুন', autoNext: false },
+    { selector: '#classroom-select', text: 'শিক্ষার্থীর শ্রেণি নির্বাচন করুন', autoNext: false },
+    { selector: '#section-select', text: 'শাখা নির্বাচন করুন', autoNext: false },
+    { selector: '#roll-number-input', text: 'রোল নম্বর লিখুন', autoNext: false },
+    { selector: '#student-name-input', text: 'শিক্ষার্থীর নাম লিখুন', autoNext: false },
+    { selector: '#last-name-input', text: 'পদবী/বংশ লিখুন', autoNext: false },
+    { selector: '#username-input', text: 'ইউজার আইডি লিখুন (ঐচ্ছিক)', autoNext: false },
+    { selector: '#password-input', text: 'পাসওয়ার্ড সেট করুন', autoNext: false },
+    { selector: '#gender-select', text: 'লিঙ্গ নির্বাচন করুন', autoNext: false },
+    { selector: '#blood-group-select', text: 'রক্তের গ্রুপ নির্বাচন করুন', autoNext: false },
+    { selector: '#birth-date-input', text: 'জন্ম তারিখ দিন', autoNext: false },
+    ...(isNineTen ? [
+      { selector: '#group-select', text: 'গ্রুপ (৯ম-১০ম) নির্বাচন করুন', autoNext: false },
+      { selector: '#optional-subject-select', text: '৪র্থ বিষয় (Optional) নির্বাচন করুন', autoNext: false }
+    ] : []),
+    { selector: '#guardian-name-input', text: 'অভিভাবকের নাম লিখুন', autoNext: false },
+    { selector: '#student-save-btn', text: 'সবশেষে সেভ বাটনে ক্লিক করুন', autoNext: false }
+  ];
+
+  const updateStep = (selector) => {
+    const currentIdx = guidanceSteps.findIndex(s => s.selector === selector);
+    if (currentIdx !== -1 && currentIdx < guidanceSteps.length - 1) {
+      setTourStep(currentIdx + 2);
+    } else if (currentIdx === guidanceSteps.length - 1) {
+      setTourStep(guidanceSteps.length);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setTourStep(1), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [classes, secs, subjs] = await Promise.all([
+          api.get(`/api/academics/classrooms/?school=${id}`),
+          api.get(`/api/academics/sections/?school=${id}`),
+          api.get(`/api/academics/subjects/?school=${id}`)
+        ]);
+        setClassrooms(Array.isArray(classes.data) ? classes.data : (classes.data?.results || []));
+        setSections(Array.isArray(secs.data) ? secs.data : (secs.data?.results || []));
+        setSubjects(Array.isArray(subjs.data) ? subjs.data : (subjs.data?.results || []));
+      } catch (e) {
+        console.error("Error loading dropdown data:", e);
+      }
+    };
+    load();
+  }, [id]);
+
+  useEffect(() => {
+    const uname = (form.username || '').trim();
+    if (!uname) {
+      setUsernameCheck({ loading: false, available: null, suggestions: [], msg: '' });
+      return;
+    }
+    let cancelled = false;
+    setUsernameCheck(prev => ({ ...prev, loading: true, msg: '' }));
+    const h = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/users/username-availability/', { params: { q: uname } });
+        if (cancelled) return;
+
+        setUsernameCheck({ loading: false, available: res.data.available, suggestions: [], msg: '' });
+      } catch (e) {
+        if (cancelled) return;
+        setUsernameCheck({ loading: false, available: null, suggestions: [], msg: 'Check failed' });
+      }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(h); };
+  }, [form.username]);
+
+  useEffect(() => {
+    if (!isNineTen || !form.group || subjects.length === 0) return;
+
+    let targetName = '';
+    if (form.group === 'science') {
+      targetName = 'উচ্চতর গণিত';
+    } else if (form.group === 'arts' || form.group === 'commerce') {
+      targetName = 'কৃষি';
+    }
+
+    if (targetName) {
+      const found = subjects.find(s =>
+        s.name.includes(targetName) ||
+        (targetName === 'উচ্চতর গণিত' && s.name.toLowerCase().includes('higher math')) ||
+        (targetName === 'কৃষি' && s.name.toLowerCase().includes('agriculture'))
+      );
+      if (found && !form.optional_subject_id) {
+        setForm(prev => ({ ...prev, optional_subject_id: found.id }));
+      }
+    }
+  }, [isNineTen, form.group, subjects, form.optional_subject_id]);
+
+  const handleSubmit = async () => {
+    if (!isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
+
+    if (!form.first_name) {
+        setError('শিক্ষার্থীর নাম আবশ্যক');
+        setFormErrors({ first_name: 'নাম লিখুন' });
+        return;
+    }
+
+    setSaving(true);
+    setError('');
+    setFormErrors({});
+
+    try {
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') fd.append(k, v);
+      });
+      fd.append('school_id', id);
+      if (photoFile) fd.append('photo', photoFile);
+
+      const response = await api.post('/api/academics/students/', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (response.data && response.data.offline) {
+        toast.info('আপনার ইন্টারনেট সংযোগ দুর্বল। শিক্ষার্থী ভর্তির আবেদনটি পরবর্তীতে সেভ করার জন্য জমা রাখা হয়েছে।');
+      } else {
+        toast.success('শিক্ষার্থী সফলভাবে ভর্তি করা হয়েছে');
+      }
+
+      // Navigate back to the previous context (likely the student list)
+      setTimeout(() => {
+        navigate(-1);
+      }, 1500);
+    } catch (e) {
+      const n = normalizeApiError(e);
+      setError(n.message || 'ভর্তি প্রক্রিয়া ব্যর্থ হয়েছে');
+      setFormErrors(n.fieldErrors || {});
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Box sx={{ p: 3 }}>
+      <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+        <Typography variant="h4" gutterBottom>নতুন ছাত্র ভর্তি (New Student Admission)</Typography>
+        <Typography variant="body2" color="text.secondary">স্কুল আইডি: {id}</Typography>
+      </Paper>
+
+      <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Stack spacing={3}>
+          {error && <Alert severity="error">{error}</Alert>}
+
+          <Box id="student-photo-box" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }} onClick={() => updateStep('#classroom-select')}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>শিক্ষার্থীর ছবি</Typography>
+            <PhotoUpload currentPhoto={null} onPhotoChange={setPhotoFile} userName={form.first_name || 'Student'} />
+          </Box>
+
+          <Divider />
+
+          <Typography variant="h6">একাডেমিক তথ্য</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <TextField id="classroom-select" select fullWidth label="শ্রেণি *" value={form.classroom_id} onFocus={() => updateStep('#classroom-select')} onChange={e => { setForm({...form, classroom_id: e.target.value, section_id: ''}); updateStep('#section-select'); }} required>
+                {classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField id="section-select" select fullWidth label="শাখা" value={form.section_id} onFocus={() => updateStep('#section-select')} onChange={e => { setForm({...form, section_id: e.target.value}); updateStep('#roll-number-input'); }} disabled={!form.classroom_id}>
+                <MenuItem value="">শাখা নেই</MenuItem>
+                {sections.filter(s => String(s.classroom?.id || s.classroom) === String(form.classroom_id)).map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField id="roll-number-input" fullWidth label="রোল নম্বর" value={form.roll_number} onFocus={() => updateStep('#roll-number-input')} onChange={e => setForm({...form, roll_number: e.target.value})} />
+            </Grid>
+          </Grid>
+
+          <Divider />
+
+          <Typography variant="h6">ব্যক্তিগত তথ্য</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField id="student-name-input" fullWidth label="শিক্ষার্থীর নাম (First Name) *" value={form.first_name} onFocus={() => updateStep('#student-name-input')} onChange={e => setForm({...form, first_name: e.target.value})} error={!!formErrors.first_name} helperText={formErrors.first_name} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField id="last-name-input" fullWidth label="পদবী/বংশ (Last Name)" value={form.last_name} onFocus={() => updateStep('#last-name-input')} onChange={e => setForm({...form, last_name: e.target.value})} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField id="username-input" fullWidth label="ইউজার আইডি (Username)" value={form.username} onFocus={() => updateStep('#username-input')} onChange={e => setForm({...form, username: e.target.value})} helperText="খালি রাখলে স্বয়ংক্রিয়ভাবে তৈরি হবে" error={usernameCheck.available === false} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField id="password-input" fullWidth label="পাসওয়ার্ড" type="password" value={form.password} onFocus={() => updateStep('#password-input')} onChange={e => setForm({...form, password: e.target.value})} placeholder="ডিফল্ট: 12345678" />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField id="gender-select" select fullWidth label="লিঙ্গ" value={form.gender} onFocus={() => updateStep('#gender-select')} onChange={e => { setForm({...form, gender: e.target.value}); updateStep('#blood-group-select'); }}>
+                <MenuItem value="male">ছাত্র (Male)</MenuItem>
+                <MenuItem value="female">ছাত্রী (Female)</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField id="blood-group-select" select fullWidth label="রক্তের গ্রুপ" value={form.blood_group} onFocus={() => updateStep('#blood-group-select')} onChange={e => { setForm({...form, blood_group: e.target.value}); updateStep('#birth-date-input'); }}>
+                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <MenuItem key={bg} value={bg}>{bg}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField id="birth-date-input" fullWidth label="জন্ম তারিখ" type="date" value={form.birth_date} onFocus={() => updateStep('#birth-date-input')} onChange={e => setForm({...form, birth_date: e.target.value})} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            {isNineTen && (
+              <>
+                <Grid item xs={12} sm={4}>
+                    <TextField id="group-select" select fullWidth label="গ্রুপ (৯ম-১০ম)" value={form.group} onFocus={() => updateStep('#group-select')} onChange={e => { setForm({...form, group: e.target.value}); updateStep('#optional-subject-select'); }}>
+                        <MenuItem value="">প্রযোজ্য নয়</MenuItem>
+                        <MenuItem value="science">বিজ্ঞান</MenuItem>
+                        <MenuItem value="arts">মানবিক</MenuItem>
+                        <MenuItem value="commerce">ব্যবসায় শিক্ষা</MenuItem>
+                    </TextField>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField id="optional-subject-select" select fullWidth label="৪র্থ বিষয় (Optional)" value={form.optional_subject_id} onFocus={() => updateStep('#optional-subject-select')} onChange={e => { setForm({...form, optional_subject_id: e.target.value}); updateStep('#guardian-name-input'); }}>
+                    <MenuItem value="">নির্বাচন করুন</MenuItem>
+                    {subjects.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+                  </TextField>
+                </Grid>
+              </>
+            )}
+          </Grid>
+
+          <Divider />
+
+          <Typography variant="h6">অভিভাবকের তথ্য</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField id="guardian-name-input" fullWidth label="অভিভাবকের নাম *" value={form.guardian_name} onFocus={() => updateStep('#guardian-name-input')} onChange={e => setForm({...form, guardian_name: e.target.value})} helperText="এটি দিয়ে স্বয়ংক্রিয়ভাবে অভিভাবক প্রোফাইল তৈরি হবে" />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth label="মোবাইল নম্বর" value={form.phone_number} onChange={e => setForm({...form, phone_number: e.target.value})} placeholder="017XXXXXXXX" />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth label="পিতার নাম" value={form.father_name} onChange={e => setForm({...form, father_name: e.target.value})} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth label="মাতার নাম" value={form.mother_name} onChange={e => setForm({...form, mother_name: e.target.value})} />
+            </Grid>
+          </Grid>
+
+          <Divider />
+
+          <Typography variant="h6">অন্যান্য তথ্য</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth label="ভর্তির তারিখ" type="date" value={form.admission_date} onChange={e => setForm({...form, admission_date: e.target.value})} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth label="ঠিকানা" multiline rows={2} value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+            </Grid>
+          </Grid>
+
+          <Stack direction="row" spacing={2} justifyContent="flex-end">
+            <Button variant="outlined" onClick={() => navigate(-1)}>বাতিল</Button>
+            <Button id="student-save-btn" variant="contained" startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />} onClick={handleSubmit} disabled={saving}>সংরক্ষণ করুন</Button>
+          </Stack>
+        </Stack>
+      </Paper>
+      <InputGuidance steps={guidanceSteps} activeStep={tourStep - 1} onStepComplete={(step) => setTourStep(step + 1)} />
+    </Box>
+  );
+}

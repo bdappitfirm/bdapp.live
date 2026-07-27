@@ -9,7 +9,7 @@ import api from '../utils/api';
 import { useToast } from './Toast';
 import PhotoUpload from './PhotoUpload';
 import { useAuth } from '../context/AuthContext';
-import { canEdit, canDelete } from '../utils/helpers';
+import { canEdit, canDelete, getCleanDisplayName } from '../utils/helpers';
 import { getMediaUrl } from '../utils/media';
 
 export default function StudentCard({ student, onUploaded, onEdit, onDelete, onClick }) {
@@ -18,17 +18,36 @@ export default function StudentCard({ student, onUploaded, onEdit, onDelete, onC
   const { user } = useAuth();
   const [photoVersion, setPhotoVersion] = useState(0);
 
-  // Display name: first_name + last_name, fallback to username
-  const displayName = student.displayName
-    || (student.user?.first_name || student.user?.last_name
-      ? `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim()
-      : student.user?.username);
+  // Display name logic using global helper
+  const displayName = student.displayName || getCleanDisplayName(
+    student.user?.first_name,
+    student.user?.last_name,
+    student.user?.username || student.username || 'unknown'
+  );
 
   const className = student.classroom?.name || '';
   const sectionName = student.section?.name || '';
-  const guardianName = (student.guardian ? `${student.guardian.first_name || ''} ${student.guardian.last_name || ''}`.trim() : '') || student.guardian_name;
+  const guardianName = useMemo(() => {
+    // 1. Primary: Use explicit guardian_name field (string) saved in the profile
+    // This ensures we show exactly what was typed during edit
+    if (student.guardian_name) return student.guardian_name;
 
-  const rawPhoto = student.user?.photo_url || student.user?.photo || student.user?.profile_picture || student.photo_url || student.photo || null;
+    // 2. Fallback: Try linked guardian object from student profile
+    const g = student.guardian;
+    if (g) {
+      const fn = g.first_name || g.user?.first_name || '';
+      const ln = g.last_name || g.user?.last_name || '';
+      const fullName = `${fn} ${ln}`.trim();
+      if (fullName) return fullName;
+      const un = g.username || g.user?.username || '';
+      if (un) return un;
+    }
+
+    // 3. Additional fallbacks for other possible field names
+    return student.parent_name || student.father_name || student.mother_name || '';
+  }, [student]);
+
+  const rawPhoto = student.user?.thumbnail_url || student.user?.photo_url || student.user?.photo || student.user?.profile_picture || student.photo_url || student.photo || null;
   const photoUrl = getMediaUrl(rawPhoto);
   const cacheBustedPhoto = useMemo(() => {
     if (!photoUrl) return null;
@@ -79,7 +98,13 @@ export default function StudentCard({ student, onUploaded, onEdit, onDelete, onC
             {/* Always-visible small avatar next to name */}
             <Box>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Avatar sx={{ width: 36, height: 36 }} src={cacheBustedPhoto || undefined}>{!cacheBustedPhoto ? '🧑' : null}</Avatar>
+                <Avatar
+                  sx={{ width: 36, height: 36 }}
+                  src={cacheBustedPhoto || undefined}
+                  imgProps={{ loading: "lazy" }}
+                >
+                  {!cacheBustedPhoto ? '🧑' : null}
+                </Avatar>
                 <Box>
                   <Typography variant="h6" sx={{ lineHeight: 1.2 }}>{displayName}</Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -90,9 +115,11 @@ export default function StudentCard({ student, onUploaded, onEdit, onDelete, onC
               <Typography variant="body2">রোল: {student.roll_number || 'N/A'}</Typography>
               {className && <Typography variant="body2">শ্রেণি: {className}</Typography>}
               {sectionName && <Typography variant="body2">সেকশন: {sectionName}</Typography>}
+              {student.group && <Typography variant="body2">গ্রুপ: {student.group === 'science' ? 'বিজ্ঞান' : student.group === 'arts' ? 'মানবিক' : 'ব্যবসায়'}</Typography>}
               {student.gender && <Typography variant="body2">Gender: {student.gender}</Typography>}
               <Typography variant="body2">রক্তের গ্রুপ: {student.blood_group || 'N/A'}</Typography>
-              {guardianName && <Typography variant="body2">অভিভাবক: {guardianName}</Typography>}
+              {student.father_name && <Typography variant="body2">পিতার নাম: {student.father_name}</Typography>}
+              {student.mother_name && <Typography variant="body2">মাতার নাম: {student.mother_name}</Typography>}
               <Typography variant="body2">ফোন: {student.user?.phone_number || student.phone_number || 'N/A'}</Typography>
             </Box>
           </Box>

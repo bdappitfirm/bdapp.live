@@ -1,626 +1,231 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Typography, Card, CardContent, CardHeader, Avatar, Autocomplete, TextField, CardMedia, Button, Stack, Paper } from "@mui/material";
-import SchoolIcon from "@mui/icons-material/School";
+import {
+  Box, Typography, Card, Avatar, CardMedia, Button,
+  Stack, Paper, useMediaQuery
+} from "@mui/material";
+import { useTheme } from '@mui/material/styles';
 import SchoolCarousel from "../components/SchoolCarousel";
 import api from "../utils/api";
-import { useAuth } from "../context/AuthContext";
 import { getMediaUrl } from "../utils/media";
-import fallbackLogo from "../components/fallback_logo.png";
+import { useAuth } from "../context/AuthContext";
+import { isAuthenticated } from "../utils/auth";
 import logo from "../components/bdschooapplogo.png";
 import welcomeBg from "../components/welcome_bg.jpg";
 
-const AdSlot = ({ items, getMediaUrl, slotIndex = 0 }) => {
+const AdSlot = React.memo(({ items, slotIndex = 0 }) => {
   const [idx, setIdx] = useState(0);
-  const timerRef = React.useRef(null);
+  const timerRef = useRef(null);
   
-  // Initialize index based on slotIndex to show variety immediately
-  useEffect(() => { 
-    if (items && items.length > 0) {
-      setIdx(slotIndex % items.length);
-    }
-  }, [items?.length, slotIndex]);
-
   useEffect(() => {
     if (!items || items.length <= 1) return;
-    const current = items[Math.min(idx, items.length - 1)];
-    
-    // If it's a video, the onEnded event will handle the rotation
-    if (current?.type === 'video') {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      return;
-    }
-    
-    // For images, use a timer
     timerRef.current = setInterval(() => {
-      setIdx((i) => (i + 1) % items.length);
+        setIdx(prev => (prev + 1) % items.length);
     }, 5000 + (slotIndex * 1000));
-    
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [items, idx, slotIndex]);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [items, slotIndex]);
 
   if (!items || items.length === 0) return null;
-  const ad = items[Math.min(idx, items.length - 1)];
+  const ad = items[idx % items.length];
   const mediaUrl = getMediaUrl(ad.media_url || ad.media);
   
   return (
-    <Card 
-      sx={{ 
-        width: { xs: 260, sm: 350 }, 
-        height: { xs: 140, sm: 180 }, 
-        borderRadius: 3, 
-        boxShadow: 6,
-        cursor: ad.link ? 'pointer' : 'default', 
-        flexShrink: 0,
-        transition: '0.3s',
-        bgcolor: '#000', // Black background for videos
-        overflow: 'hidden',
-        '&:hover': { transform: 'scale(1.02)', boxShadow: 10 }
-      }}
-      onClick={() => ad.link && window.open(ad.link, '_blank')}
-    >
+    <Card sx={{ width: { xs: '100%', sm: 350 }, height: 140, borderRadius: 3, boxShadow: 6, overflow: 'hidden', flexShrink: 0 }}>
       <CardMedia
-        key={mediaUrl}
         component={ad.type === 'video' ? 'video' : 'img'}
         src={mediaUrl}
-        title={ad.text || 'Advertisement'}
         autoPlay={ad.type === 'video'}
-        muted={ad.type === 'video'}
-        playsInline={ad.type === 'video'}
-        controls={false}
-        onEnded={() => {
-          if (ad.type === 'video') {
-            setIdx((i) => (i + 1) % items.length);
-          }
-        }}
-        onError={(e) => {
-          console.warn('Ad media failed to load:', mediaUrl);
-          // Try next ad if this one fails
-          setIdx((i) => (i + 1) % items.length);
-        }}
-        sx={{ 
-          width: '100%', 
-          height: '100%', 
-          objectFit: 'cover'
-        }}
+        muted
+        playsInline
+        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
       />
     </Card>
   );
-};
+});
 
 const WelcomePage = () => {
   const [schools, setSchools] = useState([]);
+  const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [ads, setAds] = useState(() => {
-    try {
-      const cached = localStorage.getItem('globalAds');
-      return cached ? JSON.parse(cached) : [];
-    } catch (_) {
-      return [];
-    }
-  });
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery('(max-width:768px)');
+  const isTablet = useMediaQuery('(min-width:769px) and (max-width:1024px)');
+  const { user } = useAuth();
 
-  const fetchAds = async () => {
+  const [numSlots, setNumSlots] = useState(3);
+
+  useEffect(() => {
+    if (isMobile) setNumSlots(1);
+    else if (isTablet) setNumSlots(2);
+    else setNumSlots(3);
+  }, [isMobile, isTablet]);
+
+  const fetchedRef = useRef(false);
+
+  const fetchData = useCallback(async () => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
     try {
-      console.log('Fetching global ads...');
-      let res;
-      try {
-        res = await api.get("/api/v1/ads/", { params: { _t: Date.now() } });
-      } catch (_) {
-        res = await api.get("/api/ads/", { params: { _t: Date.now() } });
+      setLoading(true);
+      const [schoolRes, adsRes] = await Promise.allSettled([
+        api.get("/api/schools/"),
+        api.get("/api/ads/").catch(() => api.get("/api/v1/ads/"))
+      ]);
+
+      if (schoolRes.status === 'fulfilled') {
+        const data = schoolRes.value.data;
+        // Handle both array and paginated response
+        const schoolsArr = Array.isArray(data) ? data : (data?.results || []);
+        setSchools(schoolsArr);
+        console.log(`WelcomePage: Loaded ${schoolsArr.length} schools`);
+      } else {
+        console.warn("WelcomePage: Schools fetch failed. It might be due to network or empty cache.");
       }
-      
-      const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-      console.log('API returned ads count:', list.length);
-      
-      if (list && list.length > 0) {
-        setAds(list);
-        localStorage.setItem('globalAds', JSON.stringify(list));
-      } else if (list.length === 0 && ads.length > 0) {
-        // If API returns empty but we have cached ads, keep them but log it
-        console.warn('API returned no ads, keeping cached ones');
+
+      if (adsRes.status === 'fulfilled') {
+        const data = adsRes.value.data;
+        setAds(Array.isArray(data) ? data : (data?.results || []));
       }
     } catch (err) {
-      console.error("Error fetching global ads:", err);
+      console.error("WelcomePage: Fetch error:", err);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const filteredAds = React.useMemo(() => {
-    if (!ads || ads.length === 0) return [];
-    
-    // Group ads by media to avoid showing same media multiple times
-    const seenMedia = new Set();
-    const uniqueAds = ads.filter(ad => {
-      const media = ad.media_url || ad.media;
-      if (!media || seenMedia.has(media)) return false;
-      seenMedia.add(media);
-      return true;
-    });
-
-    // Stable shuffle based on ad IDs if possible
-    return [...uniqueAds].sort((a, b) => {
-      const hashA = String(a.id || 0).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const hashB = String(b.id || 0).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return (hashA % 7) - (hashB % 7) || (a.id - b.id);
-    });
-  }, [ads]);
-
-  useEffect(() => {
-    // Check if app is already running in standalone mode
-    const isInStandaloneMode = () => 
-      (window.matchMedia('(display-mode: standalone)').matches) || 
-      (window.navigator.standalone === true);
-      
-    setIsStandalone(isInStandaloneMode());
-    
-    // Check if we've already hidden the prompt (but we won't use this - we'll show it every time!)
-    // We want to always show the prompt until the user installs the app!
-    
-    // Handle beforeinstallprompt event
-    const handleBeforeInstallPrompt = (e) => {
-      console.log('beforeinstallprompt event fired!');
-      // Prevent Chrome 67 and earlier from automatically showing the prompt
-      e.preventDefault();
-      // Stash the event so it can be triggered later
-      setDeferredPrompt(e);
-      setShowInstallPrompt(true);
-    };
-    
-    // Handle appinstalled event
-    const handleAppInstalled = () => {
-      console.log('App was installed!');
-      setShowInstallPrompt(false);
-      setDeferredPrompt(null);
-    };
-    
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-    
-    // If the event already fired before component mounted, show the prompt!
-    // And also show it if we're not in standalone mode!
-    if (!isInStandaloneMode()) {
-      setShowInstallPrompt(true);
-    }
-    
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
   }, []);
 
-  const handleInstall = async () => {
-    if (!deferredPrompt) {
-      // If we don't have the deferred prompt, show a friendly instructions message instead of hiding
-      alert("অ্যাপটি ইনস্টল করতে ব্রাউজারের মেনুতে যান এবং 'Add to Home Screen' বিকল্পটি নির্বাচন করুন।");
-      return;
-    }
-    
-    // Show the prompt
-    deferredPrompt.prompt();
-    
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to the install prompt: ${outcome}`);
-    
-    if (outcome === 'accepted') {
-      setShowInstallPrompt(false);
-    }
-    
-    // We've used the prompt, and can't use it again; discard it
-    setDeferredPrompt(null);
-  };
-
-  useEffect(() => {}, [navigate]);
-
   useEffect(() => {
-    const fetchSchools = async () => {
-      try {
-        const response = await api.get("/api/schools/", { params: { _t: Date.now() }, timeout: 15000 });
-        const list = Array.isArray(response.data)
-          ? response.data
-          : (response.data?.results || response.data?.data || []);
-        const schoolsWithImg = (list || []).map((school) => ({
-          ...school,
-          logo: school?.logo || school?.img || '',
-          img: school?.logo || school?.img || fallbackLogo
-        }));
-        setSchools(schoolsWithImg);
-        setLoadError('');
-      } catch (err) {
-        console.error("Error fetching schools:", err);
-        setSchools([]);
-        const status = err?.response?.status;
-        if (status) {
-          setLoadError(`সার্ভার রেসপন্স কোড: ${status} — ব্যাকএন্ড পরীক্ষা করুন`);
-        } else {
-          setLoadError('ব্যাকএন্ডে সংযোগ পাওয়া যাচ্ছে না — সার্ভার/নেটওয়ার্ক দেখুন');
+    const checkRedirect = async () => {
+      const isAuth = isAuthenticated();
+      const lastSchoolId = localStorage.getItem('currentSchoolId');
+      
+      if (isAuth && lastSchoolId && user) {
+        const username = String(user?.username || user?.user?.username || '').toLowerCase().trim();
+
+        // BDAdmin is a superuser, they should NOT be redirected
+        // All other users should go directly to their school dashboard
+        if (username !== 'bdadmin') {
+          navigate(`/school/${lastSchoolId}`, { replace: true });
         }
-      } finally {
-        setLoading(false);
       }
     };
+    
+    checkRedirect();
+  }, [navigate, user]);
 
-    fetchSchools();
-    fetchAds();
+  useEffect(() => {
+    fetchData();
 
-    // Refresh ads every 2 minutes to keep them "permanent" and fresh
-    const adInterval = setInterval(fetchAds, 120000);
-    return () => clearInterval(adInterval);
-  }, []);
-
-  const handleCardClick = (id) => {
-    navigate(`/school/${id}`);
-  };
+    // Also log the service worker registration
+    if ('serviceWorker' in navigator) {
+      console.log('WelcomePage: Service Worker API available');
+      navigator.serviceWorker.ready.then((registration) => {
+        console.log('WelcomePage: Service Worker registered:', registration);
+      }).catch((err) => {
+        console.error('WelcomePage: Service Worker registration error:', err);
+      });
+    }
+  }, [fetchData]);
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        backgroundImage: `url(${welcomeBg})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "flex-start", // Changed to flex-start for better scrolling on mobile
-        padding: { xs: 2, sm: 4 },
-        position: 'relative',
-        overflowY: 'auto'
-      }}
-    >
-      {/* App Install Prompt - Persistent until installed! */}
-      {showInstallPrompt && !isStandalone && (
-        <Paper 
-          elevation={4}
-          sx={{ 
-            position: 'fixed',
-            bottom: 20,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: { xs: '90%', sm: 450 },
-            zIndex: 1000,
-            borderRadius: 3,
-            p: 2.5,
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            animation: 'slideUp 0.3s ease-out'
-          }}
-        >
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                BD School App (Bdapp) ইনস্টল করুন!
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                দ্রুত অ্যাক্সেস এবং বেটার অভিজ্ঞতার জন্য অ্যাপটি এখনই ইনস্টল করুন।
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={1}>
-              <Button 
-                variant="outlined" 
-                color="inherit" 
-                sx={{ borderRadius: 2, borderColor: 'rgba(255,255,255,0.5)' }}
-                onClick={() => setShowInstallPrompt(false)}
-              >
-                পরে
-              </Button>
-              <Button 
-                variant="contained" 
-                sx={{ 
-                  bgcolor: 'white', 
-                  color: '#667eea',
-                  borderRadius: 2,
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' }
-                }}
-                onClick={handleInstall}
-              >
-                ইনস্টল করুন
-              </Button>
-            </Stack>
-          </Stack>
-        </Paper>
-      )}
+    <Box sx={{
+      minHeight: "100vh",
+      bgcolor: "#f0f2f5", // Facebook style background
+      position: 'relative',
+      overflowX: 'hidden'
+    }}>
 
-      {/* Top Controls - Search and User Info */}
-      <Box 
-        sx={{ 
-          position: { xs: 'relative', sm: 'absolute' }, 
-          top: { sm: 20 }, 
-          right: { sm: 20 }, 
-          width: { xs: '100%', sm: 'auto' }, 
-          zIndex: 10,
-          mb: { xs: 3, sm: 0 },
-          mt: { xs: 2, sm: 0 },
-          display: 'flex', 
-          flexDirection: { xs: 'column', sm: 'row' },
-          alignItems: 'center',
-          gap: 2
-        }}
-      >
-        {user ? (
-          <Paper 
-            elevation={3}
-            sx={{ 
-              p: 0.5, 
-              pl: 2, 
-              borderRadius: 5, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 1.5,
-              bgcolor: 'rgba(255,255,255,0.9)',
-              backdropFilter: 'blur(4px)'
-            }}
-          >
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', lineHeight: 1, color: 'primary.main' }}>
-                {user.first_name || user.username}
-              </Typography>
-              <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>
-                ID: {user.username}
-              </Typography>
-            </Box>
-            <Avatar 
-              src={user.photo_url || user.photo}
-              sx={{ width: 30, height: 30, bgcolor: 'primary.main', fontSize: '0.8rem' }}
-            >
-              {user.username?.charAt(0).toUpperCase()}
-            </Avatar>
-            <Button size="small" color="error" sx={{ minWidth: 'auto', borderRadius: 5, fontSize: '0.7rem' }} onClick={(e) => {
-              e.preventDefault();
-              logout();
-            }}>
-              লগআউট
-            </Button>
-          </Paper>
-        ) : (
-          <Stack direction="row" spacing={1}>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              sx={{ borderRadius: 5, px: 3 }}
-              onClick={(e) => {
-                e.preventDefault();
-                navigate('/login');
-              }}
-            >
-              লগইন
-            </Button>
-            <Button 
-              variant="outlined" 
-              sx={{ borderRadius: 5, px: 3, bgcolor: 'rgba(255,255,255,0.8)' }}
-              onClick={(e) => {
-                e.preventDefault();
-                navigate('/signup');
-              }}
-            >
-              সাইনআপ
-            </Button>
-          </Stack>
-        )}
-
-        <Box sx={{ width: { xs: '100%', sm: 320 } }}>
-          <Autocomplete
-            size="small"
-            sx={{ 
-              bgcolor: 'white', 
-              borderRadius: 2,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 2
-              }
-            }}
-            options={schools}
-            getOptionLabel={(opt) => (typeof opt === 'string' ? opt : (opt?.name || ''))}
-            filterOptions={(options, state) => {
-              const q = (state.inputValue || '').toLowerCase();
-              return options.filter(o => (o?.name || '').toLowerCase().includes(q));
-            }}
-            onChange={(_, value) => {
-              if (!value) return;
-              if (typeof value === 'string') {
-                const match = schools.find(s => (s.name || '').toLowerCase() === value.toLowerCase())
-                  || schools.find(s => (s.name || '').toLowerCase().includes(value.toLowerCase()));
-                if (match?.id) handleCardClick(match.id);
-              } else if (value?.id) {
-                handleCardClick(value.id);
-              }
-            }}
-            inputValue={searchInput}
-            onInputChange={(_, v) => setSearchInput(v)}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                placeholder="আপনার স্কুল সার্চ করুন..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const q = (searchInput || '').trim().toLowerCase();
-                    if (!q) return;
-                    const match = schools.find(s => (s.name || '').toLowerCase() === q)
-                      || schools.find(s => (s.name || '').toLowerCase().includes(q));
-                    if (match?.id) handleCardClick(match.id);
-                  }
-                }}
-              />
-            )}
-            renderOption={(props, option) => (
-              <li {...props} key={option.id}>
-                {option.name}
-              </li>
-            )}
-          />
-        </Box>
-      </Box>
-
-      {/* Global Advertisements Section */}
-      {ads && ads.length > 0 && (
-        <Box 
-          sx={{ 
-            width: '100%', 
-            maxWidth: 1200, 
-            mb: { xs: 4, sm: 6 }, 
-            overflowX: 'auto', 
-            display: 'flex', 
-            gap: 2, 
-            pb: 2, 
-            justifyContent: { xs: 'flex-start', md: 'center' },
-            px: 1,
-            '&::-webkit-scrollbar': { height: 6 }, 
-            '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.4)', borderRadius: 3 } 
-          }}
-        >
-          {(() => {
-            const NUM_SLOTS = 3;
-            // Now all slots have access to all ads, but start at different offsets
-            return Array.from({ length: NUM_SLOTS }, (_, i) => {
-              return <AdSlot key={i} slotIndex={i} items={filteredAds} getMediaUrl={getMediaUrl} />;
-            });
-          })()}
-        </Box>
-      )}
-
-      {/* Main Logo and Branding */}
-      <Box sx={{ textAlign: "center", mb: { xs: 4, sm: 6 }, zIndex: 1 }}>
-        <Box
-          component="img"
-          src={logo}
-          alt="BDApp Logo"
-          sx={{ 
-            width: { xs: '150px', sm: '220px' }, 
-            mb: 2, 
-            filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))' 
-          }}
+      {/* BIG CENTER ROTATING LOGO (zIndex: 0) - CENTERED 75% WIDTH */}
+      <Box sx={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        width: '100%', 
+        height: '100%', 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        pointerEvents: 'none',
+        zIndex: 0,
+        overflow: 'hidden',
+        perspective: '1000px',
+        contain: 'strict'
+      }}>
+        <Box component="img" 
+          src={logo} 
+          sx={{
+            width: '100vw',
+            height: '100vw',
+            maxWidth: '1000px',
+            maxHeight: '1000px',
+            opacity: 0.12,
+            animation: 'spin360 80s linear infinite', // Slightly slower for better stability
+            filter: 'none',
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
+            transform: 'translateZ(0)',
+            objectFit: 'contain'
+          }} 
         />
-        <Typography 
-          variant="h4" 
-          sx={{ 
-            color: "white", 
-            fontWeight: 700, 
-            textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
-            fontSize: { xs: '1.5rem', sm: '2.125rem' }
-          }}
-        >
-          স্কুল ম্যানেজমেন্ট সিস্টেম
-        </Typography>
       </Box>
 
-      {loading ? (
-        <Box sx={{ py: 10 }}>
-          <Typography variant="h5" color="white" sx={{ textAlign: 'center' }}>স্কুলগুলো লোড হচ্ছে...</Typography>
-        </Box>
-      ) : (
-        <Box sx={{ width: '100%', maxWidth: 1200 }}>
-          {loadError ? (
-            <Typography variant="h6" color="white" sx={{ textAlign: 'center', bgcolor: 'rgba(255,0,0,0.2)', p: 2, borderRadius: 2 }}>
-              {loadError}
-            </Typography>
-          ) : schools.length > 0 ? (
-            <>
-              {/* Carousel Section */}
-              <Box sx={{ mb: { xs: 6, sm: 8 } }}>
-                <SchoolCarousel schools={schools} />
-              </Box>
+      {/* ADD CSS FOR ROTATION */}
+      <style>{`
+        @keyframes spin360 {
+          from { transform: rotate(0deg) translateZ(0); }
+          to { transform: rotate(360deg) translateZ(0); }
+        }
+      `}</style>
 
-              {/* Schools Grid Section */}
-              <Typography 
-                variant="h5" 
-                sx={{ 
-                  color: 'white', 
-                  mb: 3, 
-                  textAlign: 'center', 
-                  fontWeight: 600,
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
-                }}
-              >
-                সকল স্কুল তালিকা
-              </Typography>
-              
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: {
-                    xs: '1fr',
-                    sm: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    md: 'repeat(auto-fill, minmax(300px, 1fr))'
-                  },
-                  gap: 3,
-                  width: "100%",
-                  mb: 4,
-                  px: { xs: 1, sm: 0 }
-                }}
-              >
-                {schools.map((school) => (
-                  <Card
-                    key={school.id}
-                    sx={{
-                      cursor: "pointer",
-                      borderRadius: 4,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                      transition: "all 0.3s ease",
-                      "&:hover": { 
-                        transform: "translateY(-8px)", 
-                        boxShadow: '0 12px 32px rgba(0,0,0,0.2)' 
-                      },
-                      background: "rgba(255,255,255,0.95)",
-                      border: '1px solid rgba(255,255,255,0.3)',
-                      overflow: 'hidden'
-                    }}
-                    onClick={() => handleCardClick(school.id)}
-                  >
-                    <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar 
-                        src={school.img} 
-                        sx={{ 
-                          width: 60, 
-                          height: 60, 
-                          bgcolor: 'primary.main',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                        }}
-                      >
-                        <SchoolIcon />
-                      </Avatar>
-                      <Box sx={{ overflow: 'hidden' }}>
-                        <Typography 
-                          variant="h6" 
-                          noWrap 
-                          sx={{ fontWeight: 700, color: '#1a237e' }}
-                        >
-                          {school.name}
-                        </Typography>
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary" 
-                          noWrap
-                        >
-                          {school.address || 'ঠিকানা পাওয়া যায়নি'}
-                        </Typography>
-                      </Box>
+      {/* CONTENT LAYER (zIndex: 10+) */}
+      <Box sx={{ position: 'relative', zIndex: 10 }}>
+
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 2,
+            p: 0,
+            pt: 0, // No top padding
+            overflowX: 'auto',
+            width: '100%',
+            mt: { xs: -1, sm: 0 }
+          }}>
+            {Array.from({ length: numSlots }, (_, i) => (
+              <AdSlot key={i} items={ads} slotIndex={i} />
+            ))}
+          </Box>
+
+          <Box sx={{ p: { xs: 0.5, sm: 2 }, mt: { xs: -2, sm: -4 } }}>
+            {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><Typography variant="h5" color="white">লোড হচ্ছে...</Typography></Box>
+            ) : (
+                <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+                    <Box sx={{ mb: { xs: 1, sm: 4 } }}><SchoolCarousel schools={schools} /></Box>
+                    <Typography variant="h6" color="white" align="center" sx={{ mb: 1, fontWeight: 'bold', textShadow: '2px 2px 4px rgba(0,0,0,0.5)', fontSize: { xs: '1rem', sm: '1.4rem' } }}>সকল স্কুল তালিকা</Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(280px, 1fr))', md: 'repeat(auto-fill, minmax(300px, 1fr))' }, gap: { xs: 1.5, sm: 2 } }}>
+                        {schools.map(s => (
+                            <Card key={s.id} sx={{ cursor: 'pointer', p: 2, borderRadius: 4, transition: '0.3s', '&:hover': { transform: 'translateY(-5px)', boxShadow: 10 } }} onClick={() => {
+                                if (isAuthenticated()) {
+                                    navigate(`/school/${s.id}`);
+                                } else {
+                                    navigate(`/login?next=${encodeURIComponent(`/school/${s.id}`)}`);
+                                }
+                            }}>
+                                <Stack direction="row" spacing={2} alignItems="center">
+                                    <Avatar src={getMediaUrl(s.logo_thumbnail_url || s.logo)} sx={{ width: 50, height: 50 }} />
+                                    <Box sx={{ overflow: 'hidden' }}>
+                                        <Typography variant="h6" noWrap sx={{ fontWeight: 'bold', color: '#1a237e' }}>{s.name}</Typography>
+                                        <Typography variant="caption" color="text.secondary" noWrap display="block">{s.address || 'ঠিকানা নেই'}</Typography>
+                                    </Box>
+                                </Stack>
+                            </Card>
+                        ))}
                     </Box>
-                  </Card>
-                ))}
-              </Box>
-            </>
-          ) : (
-            <Typography variant="h5" color="white" sx={{ textAlign: 'center' }}>কোনো স্কুল পাওয়া যায়নি</Typography>
-          )}
-        </Box>
-      )}
+                </Box>
+            )}
+          </Box>
+      </Box>
     </Box>
   );
 };

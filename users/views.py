@@ -1,12 +1,16 @@
 from rest_framework import generics, permissions, status, viewsets, serializers
 from rest_framework_simplejwt.views import TokenObtainPairView
-from users.permissions import AdminOrReadOnly, RolePermission, TeacherSelfOrAdminChange, IsSchoolMember
+from users.permissions import (
+    AdminOrReadOnly, RolePermission, TeacherSelfOrAdminChange,
+    IsSchoolMember, is_global_admin, get_user_school_id
+)
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth import get_user_model
-from django.db.models import Sum, F, Count
+from django.db import models
+from django.db.models import Sum, F, Count, Q
 from django.db.models.functions import TruncDate
 from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, SupportCall, ActivityLog
 from .serializers import (
@@ -37,16 +41,43 @@ class ThrottledTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         username = attrs.get('username')
         password = attrs.get('password')
+
         if username:
             username = unicodedata.normalize('NFKC', username).strip()
+
+            # 1. Handle Roll Number Resolution if school_id is provided
+            # The frontend can send school_id in the request body
+            school_id = self.context['request'].data.get('school_id')
+            if username.isdigit() and school_id:
+                from academics.models import StudentProfile
+                try:
+                    # Try finding by roll number in the given school
+                    student = StudentProfile.objects.filter(
+                        school_id=school_id,
+                        roll_number=username
+                    ).select_related('user').first()
+
+                    if student and student.user:
+                        username = student.user.username
+                except Exception:
+                    pass
+
             from django.contrib.auth import authenticate
             user = authenticate(username=username, password=password)
+
+            # Special handling for usernames with ZWJ (Zero Width Joiner) prefix
+            # as seen in some parts of the system
             if not user and not username.startswith('\u200d'):
                 zwj_username = f'\u200d{username}'
                 user = authenticate(username=zwj_username, password=password)
-                if user: attrs['username'] = zwj_username
-            elif user: attrs['username'] = username
-            if not user: raise serializers.ValidationError({'detail': 'No active account found with the given credentials'})
+                if user:
+                    username = zwj_username
+
+            if not user:
+                raise serializers.ValidationError({'detail': 'সঠিক ইউজারনেম বা পাসওয়ার্ড দিন। অথবা আপনার শিক্ষা প্রতিষ্ঠানের এডমিনের সাথে যোগাযোগ করুন।'})
+
+            attrs['username'] = username
+
         return super().validate(attrs)
 
 class ThrottledTokenObtainPairView(TokenObtainPairView):
@@ -55,21 +86,29 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
 class CurrentUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request):
-        user = request.user
         try:
-            profile = Profile.objects.get(user=user)
-        except Profile.DoesNotExist:
-            role = 'admin' if user.is_staff or user.is_superuser else 'student'
-            profile = Profile.objects.create(user=user, role=role)
-        except Exception:
-            return Response({
+            user = request.user
+            profile, _ = Profile.objects.get_or_create(user=user)
+            data = {
                 "user": UserSerializer(user, context={'request': request}).data,
-                "profile": {"role": "admin" if user.is_staff else "student"}
-            })
-        return Response({
-            "user": UserSerializer(user, context={'request': request}).data,
-            "profile": ProfileSerializer(profile).data
-        })
+                "profile": ProfileSerializer(profile, context={'request': request}).data
+            }
+            # Include student profile data if available
+            if profile.role == 'student':
+                from academics.models import StudentProfile
+                from academics.serializers import StudentProfileSerializer
+                sp = StudentProfile.objects.filter(user=user).first()
+                if sp:
+                    data["student_profile"] = StudentProfileSerializer(sp, context={'request': request}).data
+
+            return Response(data)
+        except Exception as e:
+            import traceback
+            print(f"CurrentUserView ERROR: {type(e).__name__}: {e}")
+            traceback.print_exc()
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def patch(self, request):
         user = request.user
@@ -105,40 +144,64 @@ class AdminProfileViewSet(viewsets.ModelViewSet):
     serializer_class = AdminProfileSerializer
     permission_classes = [AdminOrReadOnly]
     def get_queryset(self):
-        qs = super().get_queryset()
-        sid = self.request.query_params.get('school')
-        if sid: qs = qs.filter(school_id=sid)
-        return qs
+        sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if sid and str(sid).isdigit():
+            return AdminProfile.objects.filter(school_id=sid)
+
+        sid = get_user_school_id(self.request.user, self.request)
+        if not sid:
+            if is_global_admin(self.request.user):
+                return AdminProfile.objects.all()
+            return AdminProfile.objects.none()
+        return AdminProfile.objects.filter(school_id=sid)
 
 class ParentProfileViewSet(viewsets.ModelViewSet):
     queryset = ParentProfile.objects.all()
     serializer_class = ParentProfileSerializer
     permission_classes = [AdminOrReadOnly]
     def get_queryset(self):
-        qs = super().get_queryset()
-        sid = self.request.query_params.get('school')
-        if sid: qs = qs.filter(school_id=sid)
-        return qs
+        sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if sid and str(sid).isdigit():
+            return ParentProfile.objects.filter(school_id=sid)
+
+        sid = get_user_school_id(self.request.user, self.request)
+        if not sid:
+            if is_global_admin(self.request.user):
+                return ParentProfile.objects.all()
+            return ParentProfile.objects.none()
+        return ParentProfile.objects.filter(school_id=sid)
 
 class CommitteeProfileViewSet(viewsets.ModelViewSet):
     queryset = CommitteeProfile.objects.all()
     serializer_class = CommitteeProfileSerializer
     permission_classes = [AdminOrReadOnly]
     def get_queryset(self):
-        qs = super().get_queryset()
-        sid = self.request.query_params.get('school')
-        if sid: qs = qs.filter(school_id=sid)
-        return qs
+        sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if sid and str(sid).isdigit():
+            return CommitteeProfile.objects.filter(school_id=sid)
+
+        sid = get_user_school_id(self.request.user, self.request)
+        if not sid:
+            if is_global_admin(self.request.user):
+                return CommitteeProfile.objects.all()
+            return CommitteeProfile.objects.none()
+        return CommitteeProfile.objects.filter(school_id=sid)
 
 class TeacherProfileViewSet(viewsets.ModelViewSet):
-    queryset = Profile.objects.filter(role='teacher')
+    queryset = Profile.objects.filter(Q(role='teacher') | Q(role='admin'))
     serializer_class = TeacherProfileSerializer
     permission_classes = [AdminOrReadOnly]
     def get_queryset(self):
-        qs = super().get_queryset()
-        sid = self.request.query_params.get('school')
-        if sid: qs = qs.filter(school_id=sid)
-        return qs
+        sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if sid and str(sid).isdigit():
+            return Profile.objects.filter(school_id=sid).filter(Q(role='teacher') | Q(role='admin'))
+
+        sid = get_user_school_id(self.request.user, self.request)
+        if not sid:
+            if is_global_admin(self.request.user):
+                return Profile.objects.filter(Q(role='teacher') | Q(role='admin'))
+            return Profile.objects.none()
+        return Profile.objects.filter(school_id=sid).filter(Q(role='teacher') | Q(role='admin'))
 
 class TaskViewSet(viewsets.ModelViewSet):
     queryset = Task.objects.all()
@@ -155,13 +218,21 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
 class AIChatView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     def post(self, request):
+        from .ai_engine import SoftwareAI
         school_id = request.data.get('school') or getattr(request.user.profile, 'school_id', None)
         query = request.data.get('q')
-        if not query: return Response({"error": "Query required"}, status=400)
-        logic = AssistantLogic(request, school_id=school_id)
+        session_id = request.data.get('session_id')
+
+        if not query:
+            return Response({"error": "Query required"}, status=400)
+
+        if not school_id:
+            return Response({"error": "School ID required for context"}, status=400)
+
+        ai = SoftwareAI(school_id=school_id, user=request.user)
         try:
-            local_resp = logic.get_response(query, extra_params=request.data)
-            return Response(local_resp)
+            response = ai.ask(query, session_id=session_id, request=request)
+            return Response(response)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 

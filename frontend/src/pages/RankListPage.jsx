@@ -28,6 +28,7 @@ import { useSchool } from '../context/SchoolContext';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import InputGuidance from '../components/InputGuidance';
 
 const EXAM_TYPE_LABELS = {
   'half_yearly': 'অর্ধবার্ষিক',
@@ -58,6 +59,22 @@ const RankListPage = () => {
   const [resultsByStudent, setResultsByStudent] = useState(new Map());
   const [activeExamId, setActiveExamId] = useState(null);
   const [sortBy, setSortBy] = useState('current');
+  const [activeStep, setActiveStep] = useState(0);
+
+  const guidanceSteps = [
+    { selector: '#ranklist-exam', text: 'পরীক্ষা নির্বাচন করুন', autoNext: false },
+    { selector: '#ranklist-class', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
+    { selector: '#ranklist-section', text: 'সেকশন নির্বাচন করুন', autoNext: false },
+    { selector: '#show-button', text: 'এখানে ক্লিক করুন', autoNext: true }
+  ];
+
+  useEffect(() => {
+    if (selectedExamType && activeStep === 0) setActiveStep(1);
+    if (selectedClass && activeStep === 1) setActiveStep(2);
+    if (selectedSection && activeStep === 2) setActiveStep(3);
+    if (rankings.length > 0 && activeStep === 3) setActiveStep(4);
+  }, [selectedExamType, selectedClass, selectedSection, rankings, activeStep]);
+
   const passMarks = React.useMemo(() => {
     try {
       const ex = (examinations || []).find(e => e && e.pass_marks != null);
@@ -748,7 +765,7 @@ const RankListPage = () => {
       </Stack>
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={5}>
+          <Grid size={{ xs: 12, md: 5 }}>
             <FormControl fullWidth>
               <InputLabel id="ranklist-exam-label">Examination</InputLabel>
               <Select
@@ -773,7 +790,7 @@ const RankListPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={5}>
+          <Grid size={{ xs: 12, md: 5 }}>
             <FormControl fullWidth>
               <InputLabel id="ranklist-class-label">Class</InputLabel>
               <Select
@@ -799,12 +816,12 @@ const RankListPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <FormControl fullWidth>
               <InputLabel id="ranklist-year-label">Year</InputLabel>
               <Select
+                id="skip-to-button"
                 labelId="ranklist-year-label"
-                id="ranklist-year"
                 value={String(selectedYear)}
                 label="Year"
                 onChange={(e) => setSelectedYear(parseInt(e.target.value, 10) || new Date().getFullYear())}
@@ -815,7 +832,7 @@ const RankListPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <FormControl fullWidth>
               <InputLabel id="ranklist-sortby-label">Sort By</InputLabel>
               <Select
@@ -831,7 +848,7 @@ const RankListPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ xs: 12, md: 3 }}>
             <FormControl fullWidth disabled={!selectedClass}>
               <InputLabel id="ranklist-section-label">Section</InputLabel>
               <Select
@@ -856,8 +873,9 @@ const RankListPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <Button
+              id="show-button"
               variant="contained"
               onClick={handleFetchRankings}
               disabled={!selectedExamType || !selectedClass || loading}
@@ -1002,6 +1020,12 @@ const RankListPage = () => {
           </Table>
         </TableContainer>
       </Box>
+
+      <InputGuidance
+        steps={guidanceSteps}
+        activeStep={activeStep}
+        onStepComplete={() => setActiveStep(prev => prev + 1)}
+      />
     </Box>
   );
 };

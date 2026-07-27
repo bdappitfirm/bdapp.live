@@ -36,7 +36,7 @@ server {
         proxy_pass http://unix:/run/gunicorn.sock;
     }
 
-    location /admin/ {
+    location /admin {
         include proxy_params;
         proxy_pass http://unix:/run/gunicorn.sock;
     }

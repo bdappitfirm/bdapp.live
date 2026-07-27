@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
@@ -10,35 +10,36 @@ import {
   Stack,
   Alert,
   Grid,
-  Card,
-  CardContent,
-  Divider,
-  useTheme,
-  Chip,
   CircularProgress,
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  Checkbox,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  ListItemIcon
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Print as PrintIcon,
   Download as DownloadIcon,
-  School as SchoolIcon,
   Person as PersonIcon,
-  CalendarToday as CalendarIcon,
   EmojiEvents as AwardIcon,
   Refresh as RefreshIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  CollectionsBookmark as BulkIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
+import { useAcademics } from '../context/AcademicsContext';
 import api from '../utils/api';
 import { isAuthenticated } from '../utils/auth';
+import InputGuidance from '../components/InputGuidance';
 
 const StudentCard = ({ data, school, bloodGroup, isEditing, onEditProfile, onBloodGroupChange }) => {
-  const theme = useTheme();
   const user = data?.user || {};
   const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
   const rollNumber = data?.roll_number || '';
@@ -47,7 +48,6 @@ const StudentCard = ({ data, school, bloodGroup, isEditing, onEditProfile, onBlo
   const dateOfBirth = user?.date_of_birth || '';
   const gender = user?.gender || '';
 
-  // Function to process photo URLs
   const processPhotoUrl = (url) => {
     if (!url) return null;
     if (typeof url !== 'string') return url;
@@ -62,638 +62,258 @@ const StudentCard = ({ data, school, bloodGroup, isEditing, onEditProfile, onBlo
 
   return (
     <Box className="student-card-container" sx={{
-      position: 'relative',
-      backgroundColor: '#ffffff',
-      width: '350px',
-      minHeight: '200px',
-      p: 2,
-      border: '2px solid #1976d2',
-      borderRadius: 2,
-      boxShadow: '0 4px 15px rgba(25, 118, 210, 0.3)',
+      position: 'relative', backgroundColor: '#ffffff', width: '350px', minHeight: '200px', p: 2, border: '2px solid #1976d2', borderRadius: 2, boxShadow: '0 4px 15px rgba(25, 118, 210, 0.3)',
       backgroundImage: 'linear-gradient(45deg, #f3f4f6 25%, transparent 25%, transparent 75%, #f3f4f6 75%, #f3f4f6), linear-gradient(45deg, #f3f4f6 25%, transparent 25%, transparent 75%, #f3f4f6 75%, #f3f4f6)',
-      backgroundSize: '20px 20px',
-      backgroundPosition: '0 0, 10px 10px'
+      backgroundSize: '20px 20px', backgroundPosition: '0 0, 10px 10px'
     }}>
-      {/* School Header */}
       <Box sx={{ textAlign: 'center', mb: 1, position: 'relative', zIndex: 1 }}>
-        <Typography variant="h6" sx={{ 
-          fontWeight: 'bold', 
-          color: '#1976d2',
-          fontFamily: 'Arial, sans-serif',
-          fontSize: '0.9rem',
-          mb: 0.5
-        }}>
-          {school?.name || 'SCHOOL NAME'}
-        </Typography>
-        <Typography variant="caption" sx={{ 
-          color: '#666',
-          fontSize: '0.7rem'
-        }}>
-          Student ID Card
-        </Typography>
+        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '0.9rem', mb: 0.5 }}>{school?.name || 'SCHOOL NAME'}</Typography>
+        <Typography variant="caption" sx={{ color: '#666', fontSize: '0.7rem' }}>Student ID Card</Typography>
       </Box>
 
-      {/* Student Info */}
       <Box sx={{ display: 'flex', gap: 2, position: 'relative', zIndex: 1 }}>
-        {/* Photo Section */}
         <Box sx={{ flexShrink: 0 }}>
-          {photoUrl ? (
-            <img
-              src={photoUrl}
-              alt={name}
-              style={{
-                width: '80px',
-                height: '100px',
-                objectFit: 'cover',
-                border: '1px solid #ddd',
-                borderRadius: 1
-              }}
-            />
-          ) : (
-            <Box sx={{
-              width: '80px',
-              height: '100px',
-              border: '1px solid #ddd',
-              borderRadius: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#f5f5f5'
-            }}>
-              <PersonIcon sx={{ fontSize: 40, color: '#999' }} />
-            </Box>
+          {photoUrl ? <img src={photoUrl} alt={name} style={{ width: '80px', height: '100px', objectFit: 'cover', border: '1px solid #ddd' }} /> : (
+            <Box sx={{ width: '80px', height: '100px', border: '1px solid #ddd', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5' }}><PersonIcon sx={{ fontSize: 40, color: '#999' }} /></Box>
           )}
         </Box>
-
-        {/* Details Section */}
         <Box sx={{ flex: 1, fontSize: '0.75rem' }}>
-          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>
-            {name || 'Student Name'}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>
-            Class: {classroom} {section && `(${section})`}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>
-            Roll: {rollNumber}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>
-            Gender: {gender || 'N/A'}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>
-            DOB: {dateOfBirth || 'N/A'}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold' }}>
-            Blood Group: {isEditing ? (
-              <Select
-                value={bloodGroup}
-                onChange={(e) => onBloodGroupChange(e.target.value)}
-                size="small"
-                sx={{ fontSize: '0.7rem', height: '25px' }}
-              >
-                <MenuItem value="">Select</MenuItem>
-                <MenuItem value="A+">A+</MenuItem>
-                <MenuItem value="A-">A-</MenuItem>
-                <MenuItem value="B+">B+</MenuItem>
-                <MenuItem value="B-">B-</MenuItem>
-                <MenuItem value="O+">O+</MenuItem>
-                <MenuItem value="O-">O-</MenuItem>
-                <MenuItem value="AB+">AB+</MenuItem>
-                <MenuItem value="AB-">AB-</MenuItem>
-              </Select>
-            ) : (
-              bloodGroup || 'Not Set'
-            )}
-          </Typography>
+          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>{name}</Typography>
+          <Typography variant="caption" sx={{ display: 'block' }}>Class: {classroom} {section && `(${section})`}</Typography>
+          <Typography variant="caption" sx={{ display: 'block' }}>Roll: {rollNumber}</Typography>
+          <Typography variant="caption" sx={{ display: 'block' }}>Gender: {gender || 'N/A'}</Typography>
+          <Typography variant="caption" sx={{ display: 'block' }}>DOB: {dateOfBirth || 'N/A'}</Typography>
+          <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold' }}>Blood Group: {isEditing ? (
+            <Select value={bloodGroup} onChange={(e) => onBloodGroupChange(e.target.value)} size="small" sx={{ fontSize: '0.7rem', height: '25px' }}>
+              {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => <MenuItem key={bg} value={bg}>{bg}</MenuItem>)}
+            </Select>
+          ) : bloodGroup || 'Not Set'}</Typography>
         </Box>
       </Box>
-
-      {/* Edit Button */}
-      <Button
-        variant="outlined"
-        size="small"
-        startIcon={<EditIcon />}
-        onClick={onEditProfile}
-        sx={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          fontSize: '0.7rem',
-          minHeight: '25px',
-          px: 1
-        }}
-      >
-        {isEditing ? 'Save' : 'Edit'}
-      </Button>
+      <Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={onEditProfile} sx={{ position: 'absolute', top: 8, right: 8, fontSize: '0.7rem' }}>{isEditing ? 'Save' : 'Edit'}</Button>
     </Box>
   );
 };
 
 const Certificate = ({ data, school, session }) => {
-  const theme = useTheme();
+  if (!data) return <Box sx={{ p: 4, textAlign: 'center' }}><Typography variant="h6" color="error">No student data available</Typography></Box>;
   
-  // Add early return if no data
-  if (!data) {
-    console.log('Certificate component received no data!');
-    return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography variant="h6" color="error">
-          No student data available
-        </Typography>
-      </Box>
-    );
-  }
-  
-  // TEMPORARY: Use test data if real data is empty to verify rendering
-  const testData = {
-    student_name: 'সামিয়া আক্তার',
-    name: 'Samia Akter',
-    roll_number: '15',
-    guardian_name: 'আব্দুল গফুর',
-    classroom: { name: 'দশম শ্রেণি' },
-    section: { name: 'বিজ্ঞান' },
-    user: {
-      first_name: 'Samia',
-      last_name: 'Akter',
-      username: 'samia'
-    }
-  };
-  
-  // Use test data if real data is missing key fields
-  const effectiveData = (!data?.student_name && !data?.name && !data?.user?.first_name) ? testData : data;
-  
+  const effectiveData = data;
   const user = effectiveData?.user || {};
-  const name = effectiveData?.student_name || 
-    effectiveData?.name ||
-    `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
-    user.username || 
-    'Student Name';
+  const name = effectiveData?.student_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Student Name';
   const rollNumber = effectiveData?.roll_number || '';
   const classroom = effectiveData?.classroom?.name || '';
   const section = effectiveData?.section?.name || '';
-  const guardian = effectiveData?.guardian;
-  const guardianName = effectiveData?.guardian_name || 
-    effectiveData?.parent_name || 
-    effectiveData?.father_name || 
-    effectiveData?.mother_name ||
-    guardian ? 
-      `${guardian.first_name || ''} ${guardian.last_name || ''}`.trim() || 
-      guardian.username || 
-      guardian.name ||
-      (guardian.user ? 
-        `${guardian.user.first_name || ''} ${guardian.user.last_name || ''}`.trim() || 
-        guardian.user.username || 
-        guardian.user.name
-        : '') 
-      : '';
-  
-  // Debug logging for guardian data
-  console.log('Guardian data:', guardian);
-  console.log('Guardian name:', guardianName);
-  console.log('Guardian name field:', data?.guardian_name);
-  const dateOfBirth = user?.date_of_birth || '';
-  const address = user?.address || '';
-  const gender = user?.gender || '';
+  const dob = user.date_of_birth || effectiveData.birth_date || 'N/A';
+  const admissionDate = effectiveData.admission_date || '01 January 2020';
+  const fatherName = effectiveData.father_name || '';
+  const motherName = effectiveData.mother_name || '';
+  const guardianName = effectiveData.guardian_name || (effectiveData.guardian ? `${effectiveData.guardian.first_name || ''} ${effectiveData.guardian.last_name || ''}`.trim() : '');
 
-  // Function to process photo URLs
   const processPhotoUrl = (url) => {
     if (!url) return null;
-    if (typeof url !== 'string') return url;
-    if (url.startsWith('http')) return url;
-    const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '');
-    if (url.startsWith('/media/')) return `${base}${url}`;
-    if (url.startsWith('media/')) return `${base}/${url}`;
-    return `${base}/media/${url.replace(/^\/+|\/+$/g, '')}`;
+    const base = (api?.defaults?.baseURL || window.location.origin).replace(/\/$/, '');
+    return url.startsWith('http') ? url : `${base}/media/${url.replace(/^\/+/, '')}`;
   };
 
-  // Function to translate Bengali class names to English
-  const translateClassName = (className) => {
-    const classTranslations = {
-      'দশম শ্রেণি': 'Class Ten',
-      'নবম শ্রেণি': 'Class Nine',
-      'অষ্টম শ্রেণি': 'Class Eight',
-      'সপ্তম শ্রেণি': 'Class Seven',
-      'ষষ্ঠ শ্রেণি': 'Class Six',
-      'পঞ্চম শ্রেণি': 'Class Five',
-      'চতুর্থ শ্রেণি': 'Class Four',
-      'তৃতীয় শ্রেণি': 'Class Three',
-      'দ্বিতীয় শ্রেণি': 'Class Two',
-      'প্রথম শ্রেণি': 'Class One',
-      'কিন্ডারগার্টেন': 'Kindergarten',
-      'নার্সারি': 'Nursery'
+  const getClassLevel = (cn) => {
+    const name = String(cn || '').toLowerCase();
+    if (name.includes('দশম') || name.includes('ten') || name.includes('10')) return 10;
+    if (name.includes('নবম') || name.includes('nine') || name.includes('9')) return 9;
+    if (name.includes('অষ্টম') || name.includes('eight') || name.includes('8')) return 8;
+    if (name.includes('সপ্তম') || name.includes('seven') || name.includes('7')) return 7;
+    if (name.includes('ষষ্ঠ') || name.includes('six') || name.includes('6')) return 6;
+    if (name.includes('পঞ্চম') || name.includes('five') || name.includes('5')) return 5;
+    if (name.includes('চতুর্থ') || name.includes('four') || name.includes('4')) return 4;
+    if (name.includes('তৃতীয়') || name.includes('three') || name.includes('3')) return 3;
+    if (name.includes('দ্বিতীয়') || name.includes('two') || name.includes('2')) return 2;
+    if (name.includes('প্রথম') || name.includes('one') || name.includes('1')) return 1;
+    return null;
+  };
+
+  const translateClassName = (cn) => {
+    const level = getClassLevel(cn);
+    const mapping = {
+      1: 'Class One', 2: 'Class Two', 3: 'Class Three', 4: 'Class Four', 5: 'Class Five',
+      6: 'Class Six', 7: 'Class Seven', 8: 'Class Eight', 9: 'Class Nine', 10: 'Class Ten'
     };
-    return classTranslations[className] || className;
+    return mapping[level] || cn;
   };
 
-  // Function to translate Bengali section names to English
-  const translateSectionName = (sectionName) => {
-    const sectionTranslations = {
-      'বিজ্ঞান': 'Science',
-      'ব্যবসা': 'Commerce',
-      'মানবিক': 'Arts',
-      'ক': 'A',
-      'খ': 'B',
-      'গ': 'C',
-      'ঘ': 'D',
-      'ঙ': 'E',
-      'চ': 'F'
-    };
-    return sectionTranslations[sectionName] || sectionName;
-  };
+  const level = getClassLevel(classroom);
+  const currentYear = parseInt(session) || new Date().getFullYear();
+  let startYear = currentYear;
+  if (level) {
+    const startLevel = level >= 6 ? 6 : 1;
+    startYear = currentYear - (level - startLevel);
+  }
+  const calculatedAdmissionDate = effectiveData.admission_date || `01 January ${startYear}`;
 
-  // Function to translate Bengali school names to English
-  const translateSchoolName = (schoolName) => {
-    const schoolTranslations = {
-      'ভাটরা উচ্চ বিদ্যালয়': 'Bhatra High School',
-      'রামগঞ্জ উচ্চ বিদ্যালয়': 'Ramganj High School',
-      'লক্ষীপুর উচ্চ বিদ্যালয়': 'Lakshmipur High School',
-      'সরকারি উচ্চ বিদ্যালয়': 'Government High School',
-      'মডেল উচ্চ বিদ্যালয়': 'Model High School'
-    };
-    return schoolTranslations[schoolName] || schoolName;
-  };
+  const translateSectionName = (sn) => ({ 'বিজ্ঞান': 'Science', 'ব্যবসা': 'Commerce', 'মানবিক': 'Arts', 'ক': 'A', 'খ': 'B', 'গ': 'C' }[sn] || sn);
 
-  // Function to translate Bengali locations to English
-  const translateLocation = (location) => {
-    const locationTranslations = {
-      'ভাটরা': 'Bhatra',
-      'রামগঞ্জ': 'Ramganj',
-      'লক্ষীপুর': 'Lakshmipur',
-      'ঢাকা': 'Dhaka',
-      'চট্টগ্রাম': 'Chattogram',
-      'খুলনা': 'Khulna',
-      'রাজশাহী': 'Rajshahi',
-      'সিলেট': 'Sylhet',
-      'বরিশাল': 'Barishal',
-      'রংপুর': 'Rangpur',
-      'ময়মনসিংহ': 'Mymensingh'
-    };
-    return locationTranslations[location] || location;
-  };
-
-  // Function to clean garbled text
-  const cleanGarbledText = (text) => {
-    if (!text) return text;
-    
-    // Remove extra diacritical marks and normalize
-    return text.normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove diacritical marks
-      .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
-      .trim();
-  };
-
-  // Function to translate Bengali names to English
-  const translateName = (name) => {
-    if (!name) return name;
-    
-    // Clean garbled text first
-    const cleanName = cleanGarbledText(name);
-    
-    const nameTranslations = {
-      // Full names
-      'সামিয়া আক্তার': 'Samia Akter',
-      'আয়েশা আক্তার': 'Ayesha Akter',
-      'ফাতেমা আক্তার': 'Fatema Akter',
-      'খাদিজা আক্তার': 'Khadija Akter',
-      'মরিয়ম আক্তার': 'Mariam Akter',
-      'জান্নাতুল ফেরদাউস': 'Jannatul Ferdous',
-      'নুসরাত জাহান': 'Nusrat Jahan',
-      'রুকাইয়া খাতুন': 'Rukaiya Khatun',
-      'জান্নাতুল ফয়জুর': 'Jannatul Faizur',
-      'মুহাম্মদ ইব্রাহিম': 'Muhammad Ibrahim',
-      'মোঃ ইব্রাহিম': 'Md. Ibrahim',
-      'মোহাম্মদ ইব্রাহিম': 'Mohammad Ibrahim',
-      'মোস্তফা গাজী': 'Mostafa Gazi',
-      'মোস্তফা': 'Mostafa',
-      'গাজী': 'Gazi',
-      'আব্দুল গফুর': 'Abdul Gofur',
-      'আব্দুল গফুর': 'Abdul Gofur',
-      'আব্দুল': 'Abdul',
-      'গফুর': 'Gofur',
-      'মোঃ গফুর': 'Md. Gofur',
-      'আবু বকর': 'Abu Bakar',
-      'আবু': 'Abu',
-      'বকর': 'Bakar',
-      'মোঃ বকর': 'Md. Bakar',
-      
-      // First names
-      'সামিয়া': 'Samia',
-      'আয়েশা': 'Ayesha',
-      'ফাতেমা': 'Fatema',
-      'খাদিজা': 'Khadija',
-      'মরিয়ম': 'Mariam',
-      'জান্নাতুল': 'Jannatul',
-      'নুসরাত': 'Nusrat',
-      'রুকাইয়া': 'Rukaiya',
-      'মুহাম্মদ': 'Muhammad',
-      'মোঃ': 'Md.',
-      'মোহাম্মদ': 'Mohammad',
-      'আব্দুল': 'Abdul',
-      'আব্দুর': 'Abdur',
-      'শেখ': 'Sheikh',
-      'মিয়া': 'Mia',
-      
-      // Last names
-      'আক্তার': 'Akter',
-      'খাতুন': 'Khatun',
-      'জাহান': 'Jahan',
-      'ফেরদাউস': 'Ferdous',
-      'ফয়জুর': 'Faizur',
-      'রহমান': 'Rahman',
-      'হক': 'Haque',
-      'উদ্দিন': 'Uddin',
-      'মিয়া': 'Mia',
-      'শেখ': 'Sheikh',
-      'সরকার': 'Sarker',
-      'চৌধুরী': 'Chowdhury',
-      'হাসান': 'Hasan',
-      'হোসেন': 'Hossain',
-      'আলী': 'Ali',
-      'খান': 'Khan',
-      'মিয়া': 'Mia'
-    };
-    
-    // Try exact match first
-    if (nameTranslations[cleanName]) {
-      return nameTranslations[cleanName];
-    }
-    
-    // Try word-by-word translation
-    return cleanName.split(' ').map(word => nameTranslations[word] || word).join(' ');
-  };
-
-  // Function to translate school address
-  const translateSchoolAddress = (address) => {
-    if (!address) return address;
-    return address.split(',').map(part => translateLocation(part.trim())).join(', ');
-  };
-
-  const photoUrl = processPhotoUrl(user?.photo_url);
-  const principalSignatureUrl = school?.principal_signature ? processPhotoUrl(school.principal_signature) : null;
-  const schoolSealUrl = school?.school_seal ? processPhotoUrl(school.school_seal) : null;
-  
-  const englishClassroom = translateClassName(classroom);
-  const englishSection = translateSectionName(section);
-  const englishSchoolName = translateSchoolName(school?.name || '');
-  const englishSchoolAddress = translateSchoolAddress(school?.address || '');
-  const englishStudentName = translateName(name);
-  const englishGuardianName = translateName(guardianName);
-  
-  // Debug logging for translations
-  console.log('=== CERTIFICATE DEBUG INFO ===');
-  console.log('Using test data:', effectiveData === testData);
-  console.log('Original student data:', JSON.stringify(data, null, 2));
-  console.log('Effective student data:', JSON.stringify(effectiveData, null, 2));
-  console.log('User data:', JSON.stringify(user, null, 2));
-  console.log('Original student name:', JSON.stringify(name));
-  console.log('Cleaned student name:', cleanGarbledText(name));
-  console.log('Translated student name:', englishStudentName);
-  console.log('Guardian data:', JSON.stringify(guardian, null, 2));
-  console.log('Original guardian name:', JSON.stringify(guardianName));
-  console.log('Cleaned guardian name:', cleanGarbledText(guardianName));
-  console.log('Translated guardian name:', englishGuardianName);
-  console.log('Classroom:', JSON.stringify(classroom));
-  console.log('English Classroom:', englishClassroom);
-  console.log('Roll Number:', JSON.stringify(rollNumber));
-  console.log('Session:', JSON.stringify(session));
-  console.log('School data:', JSON.stringify(school, null, 2));
-  console.log('=============================');
+  const principalSig = processPhotoUrl(school?.principal_signature);
+  const schoolSeal = processPhotoUrl(school?.school_seal);
 
   return (
     <Box className="certificate-container" sx={{
       position: 'relative',
-      backgroundColor: '#fff8dc',
-      minHeight: '900px',
-      height: 'auto',
-      p: 4,
-      border: '3px solid #8B4513',
-      borderRadius: 2,
-      boxShadow: '0 4px 20px rgba(139, 69, 19, 0.3)',
-      backgroundImage: 'none',
-      backgroundSize: '20px 20px',
+      backgroundColor: '#fdfbf7',
+      width: '100%',
+      height: '100vh', // Forces container to fill full height of the landscape page
+      aspectRatio: '297/210',
+      maxWidth: '100%',
+      p: '15px 35px',
+      border: '12px double #8B4513',
+      outline: '1px solid #d4af37',
+      outlineOffset: '-18px',
       display: 'flex',
       flexDirection: 'column',
-      justifyContent: 'space-between'
+      justifyContent: 'space-between',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
+      fontFamily: "'Playfair Display', serif",
+      mx: 0,
+      boxShadow: 'inset 0 0 40px rgba(139, 69, 19, 0.04)',
+      '@media print': {
+        height: '100vh',
+        width: '100vw',
+        p: '10px 30px',
+        border: '12px double #8B4513',
+      }
     }}>
-      {/* Watermark Logo */}
-      {school?.logo && (
-        <Box className="watermark" sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          opacity: 0.08,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          pointerEvents: 'none',
-          zIndex: 0
-        }}>
-          <img 
-            src={processPhotoUrl(school.logo)} 
-            alt={school.name}
-            style={{ 
-              width: '95%',
-              height: '95%',
-              maxWidth: '100%',
-              maxHeight: '100%',
-              objectFit: 'contain',
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              transformOrigin: 'center center'
-            }}
-          />
-        </Box>
-      )}
-      
-      {/* Certificate Header */}
-      <Box className="text-content" sx={{ textAlign: 'center', mb: 2, position: 'relative', zIndex: 1 }}>
-        <Typography className="school-name" variant="h3" sx={{ 
-          fontWeight: 'bold', 
-          color: '#8B4513',
-          fontFamily: 'Georgia, serif',
-          mb: 0.5,
-          fontSize: '2.2rem',
-          textShadow: '1px 1px 2px rgba(139, 69, 19, 0.2)',
-          fontStyle: 'italic',
-          transform: 'perspective(500px) rotateX(1deg)'
-        }}>
-          {englishSchoolName || 'SCHOOL NAME'}
-        </Typography>
-        <Typography className="school-address" variant="h6" sx={{ 
-          color: '#2c3e50',
-          fontFamily: 'Georgia, serif',
-          mb: 0.5,
-          fontSize: '0.95rem',
-          fontStyle: 'italic'
-        }}>
-          {englishSchoolAddress || 'SCHOOL ADDRESS'}
-        </Typography>
-        <Box className="divider" sx={{ 
-          borderBottom: '3px solid #8B4513',
-          width: '300px',
-          mx: 'auto',
-          mb: 1.5,
-          borderRadius: '1px'
-        }} />
-      </Box>
-
-      {/* Certificate Title */}
-      <Box className="text-content" sx={{ textAlign: 'center', mb: 2.5, position: 'relative', zIndex: 1 }}>
-        <Typography className="certificate-subtitle" variant="h4" sx={{ 
-          fontWeight: '600', 
-          color: '#2c3e50',
-          fontFamily: 'Georgia, serif',
-          mb: 2,
-          fontSize: '1rem'
-        }}>
-          School Leaving Certificate & Testimonial
-        </Typography>
-      </Box>
-
-      {/* Certificate Content */}
-      <Box className="certificate-content" sx={{ 
-        textAlign: 'center', 
-        mb: 2,
-        fontSize: '1rem',
-        lineHeight: 2,
-        color: '#2c3e50',
-        position: 'relative',
-        zIndex: 1,
-        fontFamily: 'Georgia, serif',
-        flex: 1
-      }}>
-        <Typography variant="body1" sx={{ 
-          mb: 2,
-          fontSize: '1rem',
-          lineHeight: 2,
-          fontFamily: 'Georgia, serif',
-          color: '#2c3e50',
-          textAlign: 'center'
-        }}>
-          This is to certify that <strong className="underlined">{englishStudentName || 'Student Name'}</strong>, {' '}
-          son/daughter of <strong className="underlined">{englishGuardianName || 'Parent/Guardian Name'}</strong>, {' '}
-          was a pupil of <strong className="underlined">{englishClassroom || 'Class Name'}</strong> 
-          {englishSection && <span> ({englishSection})</span>} of this institution, bearing Roll No. <strong className="underlined">{rollNumber || 'Roll Number'}</strong>, {' '}
-          Session <strong style={{ color: '#8B4513' }}>{session || 'Session Year'}</strong>. {' '}
-          He/she sat for the Annual Examination held in <strong style={{ color: '#8B4513' }}>{session || 'Session Year'}</strong> {' '}
-          as a student of <strong style={{ color: '#2c3e50', fontSize: '1.05rem' }}>{englishClassroom || 'Class Name'}</strong> and passed the examination. {' '}
-          He/she has been promoted to the next class. {' '}
-          To the best of my knowledge, he/she bears a good moral character. {' '}
-          I wish him/her every success in life.
-        </Typography>
-      </Box>
-
-      {/* Certificate Footer */}
-      <Box className="certificate-footer" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mt: 8, position: 'relative', zIndex: 1, paddingTop: 4 }}>
-        <Box className="footer-section" sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', minHeight: 120 }}>
-          <Typography variant="body2" sx={{ 
-            fontFamily: 'Georgia, serif',
-            fontSize: '0.95rem',
-            color: '#2c3e50',
-            mb: 1,
-            minHeight: '20px'
-          }}>
-            {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-          </Typography>
-          <Typography className="footer-text" variant="body2" sx={{ 
-            fontFamily: 'Georgia, serif',
-            fontSize: '0.9rem',
-            color: '#2c3e50',
-            fontWeight: 'bold',
-            fontStyle: 'italic'
-          }}>
-            Date of Issue
-          </Typography>
-        </Box>
-        
-        <Box className="footer-section" sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', minHeight: 120 }}>
-          <Box className="footer-line" sx={{ 
-            borderBottom: '2px solid #2c3e50',
-            width: 150,
-            mb: 1,
-            mx: 'auto',
-            minHeight: '20px'
-          }} />
-          <Typography className="footer-text" variant="body2" sx={{ 
-            fontFamily: 'Georgia, serif',
-            fontSize: '0.9rem',
-            color: '#2c3e50',
-            fontWeight: 'bold',
-            fontStyle: 'italic'
-          }}>
-            Class Teacher's Signature
-          </Typography>
-        </Box>
-        
-        <Box className="footer-section" sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', minHeight: 120, position: 'relative' }}>
-          <Box sx={{ position: 'relative', width: 150, height: 60, mb: 1 }}>
-            <img
-              className="seal-stamp"
-              src={schoolSealUrl || ((school?.id && (String(school.id) === '16' || String(school.id) === '19')) ? `${(api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'')}/media/BHS/seal.png` : '/images/signatures/seal.png')}
-              alt="School Seal"
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '60px',
-                height: '60px',
-                objectFit: 'contain',
-                opacity: 0.2,
-                zIndex: 1
-              }}
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-            <img 
-              className="signature-img"
-              src={principalSignatureUrl || ((school?.id && String(school.id) === '19') ? `${(api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'')}/media/BHS/signature.png` : '/images/signatures/signature.png')} 
-              alt="Head Master's Signature"
-              style={{ 
-                position: 'relative',
-                width: '120px',
-                height: '60px',
-                objectFit: 'contain',
-                zIndex: 2
-              }}
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-          </Box>
-          <Box className="footer-line" sx={{ 
-            borderBottom: '2px solid #2c3e50',
-            width: 150,
-            mb: 1,
-            mx: 'auto'
-          }} />
-          <Typography className="footer-text" variant="body2" sx={{ 
-            fontFamily: 'Georgia, serif',
-            fontSize: '0.9rem',
-            color: '#2c3e50',
-            fontWeight: 'bold',
-            fontStyle: 'italic'
-          }}>
-            Head Master's Signature
-          </Typography>
-        </Box>
-      </Box>
-
-      {/* Certificate Border Design */}
-      <Box className="border-design" sx={{
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        right: 10,
-        bottom: 10,
-        border: '2px solid #D4AF37',
-        borderRadius: 1,
+      {/* Background/Watermark */}
+      <Box sx={{
+        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+        zIndex: 0, opacity: 0.07, display: 'flex', alignItems: 'center', justifyContent: 'center',
         pointerEvents: 'none',
-        zIndex: 2
-      }} />
+        p: 6 // Keep away from edges
+      }}>
+        {school?.logo && <img src={processPhotoUrl(school.logo)} alt="watermark" style={{ width: '90%', maxHeight: '55%', objectFit: 'contain' }} />}
+      </Box>
+
+      {/* Header Section */}
+      <Box sx={{ textAlign: 'center', position: 'relative', zIndex: 1, mt: 1 }}>
+        <Typography variant="h2" sx={{
+          fontWeight: '900',
+          color: '#5d4037',
+          fontSize: '4.2rem',
+          fontFamily: "'Playfair Display', serif",
+          textTransform: 'uppercase',
+          mb: 0.5,
+          textShadow: '1px 1px 2px rgba(0,0,0,0.1)'
+        }}>
+          {school?.name || 'SCHOOL NAME'}
+        </Typography>
+        <Typography variant="h5" sx={{
+          color: '#8b4513',
+          fontSize: '1.6rem',
+          fontWeight: '600',
+          mb: 1.5,
+          fontFamily: "'Hind Siliguri', sans-serif"
+        }}>
+          {school?.address || 'SCHOOL ADDRESS'}
+        </Typography>
+
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5, borderBottom: '2.5px solid #8b4513', pb: 0.5, px: 4 }}>
+          <Typography sx={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#5d4037' }}>No: SLC-{session}-{rollNumber || '000'}</Typography>
+          <Typography sx={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#5d4037' }}>Date: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Typography>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5 }}>
+          <Typography variant="h4" sx={{
+            fontWeight: '900',
+            color: '#ffffff',
+            backgroundColor: '#8b4513',
+            px: 12, py: 1.5,
+            borderRadius: '5px',
+            fontSize: '1.8rem',
+            textTransform: 'uppercase',
+            letterSpacing: '6px',
+            boxShadow: '0 3px 6px rgba(0,0,0,0.15)'
+          }}>
+            Testimonial
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Content Body */}
+      <Box sx={{
+        textAlign: 'justify',
+        color: '#2c3e50',
+        zIndex: 1,
+        px: 6,
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        pb: 35 // Extra padding for absolute signatures
+      }}>
+        <Typography sx={{ lineHeight: 1.8, fontSize: '1.45rem', mb: 2.5 }}>
+          This is to certify that <span style={{ fontWeight: '900', fontSize: '1.7rem', color: '#1a202c', borderBottom: '2px solid #8b4513', padding: '0 5px' }}>{name}</span>,
+          son/daughter of <span style={{ fontWeight: 'bold', color: '#1a202c' }}>{fatherName || guardianName}</span> and <span style={{ fontWeight: 'bold', color: '#1a202c' }}>{motherName}</span>,
+          was a bona fide student of <span style={{ fontWeight: 'bold' }}>{school?.name}</span> from <span style={{ fontWeight: 'bold' }}>{calculatedAdmissionDate}</span> to <span style={{ fontWeight: 'bold' }}>{session || new Date().getFullYear()}</span>.
+        </Typography>
+
+        <Typography sx={{ lineHeight: 1.8, fontSize: '1.45rem', mb: 2.5 }}>
+          He/She successfully studied up to <span style={{ fontWeight: 'bold', fontSize: '1.5rem' }}>{translateClassName(classroom)}</span> and appeared in the final examination under this institution in Session <span style={{ fontWeight: 'bold' }}>{session}</span>.
+          According to the school records, his/her <span style={{ fontWeight: 'bold' }}>Date of Birth</span> is <span style={{ fontWeight: 'bold', borderBottom: '2px solid #d4af37' }}>{dob}</span>.
+        </Typography>
+
+        <Typography sx={{ lineHeight: 1.8, fontSize: '1.45rem', mb: 3 }}>
+          He/She is leaving this institution on his/her own request for higher education. During his/her stay in the school, his/her attendance and conduct were found to be satisfactory.
+          To the best of our knowledge, he/she bears a good moral character.
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 6, mt: 15, p: 2, border: '2px dashed #8b4513', borderRadius: 4, bgcolor: 'transparent', justifyContent: 'center' }}>
+           <Typography sx={{ fontSize: '1.15rem', color: '#5d4037' }}><strong>Character:</strong> Good</Typography>
+           <Typography sx={{ fontSize: '1.15rem', color: '#5d4037' }}><strong>Conduct:</strong> Satisfactory</Typography>
+           <Typography sx={{ fontSize: '1.15rem', color: '#5d4037' }}><strong>Reason:</strong> Higher Education</Typography>
+        </Box>
+      </Box>
+
+      {/* Absolute Bottom Signatures Section */}
+      <Box sx={{
+        position: 'absolute',
+        bottom: '15px',
+        left: '80px',
+        right: '80px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        zIndex: 1
+      }}>
+        <Box sx={{ textAlign: 'center', minWidth: '220px' }}>
+          <Box sx={{ borderTop: '2.5px solid #5d4037', pt: 1 }}>
+            <Typography sx={{ fontWeight: '900', fontSize: '1.2rem', textTransform: 'uppercase', color: '#5d4037' }}>Class Teacher</Typography>
+          </Box>
+        </Box>
+
+        <Box sx={{ textAlign: 'center', position: 'relative', minWidth: '320px' }}>
+          {schoolSeal && (
+            <Box component="img" src={schoolSeal} sx={{
+              position: 'absolute',
+              top: -140, left: '50%',
+              transform: 'translateX(-50%)',
+              width: 170, opacity: 0.7, zIndex: 0
+            }} />
+          )}
+          {principalSig && (
+            <Box component="img" src={principalSig} sx={{
+              height: 100, position: 'absolute', bottom: 65, left: '50%',
+              transform: 'translateX(-50%)', zIndex: 1
+            }} />
+          )}
+          <Box sx={{ borderTop: '2.5px solid #5d4037', pt: 1, position: 'relative', zIndex: 2 }}>
+            <Typography sx={{ fontWeight: '900', fontSize: '1.4rem', textTransform: 'uppercase', color: '#5d4037' }}>Principal / Head Master</Typography>
+            <Typography sx={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5d4037' }}>(Official Seal)</Typography>
+          </Box>
+        </Box>
+      </Box>
+
     </Box>
   );
 };
+
 
 export default function CertificateGenerator() {
   const { id: schoolId } = useParams();
@@ -712,701 +332,407 @@ export default function CertificateGenerator() {
   const [school, setSchool] = useState(null);
   const [error, setError] = useState('');
   const [certificateGenerated, setCertificateGenerated] = useState(false);
-  const [classrooms, setClassrooms] = useState([]);
-  const [sections, setSections] = useState([]);
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState(new Set());
+  const [bulkCertificatesGenerated, setBulkCertificatesGenerated] = useState(false);
+  const { classrooms, sections, refreshAll, students } = useAcademics();
   const [bloodGroup, setBloodGroup] = useState('');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const certificateRef = useRef(null);
+  const bulkCertificatesRef = useRef(null);
+  const [activeStep, setActiveStep] = useState(0);
 
-  // Handle profile edit toggle
-  const handleEditProfile = () => {
-    if (!isAuthenticated()) {
-      navigate('/login');
-      return;
-    }
-    setIsEditingProfile(!isEditingProfile);
-  };
-
-  // Handle blood group change
-  const handleBloodGroupChange = (value) => {
-    setBloodGroup(value);
-  };
-
-  // Handle print certificate
-  const handlePrintCertificate = () => {
-    const certificateElement = certificateRef.current;
-    if (!certificateElement) return;
-    
-    // Create a temporary hidden container for high-quality capture
-    const captureContainer = document.createElement('div');
-    captureContainer.style.position = 'absolute';
-    captureContainer.style.left = '-9999px';
-    captureContainer.style.top = '0';
-    captureContainer.style.width = '900px'; // A4 width at higher DPI
-    captureContainer.style.height = 'auto';
-    document.body.appendChild(captureContainer);
-    
-    // Clone the certificate and apply print-specific styling
-    const clone = certificateElement.cloneNode(true);
-    clone.style.width = '1200px';
-    clone.style.height = 'auto';
-    clone.style.minHeight = 'auto';
-    clone.style.margin = '0';
-    clone.style.padding = '20px';
-    clone.style.boxShadow = 'none';
-    clone.style.border = 'none';
-    clone.style.borderRadius = '0';
-    captureContainer.appendChild(clone);
-
-    (async () => {
-      try {
-        const canvas = await html2canvas(clone, {
-          scale: 2.5, // Good quality
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#fff8dc',
-          width: 1200,
-          height: clone.scrollHeight,
-          windowWidth: 1200,
-          windowHeight: clone.scrollHeight,
-          allowTaint: false,
-          foreignObjectRendering: false,
-          imageTimeout: 15000,
-          removeContainer: false
-        });
-        
-        // Cleanup temporary container
-        document.body.removeChild(captureContainer);
-        
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) return;
-        
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Certificate - ${student?.user?.username || 'Student'}</title>
-              <style>
-                @page { size: A4 landscape; margin: 0; }
-                html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-                body { display: flex; align-items: center; justify-content: center; background: white; }
-                img { width: 100%; height: 100%; object-fit: contain; }
-              </style>
-            </head>
-            <body>
-              <img src="${imgData}" />
-              <script>
-                window.onload = () => {
-                  setTimeout(() => {
-                    window.print();
-                    window.close();
-                  }, 500);
-                };
-              </script>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      } catch (err) {
-        console.error('Print error:', err);
-        document.body.removeChild(captureContainer);
-        toast.error('Failed to prepare print');
-      }
-    })();
-  };
-
-  // Handle download certificate as PDF
-  const handleDownloadCertificate = async () => {
-    const certificateElement = certificateRef.current;
-    
-    if (!certificateElement) {
-      toast.error('Could not find the certificate to export');
-      return;
-    }
-    
-    try {
-      toast.info('Generating PDF...');
-      
-      // Create a temporary container for capturing
-      const captureContainer = document.createElement('div');
-      captureContainer.style.position = 'absolute';
-      captureContainer.style.left = '-9999px';
-      captureContainer.style.top = '0';
-      captureContainer.style.width = '900px';
-      captureContainer.style.height = 'auto';
-      document.body.appendChild(captureContainer);
-      
-      const clone = certificateElement.cloneNode(true);
-      clone.style.width = '1200px';
-      clone.style.height = 'auto';
-      clone.style.minHeight = 'auto';
-      clone.style.padding = '20px';
-      clone.style.margin = '0';
-      clone.style.boxShadow = 'none';
-      clone.style.border = 'none';
-      clone.style.borderRadius = '0';
-      captureContainer.appendChild(clone);
-      
-      const canvas = await html2canvas(clone, { 
-        scale: 2.5,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#fff8dc',
-        allowTaint: false,
-        foreignObjectRendering: false,
-        imageTimeout: 15000,
-        removeContainer: false,
-        scrollX: 0,
-        scrollY: 0,
-        width: 1200,
-        height: clone.scrollHeight,
-        windowWidth: 1200,
-        windowHeight: clone.scrollHeight
-      });
-      
-      // Cleanup
-      document.body.removeChild(captureContainer);
-      
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      
-      // Create PDF with A4 landscape size
-      const pdf = new jsPDF('l', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      
-      // Calculate image dimensions to fit the page
-      const imgWidth = pageWidth - 10; // 5mm margins on each side
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const maxHeight = pageHeight - 10;
-      let renderWidth = imgWidth;
-      let renderHeight = imgHeight;
-      if (imgHeight > maxHeight) {
-        const scale = maxHeight / imgHeight;
-        renderWidth = imgWidth * scale;
-        renderHeight = maxHeight;
-      }
-      const x = (pageWidth - renderWidth) / 2;
-      const y = 5;
-      
-      pdf.addImage(imgData, 'JPEG', x, y, renderWidth, renderHeight);
-      
-      // Save the PDF with student name and date
-      const fileName = `certificate-${student?.user?.username || 'student'}-${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-      
-      toast.success('PDF downloaded successfully');
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      toast.error('Failed to generate PDF. Please try again.');
-    }
-  };
+  const guidanceSteps = [
+    { selector: '#class-select', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
+    { selector: '#section-select', text: 'সেকশন নির্বাচন করুন', autoNext: false },
+    { selector: '#roll-input', text: 'রোল নম্বর দিন', autoNext: false },
+    { selector: '#generate-button', text: 'এখানে ক্লিক করুন', autoNext: true }
+  ];
 
   useEffect(() => {
-    if (!schoolId) return;
-    loadSchool();
-    loadClassrooms();
-  }, [schoolId]);
-
-  const loadSchool = () => {
-    api.get(`/api/schools/${schoolId}/`)
-      .then(res => setSchool(res.data))
-      .catch(err => console.error(err));
-  };
-
-  const loadClassrooms = () => {
-    api.get(`/api/academics/classrooms/?school=${schoolId}`)
-      .then(res => {
-        const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        setClassrooms(data);
-      })
-      .catch(err => console.error(err));
-  };
-
-  const loadSections = (classroomId) => {
-    if (!classroomId) {
-      setSections([]);
-      return;
-    }
-    api.get(`/api/academics/sections/?classroom=${classroomId}`)
-      .then(res => {
-        const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        setSections(data);
-      })
-      .catch(err => console.error(err));
-  };
-
-  useEffect(() => {
-    if (classFilter) {
-      loadSections(classFilter);
+    if (!classFilter) {
+      setActiveStep(0);
+    } else if (!rollNumber) {
+      setActiveStep(2); // Jump to roll if section is optional
+    } else if (!certificateGenerated) {
+      setActiveStep(3);
     } else {
-      setSections([]);
+      setActiveStep(4);
     }
+  }, [classFilter, rollNumber, certificateGenerated]);
+
+  const loadSchool = useCallback(() => { api.get(`/api/schools/${schoolId}/`).then(res => setSchool(res.data)).catch(err => console.error(err)); }, [schoolId]);
+  
+  const filteredSections = classFilter ? sections.filter(sec => String(sec.classroom?.id) === String(classFilter)) : [];
+
+  useEffect(() => { 
+    if (schoolId) { 
+      loadSchool(); 
+      refreshAll(schoolId);
+    } 
+  }, [schoolId, loadSchool, refreshAll]);
+  
+  // Update sectionFilter when class changes
+  useEffect(() => {
     setSectionFilter('');
   }, [classFilter]);
 
-  const handleGenerateCertificate = async () => {
-    if (!rollNumber && !(studentName && guardianName)) {
-      setError('Enter Roll or both Student and Guardian names');
-      return;
-    }
+  const handleEditProfile = () => { if (!isAuthenticated()) { navigate('/login'); return; } setIsEditingProfile(!isEditingProfile); };
+  const handleBloodGroupChange = (value) => setBloodGroup(value);
 
-    setLoading(true);
-    setError('');
-    setStudent(null);
-    setCertificateGenerated(false);
-
-    try {
-      // Build URL with filters - use history endpoint if session is specified
-      let url = `/api/academics/students/history/?school=${schoolId}&year=${encodeURIComponent(session)}`;
-      
-      if (rollNumber) url += `&roll_number=${encodeURIComponent(rollNumber)}`;
-      if (studentName) url += `&search=${encodeURIComponent(studentName)}`;
-      
-      if (classFilter) url += `&classroom=${classFilter}`;
-      if (sectionFilter) url += `&section=${sectionFilter}`;
-
-      const res = await api.get(url);
-      let candidates = Array.isArray(res.data) ? res.data : res.data.results || [];
-      if (!Array.isArray(candidates)) candidates = [];
-      
-      // Fallback to current students if history is empty (optional, but might be useful)
-      if (candidates.length === 0) {
-        let currentUrl = `/api/academics/students/?school=${schoolId}`;
-        if (rollNumber) currentUrl += `&roll_number=${encodeURIComponent(rollNumber)}`;
-        if (studentName) currentUrl += `&search=${encodeURIComponent(studentName)}`;
-        if (classFilter) currentUrl += `&classroom=${classFilter}`;
-        if (sectionFilter) currentUrl += `&section=${sectionFilter}`;
-        
-        const currentRes = await api.get(currentUrl);
-        let currentData = Array.isArray(currentRes.data) ? currentRes.data : currentRes.data.results || [];
-        candidates = Array.isArray(currentData) ? currentData : [];
-      }
-      
-      if (rollNumber && candidates.length > 0) {
-        const inputRollRaw = String(rollNumber || '').trim();
-        const toAsciiDigits = s => String(s || '').replace(/[০-৯]/g, d => '০১২৩৪৫৬৭৮৯'.indexOf(d));
-        const norm = s => toAsciiDigits(String(s || '').trim());
-        const numOnly = v => (String(v || '').match(/\d+/) || [''])[0];
-        let exact = candidates.filter(s => norm(s.roll_number) === norm(inputRollRaw));
-        if (exact.length === 0) {
-          exact = candidates.filter(s => numOnly(norm(s.roll_number)) === numOnly(norm(inputRollRaw)));
-        }
-        candidates = exact;
-      } else {
-        const norm = (v) => String(v || '').trim().toLowerCase();
-        const targetStudent = norm(studentName);
-        const targetGuardian = norm(guardianName);
-        const fullName = (s) => norm(`${s?.user?.first_name || ''} ${s?.user?.last_name || ''}`.trim());
-        const guardianFields = (s) => [
-          norm(s?.guardian_name),
-          norm(`${s?.guardian?.first_name || ''} ${s?.guardian?.last_name || ''}`.trim())
-        ];
-        const score = (s) => {
-          const sn = fullName(s);
-          const gs = guardianFields(s);
-          const studentExact = sn === targetStudent;
-          const guardianExact = gs.includes(targetGuardian);
-          const studentPartial = !!targetStudent && sn.includes(targetStudent);
-          const guardianPartial = !!targetGuardian && gs.some(g => g && g.includes(targetGuardian));
-          let sc = 0;
-          if (studentExact) sc += 3;
-          if (guardianExact) sc += 3;
-          if (studentPartial) sc += 1;
-          if (guardianPartial) sc += 1;
-          return sc;
-        };
-        candidates = candidates
-          .map(s => ({ s, sc: score(s) }))
-          .filter(x => x.sc > 0)
-          .sort((a, b) => b.sc - a.sc)
-          .map(x => x.s);
-      }
-      
-      // If classroom/section filters are provided, enforce them client-side too
-      if (classFilter) {
-        const clsIdStr = String(classFilter);
-        candidates = candidates.filter(s => String(s.classroom?.id ?? s.classroom) === clsIdStr);
-      }
-      if (sectionFilter) {
-        const secIdStr = String(sectionFilter);
-        candidates = candidates.filter(s => String(s.section?.id ?? s.section) === secIdStr);
-      }
-      
-      if (candidates.length === 0) {
-        setError('No student found with these criteria');
-        return;
-      }
-      
-      const studentData = (rollNumber 
-        ? [...candidates].sort((a, b) => {
-            const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
-            const br = parseInt(String(b.roll_number || '').replace(/\D/g, ''), 10);
-            const aNum = Number.isNaN(ar) ? Infinity : ar;
-            const bNum = Number.isNaN(br) ? Infinity : br;
-            if (aNum !== bNum) return aNum - bNum;
-            return (parseInt(a.id, 10) || 0) - (parseInt(b.id, 10) || 0);
-          })[0]
-        : candidates[0]
-      );
-      
-      // Debug logging for student data
-      console.log('Student data received:', studentData);
-      console.log('Guardian in student data:', studentData.guardian);
-      
-      // Map student data to ensure photo URL is in the correct format
-      const processedStudent = {
-        ...studentData,
-        user: {
-          ...studentData.user,
-          photo_url: studentData.photo || 
-                      studentData.user?.photo || 
-                      studentData.user?.photo_url
-        }
-      };
-      
-      setStudent(processedStudent);
-      setCertificateGenerated(true);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to generate certificate. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePrint = () => {
-    if (!certificateGenerated) return;
-    
-    const printWindow = window.open('', '_blank');
-    const certificateElement = document.getElementById('certificate-content');
-    
-    if (certificateElement && printWindow) {
-      printWindow.document.write(`
+  const handlePrintCertificate = () => {
+    const el = certificateRef.current;
+    if (!el) return;
+    html2canvas(el, {
+      scale: 4,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false
+    }).then(canvas => {
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const win = window.open('', '_blank');
+      win.document.write(`
         <html>
           <head>
-            <title>Certificate - ${student?.user?.username || 'Student'}</title>
+            <title>Certificate Print</title>
             <style>
-              body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
-              @media print {
-                body { margin: 0; padding: 10px; }
-                .no-print { display: none !important; }
+              @page {
+                size: A4 landscape;
+                margin: 0 !important;
+              }
+              body {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              img {
+                width: 100vw;
+                height: 100vh;
+                object-fit: fill;
+                display: block;
               }
             </style>
           </head>
           <body>
-            ${certificateElement.innerHTML}
+            <img src="${imgData}" />
           </body>
         </html>
       `);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 250);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); win.close(); }, 500);
+    });
+  };
+
+  const handleDownloadCertificate = async () => {
+    const el = certificateRef.current;
+    if (!el) return;
+    toast.info('Generating PDF...');
+    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#fff8dc' });
+    const pdf = new jsPDF('l', 'mm', 'a4');
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 10, 10, 277, 190);
+    pdf.save(`certificate-${student?.id}.pdf`);
+    toast.success('Downloaded successfully');
+  };
+
+  const handleGenerateCertificate = async () => {
+    if (!rollNumber && !(studentName && guardianName)) { setError('Enter Roll or both Student and Guardian names'); return; }
+    setLoading(true); setError(''); setStudent(null); setCertificateGenerated(false);
+    try {
+      let foundStudents = [...students];
+
+      if (rollNumber) {
+        foundStudents = foundStudents.filter(s => String(s.roll_number) === String(rollNumber));
+      }
+      if (studentName) {
+        const normalizedQuery = studentName.toLowerCase().trim();
+        foundStudents = foundStudents.filter(s => 
+          (s.user?.first_name?.toLowerCase().includes(normalizedQuery)) || 
+          (s.user?.last_name?.toLowerCase().includes(normalizedQuery)) || 
+          (s.name?.toLowerCase().includes(normalizedQuery))
+        );
+      }
+      if (classFilter) {
+        foundStudents = foundStudents.filter(s => String(s.classroom?.id) === String(classFilter));
+        if (sectionFilter) {
+          foundStudents = foundStudents.filter(s => String(s.section?.id) === String(sectionFilter));
+        }
+      }
+
+      if (foundStudents.length === 0) { setError('No student found'); return; }
+      setStudent(foundStudents[0]); setCertificateGenerated(true);
+    } catch (err) { setError('Failed to generate'); } finally { setLoading(false); }
+  };
+
+  const handleReset = () => { 
+    setRollNumber(''); 
+    setSession(''); 
+    setClassFilter(''); 
+    setSectionFilter(''); 
+    setStudent(null); 
+    setCertificateGenerated(false); 
+    setError('');
+    setIsBulkMode(false);
+    setSelectedStudents(new Set());
+    setBulkCertificatesGenerated(false);
+  };
+
+  const getFilteredStudentsForBulk = () => {
+    let filtered = [...students];
+    if (classFilter) {
+      filtered = filtered.filter(s => String(s.classroom?.id) === String(classFilter));
+    }
+    if (sectionFilter) {
+      filtered = filtered.filter(s => String(s.section?.id) === String(sectionFilter));
+    }
+    return filtered;
+  };
+
+  const handleToggleAllStudents = () => {
+    const filteredStudents = getFilteredStudentsForBulk();
+    if (selectedStudents.size === filteredStudents.length) {
+      setSelectedStudents(new Set());
+    } else {
+      setSelectedStudents(new Set(filteredStudents.map(s => s.id)));
     }
   };
 
-  const handleReset = () => {
-    setRollNumber('');
-    setSession('');
-    setClassFilter('');
-    setSectionFilter('');
-    setStudent(null);
-    setCertificateGenerated(false);
+  const handleToggleStudent = (studentId) => {
+    const newSelected = new Set(selectedStudents);
+    if (newSelected.has(studentId)) {
+      newSelected.delete(studentId);
+    } else {
+      newSelected.add(studentId);
+    }
+    setSelectedStudents(newSelected);
+  };
+
+  const handleGenerateBulkCertificates = () => {
+    if (selectedStudents.size === 0) {
+      setError('Select at least one student');
+      return;
+    }
+    setBulkCertificatesGenerated(true);
     setError('');
+  };
+
+  const handlePrintBulkCertificates = async () => {
+    if (!bulkCertificatesRef.current) return;
+    toast.info('Preparing to print all certificates...');
+    const container = bulkCertificatesRef.current;
+    const certificateElements = container.querySelectorAll('.certificate-container');
+    const printWindow = window.open('', '_blank');
+    let allImagesHTML = '';
+
+    for (let i = 0; i < certificateElements.length; i++) {
+      const canvas = await html2canvas(certificateElements[i], {
+        scale: 4, // Matching single print scale
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      const isLast = i === certificateElements.length - 1;
+      allImagesHTML += `
+        <div style="page-break-after: ${isLast ? 'avoid' : 'always'}; width: 100vw; height: 100vh;">
+          <img src="${canvas.toDataURL('image/jpeg', 1.0)}" style="width: 100%; height: 100%; object-fit: fill; display: block;" />
+        </div>
+      `;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>All Certificates</title>
+          <style>
+            @page {
+              size: A4 landscape;
+              margin: 0 !important;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            div {
+              width: 100vw;
+              height: 100vh;
+              overflow: hidden;
+            }
+          </style>
+        </head>
+        <body>
+          ${allImagesHTML}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
+  const handleDownloadBulkCertificates = async () => {
+    if (!bulkCertificatesRef.current) return;
+    toast.info('Generating PDF with all certificates...');
+    const container = bulkCertificatesRef.current;
+    const certificateElements = container.querySelectorAll('.certificate-container');
+    const pdf = new jsPDF('l', 'mm', 'a4');
+    for (let i = 0; i < certificateElements.length; i++) {
+      const canvas = await html2canvas(certificateElements[i], {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#fff8dc'
+      });
+      if (i > 0) {
+        pdf.addPage();
+      }
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 10, 10, 277, 190);
+    }
+    pdf.save('all-certificates.pdf');
+    toast.success('Downloaded all certificates successfully');
   };
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Paper 
-        elevation={0}
-        sx={{ 
-          mb: 3, 
-          p: 3, 
-          background: 'linear-gradient(135deg, #8B4513 0%, #D4AF37 100%)',
-          color: 'white',
-          borderRadius: 3
-        }}
-      >
-        <Stack 
-          direction={{ xs: 'column', sm: 'row' }} 
-          alignItems={{ xs: 'stretch', sm: 'center' }} 
-          justifyContent="space-between" 
-          spacing={2}
-        >
-          <Box>
-            <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1, display: 'flex', alignItems: 'center' }}>
-              <AwardIcon sx={{ mr: 1, fontSize: 40 }} />
-              Certificate Generator
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              Generate student certificates using Class, Section, Roll Number and Session
-            </Typography>
-            {certificateGenerated && (
-              <Typography variant="body2" sx={{ opacity: 0.7, mt: 1 }}>
-                Certificate generated for {student?.user?.first_name} {student?.user?.last_name}
-              </Typography>
-            )}
-          </Box>
-          {certificateGenerated && (
-            <Button
-              variant="contained"
-              startIcon={<PrintIcon />}
-              onClick={handlePrintCertificate}
-              sx={{ 
-                bgcolor: 'rgba(255,255,255,0.2)', 
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
-                backdropFilter: 'blur(10px)'
-              }}
-            >
-              Print Certificate
-            </Button>
-          )}
+      <Paper elevation={0} sx={{ mb: 3, p: 3, background: 'linear-gradient(135deg, #8B4513 0%, #D4AF37 100%)', color: 'white', borderRadius: 3 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Box><Typography variant="h4" sx={{ fontWeight: 'bold' }}><AwardIcon sx={{ mr: 1 }} /> Certificate Generator</Typography></Box>
+          <Button 
+            variant={isBulkMode ? "contained" : "outlined"} 
+            startIcon={<BulkIcon />} 
+            onClick={() => setIsBulkMode(!isBulkMode)}
+            sx={{ borderColor: 'white', color: isBulkMode ? '#8B4513' : 'white' }}
+          >
+            {isBulkMode ? 'Single Mode' : 'Bulk Mode'}
+          </Button>
         </Stack>
       </Paper>
 
-      {/* Input Form */}
+      {/* Filters Section */}
       <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
-          Student Information
-        </Typography>
-        
         <Grid container spacing={3}>
-          <Grid item xs={12} md={3}>
-            <FormControl fullWidth>
-              <InputLabel>Class</InputLabel>
-              <Select
-                value={classFilter}
-                label="Class"
-                onChange={(e) => setClassFilter(e.target.value)}
-              >
-                <MenuItem value="">Select Class</MenuItem>
-                {classrooms.map((classroom) => (
-                  <MenuItem key={classroom.id} value={classroom.id}>
-                    {classroom.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          
-          <Grid item xs={12} md={3}>
+          <Grid size={{ xs: 12, md: 3 }}><FormControl fullWidth><InputLabel>Class</InputLabel><Select id="class-select" value={classFilter} label="Class" onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}>{classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</Select></FormControl></Grid>
+          <Grid size={{ xs: 12, md: 3 }}>
             <FormControl fullWidth>
               <InputLabel>Section</InputLabel>
               <Select
+                id="section-select"
                 value={sectionFilter}
                 label="Section"
                 onChange={(e) => setSectionFilter(e.target.value)}
                 disabled={!classFilter}
               >
-                <MenuItem value="">Select Section</MenuItem>
-                {sections.map((section) => (
-                  <MenuItem key={section.id} value={section.id}>
-                    {section.name}
-                  </MenuItem>
-                ))}
+                <MenuItem value="">All Sections</MenuItem>
+                {filteredSections.map(sec => <MenuItem key={sec.id} value={sec.id}>{sec.name}</MenuItem>)}
               </Select>
             </FormControl>
           </Grid>
-          
-          <Grid item xs={12} md={3}>
-            <TextField
-              label="Roll Number"
-              value={rollNumber}
-              onChange={(e) => setRollNumber(e.target.value)}
-              placeholder="Enter student roll number"
-              fullWidth
-              onKeyPress={(e) => e.key === 'Enter' && handleGenerateCertificate()}
-              helperText="Search by student roll number"
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={3}>
-            <TextField
-              label="Student Name"
-              value={studentName}
-              onChange={(e) => setStudentName(e.target.value)}
-              placeholder="Enter student full name"
-              fullWidth
-              onKeyPress={(e) => e.key === 'Enter' && handleGenerateCertificate()}
-              helperText="Generate by student name"
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={3}>
-            <TextField
-              label="Guardian Name"
-              value={guardianName}
-              onChange={(e) => setGuardianName(e.target.value)}
-              placeholder="Enter guardian name"
-              fullWidth
-              onKeyPress={(e) => e.key === 'Enter' && handleGenerateCertificate()}
-              helperText="Generate by guardian name"
-              onFocus={async () => {
-                if (!studentName || !schoolId) return;
-                try {
-                  setGuardianSuggestLoading(true);
-                  let url = `/api/academics/students/?school=${schoolId}&search=${encodeURIComponent(studentName)}`;
-                  if (classFilter) url += `&classroom=${classFilter}`;
-                  if (sectionFilter) url += `&section=${sectionFilter}`;
-                  const res = await api.get(url);
-                  let arr = Array.isArray(res.data) ? res.data : res.data.results || [];
-                  if (!Array.isArray(arr)) arr = [];
-                  const toName = (s) => {
-                    const a = String(s?.guardian_name || '').trim();
-                    const b = `${s?.guardian?.first_name || ''} ${s?.guardian?.last_name || ''}`.trim();
-                    const c = a || b;
-                    return c;
-                  };
-                  const set = new Set();
-                  arr.forEach(s => {
-                    const n = toName(s);
-                    if (n) set.add(n);
-                  });
-                  setGuardianSuggestions(Array.from(set));
-                } catch (_) {
-                  setGuardianSuggestions([]);
-                } finally {
-                  setGuardianSuggestLoading(false);
-                }
-              }}
-            />
-            {!!guardianSuggestions.length && (
-              <Paper sx={{ mt: 1, p: 1 }}>
-                <Stack spacing={1}>
-                  {guardianSuggestions.slice(0, 8).map((name) => (
-                    <Button
-                      key={name}
-                      variant="text"
-                      onClick={() => setGuardianName(name)}
-                      sx={{ justifyContent: 'flex-start' }}
-                    >
-                      {name}
-                    </Button>
-                  ))}
-                  {guardianSuggestLoading && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
-                      <CircularProgress size={20} />
-                    </Box>
-                  )}
-                </Stack>
-              </Paper>
-            )}
-          </Grid>
-          
-          <Grid item xs={12} md={3}>
-            <TextField
-              label="Session"
-              value={session}
-              onChange={(e) => setSession(e.target.value)}
-              placeholder="e.g., 2024-2025"
-              fullWidth
-              onKeyPress={(e) => e.key === 'Enter' && handleGenerateCertificate()}
-              helperText="Enter academic session"
-            />
-          </Grid>
+          {!isBulkMode && (
+            <>
+              <Grid size={{ xs: 12, md: 3 }}><TextField id="roll-input" label="Roll Number" value={rollNumber} onChange={(e) => setRollNumber(e.target.value)} fullWidth /></Grid>
+              <Grid size={{ xs: 12, md: 3 }}><TextField label="Session" value={session} onChange={(e) => setSession(e.target.value)} fullWidth placeholder="2024" /></Grid>
+            </>
+          )}
+          {isBulkMode && (
+            <Grid size={{ xs: 12, md: 6 }}><TextField id="skip-to-button" label="Session" value={session} onChange={(e) => setSession(e.target.value)} fullWidth placeholder="2024" /></Grid>
+          )}
         </Grid>
-
-        <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-          <Button
-            variant="contained"
-            startIcon={<SearchIcon />}
-            onClick={handleGenerateCertificate}
-            disabled={loading}
-            sx={{ 
-              bgcolor: '#2E7D32',
-              '&:hover': { bgcolor: '#1B5E20' }
-            }}
-          >
-            {loading ? 'Generating...' : 'Generate Certificate'}
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={handleReset}
-            disabled={loading}
-          >
-            Reset
-          </Button>
+        <Stack direction="row" spacing={2} sx={{ mt: 3 }} flexWrap="wrap">
+          {!isBulkMode ? (
+            <>
+              <Button id="generate-button" variant="contained" startIcon={<SearchIcon />} onClick={handleGenerateCertificate} disabled={loading} sx={{ bgcolor: '#2E7D32' }}>Generate</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="contained" startIcon={<BulkIcon />} onClick={handleGenerateBulkCertificates} sx={{ bgcolor: '#2E7D32' }}>Generate Selected ({selectedStudents.size})</Button>
+            </>
+          )}
+          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={handleReset}>Reset</Button>
         </Stack>
-
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {certificateGenerated && (
-          <Alert severity="success" sx={{ mt: 2 }}>
-            Certificate generated successfully! Scroll down to view and print.
-          </Alert>
-        )}
+        {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
       </Paper>
 
-      {/* Certificate Display */}
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress size={60} />
-        </Box>
+      {isBulkMode && (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+            <Checkbox 
+              checked={selectedStudents.size === getFilteredStudentsForBulk().length && getFilteredStudentsForBulk().length > 0} 
+              onClick={handleToggleAllStudents}
+            />
+            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+              Select All ({getFilteredStudentsForBulk().length} students)
+            </Typography>
+          </Stack>
+          <List sx={{ maxHeight: '300px', overflow: 'auto' }}>
+            {getFilteredStudentsForBulk().map(student => {
+              const user = student?.user || {};
+              const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+              return (
+                <ListItem key={student.id} disablePadding>
+                  <ListItemButton 
+                    dense
+                    onClick={() => handleToggleStudent(student.id)}
+                    selected={selectedStudents.has(student.id)}
+                  >
+                    <ListItemIcon>
+                      <Checkbox checked={selectedStudents.has(student.id)} />
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary={`${name} (Roll: ${student.roll_number || 'N/A'})`}
+                      secondary={`Class: ${student.classroom?.name || 'N/A'}, Section: ${student.section?.name || 'N/A'}`}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              )
+            })}
+          </List>
+        </Paper>
       )}
 
-      {certificateGenerated && student && (
+      {loading && <Box align="center" p={4}><CircularProgress /></Box>}
+
+      {/* Single Certificate Render */}
+      {!isBulkMode && certificateGenerated && student && (
         <Box>
-          {/* Student Card Display */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 4 }}>
-            <StudentCard
-              data={student}
-              school={school}
-              bloodGroup={bloodGroup}
-              isEditing={isEditingProfile}
-              onEditProfile={handleEditProfile}
-              onBloodGroupChange={handleBloodGroupChange}
-            />
-          </Box>
+          <Box display="flex" justifyContent="center" mb={4}><StudentCard data={student} school={school} bloodGroup={bloodGroup} isEditing={isEditingProfile} onEditProfile={handleEditProfile} onBloodGroupChange={handleBloodGroupChange} /></Box>
+          <Stack direction="row" spacing={2} justifyContent="center" mb={4}>
+            <Button variant="contained" onClick={handlePrintCertificate}>Print</Button>
+            <Button variant="contained" onClick={handleDownloadCertificate} sx={{ bgcolor: '#2c3e50' }}>Download</Button>
+          </Stack>
+          <Box ref={certificateRef}><Certificate data={student} school={school} session={session || String(new Date().getFullYear())} /></Box>
+        </Box>
+      )}
 
-          {/* Certificate Actions */}
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 4, mb: 4 }}>
-            <Button
-              variant="contained"
-              startIcon={<PrintIcon />}
-              onClick={handlePrintCertificate}
-              sx={{
-                backgroundColor: '#8B4513',
-                '&:hover': { backgroundColor: '#6B3410' },
-                fontFamily: 'Georgia, serif',
-                fontWeight: 'bold'
-              }}
-            >
-              Print Certificate
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<DownloadIcon />}
-              onClick={handleDownloadCertificate}
-              sx={{
-                backgroundColor: '#2c3e50',
-                '&:hover': { backgroundColor: '#1a252f' },
-                fontFamily: 'Georgia, serif',
-                fontWeight: 'bold'
-              }}
-            >
-              Download Certificate
-            </Button>
-          </Box>
-
-          {/* Certificate Preview */}
-          <Box id="certificate-content" ref={certificateRef}>
-            <Certificate 
-              data={student} 
-              school={school} 
-              session={session || String(new Date().getFullYear())}
-            />
+      {/* Bulk Certificates Render */}
+      {isBulkMode && bulkCertificatesGenerated && selectedStudents.size > 0 && (
+        <Box>
+          <Stack direction="row" spacing={2} justifyContent="center" mb={4}>
+            <Button variant="contained" onClick={handlePrintBulkCertificates}>Print All</Button>
+            <Button variant="contained" onClick={handleDownloadBulkCertificates} sx={{ bgcolor: '#2c3e50' }}>Download All (PDF)</Button>
+          </Stack>
+          <Box ref={bulkCertificatesRef}>
+            {students.filter(s => selectedStudents.has(s.id)).map(student => (
+              <Box key={student.id} sx={{ mb: 6 }}>
+                <Certificate 
+                  data={student} 
+                  school={school} 
+                  session={session || String(new Date().getFullYear())} 
+                />
+              </Box>
+            ))}
           </Box>
         </Box>
       )}
+
+      <InputGuidance
+        steps={guidanceSteps}
+        activeStep={activeStep}
+        onStepComplete={() => setActiveStep(prev => prev + 1)}
+      />
     </Box>
   );
 }

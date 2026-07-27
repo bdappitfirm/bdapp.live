@@ -1,147 +1,239 @@
 // src/utils/api.js
 import axios from 'axios';
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './auth';
+import { getCachedApiResponse, cacheApiResponse, queueRequest, db } from './offlineDb';
 
+/**
+ * Smart Offline Fallback Logic:
+ * Provides filtered data from Dexie tables when URL-based cache misses.
+ */
+const smartOfflineFallback = async (config) => {
+  try {
+    const url = config.url || '';
+    const params = config.params || {};
+
+    // 1. Students list with filters
+    if (url.includes('/api/academics/students/')) {
+      const { classroom, section } = params;
+      let students = await db.students.toArray();
+      if (classroom) students = students.filter(s => String(s.classroom_id || s.classroom?.id || s.classroom) === String(classroom));
+      if (section) students = students.filter(s => String(s.section_id || s.section?.id || s.section) === String(section));
+
+      // Basic sorting by roll number
+      students.sort((a, b) => {
+        const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
+        const br = parseInt(String(b.roll_number || '').replace(/\D/g, ''), 10);
+        return (isNaN(ar) ? 0 : ar) - (isNaN(br) ? 0 : br);
+      });
+
+      return { results: students, count: students.length };
+    }
+
+    // 2. Results list with filters
+    if (url.includes('/api/results/results/')) {
+      const { examination, student, subject } = params;
+      let results = await db.results.toArray();
+      if (examination) results = results.filter(r => String(r.examination_id || r.examination?.id || r.examination) === String(examination));
+      if (student) results = results.filter(r => String(r.student_id || r.student?.id || r.student) === String(student));
+      if (subject) results = results.filter(r => String(r.subject_id || r.subject?.id || r.subject) === String(subject));
+      return { results, count: results.length };
+    }
+
+    // 3. Metadata tables
+    const tableMap = {
+      '/api/academics/classrooms/': 'classrooms',
+      '/api/academics/sections/': 'sections',
+      '/api/academics/subjects/': 'subjects',
+      '/api/users/teachers/': 'teachers',
+      '/api/results/examinations/': 'examinations',
+      '/api/fees/fees/': 'fees',
+      '/api/results/results/': 'results'
+    };
+
+    for (const [path, table] of Object.entries(tableMap)) {
+      if (url.includes(path)) {
+        let data = await db[table].toArray();
+        // Simple filtering for sections/subjects by classroom
+        if (params.classroom && (table === 'sections' || table === 'subjects' || table === 'examinations')) {
+          data = data.filter(item => String(item.classroom_id || item.classroom?.id || item.classroom) === String(params.classroom));
+        }
+        return Array.isArray(data) ? { results: data, count: data.length } : data;
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.error('Smart fallback error:', e);
+    return null;
+  }
+};
+
+/**
+ * API Engine with Offline Support.
+ */
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : ''),
+  baseURL: localStorage.getItem('api_base_url') || process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : ''),
   timeout: 60000,
   withCredentials: true,
-  headers: {
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-  },
 });
 
-// Request interceptor to add auth token and CSRF token
+/**
+ * Normalizes URL and Params into a unique, environment-independent cache key.
+ * It merges query strings from the URL and the config.params object to ensure consistency.
+ */
+const getCacheKey = (config) => {
+  try {
+    const urlStr = config.url || '';
+    // Use URL object to parse (relative URLs need a base, so we use a dummy one)
+    const dummyBase = 'http://localhost';
+    const url = new URL(urlStr, dummyBase);
+
+    // Merge existing search params with config.params
+    const searchParams = url.searchParams;
+    if (config.params) {
+      Object.keys(config.params).forEach(key => {
+        if (config.params[key] !== undefined && config.params[key] !== null) {
+          searchParams.set(key, String(config.params[key]));
+        }
+      });
+    }
+
+    // Sort params to ensure consistency regardless of insertion order
+    searchParams.sort();
+
+    // pathOnly should not contain the protocol/host
+    const path = url.pathname;
+    const finalParams = searchParams.toString();
+
+    return `${path}${finalParams ? '?' + finalParams : ''}`;
+  } catch (e) {
+    // Fallback for extremely malformed URLs
+    return config.url || '';
+  }
+};
+
+// Request interceptor: Only add auth header
 api.interceptors.request.use(
   (config) => {
-    try {
-      // If sending FormData, let the browser set the multipart boundary
-      const isFormData = (d) => {
-        if (!d) return false;
-        if (typeof FormData !== 'undefined' && d instanceof FormData) return true;
-        return typeof d.append === 'function' && (d[Symbol.toStringTag] === 'FormData' || d.constructor?.name === 'FormData');
-      };
-      if (isFormData(config.data)) {
-        if (config.headers && config.headers['Content-Type']) {
-          delete config.headers['Content-Type'];
-        }
-      }
-
-      const token = getAccessToken();
-      const method = (config.method || 'get').toLowerCase();
-      const urlPath = (config.url || '').toString();
-      const isPublicGet =
-        method === 'get' &&
-        (
-          /^\/?api\/(v1\/)?schools\/?(\?.*)?$/i.test(urlPath) ||
-          /^\/?api\/(v1\/)?schools\/\d+\/?(\?.*)?$/i.test(urlPath) ||
-          /^\/?api\/(v1\/)?ads\/?(\?.*)?$/i.test(urlPath) ||
-          /^\/?api\/(v1\/)?dashboard-stats\/?(\?.*)?$/i.test(urlPath)
-        );
-      const isAuthEndpoint = /^\/?api\/(token\/?|auth\/login\/?|users\/login\/?)$/i.test(urlPath);
-
-      // If we have a token but this is a public endpoint, we can still try to send the token
-      // for personalization, but the response interceptor will handle retries if it's invalid.
-      if (token && !isAuthEndpoint) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-
-      // Add CSRF token for non-GET requests
-      if (config.method !== 'get' && config.method !== 'GET') {
-        const csrfToken = document.cookie
-          .split('; ')
-          .find(row => row.startsWith('csrftoken='))
-          ?.split('=')[1];
-
-        if (csrfToken) {
-          config.headers['X-CSRFToken'] = csrfToken;
-        }
-      }
-    } catch (e) {
-      console.error('Error in request interceptor:', e);
-    }
+    const token = getAccessToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle token refresh
+// Response interceptor: Cache successful GET responses
 api.interceptors.response.use(
-  (response) => response,
+  async (response) => {
+    const method = response.config.method?.toLowerCase();
+    if (method === 'get' && !response.config._skipCache) {
+      const cacheKey = getCacheKey(response.config);
+      try {
+        // Only cache valid non-empty data
+        if (response.data && (typeof response.data !== 'object' || Object.keys(response.data).length > 0)) {
+          await cacheApiResponse(cacheKey, response.data);
+        }
+      } catch (e) {
+        console.warn('Cache write failed:', e);
+      }
+    } else if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      // Clear cache on mutations to avoid stale data
+      try {
+        await db.genericCache.clear();
+        console.log('🧹 Generic cache cleared due to mutation:', response.config.url);
+      } catch (e) {
+        console.warn('Cache clear failed:', e);
+      }
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+    if (!originalRequest) return Promise.reject(error);
 
-    // Retry GET requests on timeout or transient server errors
-    const isGet = (originalRequest?.method || '').toLowerCase() === 'get';
-    const status = error.response?.status;
-    const isTimeout = error.code === 'ECONNABORTED';
-    const isTransient = status === 502 || status === 503 || status === 504;
-    if (isGet && (isTimeout || isTransient)) {
-      originalRequest._retryCount = originalRequest._retryCount || 0;
-      if (originalRequest._retryCount < 2) {
-        originalRequest._retryCount += 1;
-        const backoffMs = 500 * Math.pow(2, originalRequest._retryCount - 1);
-        await new Promise((res) => setTimeout(res, backoffMs));
-        return api(originalRequest);
+    // If request failed (network error, timeout, or certain server errors)
+    const isNetworkError = !error.response || error.code === 'ECONNABORTED' || error.message === 'Network Error';
+    const isServerError = error.response && [500, 502, 503, 504].includes(error.response.status);
+    const isAuthError = error.response && error.response.status === 401;
+
+    // 1. If GET failed, try to use cached data as fallback
+    // Don't fallback for auth errors (401) to prevent showing stale private data
+    if (originalRequest.method?.toLowerCase() === 'get' && !originalRequest._skipCache && !isAuthError) {
+      const cacheKey = getCacheKey(originalRequest);
+      try {
+        // Try exact URL match first
+        let cached = await getCachedApiResponse(cacheKey);
+
+        // If exact match fails, try Smart Fallback for known endpoints
+        if (!cached) {
+          cached = await smartOfflineFallback(originalRequest);
+        }
+
+        // Stricter validation: Ensure data is not null, empty object, or empty array
+        const hasData = cached && (
+          (Array.isArray(cached) && cached.length > 0) ||
+          (Array.isArray(cached?.results) && cached.results.length > 0) ||
+          (typeof cached === 'object' && Object.keys(cached).length > 0 && !(cached instanceof Date))
+        );
+
+        if (hasData) {
+          console.log('📦 Serving from Offline Cache fallback:', cacheKey);
+          return {
+            data: cached,
+            status: 200,
+            statusText: 'OK (From Cache)',
+            headers: { 'x-from-cache': 'true' },
+            config: originalRequest,
+            request: {},
+          };
+        } else {
+            console.warn('📦 Cache miss or invalid data for:', cacheKey);
+        }
+      } catch (e) {
+        console.warn('Fallback cache read failed:', e);
       }
     }
 
-    // If it's a 401 on a public GET endpoint, immediately retry without Authorization
-    const urlPath = (originalRequest?.url || '').toString();
-    const isPublicGet = (originalRequest?.method || '').toLowerCase() === 'get' &&
-      (
-        /^\/?api\/(v1\/)?schools\/?(\?.*)?$/i.test(urlPath) ||
-        /^\/?api\/(v1\/)?schools\/\d+\/?(\?.*)?$/i.test(urlPath) ||
-        /^\/?api\/(v1\/)?ads\/?(\?.*)?$/i.test(urlPath) ||
-        /^\/?api\/(v1\/)?dashboard-stats\/?(\?.*)?$/i.test(urlPath)
-      );
-
-    if ((error.response?.status === 401 || error.response?.status === 403) && isPublicGet && !originalRequest._retryNoAuth) {
-      originalRequest._retryNoAuth = true;
-      if (originalRequest.headers) {
-        delete originalRequest.headers.Authorization;
-      }
-      return api(originalRequest);
+    // 2. Handle offline for mutations (POST, PUT, PATCH, DELETE)
+    const isMutation = ['post', 'put', 'patch', 'delete'].includes(originalRequest.method?.toLowerCase());
+    // Queue if network error OR server is temporarily unavailable (502, 503, 504)
+    // IMPORTANT: Don't queue if the request already has _isSyncRetry flag to avoid infinite loop
+    if (isMutation && !originalRequest._isSyncRetry && (isNetworkError || (isServerError && error.response.status !== 500))) {
+       console.log('📡 Network/Server error, queuing mutation for sync:', originalRequest.url);
+       try {
+         await queueRequest(originalRequest.url, originalRequest.method, originalRequest.data);
+         return {
+           data: { message: 'Queued for sync', offline: true },
+           status: 202,
+           statusText: 'Accepted (Offline)',
+           headers: {},
+           config: originalRequest,
+           request: {},
+         };
+       } catch (syncErr) {
+         console.error('Failed to queue request:', syncErr);
+       }
     }
 
-    // If error is 401 and we haven't tried to refresh yet
+    // Auth 401 refresh logic
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
+      const refreshToken = getRefreshToken();
+
+      if (!refreshToken) {
+        clearTokens();
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
 
       try {
-        const refreshToken = getRefreshToken();
-        if (refreshToken) {
-          // Try to refresh the token
-          const response = await axios.post(
-            `${(process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '')}/api/token/refresh/`,
-            { refresh: refreshToken },
-            { withCredentials: true }
-          );
-
-          const { access } = response.data;
-          saveTokens(access, refreshToken);
-
-          // Retry the original request with the new token
-          originalRequest.headers.Authorization = `Bearer ${access}`;
-          return api(originalRequest);
-        }
-      } catch (error) {
-        console.error('Token refresh failed:', error);
-        // If refresh fails and this was a GET, try once without Authorization (public endpoints)
-        const isGet = (originalRequest?.method || '').toLowerCase() === 'get';
-        if (isGet && !originalRequest._retryNoAuth) {
-          originalRequest._retryNoAuth = true;
-          // Remove Authorization header and tokens for this retry only
-          if (originalRequest.headers) {
-            delete originalRequest.headers.Authorization;
-          }
-          return api(originalRequest);
-        }
-        // Otherwise, clear tokens and redirect to login
+        const res = await axios.post(`${api.defaults.baseURL}/api/token/refresh/`, { refresh: refreshToken });
+        saveTokens(res.data.access, refreshToken);
+        originalRequest.headers.Authorization = `Bearer ${res.data.access}`;
+        return api(originalRequest);
+      } catch (refreshErr) {
         clearTokens();
         if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
           window.location.href = '/login';
@@ -149,14 +241,6 @@ api.interceptors.response.use(
       }
     }
 
-    // For other errors, just reject with the error
-    // Global error message handling for non-401 errors
-    if (error.response?.status && error.response.status >= 500) {
-      console.error('Server error:', error);
-    } else if (error.code === 'ERR_NETWORK') {
-      console.error('Network error:', error);
-    }
-    
     return Promise.reject(error);
   }
 );

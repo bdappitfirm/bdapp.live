@@ -17,6 +17,10 @@ class AttendanceRecord(models.Model):
         related_name='attendance_taken'
     )
     taken_by_name = models.CharField(max_length=150, blank=True, default='')
+    device_id = models.CharField(max_length=200, blank=True, null=True, help_text="Unique ID of the scanning device")
+    scan_time = models.DateTimeField(null=True, blank=True, help_text="Exact time of the QR scan")
+    session = models.CharField(max_length=50, blank=True, null=True, help_text="Academic year/session")
+    operator_log = models.JSONField(default=dict, blank=True, help_text="Audit log of operators who modified this record")
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     class Meta:
@@ -31,4 +35,4 @@ class AttendanceRecord(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.student.user.username} - {self.date} - {'P' if self.present else 'A'}"
+        return f"{self.student.user.username} - {self.date}"

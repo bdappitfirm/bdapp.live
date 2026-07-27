@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
+import { useAcademics } from '../context/AcademicsContext';
 import {
   Box,
   Typography,
@@ -28,14 +29,14 @@ import CloseIcon from '@mui/icons-material/Close';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import AdmissionCard from '../components/AdmissionCard';
+import InputGuidance from '../components/InputGuidance';
 
 export default function AdmissionCardGenerator() {
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
   const [school, setSchool] = useState(null);
-  const [classrooms, setClassrooms] = useState([]);
-  const [sections, setSections] = useState([]);
-  const [students, setStudents] = useState([]);
+  const { classrooms, sections, refreshAll, students: allStudents } = useAcademics();
+  const [searchResults, setSearchResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
@@ -46,7 +47,30 @@ export default function AdmissionCardGenerator() {
   const [exams, setExams] = useState([]);
   const [loadingExams, setLoadingExams] = useState(false);
   const [examSlots, setExamSlots] = useState([]);
+  const [activeStep, setActiveStep] = useState(0);
 
+  const guidanceSteps = [
+    { selector: '#class-select', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
+    { selector: '#section-select', text: 'সেকশন নির্বাচন করুন', autoNext: false },
+    { selector: '#exam-select', text: 'পরীক্ষা নির্বাচন করুন', autoNext: false },
+    { selector: '#search-button', text: 'এখানে ক্লিক করুন', autoNext: true }
+  ];
+
+  useEffect(() => {
+    if (!classFilter) {
+      setActiveStep(0);
+    } else if (!selectedExam) {
+      setActiveStep(1);
+    } else if (searchResults.length === 0) {
+      setActiveStep(2);
+    } else {
+      setActiveStep(3);
+    }
+  }, [classFilter, selectedExam, searchResults.length]);
+
+  // Filter sections for selected class
+  const filteredSections = classFilter ? sections.filter(sec => String(sec.classroom?.id) === String(classFilter)) : [];
+  
   // Load school data
   useEffect(() => {
     if (!id) return;
@@ -56,25 +80,13 @@ export default function AdmissionCardGenerator() {
         const res = await api.get(`/api/schools/${id}/`);
         setSchool(res.data);
       } catch (err) {
-        console.error('Failed to load school data:', err);
-        showSnackbar('Failed to load school data', 'error');
-      }
-    };
-
-    const loadClassrooms = async () => {
-      try {
-        const res = await api.get(`/api/academics/classrooms/?school=${id}`);
-        const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        setClassrooms(data);
-      } catch (err) {
-        console.error('Failed to load classrooms:', err);
-        showSnackbar('Failed to load classrooms', 'error');
-      }
-    };
-
-    loadSchool();
-    loadClassrooms();
-  }, [id]);
+          console.error('Failed to load school data:', err);
+          showSnackbar('Failed to load school data', 'error');
+        }
+      };
+      loadSchool();
+      refreshAll(id);
+    }, [id, refreshAll]);
 
   // Load examinations for the school (and optionally for selected class)
   useEffect(() => {
@@ -119,22 +131,6 @@ export default function AdmissionCardGenerator() {
     fetchExamSlots();
   }, [id, classFilter, selectedExam]);
 
-  // Load sections when class is selected
-  const loadSections = async (classroomId) => {
-    if (!classroomId) {
-      setSections([]);
-      return;
-    }
-    
-    try {
-      const res = await api.get(`/api/academics/sections/?classroom=${classroomId}`);
-      const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-      setSections(data);
-    } catch (err) {
-      console.error('Failed to load sections:', err);
-      showSnackbar('Failed to load sections', 'error');
-    }
-  };
 
   const searchStudents = async () => {
     if (!selectedExam) {
@@ -144,28 +140,29 @@ export default function AdmissionCardGenerator() {
     
     setLoading(true);
     try {
-      let url = `/api/academics/students/?school=${id}`;
-      
+      let foundStudents = [];
+
       if (searchQuery) {
-        if (/^\d+$/.test(searchQuery)) {
-          url += `&roll_number=${searchQuery}`;
-        } else {
-          url += `&search=${searchQuery}`;
-        }
+        const normalizedQuery = searchQuery.toLowerCase().trim();
+        foundStudents = allStudents.filter(s => 
+          (s.roll_number?.toString().includes(searchQuery)) || 
+          (s.user?.first_name?.toLowerCase().includes(normalizedQuery)) || 
+          (s.user?.last_name?.toLowerCase().includes(normalizedQuery)) || 
+          (s.name?.toLowerCase().includes(normalizedQuery))
+        );
       } else if (classFilter) {
-        url += `&classroom=${classFilter}`;
-        if (sectionFilter) url += `&section=${sectionFilter}`;
+        foundStudents = allStudents.filter(s => String(s.classroom?.id) === String(classFilter));
+        if (sectionFilter) {
+          foundStudents = foundStudents.filter(s => String(s.section?.id) === String(sectionFilter));
+        }
       } else {
         showSnackbar('Please enter search criteria or select class', 'warning');
         setLoading(false);
         return;
       }
-
-      const res = await api.get(url);
-      let data = Array.isArray(res.data) ? res.data : res.data.results || [];
       
       // Map student data to ensure photo URL is in the correct format
-      data = data.map(student => ({
+      foundStudents = foundStudents.map(student => ({
         ...student,
         user: {
           ...student.user,
@@ -175,18 +172,19 @@ export default function AdmissionCardGenerator() {
         }
       }));
       
-      if (data.length === 0) {
+      if (foundStudents.length === 0) {
+        setSearchResults([]);
         showSnackbar('No students found with the specified criteria', 'warning');
       } else {
-        // Sort by roll number if available
-        const sortedData = [...data].sort((a, b) => {
-          if (a.roll_number && b.roll_number) {
-            return parseInt(a.roll_number) - parseInt(b.roll_number);
-          }
-          return 0;
+        // Sort by roll number
+        const sortedData = [...foundStudents].sort((a, b) => {
+          const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+          const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+          if (!isNaN(ar) && !isNaN(br)) return ar - br;
+          return String(a?.roll_number).localeCompare(String(b?.roll_number));
         });
         
-        setStudents(sortedData);
+        setSearchResults(sortedData);
         showSnackbar(`Found ${sortedData.length} student(s)`, 'success');
       }
     } catch (err) {
@@ -232,7 +230,7 @@ export default function AdmissionCardGenerator() {
 
     writeLoadingPage();
 
-    const studentsToPrint = student ? [student] : students;
+    const studentsToPrint = student ? [student] : searchResults;
     if (studentsToPrint.length === 0) {
       showSnackbar('No students to print', 'warning');
       try { printWindow.close(); } catch (_) {}
@@ -375,7 +373,7 @@ export default function AdmissionCardGenerator() {
   };
 
   const handleExportPDF = async (student = null) => {
-    const studentsToExport = student ? [student] : students;
+    const studentsToExport = student ? [student] : searchResults;
     
     if (studentsToExport.length === 0) {
       showSnackbar('No students to export', 'warning');
@@ -489,8 +487,10 @@ export default function AdmissionCardGenerator() {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  const selectedExamData = exams.find(exam => String(exam.id) === String(selectedExam)) || {};
-  console.log('AdmissionCardGenerator: selectedExamData =', selectedExamData);
+  const selectedExamData = useMemo(() =>
+    exams.find(exam => String(exam.id) === String(selectedExam)) || {},
+    [exams, selectedExam]
+  );
 
   useEffect(() => {
     if (!selectedExam) return;
@@ -527,7 +527,7 @@ export default function AdmissionCardGenerator() {
             )}
           </Box>
           
-          {students.length > 0 && (
+          {searchResults.length > 0 && (
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
@@ -571,8 +571,58 @@ export default function AdmissionCardGenerator() {
         </Typography>
         
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <TextField
+              id="class-select"
+              select
+              fullWidth
+              label="Select Class"
+              value={classFilter}
+              onChange={(e) => {
+                    setClassFilter(e.target.value);
+                    setSectionFilter('');
+                    setSearchQuery('');
+                  }}
+              variant="outlined"
+              size="small"
+              required
+            >
+              <MenuItem value="">All Classes</MenuItem>
+              {classrooms.map((cls) => (
+                <MenuItem key={cls.id} value={cls.id}>
+                  {cls.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField
+              id="section-select"
+              select
+              fullWidth
+              label="Select Section"
+              value={sectionFilter}
+              onChange={(e) => {
+                setSectionFilter(e.target.value);
+                setSearchQuery('');
+              }}
+              variant="outlined"
+              size="small"
+              disabled={!classFilter}
+            >
+              <MenuItem value="">All Sections</MenuItem>
+              {filteredSections.map((sec) => (
+                <MenuItem key={sec.id} value={sec.id}>
+                  {sec.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField
+              id="exam-select"
               select
               fullWidth
               label="Select Exam"
@@ -584,7 +634,21 @@ export default function AdmissionCardGenerator() {
               disabled={loadingExams}
             >
               <MenuItem value="">Select an exam</MenuItem>
-              {exams.map((exam) => {
+              {exams
+                .filter(exam => {
+                  const name = (exam.name || '').trim();
+                  const type = (exam.exam_type || '').toLowerCase();
+
+                  if (type === 'half_yearly' || type === 'annual') return true;
+
+                  const parts = name.split('(');
+                  const beforeBracket = parts[0].toLowerCase().trim();
+                  const hasKeywordBefore = beforeBracket.includes('অর্ধ') || beforeBracket.includes('বার্ষিক') ||
+                                         beforeBracket.includes('half') || beforeBracket.includes('yearly') || beforeBracket.includes('annual');
+
+                  return hasKeywordBefore;
+                })
+                .map((exam) => {
                 const yr = (() => {
                   const ay = parseInt(exam.academic_year, 10);
                   if (!Number.isNaN(ay) && ay > 0) return ay;
@@ -600,11 +664,12 @@ export default function AdmissionCardGenerator() {
               })}
             </TextField>
           </Grid>
-          
-          <Grid item xs={12} md={6}>
+
+          <Grid size={{ xs: 12, md: 8 }}>
             <TextField
+              id="skip-to-button"
               fullWidth
-              label="Search by Name or Roll Number"
+              label="Search by Name or Roll Number (Optional)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               variant="outlined"
@@ -614,55 +679,9 @@ export default function AdmissionCardGenerator() {
             />
           </Grid>
           
-          <Grid item xs={12} md={4}>
-            <TextField
-              select
-              fullWidth
-              label="Select Class"
-              value={classFilter}
-              onChange={(e) => {
-                setClassFilter(e.target.value);
-                loadSections(e.target.value);
-                setSectionFilter('');
-                setSearchQuery('');
-              }}
-              variant="outlined"
-              size="small"
-            >
-              <MenuItem value="">All Classes</MenuItem>
-              {classrooms.map((cls) => (
-                <MenuItem key={cls.id} value={cls.id}>
-                  {cls.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          
-          <Grid item xs={12} md={4}>
-            <TextField
-              select
-              fullWidth
-              label="Select Section"
-              value={sectionFilter}
-              onChange={(e) => {
-                setSectionFilter(e.target.value);
-                setSearchQuery('');
-              }}
-              variant="outlined"
-              size="small"
-              disabled={!classFilter}
-            >
-              <MenuItem value="">All Sections</MenuItem>
-              {sections.map((sec) => (
-                <MenuItem key={sec.id} value={sec.id}>
-                  {sec.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          
-          <Grid item xs={12} md={4} sx={{ display: 'flex', alignItems: 'flex-end' }}>
+          <Grid size={{ xs: 12, md: 4 }} sx={{ display: 'flex', alignItems: 'flex-end' }}>
             <Button
+              id="search-button"
               variant="contained"
               color="primary"
               onClick={searchStudents}
@@ -693,11 +712,11 @@ export default function AdmissionCardGenerator() {
       </Paper>
 
       {/* Results */}
-      {students.length > 0 ? (
+      {searchResults.length > 0 ? (
         <Box>
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
             <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-              Found {students.length} Student(s)
+              Found {searchResults.length} Student(s)
             </Typography>
             <Button 
               variant="outlined" 
@@ -711,7 +730,7 @@ export default function AdmissionCardGenerator() {
           </Box>
           
           <Grid container spacing={3}>
-            {students.map((student) => (
+            {searchResults.map((student) => (
               <Grid item xs={12} sm={6} md={4} key={student.id}>
                 <Box position="relative">
                   <Box id={`admission-card-${student.id}`}>
@@ -832,6 +851,12 @@ export default function AdmissionCardGenerator() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <InputGuidance
+        steps={guidanceSteps}
+        activeStep={activeStep}
+        onStepComplete={() => setActiveStep(prev => prev + 1)}
+      />
     </Box>
   );
 }

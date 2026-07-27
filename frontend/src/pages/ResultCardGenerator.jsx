@@ -27,6 +27,23 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import { scopedGet } from '../utils/schoolApi';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
+const UNWANTED_SUBJECTS = [
+  'আরবি', 'বাংলা', 'ভৌৌতবিজ্ঞান', 'ইংরেজি', 'সামাজিক বিজ্ঞান',
+  'ইংরেজী', 'সমাজ', 'ধর্ম', 'ইংরেজি-1', 'ইংরেজি-2', 'বাংলা-1', 'বাংলা-2'
+];
+
+const UNWANTED_KEYWORDS = [
+  'অর্ধ-বার্ষিক', 'বার্ষিক', 'অর্ধবার্ষিক', 'test', 'model test'
+];
+
+const CO_CURRICULAR_SUBJECTS = [
+  'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'Physical Education', 'Physical Education and Health',
+  'ক্যারিয়ার শিক্ষা', 'ক্যারিয়ার শিক্ষা', 'Career Education', 'ক্যারিয়ার', 'ক্যারিয়ার',
+  'Word Collection Achievement Test', 'WCAT',
+  'বই পড়া', 'বই পড়া', 'চারু ও কারুকলা', 'Arts and Crafts',
+  'কর্ম ও জীবনমুখী', 'Life and Work', 'Continuous Assessment', 'ধারাবাহিক মূল্যায়ন'
+];
+
 export default function ResultCardGenerator() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -337,6 +354,10 @@ export default function ResultCardGenerator() {
     }
     const lower = base.toLowerCase();
     const paperNo = (/(১ম|1st|first)/i.test(lower) ? 1 : (/(২য়|২য়|2nd|second)/i.test(lower) ? 2 : null));
+
+    // Distinguish Higher Math from General Math
+    if (lower.includes('উচ্চতর') || lower.includes('higher')) return 'higher_math';
+
     if (/(বাংলা|bangla|bengali)/i.test(lower)) return paperNo ? `bangla__paper${paperNo}` : 'bangla';
     if (/(english|ইংরেজি|ইংরেজী)/i.test(lower)) return paperNo ? `english__paper${paperNo}` : 'english';
     if (/(গণিত|গনিত|math)/i.test(lower)) return paperNo ? `math__paper${paperNo}` : 'math';
@@ -437,8 +458,11 @@ export default function ResultCardGenerator() {
       'তথ্য ও যোগযোগ প্রযুক্তি': { written: 10, mcq: 15, practical: 25 },
       'religion': { written: 70, mcq: 30, practical: 0 },
       'ধর্ম': { written: 70, mcq: 30, practical: 0 },
-      'কৃষি': { written: 50, mcq: 25, practical: 25 },
-      'agriculture': { written: 50, mcq: 25, practical: 25 }
+      'কৃষি': { written: 35, mcq: 15, practical: 0 },
+      'agriculture': { written: 35, mcq: 15, practical: 0 },
+      'কৃষি শিক্ষা': { written: 35, mcq: 15, practical: 0 },
+      'গার্হস্থ্য': { written: 35, mcq: 15, practical: 0 },
+      'home economics': { written: 35, mcq: 15, practical: 0 }
     }
   };
   const getSubjectMaximaForClass = (subjectName) => {
@@ -446,21 +470,42 @@ export default function ResultCardGenerator() {
     if (!grp || grp !== 'six_to_eight') return null;
     const s = canonicalLower(subjectName);
     const keys = Object.keys(SUBJECT_MAXIMA.six_to_eight);
+
+    // 1. Try exact match first
     const hit = keys.find(k => normalizeLower(k) === s);
-    return hit ? SUBJECT_MAXIMA.six_to_eight[hit] : null;
+    if (hit) return SUBJECT_MAXIMA.six_to_eight[hit];
+
+    // 2. Try substring match for Agriculture/Home Economics
+    if (s.includes('কৃষি') || s.includes('agri')) return SUBJECT_MAXIMA.six_to_eight['কৃষি'];
+    if (s.includes('গার্হস্থ্য') || s.includes('home')) return SUBJECT_MAXIMA.six_to_eight['গার্হস্থ্য'];
+
+    return null;
   };
   const getTotalMaxForResult = (r) => {
     const ex = r.examination || {};
     const nm = r.subject?.name || r.subject_name || '';
+
+    // For Class 6-8, ensure we don't accidentally use 200 as total possible
+    const group = getClassGroup();
+    const isNineTen = group === 'nine_ten';
+
     const m = getSubjectMaximaForClass(nm);
     const subjectTotal = m ? (m.written + m.mcq + m.practical) : null;
     const direct = getExamMax(ex);
     const rawTotal = parseFloat(r.total_marks);
     const hasExplicitExMax = (parseFloat(ex?.written_max) || 0) || (parseFloat(ex?.mcq_max) || 0) || (parseFloat(ex?.practical_max) || 0);
+
     if (subjectTotal && !hasExplicitExMax) return subjectTotal;
-    if (Number.isFinite(rawTotal) && rawTotal > 0) return rawTotal;
-    if (hasExplicitExMax) return direct;
-    return subjectTotal || direct || 100;
+
+    let finalMax = 100;
+    if (Number.isFinite(rawTotal) && rawTotal > 0) finalMax = rawTotal;
+    else if (hasExplicitExMax) finalMax = direct;
+    else finalMax = subjectTotal || direct || 100;
+
+    // Safety guard: If NOT Class 9/10, a single subject shouldn't exceed 100 normally
+    if (!isNineTen && finalMax > 100) return 100;
+
+    return finalMax;
   };
 
   const dedupeAndFillResults = (arr, exams) => {
@@ -468,8 +513,30 @@ export default function ResultCardGenerator() {
     
     // Process existing results
     for (const r of (Array.isArray(arr) ? arr : [])) {
-      const nm = normalizeSubjectName(r.subject?.name || r.subject_name || r.examination?.name);
-      if (!nm) continue;
+      let subjName = r.subject?.name || r.subject_name;
+      if (!subjName && r.examination?.name) {
+         // Fallback to exam name only if it doesn't look like a generic exam type
+         const exName = String(r.examination.name).toLowerCase();
+         if (!/(অর্ধ|বার্ষিক|test|model|terminal|half|annual)/.test(exName)) {
+             subjName = r.examination.name;
+         }
+      }
+
+      const nm = normalizeSubjectName(subjName);
+      const isUnwanted = (name) => {
+        const n = String(name || '').trim().toLowerCase();
+        // Exact match check
+        if (UNWANTED_SUBJECTS.some(u => n === u.toLowerCase())) return true;
+
+        // Don't filter out co-curricular subjects even if they contain keywords like 'test'
+        if (CO_CURRICULAR_SUBJECTS.some(sub => n.includes(sub.toLowerCase()))) return false;
+
+        // Keyword contains check
+        if (UNWANTED_KEYWORDS.some(u => n.includes(u.toLowerCase()))) return true;
+        return false;
+      };
+
+      if (!nm || isUnwanted(nm) || isUnwanted(subjName)) continue;
       
       const prev = map.get(nm);
       if (prev) {
@@ -584,6 +651,17 @@ export default function ResultCardGenerator() {
     return Array.from(map.values());
   };
 
+  const getGradeFromCgpa = (cgpa) => {
+    const v = parseFloat(cgpa);
+    if (v >= 5.0) return 'A+';
+    if (v >= 4.0) return 'A';
+    if (v >= 3.5) return 'A-';
+    if (v >= 3.0) return 'B';
+    if (v >= 2.0) return 'C';
+    if (v >= 1.0) return 'D';
+    return 'F';
+  };
+
   const handleSearch = async (examIdOverride = null) => {
     if (!selectedStudent || (!selectedExamType && !examIdOverride)) {
       toast.warning('Please select class, student, and exam type');
@@ -599,7 +677,8 @@ export default function ResultCardGenerator() {
 
       let matchingExams = [];
       if (examIdOverride) {
-        const ex = examinations.find(e => String(e.id) === String(examIdOverride));
+        const exRes = await api.get(`/api/results/examinations/${examIdOverride}/`, { params: { school: id } });
+        const ex = exRes.data;
         matchingExams = ex ? [ex] : [];
       } else {
         const selType = normalizeExamType(selectedExamType);
@@ -636,7 +715,7 @@ export default function ResultCardGenerator() {
             let found = null;
             for (const exId of examIds) {
               try {
-                const exRes = await api.get(`/api/results/examinations/${exId}/`);
+                const exRes = await api.get(`/api/results/examinations/${exId}/`, { params: { school: id } });
                 const ex = exRes.data;
                 if (getClassroomId(ex.classroom) === selectedClass && normalizeExamType(ex.exam_type, ex.name) === sel) {
                   found = ex;
@@ -662,7 +741,7 @@ export default function ResultCardGenerator() {
       let chosenExam = null;
       const possibleExams = [...matchingExams];
       try {
-        const examResList = await Promise.all(matchingExams.map(ex => api.get(`/api/results/examinations/${ex.id}/`).then(r => r.data).catch(() => null)));
+        const examResList = await Promise.all(matchingExams.map(ex => api.get(`/api/results/examinations/${ex.id}/`, { params: { school: id } }).then(r => r.data).catch(() => null)));
         const valid = examResList.filter(Boolean);
         const validSorted = [...valid].sort((a, b) => new Date(b.exam_date || 0) - new Date(a.exam_date || 0));
         chosenExam = validSorted[0] || valid[0] || null;
@@ -690,7 +769,11 @@ export default function ResultCardGenerator() {
         const broadArr = Array.isArray(broadRes.data) ? broadRes.data : (broadRes.data?.results || []);
         
         if (broadArr.length > 0) {
-          fetchedResults = broadArr;
+          // Double verify student ID on frontend to ensure no data leakage from server top-N results
+          fetchedResults = broadArr.filter(r => {
+            const rid = String(r.student?.id || r.student || '');
+            return rid === String(student.id);
+          });
         }
       } catch (err) {
         console.warn('Broad fetch failed, falling back to specific exam fetch', err);
@@ -728,7 +811,7 @@ export default function ResultCardGenerator() {
           return typeof exObj === 'object' ? exObj?.id : exObj;
         }).filter(Boolean)));
         try {
-          const usedExamObjs = await Promise.all(usedExamIds.map(eid => api.get(`/api/results/examinations/${eid}/`).then(r => r.data).catch(() => null)));
+          const usedExamObjs = await Promise.all(usedExamIds.map(eid => api.get(`/api/results/examinations/${eid}/`, { params: { school: id } }).then(r => r.data).catch(() => null)));
           const validUsed = usedExamObjs.filter(Boolean).sort((a, b) => new Date(b.exam_date || 0) - new Date(a.exam_date || 0));
           if (validUsed[0]) setExamination(validUsed[0]);
         } catch (_) {}
@@ -865,24 +948,41 @@ export default function ResultCardGenerator() {
           return sum + (rMax > 0 ? rMax : maximaSum);
         }, 0);
         
-        const avgGPA = fetchedResults.reduce((sum, r) => sum + (parseFloat(r.gpa) || 0), 0) / fetchedResults.length;
+        // Accurate GPA calculation with grouping
+        const grouped = {};
+        const UNWANTED = [...UNWANTED_SUBJECTS, ...CO_CURRICULAR_SUBJECTS];
+
+        fetchedResults.forEach(r => {
+          const name = (r.subject?.name || r.subject_name || '').toLowerCase();
+          if (UNWANTED.some(u => name.includes(u.toLowerCase()))) return;
+          if (r.is_optional || (name.includes('optional') || name.includes('ঐচ্ছিক'))) return;
+
+          let baseName = name;
+          if (name.includes('bangla') || name.includes('বাংলা')) baseName = 'bangla';
+          else if (name.includes('english') || name.includes('ইংরেজি') || name.includes('ইংরেজী')) baseName = 'english';
+
+          if (!grouped[baseName]) grouped[baseName] = [];
+          grouped[baseName].push(parseFloat(r.gpa) || 0);
+        });
+
+        let sumGP = 0;
+        const subCount = Object.keys(grouped).length;
+        Object.values(grouped).forEach(gpas => {
+          sumGP += gpas.reduce((a, b) => a + b, 0) / gpas.length;
+        });
+
         const percentage = totalPossible > 0 ? (totalObtained / totalPossible * 100).toFixed(2) : 0;
         const isPassed = fetchedResults.every(r => r.is_passed);
         
-        let grade = 'F';
-        if (avgGPA >= 5.0) grade = 'A+';
-        else if (avgGPA >= 4.0) grade = 'A';
-        else if (avgGPA >= 3.5) grade = 'A-';
-        else if (avgGPA >= 3.0) grade = 'B';
-        else if (avgGPA >= 2.0) grade = 'C';
-        else if (avgGPA >= 1.0) grade = 'D';
+        const finalGPA = subCount > 0 ? Math.min(5, sumGP / subCount) : 0;
+        const grade = calculateGradeAndGPA(totalObtained, totalPossible).grade; // Fallback to percentage-based grade if GP average is tricky
         
         overall = {
           total_marks_obtained: totalObtained.toFixed(2),
           total_marks_possible: totalPossible.toFixed(2),
           percentage: percentage,
-          cgpa: avgGPA.toFixed(2),
-          grade: grade,
+          cgpa: finalGPA.toFixed(2),
+          grade: getGradeFromCgpa(finalGPA),
           is_passed: isPassed,
           rank: null
         };
@@ -932,36 +1032,74 @@ export default function ResultCardGenerator() {
       toast.warning('Please generate a result card first');
       return;
     }
+    setLoading(true);
     try {
       const cardEl = document.querySelector('.result-card-container');
       if (!cardEl) {
         toast.error('Could not find the result card to export');
+        setLoading(false);
         return;
       }
-      const canvas = await html2canvas(cardEl, { scale: 2, useCORS: true, logging: false });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'pt', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth - 40; // margins
+
+      // Pre-capture preparation: scroll to top
+      const originalScrollY = window.scrollY;
+      window.scrollTo(0, 0);
+
+      const canvas = await html2canvas(cardEl, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          // Fix for MUI elements that might lose color in capture
+          const chips = clonedDoc.querySelectorAll('.MuiChip-root');
+          chips.forEach(chip => {
+            chip.style.opacity = '1';
+            chip.style.visibility = 'visible';
+          });
+
+          const watermarks = clonedDoc.querySelectorAll('.result-card-container > div');
+          watermarks.forEach(div => {
+            if (div.style.opacity === '0.12') {
+              div.style.opacity = '0.08'; // Slightly lower for better PDF readability
+            }
+          });
+        }
+      });
+
+      // Restore scroll
+      window.scrollTo(0, originalScrollY);
+
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      const margin = 10;
+      const imgWidth = pdfWidth - (margin * 2);
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let y = 20;
-      if (imgHeight > pageHeight - 40) {
-        // scale to fit height if needed
-        const scale = (pageHeight - 40) / imgHeight;
-        const scaledWidth = imgWidth * scale;
-        const scaledHeight = imgHeight * scale;
-        const x = (pageWidth - scaledWidth) / 2;
-        pdf.addImage(imgData, 'PNG', x, 20, scaledWidth, scaledHeight);
+
+      // If content is longer than one page
+      if (imgHeight > (pdfHeight - (margin * 2))) {
+        const ratio = (pdfHeight - (margin * 2)) / imgHeight;
+        const scaledWidth = imgWidth * ratio;
+        const x = (pdfWidth - scaledWidth) / 2;
+        pdf.addImage(imgData, 'PNG', x, margin, scaledWidth, pdfHeight - (margin * 2));
       } else {
-        const x = (pageWidth - imgWidth) / 2;
-        pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+        const x = (pdfWidth - imgWidth) / 2;
+        pdf.addImage(imgData, 'PNG', x, margin, imgWidth, imgHeight);
       }
-      pdf.save(`result-card-${studentData.student?.user?.username || 'student'}.pdf`);
-      toast.success('PDF downloaded');
+
+      const fileName = `result-card-${studentData.student?.user?.username || 'student'}.pdf`;
+      pdf.save(fileName);
+      toast.success('PDF ডাউনলোড সফল হয়েছে');
     } catch (e) {
       console.error('PDF generation error:', e);
-      toast.error('Failed to generate PDF.');
+      toast.error('পিডিএফ তৈরি করতে সমস্যা হয়েছে।');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -987,7 +1125,7 @@ export default function ResultCardGenerator() {
       }
       let chosenExam = null;
       try {
-        const examResList = await Promise.all(matchingExams.map(ex => api.get(`/api/results/examinations/${ex.id}/`).then(r => r.data).catch(() => null)));
+        const examResList = await Promise.all(matchingExams.map(ex => api.get(`/api/results/examinations/${ex.id}/`, { params: { school: id } }).then(r => r.data).catch(() => null)));
         const valid = examResList.filter(Boolean);
         const validSorted = [...valid].sort((a, b) => new Date(b.exam_date || 0) - new Date(a.exam_date || 0));
         chosenExam = validSorted[0] || valid[0] || null;
@@ -1137,6 +1275,37 @@ export default function ResultCardGenerator() {
       } catch (_) {
         overall = null;
       }
+
+      // IMPROVED FALLBACK FOR BULK
+      if (!overall && merged.length > 0) {
+        const totalObtained = merged.reduce((sum, r) => sum + (parseFloat(r.total_obtained) || 0), 0);
+        const totalPossible = merged.reduce((sum, r) => sum + (parseFloat(r.total_marks) || 100), 0);
+
+        const grouped = {};
+        merged.forEach(r => {
+          const name = (r.subject?.name || r.subject_name || '').toLowerCase();
+          let baseName = name;
+          if (name.includes('bangla') || name.includes('বাংলা')) baseName = 'bangla';
+          else if (name.includes('english') || name.includes('ইংরেজি') || name.includes('ইংরেজী')) baseName = 'english';
+          if (!grouped[baseName]) grouped[baseName] = [];
+          grouped[baseName].push(parseFloat(r.gpa) || 0);
+        });
+
+        let sumGP = 0;
+        const subCount = Object.keys(grouped).length;
+        Object.values(grouped).forEach(gpas => {
+          sumGP += gpas.reduce((a, b) => a + b, 0) / gpas.length;
+        });
+
+        const finalGPA = subCount > 0 ? Math.min(5, sumGP / subCount) : 0;
+        overall = {
+          total_marks_obtained: totalObtained,
+          total_marks_possible: totalPossible,
+          cgpa: finalGPA.toFixed(2),
+          grade: getGradeFromCgpa(finalGPA),
+          is_passed: merged.every(r => r.is_passed)
+        };
+      }
       const examObj = chosenExam || (merged.length ? merged[0]?.examination : null);
       return {
         studentData: { student },
@@ -1166,7 +1335,10 @@ export default function ResultCardGenerator() {
         return String(secId || '') === String(selectedSection || '');
       });
       const cards = [];
+      const studentIdsDone = new Set();
       for (const s of list) {
+        if (studentIdsDone.has(s.id)) continue;
+        studentIdsDone.add(s.id);
         const card = await buildCardForStudent(s.id);
         if (card) {
           cards.push(card);
@@ -1188,8 +1360,58 @@ export default function ResultCardGenerator() {
       toast.warning('প্রিন্ট করার জন্য কার্ড তৈরি করুন');
       return;
     }
-    toast.info('প্রিন্ট ডায়ালগ খুলছে...');
-    setTimeout(() => window.print(), 100);
+
+    toast.info('প্রিন্ট ডায়ালগ খুলছে, দয়া করে অপেক্ষা করুন...');
+
+    // Instead of setting states which causes re-renders, we use CSS classes
+    document.body.classList.add('bulk-print-active');
+
+    setTimeout(() => {
+      window.print();
+      document.body.classList.remove('bulk-print-active');
+    }, 1500);
+  };
+
+  const handleDownloadBulkPDF = async () => {
+    if (!bulkCards.length) {
+      toast.warning('ডাউনলোড করার জন্য আগে বাল্ক কার্ড জেনারেট করুন');
+      return;
+    }
+    setLoading(true);
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5;
+
+      // Temporary div to render cards one by one for capture
+      const container = document.querySelector('.bulk-print-mode');
+      const cardElements = container.querySelectorAll('.result-card-container');
+
+      for (let i = 0; i < cardElements.length; i++) {
+        const canvas = await html2canvas(cardElements[i], {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/png', 0.8);
+        const imgWidth = pdfWidth - (margin * 2);
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        if (i > 0) pdf.addPage();
+
+        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - (margin * 2)));
+      }
+
+      pdf.save(`bulk-result-cards-${selectedClass}-${selectedSection}.pdf`);
+      toast.success('সব কার্ড পিডিএফ হিসেবে ডাউনলোড হয়েছে');
+    } catch (e) {
+      console.error('Bulk PDF error:', e);
+      toast.error('বাল্ক পিডিএফ ডাউনলোড করতে সমস্যা হয়েছে');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReset = () => {
@@ -1394,45 +1616,58 @@ export default function ResultCardGenerator() {
           >
             {loading ? 'তৈরি হচ্ছে...' : 'রেজাল্ট কার্ড তৈরি করুন'}
           </Button>
+
+          <Button
+            variant="outlined"
+            startIcon={<PrintIcon />}
+            onClick={handleGenerateBulkCards}
+            color="secondary"
+            disabled={!selectedSection || bulkLoading || !selectedExamType}
+          >
+            {bulkLoading ? 'লোড হচ্ছে...' : 'সেকশনের সব কার্ড তৈরি'}
+          </Button>
           
           {studentData && (
+            <Button
+              variant="outlined"
+              startIcon={<PrintIcon />}
+              onClick={handlePrint}
+              color="primary"
+            >
+              প্রিন্ট
+            </Button>
+          )}
+
+          {bulkCards.length > 0 && (
             <>
               <Button
-                variant="outlined"
+                variant="contained"
                 startIcon={<PrintIcon />}
-                onClick={handlePrint}
-                color="primary"
+                onClick={handleBulkPrint}
+                color="success"
               >
-                প্রিন্ট
+                সব কার্ড প্রিন্ট
               </Button>
               <Button
-                variant="outlined"
-                startIcon={<PrintIcon />}
-                onClick={handleGenerateBulkCards}
-                color="secondary"
-                disabled={!selectedSection || bulkLoading}
-              >
-                {bulkLoading ? 'লোড হচ্ছে...' : 'সেকশনের সব কার্ড তৈরি'}
-              </Button>
-              {bulkCards.length > 0 && (
-                <Button
-                  variant="contained"
-                  startIcon={<PrintIcon />}
-                  onClick={handleBulkPrint}
-                  color="success"
-                >
-                  সব কার্ড প্রিন্ট
-                </Button>
-              )}
-              <Button
-                variant="outlined"
+                variant="contained"
                 startIcon={<DownloadIcon />}
-                onClick={handleDownloadPDF}
-                color="secondary"
+                onClick={handleDownloadBulkPDF}
+                color="info"
               >
-                পিডিএফ ডাউনলোড
+                সব পিডিএফ ডাউনলোড
               </Button>
             </>
+          )}
+
+          {studentData && (
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={handleDownloadPDF}
+              color="secondary"
+            >
+              পিডিএফ ডাউনলোড
+            </Button>
           )}
           
           <Button
@@ -1467,42 +1702,82 @@ export default function ResultCardGenerator() {
       
 
       {/* Result Card Display */}
-      {studentData ? (
-        <>
-          <ResultCard
-            studentData={studentData}
-            results={results}
-            overallResult={overallResult}
-            examination={overrideLogo ? { ...(examination || {}), school_logo: overrideLogo } : examination}
-            school={school || {}}
-            schoolId={id}
-          />
-          {bulkCards.length > 0 && (
-            <Box sx={{ mt: 4 }} className="bulk-print-mode">
-              {bulkCards.map((card, idx) => (
-                <Box key={idx} className="bulk-sheet">
-                  <Box className="bulk-card-wrap">
-                    <ResultCard
-                      studentData={card.studentData}
-                      results={card.results}
-                      overallResult={card.overallResult}
-                      examination={card.examination}
-                      school={school || {}}
-                      schoolId={id}
-                    />
-                  </Box>
+      <Box className="result-display-area">
+        {studentData && (
+          <Box className="single-card-view">
+            <ResultCard
+              studentData={studentData}
+              results={results}
+              overallResult={overallResult}
+              examination={overrideLogo ? { ...(examination || {}), school_logo: overrideLogo } : examination}
+              school={school || {}}
+              schoolId={id}
+            />
+          </Box>
+        )}
+
+        {bulkCards.length > 0 && (
+          <Box sx={{ mt: studentData ? 8 : 0 }} className="bulk-print-mode">
+            {bulkCards.map((card, idx) => (
+              <Box key={`${card.studentData.student.id}-${idx}`} className="bulk-sheet">
+                <Box className="bulk-card-wrap">
+                  <ResultCard
+                    studentData={card.studentData}
+                    results={card.results}
+                    overallResult={card.overallResult}
+                    examination={card.examination}
+                    school={school || {}}
+                    schoolId={id}
+                  />
                 </Box>
-              ))}
-            </Box>
-          )}
-        </>
-      ) : (
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      {!studentData && bulkCards.length === 0 && (
         <EmptyState
           icon={AssessmentIcon}
           title={noYearMessage ? "রেজাল্ট পাওয়া যায়নি" : "কোনো রেজাল্ট কার্ড তৈরি হয়নি"}
           message={noYearMessage || "সব বিষয়ে রেজাল্ট কার্ড তৈরির জন্য শ্রেণি, শিক্ষার্থী এবং পরীক্ষার ধরন নির্বাচন করুন"}
         />
       )}
+      <style>
+        {`
+          @media print {
+            .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiSnackbar-root, .MuiAlert-root {
+              display: none !important;
+            }
+
+            body, html {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+
+            .result-display-area {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+
+            .bulk-sheet {
+              page-break-after: always !important;
+              break-after: page !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+
+            .bulk-card-wrap {
+              width: 100% !important;
+              display: flex !important;
+              justify-content: center !important;
+            }
+          }
+        `}
+      </style>
     </Box>
   );
 }

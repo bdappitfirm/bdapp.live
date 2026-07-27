@@ -32,11 +32,25 @@ export const normalizeNumberInput = (input) => {
 export const canEdit = (user, itemUserId = null, itemRole = null) => {
   if (!user) return false;
   
-  const username = String(user.username || '').toLowerCase();
-  const role = String(user.role || '').toLowerCase();
+  const normalize = (u) => String(u || '').toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  const username = normalize(user.username);
+  const role = String(user.role || user.profile?.effective_role || user.profile?.role || '').toLowerCase();
+  const designation = String(user.profile?.designation || '').toLowerCase();
   
   // Principal (shamir), Superuser (bdadmin) or Admin can edit anything
-  if (username === 'shamir' || username === 'bdadmin' || user.is_superuser || role === 'admin' || role === 'superadmin' || user.is_staff) {
+  if (
+    username === 'shamir' || 
+    username === 'bdadmin' || 
+    username === 'umor' ||
+    user.is_superuser ||
+    role === 'admin' || 
+    role === 'superadmin' || 
+    role === 'super_admin' ||
+    user.is_staff ||
+    designation.includes('প্রধান') || 
+    designation.includes('principal') || 
+    designation.includes('headmaster')
+  ) {
     return true;
   }
   
@@ -55,11 +69,25 @@ export const canEdit = (user, itemUserId = null, itemRole = null) => {
 export const canDelete = (user, itemUserId = null, itemRole = null) => {
   if (!user) return false;
   
-  const username = String(user.username || '').toLowerCase();
-  const role = String(user.role || '').toLowerCase();
+  const normalize = (u) => String(u || '').toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  const username = normalize(user.username);
+  const role = String(user.role || user.profile?.effective_role || user.profile?.role || '').toLowerCase();
+  const designation = String(user.profile?.designation || '').toLowerCase();
   
   // Principal (shamir), Superuser (bdadmin) or Admin can delete anything
-  if (username === 'shamir' || username === 'bdadmin' || user.is_superuser || role === 'admin' || role === 'superadmin' || user.is_staff) {
+  if (
+    username === 'shamir' || 
+    username === 'bdadmin' || 
+    username === 'umor' ||
+    user.is_superuser ||
+    role === 'admin' || 
+    role === 'superadmin' || 
+    role === 'super_admin' ||
+    user.is_staff ||
+    designation.includes('প্রধান') || 
+    designation.includes('principal') || 
+    designation.includes('headmaster')
+  ) {
     return true;
   }
   
@@ -79,4 +107,41 @@ export const canEditResult = (user, subjectTeacherId = null) => {
 export const canViewAll = (user) => {
   if (!user) return false;
   return user.is_superuser || user.role === 'admin' || user.role === 'teacher';
+};
+
+// Global helper to combine first and last names while removing duplicates (Bangla-aware)
+export const getCleanDisplayName = (firstName, lastName, fallback = '') => {
+  const fn = (firstName || '').trim();
+  const ln = (lastName || '').trim();
+
+  if (!fn) return ln || fallback;
+  if (!ln) return fn || fallback;
+
+  // Split into words
+  const words = `${fn} ${ln}`.split(/\s+/).filter(w => w.trim() !== '');
+
+  const result = [];
+  const seenBase = new Set();
+
+  // Bangla normalization helper: removes vowel signs (kar) to catch variations like মীম/মিম
+  const getBase = (str) => {
+    return str.toLowerCase()
+      .replace(/[্ািীুূৃেৈোৌৗ]/g, '') // Remove Bangla vowels
+      .replace(/[yhw]/g, '')        // Remove common English silent letters
+      .trim();
+  };
+
+  for (const word of words) {
+    const base = getBase(word);
+    if (base && !seenBase.has(base)) {
+      seenBase.add(base);
+      result.push(word);
+    } else if (!base && !seenBase.has(word.toLowerCase())) {
+      // For non-Bangla words with no "base" (unlikely)
+      seenBase.add(word.toLowerCase());
+      result.push(word);
+    }
+  }
+
+  return result.join(' ');
 };

@@ -8,46 +8,134 @@ import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
-import { isAuthenticated, clearTokens } from './utils/auth';
+import { isAuthenticated } from './utils/auth';
 import { CircularProgress, Box, Typography } from '@mui/material';
+import SyncManager from './components/SyncManager';
+import {
+  Paper, Stack, Button
+} from '@mui/material';
 
-const APP_VERSION = '1.0.5'; // Increment this to force cache clear on next load
+const GlobalInstallPrompt = () => {
+  const [deferredPrompt, setDeferredPrompt] = React.useState(null);
+  const [showPrompt, setShowPrompt] = React.useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setDeferredPrompt(e);
+      // Update UI notify the user they can install the PWA
+      setShowPrompt(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    // Show the install prompt
+    deferredPrompt.prompt();
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
+    // We've used the prompt, and can't use it again, throw it away
+    setDeferredPrompt(null);
+    setShowPrompt(false);
+  };
+
+  if (!showPrompt) return null;
+
+  return (
+    <Paper
+      elevation={10}
+      sx={{
+        position: 'fixed',
+        top: 10,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 99999,
+        p: 1.5,
+        width: { xs: '95%', sm: 'auto' },
+        minWidth: { sm: 400 },
+        borderRadius: 2,
+        background: 'linear-gradient(135deg, #1a237e 0%, #3949ab 100%)',
+        color: 'white',
+        border: '1px solid rgba(255,255,255,0.2)'
+      }}
+    >
+      <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>সহজ ব্যবহারের জন্য অ্যাপটি ইনস্টল করুন!</Typography>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="contained"
+            size="small"
+            sx={{ bgcolor: 'white', color: '#1a237e', fontWeight: 'bold', '&:hover': { bgcolor: '#f5f5f5' } }}
+            onClick={handleInstallClick}
+          >
+            ইনস্টল
+          </Button>
+          <Button color="inherit" size="small" onClick={() => setShowPrompt(false)}>পরে</Button>
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+};
+
+const APP_VERSION = '2.1.1';
 const CACHE_VERSION_KEY = 'bdapp_cache_version';
 
 const CacheClearer = () => {
+  const location = useLocation();
   useEffect(() => {
     try {
       const storedVersion = localStorage.getItem(CACHE_VERSION_KEY);
-      
-      // If version mismatch or no version stored, clear all cache
-      if (storedVersion !== APP_VERSION) {
-        console.log(`Cache version mismatch (stored: ${storedVersion}, current: ${APP_VERSION}) - clearing cache...`);
-        
-        // Clear all localStorage items except what we want to keep (if any)
-        const keysToKeep = [];
-        const allKeys = Object.keys(localStorage);
-        allKeys.forEach(key => {
-          if (!keysToKeep.includes(key)) {
-            localStorage.removeItem(key);
+      const migrationDone = sessionStorage.getItem('cache_migration_done');
+      const isClearedUrl = location.search.includes('cleared=true');
+
+      if (storedVersion && storedVersion !== APP_VERSION && !migrationDone && !isClearedUrl) {
+        console.log(`Version mismatch: ${storedVersion} -> ${APP_VERSION}. Clearing cache...`);
+
+        const timer = setTimeout(() => {
+          if ('caches' in window) {
+            caches.keys().then((names) => {
+              for (let name of names) caches.delete(name);
+            });
           }
-        });
-        
-        // Clear all sessionStorage
-        sessionStorage.clear();
-        
-        // Clear auth tokens specifically
-        clearTokens();
-        
-        // Set new version
+
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+              for (let r of registrations) r.unregister();
+            });
+          }
+
+          // Save critical info
+          const schoolId = localStorage.getItem('currentSchoolId');
+          const accessToken = localStorage.getItem('accessToken');
+          const refreshToken = localStorage.getItem('refreshToken');
+
+          localStorage.clear();
+
+          if (schoolId) localStorage.setItem('currentSchoolId', schoolId);
+          if (accessToken) localStorage.setItem('accessToken', accessToken);
+          if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+
+          localStorage.setItem(CACHE_VERSION_KEY, APP_VERSION);
+          sessionStorage.setItem('cache_migration_done', 'true');
+
+          window.location.href = window.location.pathname + '?cleared=true';
+        }, 1000);
+
+        return () => clearTimeout(timer);
+      } else if (!storedVersion) {
         localStorage.setItem(CACHE_VERSION_KEY, APP_VERSION);
-        
-        console.log('Cache cleared successfully!');
       }
-    } catch (error) {
-      console.error('Error clearing cache:', error);
-    }
-  }, []);
-  
+    } catch (e) {}
+  }, [location.pathname, location.search]);
   return null;
 };
 
@@ -67,14 +155,21 @@ const CredentialsPage = React.lazy(() => import('./pages/CredentialsPage'));
 const TeacherCardsPage = React.lazy(() => import('./pages/TeacherCardsPage'));
 const SoftwareAssistant = React.lazy(() => import('./pages/SoftwareAssistant.jsx'));
 const StudentsPage = React.lazy(() => import('./pages/StudentsPage'));
+const AddStudentPage = React.lazy(() => import('./pages/AddStudentPage'));
+const EditStudentPage = React.lazy(() => import('./pages/EditStudentPage'));
 const AcademicsPage = React.lazy(() => import('./pages/AcademicsPage'));
 const ParentsPage = React.lazy(() => import('./pages/ParentsPage'));
 const AddParentPage = React.lazy(() => import('./pages/AddParentPage'));
 const ParentDashboard = React.lazy(() => import('./pages/ParentDashboard'));
 const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
 const ResultsPage = React.lazy(() => import('./pages/ResultsPage'));
+const ExaminationsPage = React.lazy(() => import('./pages/ExaminationsPage'));
 const ResultCardGenerator = React.lazy(() => import('./pages/ResultCardGenerator'));
 const RankListPage = React.lazy(() => import('./pages/RankListPage'));
+const ToTListPage = React.lazy(() => import('./pages/ToTListPage'));
+const VoterListPage = React.lazy(() => import('./pages/VoterListPage'));
+const StudentListPage = React.lazy(() => import('./pages/StudentListPage'));
+const SiblingsPage = React.lazy(() => import('./pages/SiblingsPage.jsx'));
 const ClassResultsPage = React.lazy(() => import('./pages/ClassResultsPage'));
 const IDCardGenerator = React.lazy(() => import('./pages/IDCardGenerator'));
 const CertificateGenerator = React.lazy(() => import('./pages/CertificateGenerator'));
@@ -92,13 +187,14 @@ const ReceiptBook = React.lazy(() => import('./components/ReceiptBook'));
 const GroupsPage = React.lazy(() => import('./pages/GroupsPage'));
 const SchoolsPage = React.lazy(() => import('./pages/SchoolsPage'));
 const AttendanceRecordsPage = React.lazy(() => import('./pages/AttendanceRecordsPage'));
-const ExaminationsPage = React.lazy(() => import('./pages/ExaminationsPage'));
-const DebugPage = React.lazy(() => import('./pages/DebugPage'));
 const YearReportPage = React.lazy(() => import('./pages/YearReportPage'));
 const VirtualClassPage = React.lazy(() => import('./pages/VirtualClassPage'));
 const SupportLivePage = React.lazy(() => import('./pages/SupportLive.jsx'));
 const SchoolSettings = React.lazy(() => import('./pages/SchoolSettings.jsx'));
 const SeatAllocationPage = React.lazy(() => import('./pages/SeatAllocationPage.jsx'));
+const WhatsAppSettings = React.lazy(() => import('./pages/WhatsAppSettings.jsx'));
+const BillingPage = React.lazy(() => import('./pages/billing/BillingPage.jsx'));
+const BanbeisPage = React.lazy(() => import('./pages/BanbeisPage.jsx'));
 
 const StartupRedirect = () => {
   const navigate = useNavigate();
@@ -136,13 +232,74 @@ const PathTracker = () => {
   return null;
 };
 
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    try {
+      window.scrollTo(0, 0);
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    } catch (e) {}
+  }, [pathname]);
+  return null;
+};
+
+const OfflineIndicator = () => {
+  const [isOffline, setIsOffline] = React.useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleStatusChange = () => setIsOffline(!navigator.onLine);
+    window.addEventListener('online', handleStatusChange);
+    window.addEventListener('offline', handleStatusChange);
+    return () => {
+      window.removeEventListener('online', handleStatusChange);
+      window.removeEventListener('offline', handleStatusChange);
+    };
+  }, []);
+
+  if (!isOffline) return null;
+
+  return (
+    <Box
+      sx={{
+        position: 'fixed',
+        bottom: 20,
+        right: 20,
+        bgcolor: '#f44336',
+        color: 'white',
+        px: 2,
+        py: 1,
+        borderRadius: 2,
+        zIndex: 10000,
+        boxShadow: 3,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1
+      }}
+    >
+      <Box sx={{ width: 10, height: 10, bgcolor: 'white', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
+      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>অফলাইন মোড</Typography>
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.2); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </Box>
+  );
+};
+
 function App() {
   return (
     <Router>
       <CacheClearer />
+      <GlobalInstallPrompt />
+      <OfflineIndicator />
       <ErrorBoundary>
         <AuthProvider>
           <ToastProvider>
+            <SyncManager />
             <NotificationProvider>
               <SchoolProvider>
                 <AcademicsProvider>
@@ -163,17 +320,23 @@ function App() {
                   }>
                     <StartupRedirect />
                     <PathTracker />
+                    <ScrollToTop />
                     <Routes>
           {/* হোমপেজে WelcomePage */}
           <Route path="/" element={<WelcomePage />} />
 
         {/* স্কুল ড্যাশবোর্ড + nested */}
         <Route path="/school/:id" element={<SchoolDashboard />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Box sx={{ p: 0 }} />} />
+          <Route path="dashboard-stats" element={<Dashboard />} />
           <Route path="teacher" element={<TeachersPage />} />
           <Route path="teacher/add" element={<AddTeacherPage />} />
           <Route path="teacher/cards" element={<TeacherCardsPage />} />
           <Route path="student" element={<StudentsPage />} />
+          <Route path="student/add" element={<AddStudentPage />} />
+          <Route path="student/:studentId/edit" element={<EditStudentPage />} />
+          <Route path="billing" element={<BillingPage />} />
+          <Route path="banbeis" element={<BanbeisPage />} />
           <Route path="promotion" element={<ProtectedRoute allowedRoles={['admin','teacher']}><StudentsPage /></ProtectedRoute>} />
           <Route path="year-report" element={<ProtectedRoute allowedRoles={['admin','teacher']}><YearReportPage /></ProtectedRoute>} />
           <Route path="subjects" element={<SubjectsPage />} />
@@ -193,6 +356,10 @@ function App() {
           <Route path="result-card" element={<ResultCardGenerator />} />
           <Route path="class-results" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ClassResultsPage /></ProtectedRoute>} />
           <Route path="rank-list" element={<RankListPage />} />
+          <Route path="tot-list" element={<ToTListPage />} />
+          <Route path="voter-list" element={<VoterListPage />} />
+          <Route path="student-list" element={<StudentListPage />} />
+          <Route path="siblings" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SiblingsPage /></ProtectedRoute>} />
           <Route path="id-card" element={<IDCardGenerator />} />
           <Route path="certificate" element={<ProtectedRoute allowedRoles={['admin','teacher']}><CertificateGenerator /></ProtectedRoute>} />
           <Route path="admission-cards" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AdmissionCardGenerator /></ProtectedRoute>} />
@@ -202,6 +369,7 @@ function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="admin" element={<RoleDashboard role="admin" />} />
           <Route path="settings" element={<ProtectedRoute allowedRoles={['admin']}><SchoolSettings /></ProtectedRoute>} />
+          <Route path="whatsapp" element={<ProtectedRoute allowedRoles={['admin']}><WhatsAppSettings /></ProtectedRoute>} />
           <Route path="parent" element={<ParentsPage />} />
           <Route path="credentials" element={<ProtectedRoute allowedRoles={['admin']}><CredentialsPage /></ProtectedRoute>} />
           <Route path="parent/add" element={<AddParentPage />} />

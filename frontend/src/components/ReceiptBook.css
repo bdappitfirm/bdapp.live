@@ -206,14 +206,6 @@
 }
 
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  
-  .receipt-copies, .receipt-copies * {
-    visibility: visible;
-  }
-  
   .receipt-copies {
     position: absolute;
     left: 0;

@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { isAuthenticated } from '../utils/auth';
 import {
   Box,
   Typography,
@@ -23,7 +22,6 @@ import PersonIcon from '@mui/icons-material/Person';
 import SaveIcon from '@mui/icons-material/Save';
 import EmailIcon from '@mui/icons-material/Email';
 import PhoneIcon from '@mui/icons-material/Phone';
-import BadgeIcon from '@mui/icons-material/Badge';
 import SchoolIcon from '@mui/icons-material/School';
 import EditIcon from '@mui/icons-material/Edit';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -51,21 +49,18 @@ export default function ProfilePage() {
     school: '',
     classroom: '',
     section: '',
-    category: ''
+    category: '',
+    designation: '',
+    educational_qualification: '',
+    assigned_subject: ''
   });
   const [passwordForm, setPasswordForm] = useState({ old_password: '', new_password: '', confirm_password: '' });
   const [formErrors, setFormErrors] = useState({});
-
-  useEffect(() => {
-    loadProfile();
-    loadOptions();
-  }, []);
-
   const [schools, setSchools] = useState([]);
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
 
-  const loadOptions = async () => {
+  const loadOptions = useCallback(async () => {
     try {
       const [schoolsRes] = await Promise.all([
         api.get('/api/schools/')
@@ -74,9 +69,9 @@ export default function ProfilePage() {
     } catch (e) {
       // ignore
     }
-  };
+  }, []);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
@@ -113,7 +108,10 @@ export default function ProfilePage() {
         school: profileData.school?.id || userData.school || '',
         classroom: profileData.classroom?.id || '',
         section: profileData.section?.id || '',
-        category: profileData.category?.id || profileData.category || ''
+        category: profileData.category?.id || profileData.category || '',
+        designation: profileData.designation || '',
+        educational_qualification: profileData.educational_qualification || '',
+        assigned_subject: profileData.assigned_subject || userData.assigned_subject || ''
       });
       
       toast.success('Profile loaded successfully');
@@ -138,7 +136,13 @@ export default function ProfilePage() {
       toast.error('Failed to load profile: ' + (err.message || 'Unknown error'));
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (!id) return;
+    loadProfile();
+    loadOptions();
+  }, [id]); // Only load when ID changes
 
   const handlePhotoChange = async (file) => {
     if (!file) {
@@ -276,8 +280,18 @@ export default function ProfilePage() {
         const userData = ures.data.user || ures.data;
         setUser(userData);
 
-        // Update profile fields (gender etc)
-        await api.patch('/api/users/profile/', { gender: formData.gender });
+        // Update profile fields (designation, education, gender etc)
+        const profilePayload = {
+          gender: formData.gender,
+          designation: formData.designation,
+          educational_qualification: formData.educational_qualification,
+          assigned_subject: formData.assigned_subject,
+          category: formData.category,
+          school: formData.school,
+          classroom: formData.classroom || null,
+          section: formData.section || null
+        };
+        await api.patch('/api/users/profile/', profilePayload);
 
         // Change password if provided
         if (passwordForm.new_password) {
@@ -478,6 +492,28 @@ export default function ProfilePage() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Added Class, Section and Subject to Profile Card */}
+              {(formData.classroom || formData.designation) && (
+                <Card variant="outlined" sx={{ textAlign: 'left', bgcolor: '#f0f4ff' }}>
+                  <CardContent sx={{ py: 1.5 }}>
+                    <Stack spacing={1}>
+                      {formData.designation && (
+                        <Typography variant="body2"><b>Designation:</b> {formData.designation}</Typography>
+                      )}
+                      {formData.classroom && (
+                        <Typography variant="body2">
+                          <b>Assignment:</b> Class {classes.find(c => c.id === formData.classroom)?.name || formData.classroom}
+                          {formData.section && ` (${sections.find(s => s.id === formData.section)?.name || formData.section})`}
+                        </Typography>
+                      )}
+                      {formData.assigned_subject && (
+                        <Typography variant="body2"><b>Subject:</b> {formData.assigned_subject}</Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              )}
             </Stack>
           </Paper>
         </Grid>
@@ -495,10 +531,6 @@ export default function ProfilePage() {
                   variant="contained" 
                   startIcon={<EditIcon />}
                   onClick={() => {
-                    if (!isAuthenticated()) {
-                      navigate('/login');
-                      return;
-                    }
                     setEditing(true);
                   }}
                   sx={{ borderRadius: 2 }}
@@ -569,6 +601,27 @@ export default function ProfilePage() {
                   disabled={!editing}
                   error={!!formErrors.username}
                   helperText={formErrors.username || ''}
+                />
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Designation"
+                  name="designation"
+                  value={formData.designation}
+                  onChange={handleInputChange}
+                  fullWidth
+                  disabled={!editing}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Educational Qualification"
+                  name="educational_qualification"
+                  value={formData.educational_qualification}
+                  onChange={handleInputChange}
+                  fullWidth
+                  disabled={!editing}
                 />
               </Grid>
 
@@ -672,6 +725,17 @@ export default function ProfilePage() {
                   helperText={formErrors.category || 'Optional'}
                 />
               </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Assigned Subject"
+                  name="assigned_subject"
+                  value={formData.assigned_subject}
+                  onChange={handleInputChange}
+                  disabled={!editing}
+                  fullWidth
+                  placeholder="e.g. Mathematics"
+                />
+              </Grid>
             </Grid>
 
             {editing && (
@@ -697,7 +761,9 @@ export default function ProfilePage() {
                       classroom: profile?.classroom?.id || '',
                       section: profile?.section?.id || '',
                       gender: profile?.gender || '',
-                      category: profile?.category || ''
+                      category: profile?.category || '',
+                      designation: profile?.designation || '',
+                      educational_qualification: profile?.educational_qualification || ''
                     });
                     setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });
                   }}

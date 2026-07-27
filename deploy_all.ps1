@@ -90,21 +90,19 @@ if (-not $NoBackend) {
         "requirements.txt",
         "scripts",
         "fix_all.sh",
+        "fix_database_marks.py",
+        "fix_optional_subjects.py",
+        "fix_db_schema.py",
+        "cleanup_students.py",
+        "cleanup_orphaned_students.py",
         "restore_db.sh",
         "nginx_setup.sh",
         "gunicorn_setup.sh",
-        "deploy_rsync_vps.sh"
+        "deploy_rsync_vps.sh",
+        "school_19_students.json"
     )
-    if (Test-Path "media") {
-        Write-Host "Including media folder..." -ForegroundColor Yellow
-        $includes += "media"
-    }
-    if (Test-Path "static") {
-        Write-Host "Including static folder..." -ForegroundColor Yellow
-        $includes += "static"
-    }
     if (Test-Path "backend_minimal.tar") { Remove-Item "backend_minimal.tar" -Force }
-    tar -cf backend_minimal.tar @includes
+    tar -cf backend_minimal.tar --exclude="media" --exclude="staticfiles" --exclude=".venv" --exclude="venv" --exclude="node_modules" --exclude="__pycache__" --exclude="*.pyc" --exclude="*.tar" --exclude="*.tar.gz" --exclude="*.zip" @includes
 }
 
 Write-Host "Uploading Files to VPS..." -ForegroundColor Cyan
@@ -114,8 +112,18 @@ if (Test-Path "frontend.tar.gz") { $uploadFiles += "frontend.tar.gz" }
 $uploadFiles += "fix_all.sh"
 scp @uploadFiles "${USER}@${VPS_IP}:/root/"
 
-Write-Host "Running Deployment on VPS..." -ForegroundColor Cyan
-ssh -t "${USER}@${VPS_IP}" "cd /root; chmod +x fix_all.sh; ./fix_all.sh; rm -f /root/backend_minimal.tar /root/frontend.tar.gz /root/fix_all.sh; echo 'Deployment Complete!'"
+Write-Host "Running Deployment on VPS (Extraction & Restart)..." -ForegroundColor Cyan
+$remoteCmd = "cd /root; " +
+             "tar -xf backend_minimal.tar -C /var/www/bdapp/ 2>/dev/null; " +
+             "rm -rf /var/www/bdapp/frontend/build; " +
+             "mkdir -p /var/www/bdapp/frontend/build; " +
+             "tar -xzf frontend.tar.gz -C /var/www/bdapp/frontend/build --strip-components=1 2>/dev/null; " +
+             "cp fix_all.sh /var/www/bdapp/fix_all.sh; " +
+             "chmod +x /var/www/bdapp/fix_all.sh; " +
+             "bash /var/www/bdapp/fix_all.sh; " +
+             "rm -f /root/backend_minimal.tar /root/frontend.tar.gz /root/fix_all.sh"
+
+ssh -t "${USER}@${VPS_IP}" "$remoteCmd"
 
 Write-Host "Cleaning up local temporary files..." -ForegroundColor Gray
 if (Test-Path "backend_minimal.tar") { Remove-Item "backend_minimal.tar" -Force }

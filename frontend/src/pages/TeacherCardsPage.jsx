@@ -30,7 +30,7 @@ export default function TeacherCardsPage() {
     setLoading(true);
     try {
       // Get teacher assignments for this school
-      const res = await api.get(`/api/academics/assignments/?classroom__school=${id}`);
+      const res = await api.get(`/api/academics/assignments/?school=${id}`);
       
       // Extract unique teachers with their subjects and classes
       const teacherMap = {};

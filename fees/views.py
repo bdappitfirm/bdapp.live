@@ -1,6 +1,10 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from .models import FeeStructure, Payment, FeeCategory, StudentFeeAssignment, FeeCollection, FeeSlip
+from academics.models import StudentProfile
+from django.db import transaction
 from .serializers import (
     FeeStructureSerializer, PaymentSerializer,
     FeeCategorySerializer, StudentFeeAssignmentSerializer, FeeCollectionSerializer, FeeSlipSerializer
@@ -26,6 +30,60 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
         if classroom:
             qs = qs.filter(classroom_id=classroom)
         return qs
+
+    @action(detail=False, methods=['post'])
+    def bulk_setup(self, request):
+        """Setup or update multiple fee structures for a class at once"""
+        school_id = request.data.get('school_id')
+        classroom_id = request.data.get('classroom_id')
+        structures_data = request.data.get('structures', [])
+
+        if not school_id or not classroom_id:
+            return Response({'error': 'school_id and classroom_id are required'}, status=400)
+
+        created_count = 0
+        updated_count = 0
+
+        with transaction.atomic():
+            for data in structures_data:
+                name = data.get('name')
+                freq = data.get('frequency', 'monthly')
+                month = data.get('month')
+                amount = data.get('amount', 0)
+
+                # Try to find existing structure to update
+                existing = None
+                if freq == 'monthly' and month:
+                    existing = FeeStructure.objects.filter(
+                        school_id=school_id, classroom_id=classroom_id,
+                        frequency='monthly', month=month
+                    ).first()
+                else:
+                    # For one-time fees, match by name
+                    existing = FeeStructure.objects.filter(
+                        school_id=school_id, classroom_id=classroom_id,
+                        frequency='one_time', name__iexact=name
+                    ).first()
+
+                if existing:
+                    existing.amount = amount
+                    existing.name = name
+                    existing.save()
+                    updated_count += 1
+                else:
+                    FeeStructure.objects.create(
+                        school_id=school_id, classroom_id=classroom_id,
+                        name=name, frequency=freq, month=month, amount=amount,
+                        academic_year=data.get('academic_year', '2026'),
+                        is_active=True
+                    )
+                    created_count += 1
+
+        return Response({
+            'success': True,
+            'created': created_count,
+            'updated': updated_count
+        })
 
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('student__user','fee_assignment').all()
@@ -81,6 +139,48 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
             if s_school and f_school and getattr(s_school, 'pk', s_school) != getattr(f_school, 'pk', f_school):
                 raise ValidationError({'fee_structure_id': 'Fee structure school does not match the student\'s school.'})
         serializer.save()
+
+    @action(detail=False, methods=['post'])
+    def bulk_assign(self, request):
+        """Assign all current fee structures for a class to all students in that class"""
+        classroom_id = request.data.get('classroom_id')
+        school_id = request.data.get('school_id')
+
+        if not classroom_id or not school_id:
+            return Response({'error': 'classroom_id and school_id are required'}, status=400)
+
+        # 1. Get all students in this class
+        students = StudentProfile.objects.filter(school_id=school_id, classroom_id=classroom_id)
+
+        # 2. Get all active fee structures for this class
+        structures = FeeStructure.objects.filter(school_id=school_id, classroom_id=classroom_id, is_active=True)
+
+        if not students.exists() or not structures.exists():
+            return Response({'message': 'No students or structures found to assign'}, status=200)
+
+        created_count = 0
+
+        with transaction.atomic():
+            for student in students:
+                for structure in structures:
+                    # Avoid duplicates
+                    obj, created = StudentFeeAssignment.objects.get_or_create(
+                        student=student,
+                        fee_structure=structure,
+                        defaults={
+                            'amount': structure.amount,
+                            'due_date': request.data.get('due_date', '2026-11-01'),
+                            'status': 'unpaid'
+                        }
+                    )
+                    if created:
+                        created_count += 1
+
+        return Response({
+            'success': True,
+            'assigned': created_count,
+            'students_processed': students.count()
+        })
 
 
 class FeeCollectionViewSet(viewsets.ModelViewSet):

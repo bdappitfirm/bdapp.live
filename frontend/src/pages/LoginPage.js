@@ -77,7 +77,7 @@ const LoginPage = () => {
         else goHome();
       }
     } catch (_) {}
-  }, [location.search, role, user, navigate]);
+  }, [location.search, location.pathname, role, user, navigate]);
 
   return (
     <div style={{ maxWidth: '400px', margin: '50px auto' }}>

@@ -1,95 +1,67 @@
 import unicodedata
-from .models import Building, Room, ExamSeatPlan
-from results.models import ExamSlot
-from academics.models import StudentProfile
-
-
-def predict_gender_from_name(name):
-    """
-    Advanced gender prediction for Bangladeshi names.
-    """
-    if not name:
-        return None
-    
-    name = unicodedata.normalize('NFKC', str(name)).strip().lower()
-    name = name.replace('.', '').replace(':', '').replace('-', ' ')
-
-    female_indicators = [
-        'মোসাম্মৎ', 'মোসা', 'মোছাম্মৎ', 'মোছা', 'উম্মে', 'বিবি', 'সালেহা', 'তাকিয়া', 'মুনতাহা',
-        'আক্তার', 'খাতুন', 'বেগম', 'নেছা', 'নেসা', 'রানি', 'রাণী', 'ভানু', 'লতা', 'মনি', 'মণি',
-        'ফাতেমা', 'আয়েশা', 'মরিয়ম', 'জোহরা', 'খাদিজা', 'নুসরাত', 'তানিয়া', 'রিমা', 'মিতা',
-        'আফরোজা', 'তাছনিয়া', 'তাসনিয়া', 'মালিহা', 'মাকনুন', 'তাসমিয়া', 'শ্রাবন্তী', 'তাহমিনা',
-        'তাবাস্সুম', 'কাইফা', 'হুমাইরা', 'ইসরাত', 'মাইশা', 'লামিয়া', 'মরিয়ম', 'নুশরাত',
-        'হাবিবা', 'নাজমুন', 'সিন্থিয়া', 'লিজা', 'কামরুন', 'জুবেইদা', 'হাফসা', 'জাকিয়া',
-        'সানজিদা', 'মুনিয়া', 'মারিয়া', 'সুলতানা', 'আফরিন', 'নাজমা', 'রেহানা', 'পারভীন',
-        'আলিয়া', 'সাদিয়া', 'তানহা', 'তাফসিয়া', 'নুহা', 'আদিবা', 'হারিফা', 'বিনতে', 'নাহার', 'নেহা', 'মুন',
-        'akter', 'khatun', 'begum', 'bibi', 'mosammat', 'umme', 'rani', 'queen', 'fatema', 'ayesha',
-        'jannat', 'mim', 'sumaiya', 'nusrat', 'mariya', 'israt', 'tania', 'sadia', 'binte'
-    ]
-    
-    male_indicators = [
-        'মোহাম্মদ', 'মো', 'মুহাম্মদ', 'মুহা', 'আব্দুল', 'আব্দুর', 'আবু', 'শেখ', 'সৈয়দ', 'কাজী',
-        'রহমান', 'হাসান', 'হোসেন', 'আহমেদ', 'আহম্মেদ', 'ইসলাম', 'আলী', 'উল্লাহ', 'উদ্দিন', 'উদ্দীন',
-        'খান', 'চৌধুরী', 'সরকার', 'পাটোয়ারী', 'আরিয়ান', 'আহসান', 'মামুন', 'সাদিক', 'জিসান', 'ফাহিম',
-        'শাহাদাত', 'রাব্বি', 'জয়নাল', 'মোর্শেদ', 'রাহাত', 'আনাস', 'সাজ্জাদ', 'সৈকত', 'নিরব',
-        'আইমন', 'মুরাদ', 'মাহী', 'ওয়াসিফ', 'রকি', 'সোহেল', 'রানা', 'মিরাজ', 'জুবায়েদ', 'রামন',
-        'শাহ', 'আফনান', 'রেমন', 'মিনহাজ', 'আরাফাত', 'রব', 'রাগিব', 'রায়হান', 'আরিফ', 'রাজিন',
-        'ইফাছ', 'ইফাত', 'তানবীর', 'জুবায়ের', 'তানভীর', 'ইফতেখার', 'সাকিব', 'সাদমান', 'সামি',
-        'সায়ম্ন', 'রাহাদ', 'ইবনে', 'বিন', 'আমিন', 'আজাদ', 'ওমর',
-        'mohammad', 'md', 'abdul', 'abdur', 'abu', 'rahman', 'hasan', 'hossain', 'ahmed', 'islam',
-        'arayan', 'jishan', 'fahim', 'sadiq', 'sakib', 'tamim', 'tahsan', 'tanvir', 'ibne', 'bin'
-    ]
-
-    words = name.split()
-    for word in words:
-        if any(fi in word for ind in female_indicators if (fi := str(ind).lower()) in word):
-            return 'female'
-    for word in words:
-        if any(mi in word for ind in male_indicators if (mi := str(ind).lower()) in word):
-            return 'male'
-    return None
-
+import random
+import re
 
 def update_student_genders(school=None):
-    """Update gender from profile first, then name prediction."""
+    """Update gender from profile if missing."""
+    from academics.models import StudentProfile
+    from users.models import Profile
     queryset = StudentProfile.objects.filter(gender__isnull=True) | StudentProfile.objects.filter(gender='N/A')
     if school: queryset = queryset.filter(school=school)
 
     updated_count = 0
     for student in queryset:
-        # Check User Profile first
         try:
-            from users.models import Profile
             up = Profile.objects.get(user=student.user)
             if up.gender:
                 student.gender = up.gender
                 student.save(update_fields=['gender'])
                 updated_count += 1
-                continue
         except Exception: pass
-
-        # Fallback to name prediction
-        full_name = f"{student.user.first_name} {student.user.last_name}".strip() or student.user.username
-        predicted_gender = predict_gender_from_name(full_name)
-        if predicted_gender:
-            student.gender = predicted_gender
-            student.save(update_fields=['gender'])
-            updated_count += 1
     return updated_count
 
 
 def generate_exam_buildings_and_rooms(school, buildings_config):
     all_rooms = []
-    from .models import Room, Building
+    from academics.models import Room, Building
+    
+    # First, get all building numbers from config
+    config_building_numbers = [b_conf.get('building_number', 1) for b_conf in buildings_config]
+    
+    # Delete any existing buildings not in the config
+    existing_buildings = list(Building.objects.filter(school=school))
+    for building in existing_buildings:
+        match = re.search(r'\d+', building.name)
+        if match:
+            b_num = int(match.group(0))
+            if b_num not in config_building_numbers:
+                building.delete()
+    
     for b_conf in buildings_config:
         b_num = b_conf.get('building_number', 1)
         building, _ = Building.objects.get_or_create(school=school, name=f"ভবন-{b_num}")
-        for r_conf in b_conf.get('rooms', []):
+        
+        # Get all rooms from the config for this building
+        config_rooms = b_conf.get('rooms', [])
+        config_room_names = [r.get('room_name', f"{b_num * 100 + r.get('room_number', 1)}") for r in config_rooms]
+        
+        # Delete any existing rooms that are not in the config
+        existing_rooms = list(Room.objects.filter(building=building))
+        for room in existing_rooms:
+            if room.name not in config_room_names:
+                room.delete()
+        
+        # Process each room in the config
+        for r_conf in config_rooms:
             r_num = r_conf.get('room_number', 1)
             b_count = r_conf.get('bench_count', 15)
             cap = b_count * 3
-            r_name = f"{b_num}{r_num:02d}"
-            room, _ = Room.objects.get_or_create(building=building, name=r_name, defaults={'capacity': cap})
+            r_name = r_conf.get('room_name', f"{b_num * 100 + r_num}")
+            room, created = Room.objects.get_or_create(
+                building=building, 
+                name=r_name, 
+                defaults={'capacity': cap}
+            )
             if room.capacity != cap:
                 room.capacity = cap
                 room.save(update_fields=['capacity'])
@@ -99,82 +71,231 @@ def generate_exam_buildings_and_rooms(school, buildings_config):
 
 def generate_exam_seat_plan(examination, school, buildings_config):
     from results.models import Examination, ExamSlot
+    from academics.models import StudentProfile, ExamSeatPlan
+    from users.models import Profile
+
     update_student_genders(school=school)
     rooms = generate_exam_buildings_and_rooms(school, buildings_config)
     if not rooms: raise ValueError("No rooms available")
 
-    all_related_exams = Examination.objects.filter(school=school, name=examination.name)
-    ExamSeatPlan.objects.filter(examination__in=all_related_exams).delete()
+    # 1. Identify all exams in the same session across all classes (6-10)
+    is_morning = False
+    ref_slots = ExamSlot.objects.filter(examination=examination)
+    if any(s.start_time and s.start_time.hour < 12 for s in ref_slots):
+        is_morning = True
 
-    morning_classes = []
-    afternoon_classes = []
-    for exam in all_related_exams:
-        slots = ExamSlot.objects.filter(examination=exam)
-        if any(s.start_time and s.start_time.hour < 12 for s in slots):
-            morning_classes.append(exam.classroom_id)
+    # Get all exams of this type and year in the same school
+    all_exams_in_group = Examination.objects.filter(
+        school=school,
+        exam_type=examination.exam_type,
+        year=examination.year
+    )
+
+    # Filter to only include exams belonging to this specific morning/afternoon session
+    session_exam_ids = []
+    for ex in all_exams_in_group:
+        ex_slots = ExamSlot.objects.filter(examination=ex)
+        if is_morning:
+            if any(s.start_time and s.start_time.hour < 12 for s in ex_slots):
+                session_exam_ids.append(ex.id)
         else:
-            afternoon_classes.append(exam.classroom_id)
+            if any(s.start_time and s.start_time.hour >= 12 for s in ex_slots):
+                session_exam_ids.append(ex.id)
 
-    def assign_session(students_qs, session_name, room_list):
-        # Separate by gender
-        boys_qs = students_qs.filter(gender='male')
-        girls_qs = students_qs.filter(gender='female')
-        unknowns_qs = students_qs.exclude(gender__in=['male', 'female'])
+    # If no slots defined, fallback to just the current exam's group
+    if not session_exam_ids:
+        session_exam_ids = [examination.id]
+
+    # Clear existing plans for the entire session pool
+    ExamSeatPlan.objects.filter(examination_id__in=session_exam_ids).delete()
+
+    # 2. Collect all students in the session and separate by gender
+    session_exams = Examination.objects.filter(id__in=session_exam_ids)
+    classroom_ids = list(session_exams.values_list('classroom_id', flat=True))
+    students_qs = StudentProfile.objects.filter(school=school, classroom_id__in=classroom_ids)
+
+    def arrange_globally(students_list):
+        """Advanced Round-Robin interleaving to ensure NO same-class adjacency"""
+        if not students_list: return []
         
-        def interleave_students(qs):
-            # Group by class
-            class_groups = {}
-            for s in qs:
-                class_groups.setdefault(s.classroom_id, []).append(s)
+        # Group by class
+        by_class = {}
+        for s in students_list:
+            by_class.setdefault(s.classroom_id, []).append(s)
 
-            # Sort students within each class by roll
-            for cid in class_groups:
-                class_groups[cid].sort(key=lambda x: (int(''.join(filter(str.isdigit, x.roll_number or '0')) or '0')))
+        # Sort each class by roll
+        for cid in by_class:
+            by_class[cid].sort(key=lambda x: (int(''.join(filter(str.isdigit, x.roll_number or '0')) or '0')))
 
-            interleaved = []
-            c_ids = sorted(class_groups.keys())
-            max_len = max([len(v) for v in class_groups.values()]) if class_groups else 0
+        # Prepare for Round-Robin
+        arranged = []
+        class_ids = sorted(by_class.keys())
+        max_count = max([len(v) for v in by_class.values()]) if by_class else 0
 
-            # Pick one student from each class in cycles
-            for i in range(max_len):
-                for cid in c_ids:
-                    if i < len(class_groups[cid]):
-                        interleaved.append(class_groups[cid][i])
-            return interleaved
+        for i in range(max_count):
+            # In each cycle, pick one student from each class
+            # We shuffle the order of classes in each cycle to prevent predictable patterns
+            current_cycle_classes = list(class_ids)
+            random.shuffle(current_cycle_classes)
 
-        boys = interleave_students(boys_qs) + interleave_students(unknowns_qs)
-        girls = interleave_students(girls_qs)
+            for cid in current_cycle_classes:
+                if i < len(by_class[cid]):
+                    arranged.append(by_class[cid][i])
+        return arranged
 
-        total_rooms = len(room_list)
-        b_ratio = len(boys) / (len(boys) + len(girls)) if (len(boys) + len(girls)) > 0 else 0.5
-        b_count = max(1, min(total_rooms - 1, round(total_rooms * b_ratio))) if (boys and girls) else (total_rooms if boys else 0)
+    # Separate rooms for Boys and Girls
+    boys = list(students_qs.filter(gender='male')) + list(students_qs.exclude(gender__in=['male', 'female']))
+    girls = list(students_qs.filter(gender='female'))
 
-        b_rooms = room_list[:b_count]
-        g_rooms = room_list[b_count:]
+    final_boys = arrange_globally(boys)
+    final_girls = arrange_globally(girls)
 
+    # 3. Room Distribution
+    total_rooms = len(rooms)
+    b_count = len(final_boys)
+    g_count = len(final_girls)
+
+    if b_count > 0 and g_count > 0:
+        ratio = b_count / (b_count + g_count)
+        b_rooms_count = max(1, min(total_rooms - 1, round(total_rooms * ratio)))
+        b_rooms = rooms[:b_rooms_count]
+        g_rooms = rooms[b_rooms_count:]
+    else:
+        b_rooms = rooms if b_count > 0 else []
+        g_rooms = rooms if g_count > 0 else []
+
+    def assign_to_db(students, room_list, session_label):
         res = []
-        # Assign Boys
-        r_idx = 0; s_num = 1
-        for s in boys:
-            if r_idx >= len(b_rooms): break
-            r = b_rooms[r_idx]
-            ex = next((e for e in all_related_exams if e.classroom_id == s.classroom_id), examination)
-            res.append(ExamSeatPlan.objects.create(examination=ex, student=s, room=r, seat_number=str(s_num), session=session_name))
-            s_num += 1
-            if s_num > r.capacity: s_num = 1; r_idx += 1
-            
-        # Assign Girls
-        r_idx = 0; s_num = 1
-        for s in girls:
-            if r_idx >= len(g_rooms): break
-            r = g_rooms[r_idx]
-            ex = next((e for e in all_related_exams if e.classroom_id == s.classroom_id), examination)
-            res.append(ExamSeatPlan.objects.create(examination=ex, student=s, room=r, seat_number=str(s_num), session=session_name))
-            s_num += 1
-            if s_num > r.capacity: s_num = 1; r_idx += 1
+        s_ptr = 0
+        for r in room_list:
+            for seat_num in range(1, r.capacity + 1):
+                if s_ptr >= len(students): break
+                s = students[s_ptr]
+                # Match correct exam object for this student
+                ex = next((e for e in session_exams if e.classroom_id == s.classroom_id), examination)
+                res.append(ExamSeatPlan.objects.create(
+                    examination=ex, student=s, room=r, seat_number=str(seat_num), session=session_label
+                ))
+                s_ptr += 1
         return res
 
-    m_students = StudentProfile.objects.filter(school=school, classroom_id__in=morning_classes)
-    a_students = StudentProfile.objects.filter(school=school, classroom_id__in=afternoon_classes)
+    return assign_to_db(final_boys, b_rooms, 'morning' if is_morning else 'afternoon') + \
+           assign_to_db(final_girls, g_rooms, 'morning' if is_morning else 'afternoon')
 
-    return assign_session(m_students, 'morning', rooms) + assign_session(a_students, 'afternoon', rooms)
+
+STANDARD_SUBJECTS = [
+    # General High School
+    "বাংলা প্রথম পত্র", "বাংলা দ্বিতীয় পত্র",
+    "ইংরেজি প্রথম পত্র", "ইংরেজি দ্বিতীয় পত্র",
+    "গণিত", "বিজ্ঞান", "বাংলাদেশ ও বিশ্বপরিচয়",
+    "ইসলাম ও নৈতিক শিক্ষা", "হিন্দুধর্ম ও নৈতিক শিক্ষা", "বৌদ্ধধর্ম ও নৈতিক শিক্ষা", "খ্রিষ্টধর্ম ও নৈতিক শিক্ষা",
+    "তথ্য ও যোগাযোগ প্রযুক্তি", "কৃষি শিক্ষা", "গার্হস্থ্য বিজ্ঞান",
+    "শারীরিক শিক্ষা ও স্বাস্থ্য", "কর্ম ও জীবনমুখী শিক্ষা", "চারু ও কারুকলা",
+    "পদার্থবিজ্ঞান", "রসায়ন", "জীববিজ্ঞান", "উচ্চতর গণিত",
+    "হিসাববিজ্ঞান", "ব্যবসায় উদ্যোগ", "ফিন্যান্স ও ব্যাংকিং",
+    "বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা", "ভূগোল ও পরিবেশ", "পৌরনীতি ও নাগরিকতা", "অর্থনীতি",
+    "ক্যারিয়ার শিক্ষা",
+
+    # Humanities / Arts Extra
+    "পৌরনীতি ও সুশাসন", "সমাজবিজ্ঞান", "যুক্তিবিদ্যা", "মনোবিজ্ঞান",
+    "ইতিহাস", "ভূগোল", "সাংস্কৃতিক ঐতিহ্য",
+
+    # Madrasa (Dakhil / Alim)
+    "কুরআন মাজীদ ও তাজবীদ", "হাদীস ও উসূলুল হাদীস", "আকাইদ ও ফিকহ",
+    "आरবি প্রথম পত্র", "আরবি দ্বিতীয় পত্র", "ইসলামের ইতিহাস",
+    "বালাগাত ও মানতিক", "তাসাউফ", "নাহু-সরফ",
+
+    # Primary School
+    "প্রাথমিক বাংলা", "প্রাথমিক ইংরেজি", "প্রাথমিক গণিত", "প্রাথমিক বিজ্ঞান", "প্রাথমিক সমাজ",
+
+    # Vocational / Trade
+    "ট্রেড-১ (প্রথম পত্র)", "ট্রেড-১ (দ্বিতীয় পত্র)", "ট্রেড-২ (প্রথম পত্র)", "ট্রেড-২ (দ্বিতীয় পত্র)"
+]
+
+def standardize_subject_names():
+    from academics.models import Subject
+    import re
+
+    mapping = {
+        # Patterns for replacement
+        r'বাংলা\s*[-–]?\s*১ম': 'বাংলা প্রথম পত্র',
+        r'বাংলা\s*[-–]?\s*২য়': 'বাংলা দ্বিতীয় পত্র',
+        r'bangla\s*1st': 'বাংলা প্রথম পত্র',
+        r'bangla\s*2nd': 'বাংলা দ্বিতীয় পত্র',
+        r'ইংরেজি\s*[-–]?\s*১ম': 'ইংরেজি প্রথম পত্র',
+        r'ইংরেজি\s*[-–]?\s*২য়': 'ইংরেজি দ্বিতীয় পত্র',
+        r'ইংরেজী\s*[-–]?\s*১ম': 'ইংরেজি প্রথম পত্র',
+        r'ইংরেজী\s*[-–]?\s*২য়': 'ইংরেজি দ্বিতীয় পত্র',
+        r'english\s*1st': 'ইংরেজি প্রথম পত্র',
+        r'english\s*2nd': 'ইংরেজি দ্বিতীয় পত্র',
+        r'গনিত': 'গণিত',
+        r'উচ্চতর\s*গনিত': 'উচ্চতর গণিত',
+        r'পদার্থ\s*বিজ্ঞান': 'পদার্থবিজ্ঞান',
+        r'জীব\s*বিজ্ঞান': 'জীববিজ্ঞান',
+        r'ভৌত\s*বিজ্ঞান': 'বিজ্ঞান',
+        r'বাংলাদেশ\s*ও\s*বিশ্বপরিচয়': 'বাংলাদেশ ও বিশ্বপরিচয়',
+        r'বা\s*ইতিহাস\s*ও\s*বিশ্বসভ্যতা': 'বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা',
+        r'সমাজ': 'বাংলাদেশ ও বিশ্বপরিচয়',
+        r'সমাজ\s*বিজ্ঞান': 'সমাজবিজ্ঞান',
+        r'তথ্য\s*ও\s*যোগাযোগ\s*প্রযুক্তি': 'তথ্য ও যোগাযোগ প্রযুক্তি',
+        r'আইসিটি': 'তথ্য ও যোগাযোগ প্রযুক্তি',
+        r'ict': 'তথ্য ও যোগাযোগ প্রযুক্তি',
+        r'ইসলাম\s*ও\s*নৈতিক\s*শিক্ষা': 'ইসলাম ও নৈতিক শিক্ষা',
+        r'ইসলাম\s*শিক্ষা': 'ইসলাম ও নৈতিক শিক্ষা',
+        r'ইসলামধর্ম': 'ইসলাম ও নৈতিক শিক্ষা',
+        r'হিন্দু\s*ধর্ম': 'হিন্দুধর্ম ও নৈতিক শিক্ষা',
+        r'গার্হস্থ্য': 'গার্হস্থ্য বিজ্ঞান',
+        r'শারীরিক\s*শিক্ষা': 'শারীরিক শিক্ষা ও স্বাস্থ্য',
+        r'শরীর\s*চর্চা': 'শারীরিক শিক্ষা ও স্বাস্থ্য',
+        r'হিসাব\s*বিজ্ঞান': 'হিসাববিজ্ঞান',
+        r'ব্যবসায়\s*উদ্যোগ': 'ব্যবসায় উদ্যোগ',
+        r'ফিন্যান্স\s*ও\s*ব্যাংকিং': 'ফিন্যান্স ও ব্যাংকিং',
+        r'ভুগোল': 'ভূগোল ও পরিবেশ',
+        r'পৌরনীতি\s*ও\s*নাগরিকতা': 'পৌরনীতি ও নাগরিকতা',
+        r'পৌরনীতি\s*ও\s*সুশাসন': 'পৌরনীতি ও সুশাসন',
+        r'কুরআন': 'কুরআন মাজীদ ও তাজবীদ',
+        r'হাদীস': 'হাদীস ও উসূলুল হাদীস',
+        r'আকাইদ': 'আকাইদ ও ফিকহ',
+        r'আরবি\s*[-–]?\s*১ম': 'আরবি প্রথম পত্র',
+        r'आरবি\s*[-–]?\s*১ম': 'আরবি প্রথম পত্র',
+        r'আরবি\s*[-–]?\s*২য়': 'আরবি দ্বিতীয় পত্র',
+    }
+
+    subjects = Subject.objects.all()
+    updated_count = 0
+    for subject in subjects:
+        original_name = subject.name
+        new_name = original_name
+
+        for pattern, replacement in mapping.items():
+            if re.search(pattern, original_name, re.IGNORECASE):
+                new_name = replacement
+                break
+
+        if new_name != original_name:
+            # Simple rename
+            subject.name = new_name
+            try:
+                subject.save(update_fields=['name'])
+                updated_count += 1
+            except Exception: pass
+    return updated_count
+
+def populate_missing_subjects():
+    from schools.models import School
+    from academics.models import Subject
+
+    schools = School.objects.all()
+    created_count = 0
+    for school in schools:
+        if not Subject.objects.filter(school=school).exists():
+            for name in STANDARD_SUBJECTS:
+                Subject.objects.get_or_create(school=school, name=name)
+                created_count += 1
+    return created_count
+
+def auto_setup_school_subjects(school):
+    """Called by signal when a new school is created."""
+    from academics.models import Subject
+    for name in STANDARD_SUBJECTS:
+        Subject.objects.get_or_create(school=school, name=name)

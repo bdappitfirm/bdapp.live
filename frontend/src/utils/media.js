@@ -1,5 +1,3 @@
-import api from './api';
-
 /**
  * Resolves a media path (relative or absolute) to a full URL.
  * Handles different environments (dev vs prod) and inconsistencies in backend data.
@@ -25,30 +23,22 @@ export const getMediaUrl = (path, type = 'media') => {
     return val;
   }
 
-  // Get base URL from api utility or fallback to current origin
-  let base = (process.env.REACT_APP_API_URL || api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '');
+  // Use origin as base
+  let base = (process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '');
   
   // If we're on the production domain, always prefer HTTPS
   if (typeof window !== 'undefined' && window.location.hostname.includes('bdapp.live')) {
     if (base.startsWith('http://')) {
       base = base.replace('http://', 'https://');
     } else if (!base.startsWith('https://')) {
-      // If base is relative or just a domain without protocol
       base = 'https://bdapp.live';
     }
-  } else if (base.includes('bdapp.live') && base.startsWith('http://')) {
-    // Upgrade base to https for production if it's not already
-    base = base.replace('http://', 'https://');
   }
   
   // In development (CRA), if base is port 3000, we might need to point to 8000 for media
-  // if the proxy doesn't handle it or if we want to be explicit.
   if (typeof window !== 'undefined') {
     const origin = window.location.origin.replace(/\/$/, '');
-    const isFrontendDev = /:3000$/.test(origin);
-    const isBaseSameAsOrigin = base === origin;
-    if (isFrontendDev && isBaseSameAsOrigin) {
-      // Check if we're likely using the standard local dev setup
+    if (/:3000$/.test(origin) && base === origin) {
       base = 'http://127.0.0.1:8000';
     }
   }

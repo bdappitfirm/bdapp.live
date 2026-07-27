@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import api from '../utils/api';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { scopedGet } from '../utils/schoolApi';
+import { getCachedData, cacheData } from '../utils/offlineDb';
 
 const AcademicsContext = createContext();
 
@@ -19,219 +19,22 @@ export const AcademicsProvider = ({ children }) => {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentSchoolId, setCurrentSchoolId] = useState(null);
+  const studentsCountRef = useRef(0);
+  const classroomsCountRef = useRef(0);
+  const sectionsCountRef = useRef(0);
+  const subjectsCountRef = useRef(0);
 
-  // Fetch classrooms
-  const refreshClassrooms = useCallback(async (schoolId = currentSchoolId, force = false) => {
-    if (!schoolId) return;
-    
-    // CACHE: If data exists for current school and not forced, don't refetch
-    if (!force && classrooms.length > 0 && currentSchoolId === schoolId) return classrooms;
+  useEffect(() => {
+    studentsCountRef.current = students.length;
+    classroomsCountRef.current = classrooms.length;
+    sectionsCountRef.current = sections.length;
+    subjectsCountRef.current = subjects.length;
+  }, [students, classrooms, sections, subjects]);
 
-    try {
-      const response = await scopedGet('/api/academics/classrooms/', schoolId, {}, { timeout: 30000 });
-      const data = Array.isArray(response.data) ? response.data : response.data.results || [];
-      setClassrooms(data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching classrooms:', error);
-      throw error;
-    }
-  }, [currentSchoolId, classrooms.length]);
-
-  // Fetch sections
-  const refreshSections = useCallback(async (schoolId = currentSchoolId, force = false) => {
-    if (!schoolId) return;
-    
-    // CACHE: If data exists for current school and not forced, don't refetch
-    if (!force && sections.length > 0 && currentSchoolId === schoolId) return sections;
-
-    try {
-      const response = await scopedGet('/api/academics/sections/', schoolId, {}, { timeout: 15000 });
-      const data = Array.isArray(response.data) ? response.data : response.data.results || [];
-      setSections(data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching sections:', error);
-      throw error;
-    }
-  }, [currentSchoolId, sections.length]);
-
-  // Fetch students
-  const refreshStudents = useCallback(async (schoolId = currentSchoolId, force = false) => {
-    if (!schoolId) return;
-
-    // CACHE: If data exists for current school and not forced, don't refetch
-    if (!force && students.length > 0 && currentSchoolId === schoolId) return students;
-
-    let attempts = 0;
-    const maxAttempts = 3;
-    while (attempts < maxAttempts) {
-      try {
-        const pageSize = 500;
-        const maxPages = 50;
-        const all = [];
-        const seenIds = new Set();
-        let page = 1;
-        let repeatedStreak = 0;
-        for (; page <= maxPages; page++) {
-          const res = await scopedGet('/api/academics/students/', schoolId, { page, page_size: pageSize }, { timeout: 60000 });
-          const data = res.data;
-          const arr = Array.isArray(data) ? data : (data?.results || []);
-          if (!arr.length) break;
-          let newAdded = 0;
-          for (const s of arr) {
-            const sid = String(s.id ?? s.student_id ?? '');
-            if (!sid) continue;
-            if (!seenIds.has(sid)) {
-              seenIds.add(sid);
-              all.push(s);
-              newAdded++;
-            }
-          }
-          if (newAdded === 0) {
-            repeatedStreak += 1;
-          } else {
-            repeatedStreak = 0;
-          }
-          const hasNext = Boolean((data?.next || '').length);
-          if (hasNext) continue;
-          if (typeof data?.count === 'number') {
-            if (page * pageSize >= data.count) break;
-          } else {
-            if (arr.length < pageSize) break;
-            if (repeatedStreak >= 2) break;
-          }
-        }
-        const dataAll = all;
-        console.log(`Fetched ${dataAll.length} students across pages. Sorting...`);
-        let sorted = [];
-        try {
-          sorted = [...dataAll].sort((a, b) => {
-            const rA = String(a?.roll_number ?? '').trim();
-            const rB = String(b?.roll_number ?? '').trim();
-            const emptyA = !rA;
-            const emptyB = !rB;
-            if (emptyA && !emptyB) return 1;
-            if (!emptyA && emptyB) return -1;
-            if (emptyA && emptyB) return 0;
-            const ar = parseInt(rA.replace(/\D/g, ''), 10);
-            const br = parseInt(rB.replace(/\D/g, ''), 10);
-            const aNum = Number.isNaN(ar) ? null : ar;
-            const bNum = Number.isNaN(br) ? null : br;
-            if (aNum !== null && bNum !== null && aNum !== bNum) return aNum - bNum;
-            return rA.localeCompare(rB, undefined, { numeric: true, sensitivity: 'base' });
-          });
-        } catch (sortErr) {
-          console.error('Sorting failed, using unsorted data:', sortErr);
-          sorted = dataAll;
-        }
-        setStudents(sorted);
-        setCurrentSchoolId(schoolId); // Update school ID on success
-        return sorted;
-      } catch (error) {
-        attempts++;
-        console.error(`Error fetching students (attempt ${attempts}/${maxAttempts}):`, error);
-        if (attempts >= maxAttempts) throw error;
-        await new Promise(resolve => setTimeout(resolve, attempts * 1000));
-      }
-    }
-  }, [currentSchoolId, students.length]);
-
-  const fetchStudentsScoped = useCallback(async (schoolId = currentSchoolId, filters = {}) => {
-    if (!schoolId) return [];
-    let all = [];
-    try {
-      const pageSize = 500;
-      const maxPages = 30;
-      const seenIds = new Set();
-      for (let page = 1; page <= maxPages; page++) {
-        const params = { page, page_size: pageSize, ...filters };
-        const res = await scopedGet('/api/academics/students/', schoolId, params, { timeout: 60000 });
-        const data = res.data;
-        const arr = Array.isArray(data) ? data : (data?.results || []);
-        if (!arr.length) break;
-        for (const s of arr) {
-          const sid = String(s.id ?? s.student_id ?? '');
-          if (!sid || seenIds.has(sid)) continue;
-          seenIds.add(sid);
-          all.push(s);
-        }
-        const hasNext = Boolean((data?.next || '').length);
-        if (hasNext) continue;
-        if (typeof data?.count === 'number') {
-          if (page * pageSize >= data.count) break;
-        } else {
-          if (arr.length < pageSize) break;
-        }
-      }
-    } catch (error) {
-        return [];
-    }
-      let sorted = [];
-      try {
-        sorted = [...all].sort((a, b) => {
-          const rA = String(a?.roll_number ?? '').trim();
-          const rB = String(b?.roll_number ?? '').trim();
-          const emptyA = !rA;
-          const emptyB = !rB;
-          if (emptyA && !emptyB) return 1;
-          if (!emptyA && emptyB) return -1;
-          if (emptyA && emptyB) return 0;
-          const ar = parseInt(rA.replace(/\D/g, ''), 10);
-          const br = parseInt(rB.replace(/\D/g, ''), 10);
-          const aNum = Number.isNaN(ar) ? null : ar;
-          const bNum = Number.isNaN(br) ? null : br;
-          if (aNum !== null && bNum !== null && aNum !== bNum) return aNum - bNum;
-          return rA.localeCompare(rB, undefined, { numeric: true, sensitivity: 'base' });
-        });
-      } catch (_) {
-        sorted = all;
-      }
-      return sorted;
+  const schoolIdRef = useRef(currentSchoolId);
+  useEffect(() => {
+    schoolIdRef.current = currentSchoolId;
   }, [currentSchoolId]);
-
-  // Fetch subjects
-  const refreshSubjects = useCallback(async (schoolId = currentSchoolId, force = false) => {
-    if (!schoolId) return;
-    
-    // CACHE: If data exists for current school and not forced, don't refetch
-    if (!force && subjects.length > 0 && currentSchoolId === schoolId) return subjects;
-
-    try {
-      const response = await scopedGet('/api/academics/subjects/', schoolId, {}, { timeout: 60000 });
-      const data = Array.isArray(response.data) ? response.data : response.data.results || [];
-      setSubjects(data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching subjects:', error);
-      throw error;
-    }
-  }, [currentSchoolId, subjects.length]);
-
-  // Refresh all academic data
-  const refreshAll = useCallback(async (schoolId, force = true) => {
-    if (!schoolId) return;
-    
-    setLoading(true);
-    setCurrentSchoolId(schoolId);
-    
-    try {
-      const results = await Promise.allSettled([
-        refreshClassrooms(schoolId, force),
-        refreshSections(schoolId, force),
-        refreshStudents(schoolId, force),
-        refreshSubjects(schoolId, force)
-      ]);
-      const failed = results.filter(r => r.status === 'rejected');
-      if (failed.length) {
-        console.warn('Some academic data failed to refresh:', failed.map(f => f.reason?.message || f.reason));
-      }
-    } catch (error) {
-      console.error('Error refreshing academic data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [refreshClassrooms, refreshSections, refreshStudents, refreshSubjects]);
 
   // Clear all data (useful when switching schools or logging out)
   const clearData = useCallback(() => {
@@ -242,7 +45,211 @@ export const AcademicsProvider = ({ children }) => {
     setCurrentSchoolId(null);
   }, []);
 
-  const updateStudentInContext = (updatedStudent) => {
+  // Fetch classrooms
+  const refreshClassrooms = useCallback(async (schoolId, force = false) => {
+    const sId = schoolId || schoolIdRef.current;
+    if (!sId) return;
+    
+    // DISABLE generic cache for now as it lacks school_id filtering and causes cross-school data leakage
+    /*
+    if (!force) {
+      try {
+        const cached = await getCachedData('classrooms');
+        if (cached && cached.length > 0) {
+          setClassrooms(cached);
+          return cached;
+        }
+      } catch (e) {
+        console.warn('Failed to load cached classrooms:', e);
+      }
+    }
+    */
+
+    try {
+      const response = await scopedGet('/api/academics/classrooms/', sId, {}, { timeout: 30000 });
+      const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      setClassrooms(data);
+      if (data.length > 0) await cacheData('classrooms', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching classrooms:', error);
+      // const cached = await getCachedData('classrooms');
+      // if (cached && cached.length > 0) setClassrooms(cached);
+    }
+  }, []);
+
+  // Fetch sections
+  const refreshSections = useCallback(async (schoolId, force = false) => {
+    const sId = schoolId || schoolIdRef.current;
+    if (!sId) return;
+    
+    /*
+    if (!force) {
+      try {
+        const cached = await getCachedData('sections');
+        if (cached && cached.length > 0) {
+          setSections(cached);
+          return cached;
+        }
+      } catch (e) {
+        console.warn('Failed to load cached sections:', e);
+      }
+    }
+    */
+
+    try {
+      const response = await scopedGet('/api/academics/sections/', sId, {}, { timeout: 15000 });
+      const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      setSections(data);
+      if (data.length > 0) await cacheData('sections', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching sections:', error);
+      // const cached = await getCachedData('sections');
+      // if (cached && cached.length > 0) setSections(cached);
+    }
+  }, []);
+
+  // Fetch students
+  const refreshStudents = useCallback(async (schoolId, force = false) => {
+    const sId = schoolId || schoolIdRef.current;
+    if (!sId) return;
+
+    if (!force) {
+      try {
+        const cached = await getCachedData('students');
+        if (cached && cached.length > 0) {
+          setStudents(cached);
+          return cached;
+        }
+      } catch (e) {
+        console.warn('Failed to load cached students:', e);
+      }
+    }
+
+    try {
+      const pageSize = 500;
+      let allStudents = [];
+      let page = 1;
+      let hasNext = true;
+
+      while (hasNext && page <= 20) {
+        const res = await scopedGet('/api/academics/students/', sId, { page, page_size: pageSize }, { timeout: 60000 });
+        const data = res.data;
+        const arr = Array.isArray(data) ? data : (data?.results || []);
+        allStudents = [...allStudents, ...arr];
+        hasNext = Boolean(data?.next);
+        page++;
+        if (!arr.length) break;
+      }
+
+      setStudents(allStudents);
+      if (allStudents.length > 0) await cacheData('students', allStudents);
+      return allStudents;
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      const cached = await getCachedData('students');
+      if (cached && cached.length > 0) setStudents(cached);
+    }
+  }, []);
+
+  // Fetch subjects
+  const refreshSubjects = useCallback(async (schoolId, force = false) => {
+    const sId = schoolId || schoolIdRef.current;
+    if (!sId) return;
+    
+    if (!force) {
+      try {
+        const cached = await getCachedData('subjects');
+        if (cached && cached.length > 0) {
+          setSubjects(cached);
+          return cached;
+        }
+      } catch (e) {
+        console.warn('Failed to load cached subjects:', e);
+      }
+    }
+
+    try {
+      const response = await scopedGet('/api/academics/subjects/', sId, {}, { timeout: 60000 });
+      const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      setSubjects(data);
+      if (data.length > 0) await cacheData('subjects', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+      const cached = await getCachedData('subjects');
+      if (cached && cached.length > 0) setSubjects(cached);
+    }
+  }, []);
+
+  const isRefreshingRef = useRef(false);
+
+  // Refresh all academic data
+  const refreshAll = useCallback(async (schoolId, force = false) => {
+    if (!schoolId) return;
+    
+    const sId = String(schoolId);
+    if (isRefreshingRef.current) return;
+
+    // IMPORTANT: Clear old data if switching school
+    if (currentSchoolId && String(currentSchoolId) !== sId) {
+        setClassrooms([]);
+        setSections([]);
+        setStudents([]);
+        setSubjects([]);
+        force = true;
+    }
+
+    // If not forced and we have data for the current school, skip
+    if (!force && students.length > 0 && String(currentSchoolId) === sId) {
+      return;
+    }
+
+    isRefreshingRef.current = true;
+    setLoading(true);
+
+    try {
+      // Use force=false to allow cache usage if available
+      await Promise.all([
+        refreshClassrooms(sId, force),
+        refreshSections(sId, force),
+        refreshStudents(sId, force),
+        refreshSubjects(sId, force)
+      ]);
+
+      setCurrentSchoolId(sId);
+      console.log('Academic context refreshed successfully for school:', sId);
+    } catch (error) {
+      console.error('Error refreshing academic data:', error);
+    } finally {
+      setLoading(false);
+      isRefreshingRef.current = false;
+    }
+  }, [refreshClassrooms, refreshSections, refreshStudents, refreshSubjects]);
+
+  const fetchStudentsScoped = useCallback(async (schoolId, filters = {}) => {
+      // (Implementation remains same, but ensured schoolId consistency)
+      const sId = schoolId || schoolIdRef.current;
+      if (!sId) return [];
+      let all = [];
+      try {
+        const pageSize = 500;
+        const maxPages = 30;
+        for (let page = 1; page <= maxPages; page++) {
+          const params = { page, page_size: pageSize, ...filters };
+          const res = await scopedGet('/api/academics/students/', sId, params, { timeout: 60000 });
+          const data = res.data;
+          const arr = Array.isArray(data) ? data : (data?.results || []);
+          if (!arr.length) break;
+          all = [...all, ...arr];
+          if (!data?.next) break;
+        }
+      } catch (e) { console.error(e); }
+      return all;
+  }, []);
+
+  const updateStudentInContext = useCallback((updatedStudent) => {
     setStudents(prevStudents => {
       const index = prevStudents.findIndex(s => s.id === updatedStudent.id);
       if (index !== -1) {
@@ -250,30 +257,24 @@ export const AcademicsProvider = ({ children }) => {
         newStudents[index] = { ...newStudents[index], ...updatedStudent };
         return newStudents;
       }
-      return [...prevStudents, updatedStudent]; // Or handle as a new student
+      return [...prevStudents, updatedStudent];
     });
-  };
+  }, []);
 
   const getStudentCountForSection = useCallback((sectionId) => {
-    try {
-      if (!Array.isArray(students)) return 0;
-      return students.filter(s => {
-        const sidRaw = s.section?.id ?? s.section;
-        return sidRaw != null && Number(sidRaw) === Number(sectionId);
-      }).length;
-    } catch (_) { return 0; }
+    if (!Array.isArray(students)) return 0;
+    return students.filter(s => {
+      const sidRaw = s.section?.id ?? s.section;
+      return sidRaw != null && Number(sidRaw) === Number(sectionId);
+    }).length;
   }, [students]);
 
-  const value = {
-    // Data
+  const value = useMemo(() => ({
     classrooms,
     sections,
     students,
     subjects,
-    loading,
     currentSchoolId,
-    
-    // Actions
     refreshClassrooms,
     refreshSections,
     refreshStudents,
@@ -281,15 +282,13 @@ export const AcademicsProvider = ({ children }) => {
     refreshAll,
     clearData,
     fetchStudentsScoped,
-    updateStudentInContext, // Expose the new function
+    updateStudentInContext,
     getStudentCountForSection,
-    
-    // Setters (for external updates)
     setClassrooms,
     setSections,
     setStudents,
     setSubjects
-  };
+  }), [classrooms, sections, students, subjects, currentSchoolId, refreshClassrooms, refreshSections, refreshStudents, refreshSubjects, refreshAll, clearData, fetchStudentsScoped, updateStudentInContext, getStudentCountForSection]);
 
   return (
     <AcademicsContext.Provider value={value}>

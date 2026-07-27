@@ -18,20 +18,24 @@ if ($LASTEXITCODE -ne 0) {
 }
 Set-Location ..
 
-# 2. Bundle Everything
-Write-Host "Packing all project files..." -ForegroundColor Yellow
-if (Test-Path "deploy.tar.gz") { Remove-Item "deploy.tar.gz" }
-# Packing everything including your recent changes in results, academics etc.
-tar -czf deploy.tar.gz backend users schools academics attendance fees results manage.py requirements.txt scripts fix_all.sh frontend/build
+# 2. Bundle Everything with a timestamped filename to bypass all caches
+$timestamp = Get-Date -Format "yyyyMMddHHmmss"
+$zipName = "deploy_$timestamp.tar.gz"
+
+Write-Host "Packing all project files into $zipName..." -ForegroundColor Yellow
+tar -czf $zipName --exclude="media" --exclude="staticfiles" --exclude=".venv" --exclude="venv" --exclude="node_modules" --exclude="__pycache__" --exclude="*.pyc" --exclude="*.tar" --exclude="*.tar.gz" --exclude="*.zip" backend users schools academics attendance fees results manage.py requirements.txt scripts fix_all.sh fix_database_marks.py fix_db_schema.py cleanup_orphaned_students.py school_19_students.json frontend/build
 
 # 3. Upload using pscp.exe
 Write-Host "Uploading update bundle to server..." -ForegroundColor Yellow
-.\pscp.exe -v deploy.tar.gz "${USER}@${VPS_IP}:/tmp/deploy.tar.gz"
+.\pscp.exe -v $zipName "${USER}@${VPS_IP}:/tmp/deploy_latest.tar.gz"
 
 # 4. Force Extract and Run Fix on Server
 Write-Host "Extracting and applying changes on server..." -ForegroundColor Cyan
-# This one-liner extracts the NEW files first, then runs the NEW fix_all.sh
-ssh "${USER}@${VPS_IP}" "tar -xzf /tmp/deploy.tar.gz -C $REMOTE_DIR/; chmod +x $REMOTE_DIR/fix_all.sh; $REMOTE_DIR/fix_all.sh"
+# 1) Kill existing processes 2) Delete old build 3) Extract new 4) Run routine fix script
+ssh "${USER}@${VPS_IP}" "rm -rf $REMOTE_DIR/frontend/build; tar -xzf /tmp/deploy_latest.tar.gz -C $REMOTE_DIR/; chmod +x $REMOTE_DIR/fix_all.sh; $REMOTE_DIR/fix_all.sh"
+
+# Cleanup
+if (Test-Path $zipName) { Remove-Item $zipName }
 
 # Cleanup
 if (Test-Path "deploy.tar.gz") { Remove-Item "deploy.tar.gz" }

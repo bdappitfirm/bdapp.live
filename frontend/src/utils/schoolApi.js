@@ -7,7 +7,6 @@ export function scopedGet(path, schoolId, extraParams = {}, config = {}) {
   if (schoolId && !('school' in params) && !/\bschool=/.test(path)) {
     params.school = schoolId;
   }
-  params._t = Date.now();
   const mergedParams = { ...(config && config.params ? config.params : {}), ...params };
   const finalConfig = { ...(config || {}), params: mergedParams };
   return api.get(path, finalConfig);

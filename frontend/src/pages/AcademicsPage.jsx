@@ -31,7 +31,7 @@ export default function AcademicsPage() {
       .catch(err => console.error(err));
 
     // Teacher Assignments
-    api.get(`/api/academics/assignments/?classroom__school=${id}`)
+    api.get(`/api/academics/assignments/?school=${id}`)
       .then(res => setAssignments(res.data))
       .catch(err => console.error(err));
   }, [id]);

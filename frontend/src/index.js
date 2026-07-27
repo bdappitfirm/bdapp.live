@@ -10,7 +10,6 @@ import "slick-carousel/slick/slick-theme.css";
 import { CssBaseline } from '@mui/material';
 import { ThemeProvider, createTheme, responsiveFontSizes } from '@mui/material/styles';
 
-
 const root = ReactDOM.createRoot(document.getElementById('root'));
 let theme = createTheme({
   typography: {
@@ -49,23 +48,21 @@ let theme = createTheme({
 theme = responsiveFontSizes(theme);
 
 root.render(
-  <React.StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <App />
-    </ThemeProvider>
-  </React.StrictMode>
+  <ThemeProvider theme={theme}>
+    <CssBaseline />
+    <App />
+  </ThemeProvider>
 );
 
-// Register service worker for PWA
+// Register service worker for PWA support (Offline Capability)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/service-worker.js')
       .then((registration) => {
-        console.log('Service worker registered:', registration);
+        console.log('SW: Registered successfully');
       })
       .catch((error) => {
-        console.error('Service worker registration failed:', error);
+        console.error('SW: Registration failed:', error);
       });
   });
 }
