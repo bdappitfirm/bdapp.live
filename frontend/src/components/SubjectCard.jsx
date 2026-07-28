@@ -18,12 +18,19 @@ import {
   MenuItem,
   Divider,
   Zoom,
-  Tooltip
+  Tooltip,
+  Autocomplete,
+  Checkbox
 } from '@mui/material';
+import {
+  CheckBox as CheckBoxIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon
+} from '@mui/icons-material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import BookIcon from '@mui/icons-material/Book';
+import ClassIcon from '@mui/icons-material/Class';
 import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
 import EmailIcon from '@mui/icons-material/Email';
@@ -58,7 +65,9 @@ export default function SubjectCard({
   
   const [formData, setFormData] = useState({
     name: subject.name || '',
-    code: subject.code || ''
+    code: subject.code || '',
+    classrooms: [],
+    sections: []
   });
   const [formErrors, setFormErrors] = useState({});
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -66,6 +75,9 @@ export default function SubjectCard({
   const [selectedSectionId, setSelectedSectionId] = useState(sectionId || '');
   const [classrooms, setClassrooms] = useState([]);
   const [sections, setSections] = useState([]);
+
+  const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
+  const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
   // Get assigned teachers for this subject (prefer class-scoped list if present)
   const assignedTeachers = subject.teachers || subject.assigned_teachers || [];
@@ -114,28 +126,72 @@ export default function SubjectCard({
     }
   }, [selectedClassroomId, loadSections]);
 
-  const handleEdit = () => {
-    setFormData({
-      name: subject.name || '',
-      code: subject.code || ''
-    });
-    setFormErrors({});
-    setEditDialogOpen(true);
+  const handleEdit = async () => {
+    setSaving(true);
+    try {
+      // 1. Load all classrooms and sections for this school
+      const [clsRes, secRes] = await Promise.all([
+        api.get(`/api/academics/classrooms/?school=${schoolId}`),
+        api.get(`/api/academics/sections/?school=${schoolId}`)
+      ]);
+
+      const allCls = Array.isArray(clsRes.data) ? clsRes.data : (clsRes.data?.results || []);
+      const allSecs = Array.isArray(secRes.data) ? secRes.data : (secRes.data?.results || []);
+
+      setClassrooms(allCls);
+      setSections(allSecs);
+
+      // 2. Map current subject's links to objects for Autocomplete
+      const currentClassroomIds = Array.isArray(subject.classrooms) ? subject.classrooms : [];
+      const currentSectionIds = Array.isArray(subject.sections) ? subject.sections : [];
+
+      const initialClassrooms = allCls.filter(c =>
+        currentClassroomIds.some(item => (item.id || item) === c.id)
+      );
+
+      const initialSections = allSecs.filter(s =>
+        currentSectionIds.some(item => (item.id || item) === s.id)
+      );
+
+      setFormData({
+        name: subject.name || '',
+        code: subject.code || '',
+        classrooms: initialClassrooms,
+        sections: initialSections
+      });
+      setFormErrors({});
+      setEditDialogOpen(true);
+    } catch (err) {
+      console.error('Failed to prepare edit dialog:', err);
+      toast.error('এডিট উইন্ডো খুলতে সমস্যা হয়েছে');
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const availableSectionsForEdit = React.useMemo(() => {
+    const selectedIds = new Set(formData.classrooms.map(c => c.id));
+    return sections.filter(s => selectedIds.has(s.classroom?.id || s.classroom_id));
+  }, [formData.classrooms, sections]);
+
   const handleSave = async () => {
-    if (!formData.name || !formData.code) {
-      toast.warning('Please fill all required fields');
+    if (!formData.name) {
+      toast.warning('বিষয়ের নাম দিতে হবে');
       return;
     }
 
     setSaving(true);
     try {
-      await api.put(`/api/academics/subjects/${subject.id}/?school=${schoolId}`, {
-        ...formData,
-        school_id: schoolId
-      });
-      toast.success('Subject updated successfully!');
+      const payload = {
+        name: formData.name,
+        code: formData.code,
+        school_id: schoolId,
+        classrooms: formData.classrooms.map(c => c.id),
+        sections: formData.sections.map(s => s.id)
+      };
+
+      await api.put(`/api/academics/subjects/${subject.id}/?school=${schoolId}`, payload);
+      toast.success('বিষয় সফলভাবে আপডেট করা হয়েছে!');
       setEditDialogOpen(false);
       if (onUpdate) onUpdate();
     } catch (err) {
@@ -251,13 +307,53 @@ export default function SubjectCard({
                 >
                   {subject.name}
                 </Typography>
-                <Chip 
-                  label={subject.code} 
-                  size="small" 
-                  color="primary" 
-                  variant="outlined"
-                  sx={{ fontWeight: 'bold' }}
-                />
+                {subject.code && (
+                  <Chip 
+                    label={subject.code} 
+                    size="small" 
+                    color="primary" 
+                    variant="outlined"
+                    sx={{ fontWeight: 'bold' }}
+                  />
+                )}
+                <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 0.75 }}>
+                  {(() => {
+                    const crCount = Array.isArray(subject.classrooms) ? subject.classrooms.length : 0;
+                    const secCount = Array.isArray(subject.sections) ? subject.sections.length : 0;
+                    const isOrphan = crCount === 0 && secCount === 0;
+                    return (
+                      <>
+                        <Chip 
+                          size="small"
+                          icon={<ClassIcon sx={{ fontSize: '0.9rem !important' }} />}
+                          label={`${crCount} ক্লাস`}
+                          color={crCount > 0 ? 'info' : 'warning'}
+                          variant={crCount > 0 ? 'outlined' : 'filled'}
+                          sx={{ fontWeight: 600 }}
+                        />
+                        {secCount > 0 && (
+                          <Chip 
+                            size="small"
+                            label={`${secCount} শাখা`}
+                            color="secondary"
+                            variant="outlined"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        )}
+                        {isOrphan && (
+                          <Chip 
+                            size="small"
+                            label="⚠️ অরফান"
+                            color="error"
+                            variant="filled"
+                            sx={{ fontWeight: 'bold', bgcolor: 'error.light' }}
+                            title="কোনো ক্লাস/শাখায় অ্যাসাইন করা নেই - এডিট করে অ্যাসাইন করুন"
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
+                </Box>
               </Box>
 
               <Divider />
@@ -438,15 +534,69 @@ export default function SubjectCard({
             />
             
             <TextField
-              label="Subject Code *"
+              label="বিষয়ের কোড"
               value={formData.code}
-              onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
+              onChange={(e) => setFormData({...formData, code: e.target.value})}
               fullWidth
-              placeholder="e.g., MATH, BANG, ENG"
+              placeholder="যেমন: 101, MATH, ENG, বাং-১ (ঐচ্ছিক)"
               error={!!formErrors.code}
-              helperText={formErrors.code || 'Short code for the subject (will be uppercase)'}
-              inputProps={{ style: { textTransform: 'uppercase' } }}
+              helperText={formErrors.code || 'কোড নম্বর (ঐচ্ছিক, যা ইচ্ছা লিখুন)'}
             />
+
+            <Autocomplete
+              multiple
+              options={classrooms}
+              disableCloseOnSelect
+              getOptionLabel={(option) => option.name}
+              value={formData.classrooms}
+              onChange={(event, newValue) => {
+                const selectedIds = new Set(newValue.map(c => c.id));
+                setFormData({
+                  ...formData,
+                  classrooms: newValue,
+                  sections: formData.sections.filter(s => selectedIds.has(s.classroom?.id || s.classroom_id))
+                });
+              }}
+              renderOption={(props, option, { selected }) => (
+                <li {...props}>
+                  <Checkbox
+                    icon={icon}
+                    checkedIcon={checkedIcon}
+                    style={{ marginRight: 8 }}
+                    checked={selected}
+                  />
+                  {option.name}
+                </li>
+              )}
+              renderInput={(params) => (
+                <TextField {...params} label="শ্রেণিতে অ্যাসাইন করুন" placeholder="শ্রেণি নির্বাচন করুন" />
+              )}
+            />
+
+            {availableSectionsForEdit.length > 0 && (
+              <Autocomplete
+                multiple
+                options={availableSectionsForEdit}
+                disableCloseOnSelect
+                getOptionLabel={(option) => option.name}
+                value={formData.sections}
+                onChange={(event, newValue) => setFormData({ ...formData, sections: newValue })}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}>
+                    <Checkbox
+                      icon={icon}
+                      checkedIcon={checkedIcon}
+                      style={{ marginRight: 8 }}
+                      checked={selected}
+                    />
+                    {option.name} ({option.classroom?.name})
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <TextField {...params} label="নির্দিষ্ট শাখায় অ্যাসাইন করুন (ঐচ্ছিক)" placeholder="শাখা নির্বাচন করুন" />
+                )}
+              />
+            )}
           </Stack>
         </DialogContent>
         

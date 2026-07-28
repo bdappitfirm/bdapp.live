@@ -127,6 +127,7 @@ export default function SubjectsPage() {
   const [classSummary, setClassSummary] = useState([]);
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSection, setSelectedSection] = useState(null);
+  const [showAllSubjects, setShowAllSubjects] = useState(false);
   const [teachers, setTeachers] = useState([]);
   const [sections, setSections] = useState([]);
   const [classSections, setClassSections] = useState([]);
@@ -166,7 +167,12 @@ export default function SubjectsPage() {
       const summary = classesData.map(classroom => {
         const classSubjs = subjectsData.filter(s => {
           const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
-          return cls.includes(classroom.id);
+          const sids = Array.isArray(s.sections) ? s.sections : [];
+          // Include if classroom linked directly
+          if (cls.includes(classroom.id)) return true;
+          // Include if any linked section belongs to this classroom
+          const belongsToClass = sections.some(sec => sids.includes(sec.id) && (sec.classroom?.id === classroom.id || sec.classroom_id === classroom.id));
+          return belongsToClass;
         });
         return {
           id: classroom.id,
@@ -256,6 +262,13 @@ export default function SubjectsPage() {
   const handleBackToClasses = () => {
     setSelectedClass(null);
     setSelectedSection(null);
+    setShowAllSubjects(false);
+  };
+
+  const handleShowAll = () => {
+    setSelectedClass(null);
+    setSelectedSection(null);
+    setShowAllSubjects(true);
   };
 
   const handleSectionSelect = (section) => {
@@ -296,8 +309,8 @@ export default function SubjectsPage() {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.code) {
-      toast.warning('Please fill all required fields');
+    if (!formData.name) {
+      toast.warning('বিষয়ের নাম দিতে হবে');
       return;
     }
 
@@ -311,16 +324,26 @@ export default function SubjectsPage() {
         sections: formData.sections.map(s => s.id)
       };
       
-      await api.post(`/api/academics/subjects/?school=${id}`, payload);
-      toast.success('Subject added successfully!');
+      const res = await api.post(`/api/academics/subjects/?school=${id}`, payload);
+      toast.success('বিষয় সফলভাবে যোগ করা হয়েছে!');
       setDialogOpen(false);
       loadSubjects();
     } catch (err) {
       console.error(err);
-      const n = err.normalized || { message: 'Failed to save subject', fieldErrors: {}, suggestions: [] };
+      const n = err.normalized || { message: 'Failed to save subject', fieldErrors: {}, suggestions: [], title: 'Error' };
+      const hasFieldErrors = n.fieldErrors && Object.keys(n.fieldErrors).length > 0;
       setFormErrors(n.fieldErrors || {});
-      toast.error(n.message);
-      if (n.suggestions?.length) toast.info('Suggestions: ' + n.suggestions.join(', '));
+      let msg = n.message || 'বিষয় যোগ করতে সমস্যা হয়েছে';
+      if (hasFieldErrors) {
+        const fieldMsgs = Object.keys(n.fieldErrors).map(k => n.fieldErrors[k]).filter(Boolean).join(' • ');
+        if (fieldMsgs) msg = `${msg} • ${fieldMsgs}`;
+      }
+      toast.error(msg);
+      if (n.suggestions?.length) {
+        toast.info('সাজেশন: ' + n.suggestions.join(' | '));
+      } else if (msg.includes('ইতিমধ্যে') || msg.includes('বিদ্যমান') || msg.includes('duplicate')) {
+        toast.info('টিপস: নামের ইনপুটের নিচে এরর দেখুন। পুরোনো বিষয়টি লিস্টে থাকলে Edit বাটনে ক্লিক করুন, নতুন করে যোগ করবেন না।');
+      }
     } finally {
       setSaving(false);
     }
@@ -346,7 +369,7 @@ export default function SubjectsPage() {
   const filtered = useMemo(() => {
     return baseList
       .filter(s => {
-        if (selectedClass) {
+        if (selectedClass && !showAllSubjects) {
           if (!isClassScoped) {
             const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
             if (!cls.includes(selectedClass.id) && !s.teachers) return false;
@@ -357,7 +380,7 @@ export default function SubjectsPage() {
                s.code.toLowerCase().includes(searchLower);
       })
       .filter(s => {
-        if (selectedClass && !isClassScoped) {
+        if (selectedClass && !isClassScoped && !showAllSubjects) {
           const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
           return cls.includes(selectedClass.id);
         }
@@ -416,6 +439,16 @@ export default function SubjectsPage() {
                   শ্রেণি তালিকা
                 </Button>
               )}
+              {!showAllSubjects && !selectedClass && (
+                <Button
+                  variant="contained"
+                  startIcon={<BookIcon />}
+                  onClick={handleShowAll}
+                  sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}
+                >
+                  সকল বিষয় তালিকা
+                </Button>
+              )}
               <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd} sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>বিষয় যোগ করুন</Button>
               <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => loadSubjects(false)} sx={{ borderColor: 'rgba(255,255,255,0.5)', color: 'white' }}>রিফ্রেশ</Button>
             </Stack>
@@ -451,7 +484,7 @@ export default function SubjectsPage() {
 
       {loading ? (
         <Grid container spacing={2}>{[1,2,3,4].map(i => (<Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={i}><CardSkeleton /></Grid>))}</Grid>
-      ) : !selectedClass ? (
+      ) : (!selectedClass && !showAllSubjects) ? (
         <Grid container spacing={2}>
           {classSummary.map((classroom) => (
             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={classroom.id}>
@@ -488,14 +521,14 @@ export default function SubjectsPage() {
       )}
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add New Subject</DialogTitle>
+        <DialogTitle>নতুন বিষয় যোগ করুন</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={3} sx={{ mt: 1 }}>
-            <TextField label="Subject Name *" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} fullWidth error={!!formErrors.name} helperText={formErrors.name} />
-            <TextField label="Subject Code *" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})} fullWidth error={!!formErrors.code} helperText={formErrors.code} />
-            <Autocomplete multiple options={classrooms} disableCloseOnSelect getOptionLabel={(o) => o.name} value={formData.classrooms} onChange={(e, v) => setFormData({ ...formData, classrooms: v, sections: [] })} renderOption={(props, option, { selected }) => (<li {...props}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{option.name}</li>)} renderInput={(p) => (<TextField {...p} label="Assign to Classes (for all sections)" />)} />
+            <TextField label="বিষয়ের নাম *" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} fullWidth error={!!formErrors.name} helperText={formErrors.name || 'বিষয়ের পূর্ণ নাম লিখুন'} placeholder="যেমন: গণিত, বাংলা, English" />
+            <TextField label="বিষয়ের কোড" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} fullWidth error={!!formErrors.code} helperText={formErrors.code || 'কোড নম্বর (ঐচ্ছিক, যা ইচ্ছা লিখুন)'} placeholder="যেমন: 101, MATH, ENG, বাং-১" />
+            <Autocomplete multiple options={classrooms} disableCloseOnSelect getOptionLabel={(o) => o.name} value={formData.classrooms} onChange={(e, v) => setFormData({ ...formData, classrooms: v, sections: [] })} renderOption={(props, option, { selected }) => (<li {...props}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{option.name}</li>)} renderInput={(p) => (<TextField {...p} label="শ্রেণিতে অ্যাসাইন করুন (সব শাখার জন্য)" />)} />
             {availableSections.length > 0 && (
-              <Autocomplete multiple options={availableSections} disableCloseOnSelect getOptionLabel={(o) => o.name} value={formData.sections} onChange={(e, v) => setFormData({ ...formData, sections: v })} renderOption={(props, option, { selected }) => (<li {...props}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{option.name}</li>)} renderInput={(p) => (<TextField {...p} label="Assign to Specific Sections (optional)" />)} />
+              <Autocomplete multiple options={availableSections} disableCloseOnSelect getOptionLabel={(o) => o.name} value={formData.sections} onChange={(e, v) => setFormData({ ...formData, sections: v })} renderOption={(props, option, { selected }) => (<li {...props}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{option.name}</li>)} renderInput={(p) => (<TextField {...p} label="নির্দিষ্ট শাখায় অ্যাসাইন করুন (ঐচ্ছিক)" />)} />
             )}
           </Stack>
         </DialogContent>

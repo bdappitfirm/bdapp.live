@@ -25,6 +25,10 @@ def calculate_student_overall_result(examination, student):
     Calculate and save overall result for a student in an examination.
     This combines all subject results to calculate CGPA and overall grade.
     """
+    from .utils import _class_group, get_subject_maxima
+    from decimal import Decimal
+    import re
+
     # Get all results for this student in this examination
     all_results = Result.objects.filter(
         examination=examination,
@@ -39,8 +43,35 @@ def calculate_student_overall_result(examination, student):
         ).delete()
         return
 
-    # Filter out subjects that should not be included in GPA calculation
-    # (Continuous Assessment / Co-curricular subjects)
+    # Deduplicate and Filter by Group logic
+    student_group = (student.student_group or "").lower()
+    is_910 = _class_group(getattr(examination.classroom, "name", None)) == 'nine_ten'
+
+    # 1. Group Filtering: For 9-10, only keep subjects that belong to the student's group
+    valid_results = []
+    SCIENCE_SUBJS = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর']
+    COMMERCE_SUBJS = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়']
+    ARTS_SUBJS = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি']
+
+    # Track unique subjects to handle duplicates (keep the one with higher marks)
+    best_results = {} # normalized_name -> result_object
+
+    for r in all_results:
+        name = r.subject.name.lower()
+
+        if is_910 and student_group:
+            if student_group == 'science' and any(kw in name for kw in (COMMERCE_SUBJS + ARTS_SUBJS)): continue
+            if student_group == 'commerce' and any(kw in name for kw in (SCIENCE_SUBJS + ARTS_SUBJS)): continue
+            if student_group == 'arts' and any(kw in name for kw in (SCIENCE_SUBJS + COMMERCE_SUBJS)): continue
+
+        # Deduplication: normalized subject name as key
+        norm_key = re.sub(r'\s*\(.*?\)\s*', '', name).strip()
+        if norm_key not in best_results or float(r.total_obtained) > float(best_results[norm_key].total_obtained):
+            best_results[norm_key] = r
+
+    results_to_process = list(best_results.values())
+
+    # Filter out excluded subjects for GPA
     EXCLUDED_SUBJECTS = [
         'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'physical education',
         'ক্যারিয়ার শিক্ষা', 'career education', 'ক্যারিয়ার',
@@ -53,28 +84,30 @@ def calculate_student_overall_result(examination, student):
     optional_subject_id = student.optional_subject_id
     optional_subject_name = student.optional_subject.name.lower() if student.optional_subject else ""
 
-    for r in all_results:
+    for r in results_to_process:
         subject_name = r.subject.name.lower().strip()
         is_excluded = any(ex in subject_name for ex in EXCLUDED_SUBJECTS)
         if is_excluded:
             continue
 
-        # More robust optional subject matching
         is_optional = False
         if optional_subject_id and r.subject_id == optional_subject_id:
             is_optional = True
-        elif optional_subject_name and optional_subject_name in subject_name:
-            is_optional = True
-        elif '(optional)' in subject_name or '(ঐচ্ছিক)' in subject_name:
-            is_optional = True
+        elif optional_subject_name:
+            on = optional_subject_name.strip()
+            if subject_name == on or subject_name.endswith(' ' + on) or subject_name.startswith(on + ' '):
+                is_optional = True
+            elif '(optional)' in subject_name or '(ঐচ্ছিক)' in subject_name:
+                is_optional = True
 
         if is_optional:
-            optional_result = r
+            if optional_result is None or float(r.gpa) > float(optional_result.gpa):
+                optional_result = r
         else:
             main_results.append(r)
 
-    # If no main subjects found, use all results (fallback)
-    results_to_calculate = main_results if main_results else list(all_results)
+    # Use deduplicated list for calculation
+    results_to_calculate = main_results if main_results else results_to_process
     count = len(results_to_calculate)
 
     # Calculate totals
@@ -83,9 +116,6 @@ def calculate_student_overall_result(examination, student):
         total_obtained += float(optional_result.total_obtained)
 
     # Improved total_possible calculation based on individual subject maxima
-    from .utils import _class_group, get_subject_maxima
-    from decimal import Decimal
-
     group = _class_group(getattr(examination.classroom, "name", None))
     total_possible = 0
     for r in results_to_calculate:
@@ -104,38 +134,60 @@ def calculate_student_overall_result(examination, student):
 
     percentage = (total_obtained / total_possible * 100) if total_possible > 0 else 0
     
-    # Improved CGPA calculation with subject grouping (Bangla/English 1st+2nd count as 1)
+    PAPER_1_PAT = re.compile(r'(১ম|1st|first|১ম\s*পত্র|1st\s*paper)', re.IGNORECASE)
+    PAPER_2_PAT = re.compile(r'(২য়|২য়|2nd|second|২য়\s*পত্র|২য়\s*পত্র|2nd\s*paper)', re.IGNORECASE)
+    BANGLA_PAT  = re.compile(r'(bangla|বাংলা)', re.IGNORECASE)
+    ENGLISH_PAT = re.compile(r'(english|ইংরেজি|ইংরেজী)', re.IGNORECASE)
+
+    # 1st pass: Detect which groups actually have BOTH papers present
+    paper_detector = {}
+    for r in results_to_calculate:
+        name = r.subject.name
+        if BANGLA_PAT.search(name):
+            grp = 'bangla'
+        elif ENGLISH_PAT.search(name):
+            grp = 'english'
+        else:
+            continue
+        p1 = bool(PAPER_1_PAT.search(name))
+        p2 = bool(PAPER_2_PAT.search(name))
+        if grp not in paper_detector:
+            paper_detector[grp] = {1: False, 2: False}
+        if p1: paper_detector[grp][1] = True
+        if p2: paper_detector[grp][2] = True
+
     sum_gpa = 0
     grouped_subjects = {}
 
     for r in results_to_calculate:
-        # Group subjects by their base name (e.g., "Bangla 1st" and "Bangla 2nd" -> "Bangla")
-        name = r.subject.name.lower().strip()
-        base_name = name
+        name = r.subject.name
+        # DEFAULT: each unique subject ID is its OWN group (SAFE for duplicates)
+        group_key = f"__id_{r.subject_id}"
 
-        # Check for Bangladesh and Global Studies (BGS) first to avoid grouping it with Bangla
-        is_bgs = 'বাংলাদেশ' in name or 'bangladesh' in name or 'global studies' in name or 'bgs' in name
+        # Only do Bangla/English 2-paper merge when BOTH 1st AND 2nd paper patterns EXIST
+        if BANGLA_PAT.search(name):
+            grp = 'bangla'
+            if paper_detector.get(grp, {}).get(1) and paper_detector.get(grp, {}).get(2):
+                if PAPER_1_PAT.search(name) or PAPER_2_PAT.search(name):
+                    group_key = grp
+        elif ENGLISH_PAT.search(name):
+            grp = 'english'
+            if paper_detector.get(grp, {}).get(1) and paper_detector.get(grp, {}).get(2):
+                if PAPER_1_PAT.search(name) or PAPER_2_PAT.search(name):
+                    group_key = grp
 
-        if not is_bgs:
-            if 'bangla' in name or 'বাংলা' in name:
-                base_name = 'bangla'
-            elif 'english' in name or 'english' in name or 'ইংরেজি' in name or 'ইংরেজী' in name:
-                base_name = 'english'
+        if group_key not in grouped_subjects:
+            grouped_subjects[group_key] = []
+        grouped_subjects[group_key].append(float(r.gpa))
 
-        if base_name not in grouped_subjects:
-            grouped_subjects[base_name] = []
-        grouped_subjects[base_name].append(float(r.gpa))
-
-    # Calculate average GPA for grouped subjects (like Bangla/English) and add others
+    # Calculate average GPA for grouped subjects and add others
     total_gp = 0
     subject_count = len(grouped_subjects)
 
-    # Check if passed (all main subjects must be passed)
     is_passed = all(r.is_passed for r in results_to_calculate)
     has_fail = not is_passed
 
-    for base_name, gpas in grouped_subjects.items():
-        # In SSC standard, the GPA of combined subject is the average of its papers
+    for gk, gpas in grouped_subjects.items():
         avg_subject_gp = sum(gpas) / len(gpas)
         if avg_subject_gp < 1.0:
             has_fail = True

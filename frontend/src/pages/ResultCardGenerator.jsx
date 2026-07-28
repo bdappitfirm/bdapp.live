@@ -27,6 +27,50 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import { scopedGet } from '../utils/schoolApi';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
+// SAFE GPA grouping helper. Only groups Bangla/English when BOTH 1st and 2nd paper patterns exist.
+// Default: every unique subject ID is its OWN group (handles duplicate names safely).
+const SAFE_PAPER_1 = /(১ম|1st|first|১ম\s*পত্র|1st\s*paper)/i;
+const SAFE_PAPER_2 = /(২য়|২য়|2nd|second|২য়\s*পত্র|২য়\s*পত্র|2nd\s*paper)/i;
+const SAFE_BANGLA  = /(bangla|বাংলা)/i;
+const SAFE_ENGLISH = /(english|ইংরেজি|ইংরেজী)/i;
+
+function safeGroupSubjects(results, unwantedCheck) {
+  const paperDetector = {};
+  results.forEach(r => {
+    const name = (r.subject?.name || r.subject_name || '');
+    if (unwantedCheck && unwantedCheck(name)) return;
+    let grp = null;
+    if (SAFE_BANGLA.test(name)) grp = 'bangla';
+    else if (SAFE_ENGLISH.test(name)) grp = 'english';
+    if (!grp) return;
+    if (!paperDetector[grp]) paperDetector[grp] = {1: false, 2: false};
+    if (SAFE_PAPER_1.test(name)) paperDetector[grp][1] = true;
+    if (SAFE_PAPER_2.test(name)) paperDetector[grp][2] = true;
+  });
+
+  const grouped = {};
+  results.forEach(r => {
+    const name = (r.subject?.name || r.subject_name || '');
+    if (unwantedCheck && unwantedCheck(name)) return;
+    const sid = r.subject?.id ?? r.subject_id;
+    let groupKey = `__id_${sid ?? Math.random().toString(36).slice(2,10)}`;
+    if (SAFE_BANGLA.test(name)) {
+      const grp = 'bangla';
+      if (paperDetector[grp]?.[1] && paperDetector[grp]?.[2] && (SAFE_PAPER_1.test(name) || SAFE_PAPER_2.test(name))) {
+        groupKey = grp;
+      }
+    } else if (SAFE_ENGLISH.test(name)) {
+      const grp = 'english';
+      if (paperDetector[grp]?.[1] && paperDetector[grp]?.[2] && (SAFE_PAPER_1.test(name) || SAFE_PAPER_2.test(name))) {
+        groupKey = grp;
+      }
+    }
+    if (!grouped[groupKey]) grouped[groupKey] = [];
+    grouped[groupKey].push(parseFloat(r.gpa) || 0);
+  });
+  return grouped;
+}
+
 const UNWANTED_SUBJECTS = [
   'আরবি', 'বাংলা', 'ভৌৌতবিজ্ঞান', 'ইংরেজি', 'সামাজিক বিজ্ঞান',
   'ইংরেজী', 'সমাজ', 'ধর্ম', 'ইংরেজি-1', 'ইংরেজি-2', 'বাংলা-1', 'বাংলা-2'
@@ -81,6 +125,9 @@ export default function ResultCardGenerator() {
   const [examination, setExamination] = useState(null);
   const [overrideLogo, setOverrideLogo] = useState('');
   const [noYearMessage, setNoYearMessage] = useState('');
+  const [forceLanguage, setForceLanguage] = useState(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedData, setTranslatedData] = useState(null);
 
 
   const isMounted = React.useRef(true);
@@ -648,7 +695,53 @@ export default function ResultCardGenerator() {
     }
     
     // Do not auto-fill missing exams with zero rows; only display what the student actually has results for
-    return Array.from(map.values());
+    const unsorted = Array.from(map.values());
+    const getSubjW = (r) => {
+      if (!r) return 9999;
+      const raw = String(r.subject?.name || r.subject_name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase().replace(/\u200d/g, '');
+      const hasP = /(১ম|1st|first|২য়|২য়|2nd|second|প্রথম|দ্বিতীয়|paper|পত্র)/i.test(raw);
+      if ((raw.includes('বাংলা') || raw.includes('bangla')) && !raw.includes('বাংলাদেশ')) {
+        if (hasP) {
+          if (/(১ম|1st|first|প্রথম)/i.test(raw)) return 1;
+          return 2;
+        }
+        return 2;
+      }
+      if (raw.includes('ইংরেজি') || raw.includes('ইংরেজী') || raw.includes('english')) {
+        if (hasP) {
+          if (/(১ম|1st|first|প্রথম)/i.test(raw)) return 11;
+          return 12;
+        }
+        return 12;
+      }
+      if (raw.includes('গণিত') || raw.includes('গনিত') || raw.includes('math')) return 21;
+      if (raw.includes('ইসলাম') || raw.includes('হিন্দু') || raw.includes('ধর্ম') || raw.includes('religion')) return 31;
+      if (raw.includes('আইসিটি') || raw.includes('ict') || raw.includes('তথ্য')) return 41;
+      if (raw.includes('বিজ্ঞান') || raw.includes('science')) return 51;
+      if (raw.includes('বাংলাদেশ') || raw.includes('বিশ্বপরিচয়') || raw.includes('বিশ্বপরিয়') || raw.includes('bangladesh') || raw.includes('global studies') || raw.includes('bgs')) return 61;
+      if (raw.includes('physics') || raw.includes('পদার্থ')) return 71;
+      if (raw.includes('chemistry') || raw.includes('রসায়ন')) return 72;
+      if (raw.includes('biology') || raw.includes('জীব')) return 73;
+      if (raw.includes('উচ্চতর') || raw.includes('higher math')) return 74;
+      if (raw.includes('ইতিহাস') || raw.includes('history')) return 81;
+      if (raw.includes('ভূগোল') || raw.includes('geography')) return 82;
+      if (raw.includes('পৌরনীতি') || raw.includes('civics') || raw.includes('নাগরিকতা')) return 83;
+      if (raw.includes('অর্থনীতি') || raw.includes('economics')) return 84;
+      if (raw.includes('হিসাব') || raw.includes('accounting')) return 85;
+      if (raw.includes('ফিন্যান্স') || raw.includes('finance') || raw.includes('ব্যাংকিং')) return 86;
+      if (raw.includes('ব্যবসায়') || raw.includes('business') || raw.includes('উদ্যোগ')) return 87;
+      if (raw.includes('কৃষি') || raw.includes('agriculture')) return 91;
+      if (raw.includes('গার্হস্থ্য') || raw.includes('home economics')) return 92;
+      if (raw.includes('ক্যারিয়ার') || raw.includes('career education')) return 93;
+      return 100 + raw.length;
+    };
+    return unsorted.sort((a, b) => {
+      const wa = getSubjW(a), wb = getSubjW(b);
+      if (wa !== wb) return wa - wb;
+      const na = String(a?.subject?.name || a?.subject_name || '').toLowerCase();
+      const nb = String(b?.subject?.name || b?.subject_name || '').toLowerCase();
+      return na.localeCompare(nb, 'bn', { sensitivity: 'base' });
+    });
   };
 
   const getGradeFromCgpa = (cgpa) => {
@@ -662,18 +755,23 @@ export default function ResultCardGenerator() {
     return 'F';
   };
 
-  const handleSearch = async (examIdOverride = null) => {
+  const handleSearch = async (examIdOverride = null, targetLang = null) => {
     if (!selectedStudent || (!selectedExamType && !examIdOverride)) {
       toast.warning('Please select class, student, and exam type');
       return;
     }
 
     setLoading(true);
+    setForceLanguage(targetLang);
+    setTranslatedData(null);
+
     try {
       // Get student details
       const studentRes = await api.get(`/api/academics/students/${selectedStudent}/`);
       const student = studentRes.data;
-      setStudentData({ student: overrideLogo ? { ...student, school_logo: overrideLogo } : student });
+
+      let baseStudentData = { student: overrideLogo ? { ...student, school_logo: overrideLogo } : student };
+      setStudentData(baseStudentData);
 
       let matchingExams = [];
       if (examIdOverride) {
@@ -948,22 +1046,19 @@ export default function ResultCardGenerator() {
           return sum + (rMax > 0 ? rMax : maximaSum);
         }, 0);
         
-        // Accurate GPA calculation with grouping
-        const grouped = {};
+        // Accurate GPA calculation with SAFE grouping (ID-first, only 1st+2nd paper merge when both exist)
         const UNWANTED = [...UNWANTED_SUBJECTS, ...CO_CURRICULAR_SUBJECTS];
-
-        fetchedResults.forEach(r => {
-          const name = (r.subject?.name || r.subject_name || '').toLowerCase();
-          if (UNWANTED.some(u => name.includes(u.toLowerCase()))) return;
-          if (r.is_optional || (name.includes('optional') || name.includes('ঐচ্ছিক'))) return;
-
-          let baseName = name;
-          if (name.includes('bangla') || name.includes('বাংলা')) baseName = 'bangla';
-          else if (name.includes('english') || name.includes('ইংরেজি') || name.includes('ইংরেজী')) baseName = 'english';
-
-          if (!grouped[baseName]) grouped[baseName] = [];
-          grouped[baseName].push(parseFloat(r.gpa) || 0);
+        const unwantedCheck = (name) => {
+          const ln = String(name || '').toLowerCase();
+          if (UNWANTED.some(u => ln.includes(u.toLowerCase()))) return true;
+          if (ln.includes('optional') || ln.includes('ঐচ্ছিক')) return true;
+          return false;
+        };
+        const filtered = fetchedResults.filter(r => {
+          if (r.is_optional) return false;
+          return !unwantedCheck(r.subject?.name || r.subject_name || '');
         });
+        const grouped = safeGroupSubjects(filtered, null);
 
         let sumGP = 0;
         const subCount = Object.keys(grouped).length;
@@ -988,6 +1083,29 @@ export default function ResultCardGenerator() {
         };
       }
       setOverallResult(overall);
+
+      // Handle Translation if requested
+      if (targetLang === 'en') {
+        setIsTranslating(true);
+        try {
+          const payload = {
+            school_name: school?.name,
+            student_name: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim(),
+            father_name: student.father_name,
+            mother_name: student.mother_name,
+            guardian_name: student.guardian_name,
+            address: student.address || school?.address,
+            subjects: fetchedResults.map(r => r.subject?.name || r.subject_name)
+          };
+          const transRes = await api.post('/api/results/overall/translate_card/', payload);
+          setTranslatedData(transRes.data);
+        } catch (err) {
+          console.error('Translation failed', err);
+          toast.error('AI অনুবাদ ব্যর্থ হয়েছে, মূল ডাটা দেখানো হচ্ছে');
+        } finally {
+          setIsTranslating(false);
+        }
+      }
 
       // Fetch "New Roll" from StudentYearRecord
       try {
@@ -1061,8 +1179,9 @@ export default function ResultCardGenerator() {
 
           const watermarks = clonedDoc.querySelectorAll('.result-card-container > div');
           watermarks.forEach(div => {
-            if (div.style.opacity === '0.12') {
-              div.style.opacity = '0.08'; // Slightly lower for better PDF readability
+            const op = parseFloat(div.style.opacity || '0');
+            if (op > 0 && op <= 0.3) {
+              div.style.opacity = Math.max(0.05, op * 0.6).toFixed(2);
             }
           });
         }
@@ -1610,11 +1729,22 @@ export default function ResultCardGenerator() {
         <Stack direction="row" spacing={2} flexWrap="wrap">
           <Button
             variant="contained"
-            startIcon={<SearchIcon />}
-            onClick={() => handleSearch()}
+            startIcon={<AssessmentIcon />}
+            onClick={() => handleSearch(null, 'bn')}
             disabled={loading || !selectedStudent || !selectedExamType}
+            color="primary"
           >
-            {loading ? 'তৈরি হচ্ছে...' : 'রেজাল্ট কার্ড তৈরি করুন'}
+            {loading && !forceLanguage ? 'তৈরি হচ্ছে...' : 'বাংলায় মার্কশীট তৈরি করুন'}
+          </Button>
+
+          <Button
+            variant="contained"
+            startIcon={<AssessmentIcon />}
+            onClick={() => handleSearch(null, 'en')}
+            disabled={loading || !selectedStudent || !selectedExamType}
+            sx={{ bgcolor: '#1a237e', '&:hover': { bgcolor: '#0d1642' } }}
+          >
+            {isTranslating ? 'AI অনুবাদ হচ্ছে...' : 'ইংরেজিতে মার্কশীট তৈরি করুন'}
           </Button>
 
           <Button
@@ -1706,12 +1836,31 @@ export default function ResultCardGenerator() {
         {studentData && (
           <Box className="single-card-view">
             <ResultCard
-              studentData={studentData}
-              results={results}
+              studentData={translatedData ? {
+                ...studentData,
+                student: {
+                  ...studentData.student,
+                  user: {
+                    ...studentData.student.user,
+                    first_name: translatedData.student_name?.split(' ')[0] || studentData.student.user.first_name,
+                    last_name: translatedData.student_name?.split(' ').slice(1).join(' ') || studentData.student.user.last_name
+                  },
+                  father_name: translatedData.father_name || studentData.student.father_name,
+                  mother_name: translatedData.mother_name || studentData.student.mother_name,
+                  guardian_name: translatedData.guardian_name || studentData.student.guardian_name,
+                  address: translatedData.address || studentData.student.address
+                }
+              } : studentData}
+              results={translatedData ? results.map(r => {
+                const name = r.subject?.name || r.subject_name;
+                const transName = translatedData.subjects?.[name] || translatedData.subjects?.[name.toLowerCase()] || name;
+                return { ...r, subject: { ...r.subject, name: transName }, subject_name: transName };
+              }) : results}
               overallResult={overallResult}
               examination={overrideLogo ? { ...(examination || {}), school_logo: overrideLogo } : examination}
-              school={school || {}}
+              school={translatedData ? { ...school, name: translatedData.school_name, address: translatedData.address } : (school || {})}
               schoolId={id}
+              forceLanguage={forceLanguage}
             />
           </Box>
         )}

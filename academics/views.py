@@ -11,6 +11,18 @@ from django.db.models import Q, Count, Sum
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
 
+import re
+import unicodedata
+
+PUNCT_RE = re.compile(r'[\s\-–—_()（）【】\[\]{}.,;:\'"!?।,|·•・/\\]+', re.UNICODE)
+
+def _subject_semantic_key(name):
+    if not name:
+        return ''
+    n = unicodedata.normalize('NFKC', str(name))
+    n = n.replace('\u200d', '').replace('\u200c', '').strip().lower()
+    return PUNCT_RE.sub('', n)
+
 User = get_user_model()
 
 from schools.models import School
@@ -174,7 +186,58 @@ class SubjectViewSet(viewsets.ModelViewSet):
         sid = get_user_school_id(self.request.user, self.request)
         if not sid:
             raise ValidationError("School ID not found.")
-        serializer.save(school_id=sid)
+
+        name = serializer.validated_data.get('name', '').strip()
+        if not name:
+            raise ValidationError({"name": "বিষয়ের নাম দিতে হবে।"})
+
+        classroom_ids = serializer.validated_data.get('classrooms', [])
+        if classroom_ids:
+            valid_classrooms = ClassRoom.objects.filter(id__in=[c.id for c in classroom_ids], school_id=sid).count()
+            if valid_classrooms != len(classroom_ids):
+                raise ValidationError({"classrooms": "কিছু ক্লাসরুম এই স্কুলের অন্তর্গত নয়।"})
+
+        section_ids = serializer.validated_data.get('sections', [])
+        if section_ids:
+            valid_sections = Section.objects.filter(id__in=[s.id for s in section_ids], classroom__school_id=sid).count()
+            if valid_sections != len(section_ids):
+                raise ValidationError({"sections": "কিছু শাখা এই স্কুলের অন্তর্গত নয়।"})
+
+        school = School.objects.filter(pk=sid).first()
+        if not school:
+            raise ValidationError("School not found.")
+
+        try:
+            serializer.save(school=school, school_id=sid)
+        except Exception as e:
+            import traceback
+            print(f"Subject Create Fatal Error: {e}")
+            traceback.print_exc()
+            raise ValidationError({"detail": f"বিষয় তৈরি করতে সমস্যা: {str(e)}"})
+
+    def perform_update(self, serializer):
+        sid = get_user_school_id(self.request.user, self.request)
+        instance = serializer.instance
+
+        classroom_ids = serializer.validated_data.get('classrooms', None)
+        if classroom_ids is not None:
+            valid_classrooms = ClassRoom.objects.filter(id__in=[c.id for c in classroom_ids], school_id=sid).count()
+            if valid_classrooms != len(classroom_ids):
+                raise ValidationError({"classrooms": "কিছু ক্লাসরুম এই স্কুলের অন্তর্গত নয়।"})
+
+        section_ids = serializer.validated_data.get('sections', None)
+        if section_ids is not None:
+            valid_sections = Section.objects.filter(id__in=[s.id for s in section_ids], classroom__school_id=sid).count()
+            if valid_sections != len(section_ids):
+                raise ValidationError({"sections": "কিছু শাখা এই স্কুলের অন্তর্গত নয়।"})
+
+        try:
+            serializer.save()
+        except Exception as e:
+            import traceback
+            print(f"Subject Update Fatal Error: {e}")
+            traceback.print_exc()
+            raise ValidationError({"detail": f"বিষয় আপডেট করতে সমস্যা: {str(e)}"})
 
 class StudentProfileViewSet(viewsets.ModelViewSet):
     queryset = StudentProfile.objects.all()
@@ -304,22 +367,26 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
             return Response({"detail": "School ID or updates missing"}, status=400)
 
         updated_count = 0
+        failed_updates = []
         birth_date_exists = self.birth_date_db_exists()
 
         try:
-            with transaction.atomic():
-                # Pre-fetch students and users to avoid N+1 in the loop
-                student_ids = [u.get('id') for u in updates if u.get('id')]
-                student_map = {
-                    s.id: s for s in StudentProfile.objects.filter(id__in=student_ids, school_id=sid).select_related('user')
-                }
+            student_ids = [u.get('id') for u in updates if u.get('id')]
+            student_map = {
+                s.id: s for s in StudentProfile.objects.filter(id__in=student_ids, school_id=sid).select_related('user')
+            }
 
-                for data in updates:
-                    student_id = data.get('id')
-                    if not student_id: continue
-                    
-                    instance = student_map.get(student_id)
-                    if instance:
+            for data in updates:
+                student_id = data.get('id')
+                if not student_id: continue
+
+                instance = student_map.get(student_id)
+                if not instance:
+                    failed_updates.append({"id": student_id, "error": "Student not found"})
+                    continue
+
+                try:
+                    with transaction.atomic():
                         # 1. Update User model (only if fields actually changed)
                         user_changed = False
                         user_fields = ['first_name', 'last_name', 'phone_number', 'email']
@@ -331,7 +398,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                             if user_changed:
                                 instance.user.save()
 
-                        # 2. Update StudentProfile fields
+                        # 2. Update StudentProfile
                         profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks']
                         safe_data = {}
                         profile_changed = False
@@ -348,32 +415,25 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                                 safe_data[field] = val
                                 profile_changed = True
 
-                        if profile_changed:
-                            # Use serializer for validation and saving profile fields
-                            # This will trigger instance.save() and our optimized parent logic
+                        if profile_changed or user_changed:
+                            # Set skip flag for performance during bulk update if only user fields changed
+                            # But names_changed logic in model already handles this.
                             serializer = self.get_serializer(instance, data=safe_data, partial=True)
                             if serializer.is_valid():
-                                try:
-                                    serializer.save()
-                                    updated_count += 1
-                                except Exception as e:
-                                    # Handle duplicate student_custom_id or other DB errors
-                                    if "duplicate key" in str(e) and "student_custom_id" in str(e):
-                                        raise ValidationError({
-                                            "detail": f"Custom ID collision for student {instance.user.get_full_name()}. "
-                                                      f"Ensure roll number {data.get('roll_number', instance.roll_number)} is unique in this class."
-                                        })
-                                    raise e
+                                serializer.save()
+                                updated_count += 1
                             else:
-                                raise ValidationError(serializer.errors)
+                                failed_updates.append({"id": student_id, "error": serializer.errors})
+                except Exception as row_err:
+                    failed_updates.append({"id": student_id, "error": str(row_err)})
 
-            return Response({"status": "success", "updated": updated_count})
-        except ValidationError as ve:
-            return Response(ve.detail, status=400)
+            return Response({
+                "status": "success" if not failed_updates else "partial_success",
+                "updated": updated_count,
+                "failed": failed_updates
+            })
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return Response({"detail": f"Error during bulk update: {str(e)}"}, status=400)
+            return Response({"detail": f"Fatal error during bulk update: {str(e)}"}, status=500)
 
     @action(detail=False, methods=['get'])
     def history(self, request):

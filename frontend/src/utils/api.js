@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './auth';
 import { getCachedApiResponse, cacheApiResponse, queueRequest, db } from './offlineDb';
+import { normalizeApiError } from './errorUtils';
 
 /**
  * Smart Offline Fallback Logic:
@@ -239,6 +240,20 @@ api.interceptors.response.use(
           window.location.href = '/login';
         }
       }
+    }
+
+    // Attach normalized error for consistent handling in components
+    try {
+      error.normalized = normalizeApiError(error);
+    } catch (e) {
+      console.warn('Error normalization failed:', e);
+      error.normalized = {
+        title: 'Error',
+        message: error?.message || 'Something went wrong.',
+        fieldErrors: {},
+        suggestions: [],
+        status: error?.response?.status || null,
+      };
     }
 
     return Promise.reject(error);

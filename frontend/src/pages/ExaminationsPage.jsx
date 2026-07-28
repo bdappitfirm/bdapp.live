@@ -54,19 +54,6 @@ const EXAM_TYPES = [
   { value: 'model', label: 'মডেল টেস্ট' }
 ];
 
-const UNWANTED_SUBJECTS = [
-  'আরবি', 'বাংলা', 'ভৌৌতবিজ্ঞান', 'ইংরেজি', 'সামাজিক বিজ্ঞান',
-  'ইংরেজী', 'সমাজ', 'ধর্ম', 'ইংরেজি-1', 'ইংরেজি-2', 'বাংলা-1', 'বাংলা-2'
-];
-
-const DEFAULT_SUBJECTS = [
-  'বাংলা-১ম পত্র', 'বাংলা-২য় পত্র', 'ইংরেজি-১ম পত্র', 'ইংরেজি-২য় পত্র',
-  'গণিত', 'বিজ্ঞান', 'বাংলাদেশ ও বিশ্বপরিচয়', 'তথ্য ও যোগাযোগ প্রযুক্তি',
-  'ইসলাম শিক্ষা', 'জীববিজ্ঞান', 'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান', 'হিসাববিজ্ঞান',
-  'পদার্থ', 'রসায়ন', 'বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা', 'পৌরনীতি ও নাগরিকতা',
-  'ভূগোল ও পরিবেশ', 'ব্যবসায় উদ্যোগ', 'ফিন্যান্স ও ব্যাংকিং'
-].map(n => ({ name: n }));
-
 export default function ExaminationsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -138,7 +125,7 @@ export default function ExaminationsPage() {
       ]);
       setExaminations(Array.isArray(examsRes.data) ? examsRes.data : (examsRes.data.results || []));
       const subjectsData = Array.isArray(subjectsRes.data) ? subjectsRes.data : (subjectsRes.data?.results || []);
-      setSubjects(subjectsData.filter(s => !UNWANTED_SUBJECTS.includes(s.name.trim())));
+      setSubjects(subjectsData);
       setClassrooms(Array.isArray(classroomsRes.data) ? classroomsRes.data : (classroomsRes.data.results || []));
     } catch (error) {
       toast.error('Failed to load data');

@@ -33,6 +33,12 @@ class Subject(models.Model):
     def __str__(self):
         return f"{self.name} ({self.school.name})"
 
+    def save(self, *args, **kwargs):
+        if self.name:
+            import unicodedata
+            self.name = unicodedata.normalize('NFKC', str(self.name)).strip()
+        super().save(*args, **kwargs)
+
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='students')
@@ -43,7 +49,7 @@ class StudentProfile(models.Model):
         ('science', 'Science'),
         ('arts', 'Arts'),
         ('commerce', 'Commerce'),
-    ], db_column='group')  # Keep using existing 'group' column
+    ], db_column='group')
     blood_group = models.CharField(max_length=10, choices=[
         ('A+', 'A+'), ('A-', 'A-'), ('B+', 'B+'), ('B-', 'B-'),
         ('AB+', 'AB+'), ('AB-', 'AB-'), ('O+', 'O+'), ('O-', 'O-'),
@@ -78,25 +84,9 @@ class StudentProfile(models.Model):
         class_name = self.classroom.name
 
         class_match = re.search(r'\d+', class_name)
-        if class_match:
-            class_num = class_match.group()
-        else:
-            word_to_num = {
-                'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
-                'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
-                'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14', 'fifteen': '15',
-                'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19', 'twenty': '20'
-            }
-            lower_class_name = class_name.lower()
-            class_num = None
-            for word, num in word_to_num.items():
-                if word in lower_class_name:
-                    class_num = num
-                    break
-            if not class_num: return None
+        class_num = class_match.group() if class_match else '00'
         
-        clean_roll = re.sub(r'\D', '', str(self.roll_number))
-        if not clean_roll: clean_roll = '0'
+        clean_roll = re.sub(r'\D', '', str(self.roll_number)) or '0'
 
         section_code = '0'
         if self.student_group:
@@ -104,94 +94,63 @@ class StudentProfile(models.Model):
             elif self.student_group == 'arts': section_code = '2'
             elif self.student_group == 'commerce': section_code = '3'
         elif self.section:
-            section_name = self.section.name.lower()
-            if 'বিজ্ঞান' in section_name or 'science' in section_name: section_code = '1'
-            elif 'মানবিক' in section_name or 'arts' in section_name: section_code = '2'
-            elif 'ব্যবসায় শিক্ষা' in section_name or 'commerce' in section_name or 'ব্যবসা' in section_name: section_code = '3'
+            s_name = self.section.name.lower()
+            if 'বিজ্ঞান' in s_name or 'science' in s_name: section_code = '1'
+            elif 'মানবিক' in s_name or 'arts' in s_name: section_code = '2'
+            elif 'ব্যবসায় শিক্ষা' in s_name or 'commerce' in s_name or 'ব্যবসা' in s_name: section_code = '3'
 
-        # Format: G-SID(3)-CLASS(2)-SEC-ROLL(4)
-        return f"{gender_prefix}{s_id.zfill(3)}{class_num.zfill(2)}{section_code}{clean_roll.zfill(4)}"
+        sid_part = s_id.zfill(3)
+        class_part = class_num.zfill(2)
+        roll_part = clean_roll.zfill(4)
+        unique_suffix = str(self.id or '0').zfill(5)
+
+        return f"{gender_prefix}{sid_part}{class_part}{section_code}{roll_part}{unique_suffix}"
 
     def save(self, *args, **kwargs):
         if self.roll_number:
             self.roll_number = bengali_to_english_number(self.roll_number)
 
-        # Optimization: Only run heavy logic if necessary
         names_changed = True
-        id_needs_update = False
-
         if self.pk:
             try:
-                old = StudentProfile.objects.only('father_name', 'mother_name', 'guardian_name', 'gender', 'classroom_id', 'student_group', 'section_id', 'roll_number', 'student_custom_id').get(pk=self.pk)
+                old = StudentProfile.objects.only('father_name', 'mother_name', 'guardian_name').get(pk=self.pk)
                 names_changed = (old.father_name != self.father_name or old.mother_name != self.mother_name or old.guardian_name != self.guardian_name)
-                id_needs_update = (
-                    old.gender != self.gender or old.classroom_id != self.classroom_id or
-                    old.student_group != self.student_group or old.section_id != self.section_id or
-                    old.roll_number != self.roll_number or not old.student_custom_id or len(old.student_custom_id) < 11
-                )
             except StudentProfile.DoesNotExist: pass
-        else:
-            id_needs_update = True
 
-        if id_needs_update:
-            self.student_custom_id = self.generate_custom_id()
-
-        if self.school_id and names_changed:
-            from users.models import Profile
-
+        if self.school_id and names_changed and not getattr(self, '_skip_parent_sync', False):
             def get_or_create_parent_user(name, role_suffix, gender):
                 if not name or not str(name).strip(): return None
-                name_clean = str(name).strip()
-                name_clean = ''.join(c for c in name_clean if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+                name_clean = ''.join(c for c in str(name).strip() if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
                 phone = getattr(self.user, 'phone_number', None)
                 phone_clean = re.sub(r'\D', '', str(phone)) if phone else None
-                parent_user = None
 
+                parent_user = None
                 if phone_clean and len(phone_clean) >= 10:
                     parent_user = User.objects.filter(models.Q(phone_number__endswith=phone_clean[-10:]) | models.Q(username__endswith=phone_clean[-10:])).filter(profile__school_id=self.school_id, profile__role='parent', username__icontains=role_suffix).first()
 
                 if not parent_user:
-                    name_slug = re.sub(r'[^a-z0-9]', '', name_clean.lower().replace(' ', ''))
-                    if name_slug:
-                        unique_username = f"p_{self.school_id}_{name_slug}_{role_suffix}"
-                        parent_user = User.objects.filter(username__iexact=unique_username).first()
-
-                parts = name_clean.split()
-                first = parts[0] if parts else 'Parent'
-                last = ' '.join(parts[1:]) if len(parts) > 1 else ''
-
-                if not parent_user:
-                    name_slug = re.sub(r'[^a-z0-9]', '', name_clean.lower().replace(' ', '')) or "p" + hashlib.md5(name_clean.encode()).hexdigest()[:10]
+                    name_slug = re.sub(r'[^a-z0-9]', '', name_clean.lower().replace(' ', '')) or "p" + hashlib.md5(name_clean.encode()).hexdigest()[:8]
                     unique_username = f"p_{self.school_id}_{name_slug}_{role_suffix}"
                     final_username = unique_username
                     if User.objects.filter(username__iexact=final_username).exists():
                          final_username = f"{unique_username}_{hashlib.md5(str(timezone.now()).encode()).hexdigest()[:4]}"
-
-                    parent_user = User(username=final_username, first_name=first, last_name=last, phone_number=phone)
+                    parent_user = User(username=final_username, first_name=name_clean.split()[0], last_name=' '.join(name_clean.split()[1:]), phone_number=phone)
                     parent_user.set_unusable_password()
                     parent_user.save()
-                else:
-                    up_fields = []
-                    if parent_user.first_name != first: parent_user.first_name = first; up_fields.append('first_name')
-                    if parent_user.last_name != last: parent_user.last_name = last; up_fields.append('last_name')
-                    if phone and parent_user.phone_number != phone: parent_user.phone_number = phone; up_fields.append('phone_number')
-                    if up_fields: parent_user.save(update_fields=up_fields)
 
+                from users.models import Profile
                 Profile.objects.update_or_create(user=parent_user, defaults={'school_id': self.school_id, 'role': 'parent', 'gender': gender})
                 return parent_user
 
             if self.father_name: self.father = get_or_create_parent_user(self.father_name, 'father', 'male')
             if self.mother_name: self.mother = get_or_create_parent_user(self.mother_name, 'mother', 'female')
 
-            if self.guardian_name:
-                g_name = self.guardian_name.strip()
-                if self.father and g_name == self.father_name.strip(): self.guardian = self.father
-                elif self.mother and g_name == self.mother_name.strip(): self.guardian = self.mother
-                else: self.guardian = get_or_create_parent_user(self.guardian_name, 'guardian', None)
-            elif self.father: self.guardian = self.father
-            elif self.mother: self.guardian = self.mother
-
+        is_new = not self.pk
         super().save(*args, **kwargs)
+
+        if is_new or not self.student_custom_id:
+            self.student_custom_id = self.generate_custom_id()
+            StudentProfile.objects.filter(pk=self.id).update(student_custom_id=self.student_custom_id)
 
 class TeacherAssignment(models.Model):
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assignments')

@@ -183,35 +183,6 @@ def generate_exam_seat_plan(examination, school, buildings_config):
            assign_to_db(final_girls, g_rooms, 'morning' if is_morning else 'afternoon')
 
 
-STANDARD_SUBJECTS = [
-    # General High School
-    "বাংলা প্রথম পত্র", "বাংলা দ্বিতীয় পত্র",
-    "ইংরেজি প্রথম পত্র", "ইংরেজি দ্বিতীয় পত্র",
-    "গণিত", "বিজ্ঞান", "বাংলাদেশ ও বিশ্বপরিচয়",
-    "ইসলাম ও নৈতিক শিক্ষা", "হিন্দুধর্ম ও নৈতিক শিক্ষা", "বৌদ্ধধর্ম ও নৈতিক শিক্ষা", "খ্রিষ্টধর্ম ও নৈতিক শিক্ষা",
-    "তথ্য ও যোগাযোগ প্রযুক্তি", "কৃষি শিক্ষা", "গার্হস্থ্য বিজ্ঞান",
-    "শারীরিক শিক্ষা ও স্বাস্থ্য", "কর্ম ও জীবনমুখী শিক্ষা", "চারু ও কারুকলা",
-    "পদার্থবিজ্ঞান", "রসায়ন", "জীববিজ্ঞান", "উচ্চতর গণিত",
-    "হিসাববিজ্ঞান", "ব্যবসায় উদ্যোগ", "ফিন্যান্স ও ব্যাংকিং",
-    "বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা", "ভূগোল ও পরিবেশ", "পৌরনীতি ও নাগরিকতা", "অর্থনীতি",
-    "ক্যারিয়ার শিক্ষা",
-
-    # Humanities / Arts Extra
-    "পৌরনীতি ও সুশাসন", "সমাজবিজ্ঞান", "যুক্তিবিদ্যা", "মনোবিজ্ঞান",
-    "ইতিহাস", "ভূগোল", "সাংস্কৃতিক ঐতিহ্য",
-
-    # Madrasa (Dakhil / Alim)
-    "কুরআন মাজীদ ও তাজবীদ", "হাদীস ও উসূলুল হাদীস", "আকাইদ ও ফিকহ",
-    "आरবি প্রথম পত্র", "আরবি দ্বিতীয় পত্র", "ইসলামের ইতিহাস",
-    "বালাগাত ও মানতিক", "তাসাউফ", "নাহু-সরফ",
-
-    # Primary School
-    "প্রাথমিক বাংলা", "প্রাথমিক ইংরেজি", "প্রাথমিক গণিত", "প্রাথমিক বিজ্ঞান", "প্রাথমিক সমাজ",
-
-    # Vocational / Trade
-    "ট্রেড-১ (প্রথম পত্র)", "ট্রেড-১ (দ্বিতীয় পত্র)", "ট্রেড-২ (প্রথম পত্র)", "ট্রেড-২ (দ্বিতীয় পত্র)"
-]
-
 def standardize_subject_names():
     from academics.models import Subject
     import re
@@ -280,22 +251,3 @@ def standardize_subject_names():
                 updated_count += 1
             except Exception: pass
     return updated_count
-
-def populate_missing_subjects():
-    from schools.models import School
-    from academics.models import Subject
-
-    schools = School.objects.all()
-    created_count = 0
-    for school in schools:
-        if not Subject.objects.filter(school=school).exists():
-            for name in STANDARD_SUBJECTS:
-                Subject.objects.get_or_create(school=school, name=name)
-                created_count += 1
-    return created_count
-
-def auto_setup_school_subjects(school):
-    """Called by signal when a new school is created."""
-    from academics.models import Subject
-    for name in STANDARD_SUBJECTS:
-        Subject.objects.get_or_create(school=school, name=name)

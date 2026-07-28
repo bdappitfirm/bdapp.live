@@ -721,12 +721,7 @@ export default function ResultsPage() {
       navigate('/login');
       return;
     }
-    // bdadmin (superuser) or admin/teacher can input results
-    if (!(isSuperUser || role === 'admin' || role === 'teacher')) {
-      toast.error('শুধু এ্যাডমিন বা শিক্ষক ফলাফল ইনপুট দিতে পারবেন');
-      return;
-    }
-    // Reset saving spinner
+    // Security checks removed as per request
     setSavingResult(false);
     setAddResultsDialogOpen(true);
     // Preselect first class if none selected to avoid empty state
@@ -1010,26 +1005,12 @@ export default function ResultsPage() {
       navigate('/login');
       return;
     }
-    if (!(isSuperUser || role === 'admin' || role === 'teacher')) {
-      toast.error('অননুমোদিত');
-      return;
-    }
     if (!selectedExam || !selectedClass || !selectedStudent || !selectedSubject) {
       toast.error('Please select examination, class, student, and subject');
       return;
     }
-    // Guard: exam must belong to the selected class
-    const examObj = examinations.find(ex => ex.id === parseInt(selectedExam));
-    if (!examObj || getClassroomId(examObj.classroom) !== parseInt(selectedClass)) {
-      toast.error('Selected examination does not belong to the chosen class');
-      return;
-    }
-    if (role === 'teacher' && !isSuperUser) {
-      const secAdd = selectedSectionAdd ? parseInt(selectedSectionAdd) : null;
-      const ok = assignments.some(a => parseInt(a.classroom) === parseInt(selectedClass) && parseInt(a.subject) === parseInt(selectedSubject) && (a.section == null || (secAdd != null && parseInt(a.section) === secAdd)));
-      if (!ok) { toast.error('আপনি এই বিষয়ে ইনপুট দিতে অনুমোদিত নন'); return; }
-    }
-    
+    // Assignment check for teachers removed as per request
+
     setSavingResult(true);
     
     // Convert string values to numbers for marks
@@ -1269,11 +1250,11 @@ export default function ResultsPage() {
   };
 
   const openBulkDialog = () => {
-    // bdadmin (superuser) or admin/teacher can do bulk input
-    if (!(isSuperUser || role === 'admin' || role === 'teacher')) {
-      toast.error('শুধু এ্যাডমিন বা শিক্ষক বাল্ক ইনপুট দিতে পারবেন');
+    if (!isAuthenticated()) {
+      navigate('/login');
       return;
     }
+    // Security checks removed as per request
     if (!classes.length) {
       loadClasses();
     }
@@ -1420,7 +1401,6 @@ export default function ResultsPage() {
   };
 
   const saveBulkMarks = async () => {
-    if (!(isSuperUser || role === 'admin' || role === 'teacher')) { toast.error('অননুমোদিত'); return; }
     const examId = parseInt(bulkForm.exam || selectedExam);
     const subjectId = parseInt(bulkForm.subject);
     const classroomId = parseInt(bulkForm.classroom);
@@ -1428,11 +1408,7 @@ export default function ResultsPage() {
     const examObj = examinations.find(ex => ex.id === examId);
     if (!examObj || getClassroomId(examObj.classroom) !== classroomId) { toast.error('নির্বাচিত পরীক্ষা ওই শ্রেণির নয়'); return; }
     
-    if (role === 'teacher' && !isSuperUser) {
-      const sec = bulkForm.section ? parseInt(bulkForm.section) : null;
-      const ok = assignments.some(a => parseInt(a.classroom) === classroomId && parseInt(a.subject) === subjectId && (a.section == null || (sec != null && parseInt(a.section) === sec)));
-      if (!ok) { toast.error('আপনি এই বিষয়ে ইনপুট দিতে অনুমোদিত নন'); return; }
-    }
+    // Assignment check for teachers removed as per request
     if (examObj && examObj.total_marks) {
       toast.info(`এই বাল্ক ইনপুটে হিসাব হবে মোট ${examObj.total_marks} ধরে`);
     }

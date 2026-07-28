@@ -1,75 +1,90 @@
+/* Result Card Standard Styles */
+.result-card-container {
+  font-family: 'Roboto', 'Arial', sans-serif;
+  box-shadow: none !important;
+}
+
+/*
+   Print Specific Optimizations
+   Note: Styles are strictly scoped to .result-card-container
+   to prevent affecting other print pages like Admission/ID cards.
+*/
 @media print {
   @page {
     size: A4 portrait;
-    margin: 5mm !important; /* Proper margin to prevent shadow box appearance */
+    margin: 8mm !important;
   }
 
   html, body {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
-    background: #fff !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+    background-color: white !important;
     color-scheme: light !important;
   }
 
-  /* CRITICAL: Force remove shadows from ALL elements */
-  * {
+  /* Force background colors only inside result card */
+  .result-card-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: white !important;
+    border: none !important;
+    box-shadow: none !important;
+    display: block !important;
+  }
+
+  /* Universal reset for result card elements to ensure clarity */
+  .result-card-container * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     box-shadow: none !important;
     text-shadow: none !important;
     filter: none !important;
-    -webkit-filter: none !important;
-    border-radius: 0 !important;
   }
 
-  .result-card-container {
-    position: relative !important;
-    display: block !important;
-    width: 100% !important;
-    max-width: 210mm !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-    border: none !important;
-    outline: none !important;
-    background: white !important;
-    background-color: white !important;
-    overflow: visible !important;
+  /* Table header persistence */
+  .result-card-container .table-header-row,
+  .result-card-container .header-cell {
+    background-color: #1a237e !important;
+    color: white !important;
   }
 
-  /* Force background colors on MUI elements */
-  .MuiBox-root,
-  .MuiPaper-root,
-  .MuiTableCell-root,
-  .MuiTableRow-root,
-  .MuiGrid-root {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    background-color: inherit !important;
-    box-shadow: none !important;
-    border-color: #1a237e !important;
+  /* Stripes and highlights */
+  .result-card-container .MuiTableRow-root[style*="rgba(0, 0, 0, 0.03)"] {
+    background-color: #f5f5f5 !important;
+  }
+  .result-card-container .MuiTableRow-root[style*="rgba(255, 249, 196, 0.6)"] {
+    background-color: #fff9c4 !important;
+  }
+  .result-card-container .MuiTableRow-root[style*="rgba(232, 234, 246, 0.7)"] {
+    background-color: #e8eaf6 !important;
   }
 
-  /* Grade badge fix for print */
-  .MuiBox-root[style*="background-color"] {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+  /* Final result badge */
+  .result-card-container .MuiTypography-h6[style*="border"] {
+    border: 2px solid #1a237e !important;
+    background-color: #f8f9fa !important;
   }
 
-  /* Specific table border for clarity */
-  .MuiTableCell-root {
-    border: 0.5pt solid #1a237e !important;
+  /* Table borders for professional look */
+  .result-card-container .MuiTableCell-root {
+    border-bottom: 1px solid #1a237e !important;
+    border-right: 0.5pt solid rgba(26, 35, 126, 0.2) !important;
+  }
+  .result-card-container .MuiTableCell-root:last-child {
+    border-right: none !important;
   }
 
-  .no-print, button, header, footer, nav, .MuiSnackbar-root {
+  /* Hide UI components during print */
+  .no-print,
+  button,
+  header,
+  footer,
+  nav,
+  .MuiSnackbar-root,
+  .MuiDialog-root {
     display: none !important;
   }
-}
-
-.result-card-container {
-  font-family: 'Roboto', 'Arial', sans-serif;
-  box-shadow: none !important;
 }

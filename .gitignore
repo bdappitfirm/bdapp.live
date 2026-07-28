@@ -25,11 +25,16 @@ Thumbs.db
 *.pdf
 .env
 credentials.json
+bdadmin_backup.sql
+*.sql
+*.dump
 # Build
 dist/
 build/
 # Node
 node_modules/
+whatsapp-gateway/sessions/
+whatsapp-gateway/node_modules/
 
 # Local backups, temp files, and workspace-specific artifacts
 *.tar

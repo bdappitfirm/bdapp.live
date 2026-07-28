@@ -94,8 +94,9 @@ class SectionSerializer(serializers.ModelSerializer):
         fields = ['id', 'classroom', 'classroom_id', 'name', 'student_count']
 
 class SubjectSerializer(serializers.ModelSerializer):
-    assigned_teachers = serializers.SerializerMethodField()
+    school = SchoolSerializer(read_only=True)
     school_id = serializers.PrimaryKeyRelatedField(source='school', queryset=School.objects.all(), write_only=True, required=False)
+    assigned_teachers = serializers.SerializerMethodField()
     classrooms = serializers.PrimaryKeyRelatedField(many=True, queryset=ClassRoom.objects.all(), required=False)
     sections = serializers.PrimaryKeyRelatedField(many=True, queryset=Section.objects.all(), required=False)
     
@@ -104,20 +105,64 @@ class SubjectSerializer(serializers.ModelSerializer):
         fields = ['id', 'school', 'school_id', 'name', 'code', 'assigned_teachers', 'classrooms', 'sections']
         read_only_fields = ['school']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request:
+            from users.permissions import get_user_school_id
+            sid = get_user_school_id(request.user, request)
+            if sid:
+                self.fields['classrooms'].queryset = ClassRoom.objects.filter(school_id=sid)
+                self.fields['sections'].queryset = Section.objects.filter(classroom__school_id=sid)
+
+    def create(self, validated_data):
+        classrooms = validated_data.pop('classrooms', [])
+        sections = validated_data.pop('sections', [])
+        school = validated_data.pop('school', None)
+        sid_value = validated_data.pop('school_id', None)
+        if not school:
+            if sid_value:
+                if isinstance(sid_value, School):
+                    school = sid_value
+                else:
+                    school = School.objects.filter(pk=sid_value).first()
+            if not school:
+                request = self.context.get('request')
+                if request:
+                    from users.permissions import get_user_school_id
+                    user_sid = get_user_school_id(request.user, request)
+                    if user_sid: school = School.objects.filter(pk=user_sid).first()
+        if not school:
+            raise serializers.ValidationError({'school': 'School is required.'})
+        code_val = validated_data.get('code', None)
+        if code_val is not None and str(code_val).strip() == '':
+            validated_data['code'] = None
+        subject = Subject.objects.create(school=school, **validated_data)
+        if classrooms:
+            subject.classrooms.set(classrooms)
+        if sections:
+            subject.sections.set(sections)
+        return subject
+
+    def update(self, instance, validated_data):
+        classrooms = validated_data.pop('classrooms', None)
+        sections = validated_data.pop('sections', None)
+        code_val = validated_data.get('code', None)
+        if code_val is not None and str(code_val).strip() == '':
+            validated_data['code'] = None
+        validated_data.pop('school', None)
+        validated_data.pop('school_id', None)
+        instance = super().update(instance, validated_data)
+        if classrooms is not None:
+            instance.classrooms.set(classrooms)
+        if sections is not None:
+            instance.sections.set(sections)
+        return instance
+
     def get_assigned_teachers(self, obj):
         try:
             if not obj.id: return []
-            classroom_id = self.context.get('classroom_id') if self.context else None
-            section_id = self.context.get('section_id') if self.context else None
-
             assignments = obj.assignments.all()
-            if classroom_id:
-                from django.db.models import Q
-                filter_q = Q(classroom_id=classroom_id)
-                if section_id:
-                    filter_q &= (Q(section_id=section_id) | Q(section__isnull=True))
-                assignments = assignments.filter(filter_q)
-
             teachers_data = []
             seen_teachers = set()
             for assignment in assignments:
@@ -130,12 +175,9 @@ class SubjectSerializer(serializers.ModelSerializer):
                     'username': teacher.username,
                     'first_name': teacher.first_name,
                     'last_name': teacher.last_name,
-                    'email': teacher.email,
-                    'phone_number': getattr(teacher, 'phone_number', ''),
                 })
             return teachers_data
-        except Exception:
-            return []
+        except Exception: return []
 
 class TinyClassRoomSerializer(serializers.ModelSerializer):
     class Meta:
@@ -212,55 +254,24 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         if not self.birth_date_db_exists(): validated_data.pop('birth_date', None)
-
-        # Separate User model fields from StudentProfile fields
         user_fields = ['username', 'password', 'first_name', 'last_name', 'email', 'phone_number', 'photo']
         user_data = {f: validated_data.pop(f) for f in user_fields if f in validated_data}
-
-        # Update User model if needed
         if user_data:
             user = instance.user
             user_updated = False
-
             if 'username' in user_data:
                 norm_username = unicodedata.normalize('NFKC', str(user_data['username'])).strip()
                 if User.objects.filter(username=norm_username).exclude(pk=user.pk).exists():
                      raise serializers.ValidationError({'username': 'This username is already taken.'})
-                user.username = norm_username
-                user_updated = True
-
-            if 'password' in user_data and user_data['password']:
-                user.set_password(user_data['password'])
-                user_updated = True
-
-            if 'first_name' in user_data:
-                user.first_name = user_data['first_name']
-                user_updated = True
-
-            if 'last_name' in user_data:
-                user.last_name = user_data['last_name']
-                user_updated = True
-
-            if 'email' in user_data:
-                user.email = user_data['email']
-                user_updated = True
-
-            if 'phone_number' in user_data:
-                user.phone_number = user_data['phone_number']
-                user_updated = True
-
-            if 'photo' in user_data:
-                user.photo = user_data['photo']
-                user_updated = True
-
-            if user_updated:
-                user.save()
-
-            # Update Profile gender if it was updated in StudentProfile
-            if 'gender' in validated_data:
-                Profile.objects.filter(user=user).update(gender=validated_data['gender'])
-
-        # Continue with StudentProfile update
+                user.username = norm_username; user_updated = True
+            if 'password' in user_data and user_data['password']: user.set_password(user_data['password']); user_updated = True
+            if 'first_name' in user_data: user.first_name = user_data['first_name']; user_updated = True
+            if 'last_name' in user_data: user.last_name = user_data['last_name']; user_updated = True
+            if 'email' in user_data: user.email = user_data['email']; user_updated = True
+            if 'phone_number' in user_data: user.phone_number = user_data['phone_number']; user_updated = True
+            if 'photo' in user_data: user.photo = user_data['photo']; user_updated = True
+            if user_updated: user.save()
+            if 'gender' in validated_data: Profile.objects.filter(user=user).update(gender=validated_data['gender'])
         return super().update(instance, validated_data)
 
 class TeacherAssignmentSerializer(serializers.ModelSerializer):

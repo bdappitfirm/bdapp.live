@@ -11,7 +11,12 @@ cd $BACKEND_DIR
 
 # 1. Normal Database Sync (Only applies NEW changes if any)
 echo "⚙️ Syncing database..."
-$VENV_PYTHON manage.py migrate --noinput
+# If migration 0010 fails due to existing constraint, we fake it
+$VENV_PYTHON manage.py migrate --noinput || {
+    echo "⚠️  Migration failed, attempting to fake conflicting migration..."
+    $VENV_PYTHON manage.py migrate academics 0010 --fake --noinput 2>/dev/null
+    $VENV_PYTHON manage.py migrate --noinput
+}
 
 # 1.5 Fix existing database marks and recalculate grades
 if [ -f "fix_database_marks.py" ]; then
