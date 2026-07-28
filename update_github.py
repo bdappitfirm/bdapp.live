@@ -4,43 +4,26 @@ import sys
 import os
 from datetime import datetime
 
-def get_bengali_timestamp():
-    # English month names written in Bengali script
-    months_bn = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"]
-
+def get_timestamp():
+    # Standard English timestamp format
+    # Example: (29 July 2024 02:44 AM)
     now = datetime.now()
-    day = now.day
-    month = months_bn[now.month - 1]
-    year = now.year
-    hour = now.hour
-    minute = now.minute
-
-    # Period markers (রাত, সকাল, দুপুর etc)
-    period_bn = ""
-    if 0 <= hour < 6: period_bn = "রাত"
-    elif 6 <= hour < 12: period_bn = "সকাল"
-    elif 12 <= hour < 15: period_bn = "দুপুর"
-    elif 15 <= hour < 18: period_bn = "বিকাল"
-    elif 18 <= hour < 20: period_bn = "সন্ধ্যা"
-    else: period_bn = "রাত"
-
-    # AM/PM and 12-hour format
-    am_pm = "A.M." if hour < 12 else "P.M."
-    display_hour = hour % 12
-    if display_hour == 0: display_hour = 12
-
-    # Using English digits for date, year and time as requested
-    timestamp = f"({day} {month} {year} {period_bn} {display_hour}:{minute:02d} {am_pm})"
-    return timestamp
+    return now.strftime("(%d %B %Y %I:%M %p)")
 
 def run_command(command):
     try:
+        # Running with default encoding since we removed Bengali
         result = subprocess.run(command, capture_output=True, text=True, check=True, shell=True)
-        return result.stdout.strip()
+        return result.stdout.strip() if result.stdout else ""
     except subprocess.CalledProcessError as e:
-        if "nothing to commit" in e.stderr:
+        err_msg = e.stderr or ""
+        if "nothing to commit" in err_msg:
             return "NOTHING_TO_COMMIT"
-        print(f"Error: {e.stderr}")
+        print(f"Error executing: {command}")
+        print(f"Details: {err_msg}")
+        return None
+    except Exception as e:
+        print(f"Unexpected Error: {e}")
         return None
 
 def generate_message():
@@ -51,9 +34,12 @@ def generate_message():
     lines = status.split('\n')
     changes = []
     for line in lines:
+        # Extract folder/file names for a smart message
         parts = line.strip().split('/')
         if len(parts) > 1:
-            changes.append(parts[0].split()[-1])
+            # Get the module name (first folder)
+            module = parts[0].split()[-1]
+            changes.append(module)
         else:
             changes.append("root files")
 
@@ -62,38 +48,44 @@ def generate_message():
     if len(unique_changes) > 3:
         msg += " and other modules"
 
-    # Append Bengali Timestamp
-    msg += f" {get_bengali_timestamp()}"
+    # Append English Timestamp
+    msg += f" {get_timestamp()}"
     return msg
 
 def update():
-    print("🔍 Checking for changes...")
+    print("Checking for changes...")
 
-    # Add changes
+    # Stage all changes
     run_command("git add .")
 
-    # Generate Message
+    # Generate Intelligent Message
     message = generate_message()
     if not message:
-        print("✅ Everything is already up to date.")
+        print("Everything is already up to date.")
         return
 
-    print(f"📝 Intelligent Commit: {message}")
+    print(f"Commit Message: {message}")
 
-    # Commit
-    commit_res = run_command(f'git commit -m "{message}"')
+    # Commit with escaped message
+    safe_message = message.replace('"', '\\"')
+    commit_res = run_command(f'git commit -m "{safe_message}"')
+
+    if commit_res is None:
+        print("Commit failed.")
+        return
+
     if commit_res == "NOTHING_TO_COMMIT":
-        print("✅ No new changes to commit.")
+        print("No new changes to commit.")
         return
 
-    # Push
-    print("📤 Pushing to GitHub...")
+    # Push to GitHub
+    print("Pushing to GitHub...")
     push_res = run_command("git push")
 
     if push_res is not None:
-        print("🚀 Success! GitHub repository updated.")
+        print("Success! GitHub repository updated.")
     else:
-        print("❌ Push failed. Please check your internet or git credentials.")
+        print("Push failed. Please check your internet or git credentials.")
 
 if __name__ == "__main__":
     update()
