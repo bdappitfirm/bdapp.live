@@ -42,6 +42,7 @@ import EmptyState from '../components/EmptyState';
 import SubjectCard from '../components/SubjectCard';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
+import { sortClassrooms } from '../utils/classroomUtils';
 
 const banglaNumberMap = {
   'প্লে': -3,
@@ -156,15 +157,12 @@ export default function SubjectsPage() {
       setSubjects(subjectsData);
 
       const classRes = await api.get(`/api/academics/classrooms/?school=${id}`);
-      let classesData = Array.isArray(classRes.data) ? classRes.data : classRes.data.results || [];
+      const classesData = Array.isArray(classRes.data) ? classRes.data : classRes.data.results || [];
       
-      classesData = classesData.sort((a, b) => {
-        return getClassOrder(a.name) - getClassOrder(b.name);
-      });
-      
-      setClassrooms(classesData);
+      const sortedClasses = sortClassrooms(classesData);
+      setClassrooms(sortedClasses);
 
-      const summary = classesData.map(classroom => {
+      const summary = sortedClasses.map(classroom => {
         const classSubjs = subjectsData.filter(s => {
           const cls = Array.isArray(s.classrooms) ? s.classrooms : [];
           const sids = Array.isArray(s.sections) ? s.sections : [];

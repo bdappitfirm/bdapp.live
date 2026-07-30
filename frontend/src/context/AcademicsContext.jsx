@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { scopedGet } from '../utils/schoolApi';
 import { getCachedData, cacheData } from '../utils/offlineDb';
+import { sortClassrooms } from '../utils/classroomUtils';
 
 const AcademicsContext = createContext();
 
@@ -68,9 +69,10 @@ export const AcademicsProvider = ({ children }) => {
     try {
       const response = await scopedGet('/api/academics/classrooms/', sId, {}, { timeout: 30000 });
       const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
-      setClassrooms(data);
-      if (data.length > 0) await cacheData('classrooms', data);
-      return data;
+      const sorted = sortClassrooms(data);
+      setClassrooms(sorted);
+      if (sorted.length > 0) await cacheData('classrooms', sorted);
+      return sorted;
     } catch (error) {
       console.error('Error fetching classrooms:', error);
       // const cached = await getCachedData('classrooms');

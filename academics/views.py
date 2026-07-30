@@ -57,24 +57,34 @@ class ClassRoomViewSet(viewsets.ModelViewSet):
                 if is_global_admin(self.request.user):
                     return ClassRoom.objects.all().prefetch_related('sections').annotate(
                         annotated_student_count=Count('students', distinct=True)
-                    ).order_by('name')
+                    )
                 return ClassRoom.objects.none()
 
-            try:
-                # Intelligent sorting: First by length, then by value
-                from django.db.models.functions import Length
-                return ClassRoom.objects.filter(school_id=sid).prefetch_related('sections').annotate(
-                    annotated_student_count=Count('students', distinct=True),
-                    name_len=Length('name')
-                ).order_by('name_len', 'name')
-            except Exception as e:
-                print(f"ClassRoom Queryset Sorting Error: {e}")
-                return ClassRoom.objects.filter(school_id=sid).prefetch_related('sections').annotate(
-                    annotated_student_count=Count('students', distinct=True)
-                ).order_by('name')
+            return ClassRoom.objects.filter(school_id=sid).prefetch_related('sections').annotate(
+                annotated_student_count=Count('students', distinct=True)
+            )
         except Exception as e:
             print(f"ClassRoom Queryset Fatal Error: {e}")
             return ClassRoom.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Performance optimization: Default DB sort
+        queryset = queryset.order_by('name')
+
+        # Logical sort using Python helper
+        from .utils import get_class_order
+        items = list(queryset)
+        items.sort(key=lambda x: get_class_order(x.name))
+
+        page = self.paginate_queryset(items)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(items, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def summary(self, request):

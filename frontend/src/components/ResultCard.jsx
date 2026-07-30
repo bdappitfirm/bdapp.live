@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Grid } from '@mui/material';
+import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Grid, Stack } from '@mui/material';
+import dayjs from 'dayjs';
 import './ResultCard.css';
 import ImageWithFallback from './ImageWithFallback';
 import api from '../utils/api';
@@ -8,29 +9,33 @@ import { getMediaUrl } from '../utils/media';
 
 const toBn = (v) => String(v ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
 
-const getSubjectOrderWeight = (r) => {
+const getSubjectOrderWeight = (r, isOptional) => {
   if (!r) return 9999;
+
+  // Rule: Optional subjects ALWAYS go to the end (Weight 1000+)
+  if (isOptional) return 1000;
+
   const rawName = String(r.subject?.name || r.subject_name || '').replace(/\s*\(.*?\)\s*/g, '').trim();
   const n = rawName.toLowerCase();
   const clean = n.replace(/\u200d/g, '').replace(/\s+/g, ' ').trim();
 
   // 1. Bangla
-  if (r.id === 'merged-bangla' || clean.includes('বাংলা (১ম + ২য়)') || clean.includes('bangla (1st + 2nd)') || ((clean.includes('বাংলা') || clean.includes('bangla')) && !clean.includes('বাংলাদেশ'))) return 10;
-
-  // 2. English
-  if (r.id === 'merged-english' || clean.includes('ইংরেজি (১ম + ২য়)') || clean.includes('ইংরেজী (১ম + ২য়)') || clean.includes('english (1st + 2nd)') || clean.includes('english') || clean.includes('ইংরেজি') || clean.includes('ইংরেজী')) return 20;
-
-  // 3. Math
-  if (clean.includes('গণিত') || clean.includes('গনিত') || clean.includes('math')) {
-      if (clean.includes('উচ্চতর') || clean.includes('higher')) return 100; // Higher math is 10th
-      return 30;
+  if (r.id === 'merged-bangla' || clean.includes('বাংলা') || clean.includes('bangla') || clean.includes('bengali')) {
+      if (clean.includes('বাংলাদেশ') || clean.includes('bangladesh')) return 61; // BGS
+      return 10;
   }
 
+  // 2. English
+  if (r.id === 'merged-english' || clean.includes('english') || clean.includes('ইংরেজি') || clean.includes('ইংরেজী')) return 20;
+
+  // 3. Math
+  if (clean.includes('গণিত') || clean.includes('গনিত') || clean.includes('math') || clean.includes('mathematics')) return 30;
+
   // 4. Religion
-  if (clean.includes('ইসলাম') || clean.includes('হিন্দু') || clean.includes('ধর্ম') || clean.includes('religion')) return 40;
+  if (clean.includes('ইসলাম') || clean.includes('islam') || clean.includes('হিন্দু') || clean.includes('hindu') || clean.includes('ধর্ম') || clean.includes('religion')) return 40;
 
   // 5. ICT
-  if (clean.includes('আইসিটি') || clean.includes('ict') || clean.includes('তথ্য')) return 50;
+  if (clean.includes('আইসিটি') || clean.includes('ict') || clean.includes('তথ্য') || clean.includes('information')) return 50;
 
   // 6. Science / BGS
   if (clean.includes('বিজ্ঞান') || clean.includes('science')) {
@@ -48,27 +53,31 @@ const getSubjectOrderWeight = (r) => {
 
   // 8. Chemistry / Finance / History
   if (clean.includes('রসায়ন') || clean.includes('রসায়ন') || clean.includes('chemistry')) return 80;
-  if (clean.includes('ফিন্যান্স') || clean.includes('finance') || clean.includes('ব্যাংকিং')) return 81;
+  if (clean.includes('ফিন্যান্স') || clean.includes('finance') || clean.includes('ব্যাংকিং') || clean.includes('banking')) return 81;
   if (clean.includes('ইতিহাস') || clean.includes('history')) return 82;
 
   // 9. Biology / Business Ent / Civics
   if (clean.includes('জীব') || clean.includes('biology')) return 90;
-  if (clean.includes('ব্যবসায়') || clean.includes('business') || clean.includes('উদ্যোগ')) return 91;
-  if (clean.includes('পৌরনীতি') || clean.includes('civics') || clean.includes('নাগরিকতা')) return 92;
+  if (clean.includes('ব্যবসায়') || clean.includes('business') || clean.includes('উদ্যোগ') || clean.includes('entrepreneurship')) return 91;
+  if (clean.includes('পৌরনীতি') || clean.includes('civics') || clean.includes('নাগরিকতা') || clean.includes('citizenship')) return 92;
 
-  // 10. Higher Math / Agriculture (Optional)
-  if (clean.includes('উচ্চতর') || clean.includes('higher math')) return 100;
-  if (clean.includes('কৃষি') || clean.includes('agriculture')) return 101;
+  // 10. Higher Math / Agriculture (Handled by isOptional Rule above)
 
   // 11. Others
   return 200 + clean.length;
 };
 
-const sortSubjectsByOrder = (arr) => {
+const sortSubjectsByOrder = (arr, allResults) => {
   if (!Array.isArray(arr) || arr.length === 0) return arr;
+
+  // Pre-calculate which subjects are optional to pass to weight function
   return [...arr].sort((a, b) => {
-    const wa = getSubjectOrderWeight(a);
-    const wb = getSubjectOrderWeight(b);
+    const isOptA = allResults.some(r => (r.id === a.id || r.subject?.id === a.subject?.id) && r.is_optional_detected);
+    const isOptB = allResults.some(r => (r.id === b.id || r.subject?.id === b.subject?.id) && r.is_optional_detected);
+
+    const wa = getSubjectOrderWeight(a, isOptA);
+    const wb = getSubjectOrderWeight(b, isOptB);
+
     if (wa !== wb) return wa - wb;
     const na = String(a?.subject?.name || a?.subject_name || '').toLowerCase();
     const nb = String(b?.subject?.name || b?.subject_name || '').toLowerCase();
@@ -76,17 +85,31 @@ const sortSubjectsByOrder = (arr) => {
   });
 };
 
-export default function ResultCard({ studentData, results: rawResults, overallResult, examination, school, schoolId, forceLanguage }) {
+export default function ResultCard({ studentData, results: rawResults, overallResult, examination, school, schoolId, forceLanguage, translatedData }) {
   const student = studentData?.student || {};
   const user = student.user || {};
-  const studentName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
-  const guardianName = (
-    (student.guardian ? `${student.guardian.first_name || ''} ${student.guardian.last_name || ''}`.trim() : '') ||
-    student.guardian_name || student.parent_name || student.father_name || student.mother_name ||
-    user.guardian_name || user.parent_name || ''
-  );
 
   const [resolvedSchool, setResolvedSchool] = React.useState(school || null);
+  React.useEffect(() => { if (school && !resolvedSchool) setResolvedSchool(school); }, [school, resolvedSchool]);
+
+  const studentName = useMemo(() => {
+    if (translatedData?.student_name) return translatedData.student_name;
+    return `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+  }, [user, translatedData]);
+
+  const guardianName = useMemo(() => {
+    if (translatedData?.guardian_name) return translatedData.guardian_name;
+    return (
+      (student.guardian ? `${student.guardian.first_name || ''} ${student.guardian.last_name || ''}`.trim() : '') ||
+      student.guardian_name || student.parent_name || student.father_name || student.mother_name ||
+      user.guardian_name || user.parent_name || ''
+    );
+  }, [student, user, translatedData]);
+
+  const schoolName = useMemo(() => {
+    if (translatedData?.school_name) return translatedData.school_name;
+    return resolvedSchool?.name || "BD School";
+  }, [resolvedSchool, translatedData]);
 
   // --- 0. LANGUAGE LOGIC ---
   const isLanguageBengali = useMemo(() => {
@@ -244,7 +267,7 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
         if (spec.mcq > 0 && m < Math.round(spec.mcq * 0.33)) isPassed = false;
         if (spec.pr > 0 && p < Math.round(spec.pr * 0.33)) isPassed = false;
       }
-      return { ...r, total_obtained: obtained, total_possible: totalPossible, grade: isPassed ? computeGrade(percentage) : 'F', gpa: isPassed ? computeGpa(percentage).toFixed(2) : '0.00', is_passed: isPassed };
+      return { ...r, total_obtained: obtained, total_possible: totalPossible, grade: isPassed ? computeGrade(percentage) : 'F', gpa: isPassed ? computeGpa(percentage).toFixed(2) : '0.00', is_passed: isPassed, is_optional_detected: isOptionalSubject(r) };
     });
   }, [rawResults, isClassNineOrTen]);
 
@@ -299,7 +322,7 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
         const totalPossible = papers.bangla.reduce((s, r) => s + r.total_possible, 0);
         const allPassed = papers.bangla.every(r => r.is_passed);
         const firstName = String(papers.bangla[0]?.subject?.name || papers.bangla[0]?.subject_name || '').toLowerCase();
-        const mergedName = firstName.includes('bangla') ? 'Bangla (1st + 2nd)' : 'বাংলা (১ম + ২য়)';
+        const mergedName = (forceLanguage === 'en' || firstName.includes('bangla') || firstName.includes('bengali')) ? 'Bangla (1st + 2nd)' : 'বাংলা (১ম + ২য়)';
         merged.push({ id: 'merged-bangla', subject: { name: mergedName }, written_marks: papers.bangla.map(r => r.written_marks).join(' + '), mcq_marks: papers.bangla.map(r => r.mcq_marks).join(' + '), practical_marks: '--', total_obtained: sumObtained, total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed });
         papers.bangla.forEach(r => handledSubjectIds.add(r.subject?.id || r.subject));
       }
@@ -308,7 +331,7 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
         const totalPossible = papers.english.reduce((s, r) => s + r.total_possible, 0);
         const allPassed = papers.english.every(r => r.is_passed);
         const firstName = String(papers.english[0]?.subject?.name || papers.english[0]?.subject_name || '').toLowerCase();
-        const mergedName = firstName.includes('english') ? 'English (1st + 2nd)' : 'ইংরেজি (১ম + ২য়)';
+        const mergedName = (forceLanguage === 'en' || firstName.includes('english')) ? 'English (1st + 2nd)' : 'ইংরেজি (১ম + ২য়)';
         merged.push({ id: 'merged-english', subject: { name: mergedName }, written_marks: papers.english.map(r => r.total_obtained).join(' + '), mcq_marks: '--', practical_marks: '--', total_obtained: sumObtained, total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed });
         papers.english.forEach(r => handledSubjectIds.add(r.subject?.id || r.subject));
       }
@@ -318,11 +341,11 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
       });
 
       const finalMain = [...merged, ...optionalResults];
-      return { main: sortSubjectsByOrder(finalMain), coCurricular: coCurricularResults };
+      return { main: sortSubjectsByOrder(finalMain, allRecalculated), coCurricular: coCurricularResults };
     }
 
     const finalMainNon910 = [...mainResults, ...optionalResults];
-    return { main: sortSubjectsByOrder(finalMainNon910), coCurricular: coCurricularResults };
+    return { main: sortSubjectsByOrder(finalMainNon910, allRecalculated), coCurricular: coCurricularResults };
   }, [allRecalculated, isClassNineOrTen, student]);
 
   const finalSummary = useMemo(() => {
@@ -370,85 +393,140 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
     return '';
   }, [student]);
 
-  React.useEffect(() => { if (school && !resolvedSchool) setResolvedSchool(school); }, [school, resolvedSchool]);
-  const logoUrl = getMediaUrl(resolvedSchool?.logo || fallbackLogo);
   const studentPhotoUrl = getMediaUrl(user?.photo || user?.photo_url);
+  const logoUrl = getMediaUrl(resolvedSchool?.logo || fallbackLogo);
+
+  const displayClass = useMemo(() => {
+    if (translatedData?.class_name) return translatedData.class_name;
+    return `${student.classroom?.name || ''} ${student.section?.name ? `(${student.section.name})` : ''}`;
+  }, [student, translatedData]);
+
+  const displayExam = useMemo(() => {
+    if (translatedData?.examination_name) return translatedData.examination_name;
+    return `${examination?.academic_year || ''} ${examination?.name || ''}`.trim();
+  }, [examination, translatedData]);
 
   return (
     <Box className="result-card-container" sx={{
-      maxWidth: 900, mx: 'auto', bgcolor: 'white', p: 1.5, position: 'relative', overflow: 'visible',
-      border: 'none !important', boxShadow: 'none !important', outline: 'none !important'
+      width: '100%', maxWidth: '210mm', minHeight: '290mm', mx: 'auto', bgcolor: 'white', p: '10mm', position: 'relative',
+      border: '2px solid #1a237e', borderRadius: '2px', outline: '6px double #1a237e', outlineOffset: '-10px',
+      boxShadow: 'none !important', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always',
+      '@media print': { margin: 0, border: 'none', outline: '4px double #1a237e', outlineOffset: '-8px' }
     }}>
-      <Box sx={{ position: 'absolute', top: '58%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', opacity: 0.15, zIndex: 0, pointerEvents: 'none', display: 'flex', justifyContent: 'center' }}><img src={logoUrl} alt="" style={{ width: '100%', maxWidth: '500px' }} /></Box>
+      {/* Background Watermark */}
+      <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '70%', opacity: 0.12, zIndex: 0, pointerEvents: 'none', display: 'flex', justifyContent: 'center' }}>
+        <img src={logoUrl} alt="" style={{ width: '100%', maxWidth: '500px', filter: 'grayscale(100%) brightness(1.2)' }} />
+      </Box>
+
       <Box sx={{ position: 'relative', zIndex: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1.5, mt: 0.5, minHeight: '125px', overflow: 'visible' }}>
-          <Box sx={{ width: '120px', height: '120px', flexShrink: 0, display: 'flex', alignItems: 'center' }}><ImageWithFallback src={logoUrl} alt="Logo" width="100%" height="auto" /></Box>
-          <Box sx={{ flexGrow: 1, textAlign: 'center', minWidth: 0, px: 1 }}>
-            <Typography variant="h4" sx={{ fontWeight: 900, color: '#1a237e !important', fontSize: (resolvedSchool?.name?.length > 50) ? '1.2rem' : (resolvedSchool?.name?.length > 35) ? '1.4rem' : '1.8rem', mb: 0.1, lineHeight: 1.6, pt: 0.8, pb: 0.4, display: 'block', wordWrap: 'break-word', overflow: 'visible', WebkitPrintColorAdjust: 'exact' }}>{resolvedSchool?.name || "BD School"}</Typography>
-            {resolvedSchool?.ein && (<Typography sx={{ fontSize: '12px', color: '#1a237e !important', fontWeight: 'bold', mt: -0.2, WebkitPrintColorAdjust: 'exact' }}>EIIN: {resolvedSchool.ein}</Typography>)}
-            <Typography variant="h6" sx={{ color: '#5c6bc0 !important', fontSize: '12px', lineHeight: 1.1, WebkitPrintColorAdjust: 'exact' }}>{resolvedSchool?.address || "" }</Typography>
-            <Box sx={{ mt: 1, mx: 'auto', width: 'fit-content', px: 3, py: 0.5, borderRadius: '50px', bgcolor: '#1a237e !important', color: 'white !important', whiteSpace: 'nowrap', WebkitPrintColorAdjust: 'exact' }}><Typography sx={{ fontWeight: 'bold', fontSize: '14px' }}>{l.reportTitle}</Typography></Box>
+        {/* Header Section */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+          {/* Left: Logo */}
+          <Box sx={{ width: '100px', height: '100px', display: 'flex', alignItems: 'center' }}>
+            <ImageWithFallback src={logoUrl} alt="Logo" width="100%" height="auto" />
           </Box>
-          <Box sx={{ width: '120px', height: '120px', border: '2.5px solid #1a237e', borderRadius: 1.5, overflow: 'hidden', flexShrink: 0 }}><ImageWithFallback src={studentPhotoUrl} alt="Student" width="100%" height="100%" /></Box>
+
+          {/* Center: School Info */}
+          <Box sx={{ flexGrow: 1, textAlign: 'center', px: 2 }}>
+            <Typography variant="h4" sx={{ fontWeight: 900, color: '#1a237e !important', fontSize: (schoolName?.length > 40) ? '1.4rem' : '2rem', mb: 0.5, letterSpacing: '1px', WebkitPrintColorAdjust: 'exact' }}>
+              {schoolName}
+            </Typography>
+            {resolvedSchool?.ein && (
+              <Typography sx={{ fontSize: '14px', color: '#333 !important', fontWeight: 'bold', mb: 0.5, WebkitPrintColorAdjust: 'exact' }}>
+                EIIN: {resolvedSchool.ein}
+              </Typography>
+            )}
+            <Typography sx={{ color: '#555 !important', fontSize: '12px', mb: 1, WebkitPrintColorAdjust: 'exact' }}>
+              {translatedData?.address || resolvedSchool?.address || "" }
+            </Typography>
+            <Box sx={{ mt: 1, mx: 'auto', width: 'fit-content', px: 3, py: 0.4, border: '1.5px solid #1a237e', borderRadius: '4px', bgcolor: '#1a237e !important', color: 'white !important', WebkitPrintColorAdjust: 'exact' }}>
+              <Typography sx={{ fontWeight: 'bold', fontSize: '14px', letterSpacing: 2 }}>{l.reportTitle.toUpperCase()}</Typography>
+            </Box>
+          </Box>
+
+          {/* Right: Photo & Grade Scale */}
+          <Stack spacing={1} alignItems="flex-end">
+            <Box sx={{ width: '90px', height: '105px', border: '2px solid #1a237e', p: '2px', bgcolor: 'white' }}>
+              <ImageWithFallback src={studentPhotoUrl} alt="Student" width="100%" height="100%" />
+            </Box>
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #1a237e', width: '110px', bgcolor: 'transparent' }}>
+              <Table size="small" sx={{ '& td, & th': { fontSize: '8px', p: '1px 2px', border: '0.5px solid #1a237e' } }}>
+                <TableBody>
+                  {[ ['80-100','A+','5.0'],['70-79','A','4.0'],['60-69','A-','3.5'],['50-59','B','3.0'],['40-49','C','2.0'],['33-39','D','1.0'],['00-32','F','0.0'] ].map((r, i) => (
+                    <TableRow key={i}><TableCell align="center">{r[0]}</TableCell><TableCell align="center">{r[1]}</TableCell><TableCell align="center">{r[2]}</TableCell></TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Stack>
         </Box>
-        <Grid container spacing={1} sx={{ mb: 1, mt: 1, bgcolor: '#f8f9fa !important', p: 1.5, borderRadius: 2, borderLeft: '6px solid #1a237e', WebkitPrintColorAdjust: 'exact' }}>
-          <Grid item xs={12} sm={6}><Typography sx={{ color: 'black !important' }}><strong>{l.studentName}</strong> {studentName}</Typography></Grid>
-          <Grid item xs={6} sm={3}><Typography sx={{ color: 'black !important' }}><strong>{l.rollNo}</strong> {n(student.roll_number)}</Typography></Grid>
-          <Grid item xs={6} sm={3}><Typography sx={{ color: 'black !important' }}><strong>{l.class}</strong> {student.classroom?.name} {student.section?.name ? `(${student.section.name})` : ''} {isLanguageBengali ? (studentGroupBn ? `| ${studentGroupBn}` : '') : (studentGroupEn ? `| ${studentGroupEn}` : '')}</Typography></Grid>
-          <Grid item xs={12} sm={6}><Typography sx={{ color: 'black !important' }}><strong>{l.examination}</strong> {n(examination?.academic_year)} {examination?.name}</Typography></Grid>
-          <Grid item xs={12} sm={6}><Typography sx={{ color: 'black !important' }}><strong>{l.guardian}</strong> {guardianName}</Typography></Grid>
-        </Grid>
-        <TableContainer component={Paper} elevation={0} sx={{ mb: 1, border: '1.5px solid #1a237e', bgcolor: 'transparent', boxShadow: 'none' }}>
-          <Table size="small" sx={{ bgcolor: 'transparent', tableLayout: 'fixed' }}>
-            <colgroup><col style={{ width: '36%' }} /><col style={{ width: '12%' }} /><col style={{ width: '12%' }} /><col style={{ width: '8%' }} /><col style={{ width: '10%' }} /><col style={{ width: '11%' }} /><col style={{ width: '11%' }} /></colgroup>
+
+        {/* Student Info Details */}
+        <Box sx={{ border: '1px solid #1a237e', p: 1.5, mb: 2, bgcolor: 'rgba(26, 35, 126, 0.01)' }}>
+          <Grid container spacing={1}>
+            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>{l.studentName}</strong> <span style={{ borderBottom: '1px dotted #1a237e', flexGrow: 1, marginLeft: '8px' }}>{studentName}</span></Typography></Grid>
+            <Grid item xs={3}><Typography sx={{ fontSize: '14px' }}><strong>Roll No:</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{n(student.roll_number)}</span></Typography></Grid>
+            <Grid item xs={3}><Typography sx={{ fontSize: '14px' }}><strong>{l.class}</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{displayClass}</span></Typography></Grid>
+
+            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>Father's Name:</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{translatedData?.father_name || student.father_name || 'N/A'}</span></Typography></Grid>
+            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>{l.examination}</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{displayExam}</span></Typography></Grid>
+
+            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>Mother's Name:</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{translatedData?.mother_name || student.mother_name || 'N/A'}</span></Typography></Grid>
+            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>Group:</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{isLanguageBengali ? (studentGroupBn || 'সাধারণ') : (studentGroupEn || 'General')}</span></Typography></Grid>
+          </Grid>
+        </Box>
+
+        {/* Results Table */}
+        <TableContainer component={Paper} elevation={0} sx={{ mb: 1, border: '1px solid #1a237e', borderRadius: 0 }}>
+          <Table size="small" sx={{ borderCollapse: 'collapse', '& td, & th': { border: '1px solid #1a237e !important', py: 0.5, px: 1, fontSize: '13px' } }}>
             <TableHead>
-              <TableRow className="table-header-row" sx={{ bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                <TableCell className="header-cell" sx={{ color: 'white !important', fontWeight: 'bold', bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact' }}>{l.subjectName}</TableCell>
-                <TableCell className="header-cell" align="center" sx={{ color: 'white !important', fontWeight: 'bold', bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact' }}>{l.cq}</TableCell>
-                <TableCell className="header-cell" align="center" sx={{ color: 'white !important', fontWeight: 'bold', bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact' }}>{l.mcq}</TableCell>
-                <TableCell className="header-cell" align="center" sx={{ color: 'white !important', fontWeight: 'bold', bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact' }}>{l.prac}</TableCell>
-                <TableCell className="header-cell" align="center" sx={{ color: 'white !important', fontWeight: 'bold', bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact' }}>{l.total}</TableCell>
-                <TableCell className="header-cell" align="center" sx={{ color: 'white !important', fontWeight: 'bold', bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact' }}>{l.grade}</TableCell>
-                <TableCell className="header-cell" align="center" sx={{ color: 'white !important', fontWeight: 'bold', bgcolor: '#1a237e !important', WebkitPrintColorAdjust: 'exact' }}>{l.gpa}</TableCell>
+              <TableRow sx={{ bgcolor: '#f5f5f5 !important', WebkitPrintColorAdjust: 'exact' }}>
+                <TableCell sx={{ fontWeight: 'bold' }}>{l.subjectName}</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '50px' }}>CQ</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '50px' }}>MCQ</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '50px' }}>PRAC</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '60px' }}>{l.total.toUpperCase()}</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '60px' }}>{l.grade.toUpperCase()}</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '60px' }}>{l.gpa.toUpperCase()}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {displayResults.main.map((r, idx) => (
-                <TableRow key={r.id || idx} sx={{ bgcolor: isOptionalSubject(r) ? 'rgba(255, 249, 196, 0.6) !important' : (idx % 2 ? 'rgba(0, 0, 0, 0.03) !important' : 'transparent'), WebkitPrintColorAdjust: 'exact', '& td': { borderBottom: '1px solid #1a237e' } }}>
-                  <TableCell sx={{ fontWeight: 600, py: 0.5 }}>{isOptionalSubject(r) ? (isLanguageBengali ? `(ঐচ্ছিক) ${r.subject?.name || r.subject_name}` : `(Optional) ${r.subject?.name || r.subject_name}`) : (r.subject?.name || r.subject_name)}</TableCell>
-                  <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}><strong>{formatMark(r.written_marks)}</strong></TableCell>
-                  <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}><strong>{formatMark(r.mcq_marks)}</strong></TableCell>
-                  <TableCell align="center"><strong>{formatMark(r.practical_marks)}</strong></TableCell>
+                <TableRow key={r.id || idx}>
+                  <TableCell sx={{ fontWeight: r.is_optional_detected ? 400 : 600 }}>{r.is_optional_detected ? `(Opt) ${r.subject?.name || r.subject_name}` : (r.subject?.name || r.subject_name)}</TableCell>
+                  <TableCell align="center">{formatMark(r.written_marks)}</TableCell>
+                  <TableCell align="center">{formatMark(r.mcq_marks)}</TableCell>
+                  <TableCell align="center">{formatMark(r.practical_marks)}</TableCell>
                   <TableCell align="center"><strong>{n(r.total_obtained)}</strong></TableCell>
-                  <TableCell align="center"><Box sx={{ bgcolor: getGradeColor(r.grade), color: 'white !important', fontWeight: 'bold', borderRadius: '10px', px: 1, fontSize: '11px', display: 'inline-block', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{r.grade}</Box></TableCell>
+                  <TableCell align="center"><strong>{r.grade}</strong></TableCell>
                   <TableCell align="center"><strong>{n(r.gpa)}</strong></TableCell>
                 </TableRow>
               ))}
-              <TableRow sx={{ bgcolor: 'rgba(232, 234, 246, 0.7) !important', WebkitPrintColorAdjust: 'exact', fontWeight: 'bold', '& td': { borderTop: '2px solid #1a237e' } }}>
-                <TableCell colSpan={4} sx={{ color: '#1a237e !important' }}>{l.overallResult}</TableCell>
-                <TableCell align="center" sx={{ color: '#1a237e !important' }}><strong>{n(finalSummary.obtained)} / {n(finalSummary.possible)}</strong></TableCell>
-                <TableCell align="center"><Box sx={{ bgcolor: getGradeColor(finalSummary.isPassed ? finalSummary.grade : 'F'), color: 'white !important', fontWeight: 900, borderRadius: '16px', px: 2, py: 0.5, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{finalSummary.isPassed ? finalSummary.grade : 'F'}</Box></TableCell>
-                <TableCell align="center" sx={{ color: '#1a237e !important' }}><strong>{n(finalSummary.cgpa)}</strong></TableCell>
+              <TableRow sx={{ bgcolor: '#f9f9f9 !important', WebkitPrintColorAdjust: 'exact' }}>
+                <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{l.overallResult} =</TableCell>
+                <TableCell align="center"><strong>{n(finalSummary.obtained)}/{n(finalSummary.possible)}</strong></TableCell>
+                <TableCell align="center"><strong>{finalSummary.isPassed ? finalSummary.grade : 'F'}</strong></TableCell>
+                <TableCell align="center"><strong>{n(finalSummary.cgpa)}</strong></TableCell>
               </TableRow>
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Continuous Assessment Section */}
         {displayResults.coCurricular.length > 0 && (
           <Box sx={{ mt: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#1a237e !important', mb: 0.5, pl: 1, borderLeft: '4px solid #1a237e' }}>{l.continuousAssessment}</Typography>
-            <TableContainer component={Paper} elevation={0} sx={{ border: '1.5px solid #1a237e', bgcolor: 'transparent', boxShadow: 'none' }}>
-              <Table size="small" sx={{ bgcolor: 'transparent', tableLayout: 'fixed' }}>
-                <colgroup><col style={{ width: '36%' }} /><col style={{ width: '12%' }} /><col style={{ width: '12%' }} /><col style={{ width: '8%' }} /><col style={{ width: '10%' }} /><col style={{ width: '11%' }} /><col style={{ width: '11%' }} /></colgroup>
+            <Typography variant="caption" sx={{ fontWeight: 900, display: 'block', mb: 0.3, textAlign: 'center' }}>
+              --- {l.continuousAssessment.toUpperCase()} ---
+            </Typography>
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #1a237e', borderRadius: 0 }}>
+              <Table size="small" sx={{ '& td': { border: '1px solid #1a237e', fontSize: '11px', py: 0.3 } }}>
                 <TableBody>
                   {displayResults.coCurricular.map((r, idx) => (
-                    <TableRow key={r.id || idx} sx={{ bgcolor: idx % 2 ? 'rgba(0, 0, 0, 0.03) !important' : 'transparent', WebkitPrintColorAdjust: 'exact', '& td': { borderBottom: '1px solid #1a237e' } }}>
-                      <TableCell sx={{ fontWeight: 600, py: 0.5 }}>{r.subject?.name || r.subject_name}</TableCell>
-                      <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>{formatMark(r.written_marks)}</TableCell>
-                      <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>{formatMark(r.mcq_marks)}</TableCell>
-                      <TableCell align="center">{formatMark(r.practical_marks)}</TableCell>
-                      <TableCell align="center"><strong>{n(r.total_obtained)}</strong></TableCell>
-                      <TableCell align="center"><Box sx={{ bgcolor: getGradeColor(r.grade), color: 'white !important', fontWeight: 'bold', borderRadius: '10px', px: 1, fontSize: '11px', display: 'inline-block', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{r.grade}</Box></TableCell>
-                      <TableCell align="center"><strong>{n(r.gpa)}</strong></TableCell>
+                    <TableRow key={r.id || idx}>
+                      <TableCell sx={{ fontWeight: 600, width: '40%' }}>{r.subject?.name || r.subject_name}</TableCell>
+                      <TableCell align="center">Grade: <strong>{r.grade}</strong></TableCell>
+                      <TableCell align="center">GPA: <strong>{n(r.gpa)}</strong></TableCell>
+                      <TableCell align="center"><strong>{r.is_passed ? 'PASSED' : 'FAILED'}</strong></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -456,24 +534,52 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
             </TableContainer>
           </Box>
         )}
-        <Box sx={{ p: 1, borderRadius: 2, border: '1.5px solid #1a237e' }}>
-          <Grid container spacing={1} textAlign="center">
-            <Grid item xs={4}><Typography variant="overline">{l.finalStatus}</Typography><Typography variant="h6" sx={{ color: finalSummary.isPassed ? '#2e7d32' : '#d32f2f', fontWeight: 900, border: '2px solid', borderRadius: 1.5 }}>{finalSummary.isPassed ? l.passed : l.failed}</Typography></Grid>
-            <Grid item xs={4}><Typography variant="overline">{l.overallGpa}</Typography><Typography variant="h6" sx={{ color: '#1a237e', fontWeight: 900 }}>{n(finalSummary.cgpa)}</Typography></Grid>
-            <Grid item xs={4}><Typography variant="overline">{l.letterGrade}</Typography><Typography variant="h6" sx={{ color: getGradeColor(finalSummary.isPassed ? finalSummary.grade : 'F'), fontWeight: 900 }}>{finalSummary.isPassed ? finalSummary.grade : 'F'}</Typography></Grid>
-          </Grid>
+
+        {/* Footer Summary Blocks */}
+        <Grid container spacing={1} sx={{ mt: 1.5 }}>
+          {[ {l: l.finalStatus, v: finalSummary.isPassed ? l.passed : l.failed, c: finalSummary.isPassed ? '#2e7d32' : '#d32f2f'},
+             {l: l.overallGpa, v: n(finalSummary.cgpa), c: '#1a237e'},
+             {l: l.letterGrade, v: finalSummary.isPassed ? finalSummary.grade : 'F', c: '#1a237e'}
+          ].map((item, i) => (
+            <Grid item xs={4} key={i}>
+              <Box sx={{ border: '1px solid #1a237e', textAlign: 'center', py: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', fontSize: '10px' }}>{item.l.toUpperCase()}</Typography>
+                <Typography variant="h6" sx={{ color: item.c, fontWeight: 900, fontSize: '1.1rem' }}>{item.v}</Typography>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>
+
+        {/* QR & Remarks Placeholder (Optional - based on image 2) */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, alignItems: 'center' }}>
+           <Box sx={{ width: '60px', height: '60px', border: '1px solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <Typography sx={{ fontSize: '8px', color: '#999' }}>QR CODE</Typography>
+           </Box>
+           <Box sx={{ flexGrow: 1, ml: 2, border: '1px solid #1a237e', p: 0.5, height: '50px' }}>
+             <Typography variant="caption" sx={{ fontSize: '9px', fontWeight: 'bold' }}>COMMENTS:</Typography>
+           </Box>
         </Box>
-        <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', pl: 4, pr: 1, pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-          <Box sx={{ textAlign: 'center', width: '150px' }}><Box sx={{ height: '30px', mb: 0.2 }} /><Typography variant="body2" sx={{ borderTop: '1.5px solid #333', pt: 0.2, fontWeight: 'bold', fontSize: '12px' }}>{l.classTeacherSig}</Typography></Box>
-          <Box sx={{ textAlign: 'center', width: '150px' }}><Box sx={{ height: '30px', mb: 0.2 }} /><Typography variant="body2" sx={{ borderTop: '1.5px solid #333', pt: 0.2, fontWeight: 'bold', fontSize: '12px' }}>{l.guardianSig}</Typography></Box>
-          <Box sx={{ width: '250px', textAlign: 'center', mr: 1 }}>
-            <Box sx={{ height: '40px', mb: 0.1, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-               {resolvedSchool?.school_seal && <img src={getMediaUrl(resolvedSchool.school_seal)} alt="" style={{ position: 'absolute', maxHeight: '40px', maxWidth: '70px', opacity: 0.7, mixBlendMode: 'multiply', WebkitPrintColorAdjust: 'exact' }} />}
-               {resolvedSchool?.principal_signature && <img src={getMediaUrl(resolvedSchool.principal_signature)} alt="" style={{ position: 'absolute', maxHeight: '35px', maxWidth: '180px', zIndex: 2, mixBlendMode: 'multiply', WebkitPrintColorAdjust: 'exact' }} />}
-               {!resolvedSchool?.principal_signature && !resolvedSchool?.school_seal && <img src="/signature.png" alt="" style={{ position: 'absolute', maxHeight: '35px', maxWidth: '140px', mixBlendMode: 'multiply', WebkitPrintColorAdjust: 'exact' }} />}
+
+        {/* Signatures */}
+        <Box sx={{ mt: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          {[l.guardianSig, l.classTeacherSig, l.headmaster].map((sig, i) => (
+            <Box key={i} sx={{ textAlign: 'center', width: '30%' }}>
+              {i === 2 && (
+                <Box sx={{ height: '40px', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 0.5 }}>
+                   {resolvedSchool?.school_seal && <img src={getMediaUrl(resolvedSchool.school_seal)} alt="" style={{ position: 'absolute', maxHeight: '45px', opacity: 0.5, mixBlendMode: 'multiply' }} />}
+                   {resolvedSchool?.principal_signature && <img src={getMediaUrl(resolvedSchool.principal_signature)} alt="" style={{ position: 'absolute', maxHeight: '35px', zIndex: 2, mixBlendMode: 'multiply' }} />}
+                </Box>
+              )}
+              <Typography variant="body2" sx={{ borderTop: '1px solid #000', pt: 0.5, fontSize: '12px', fontWeight: 'bold' }}>{sig}</Typography>
+              {i === 2 && resolvedSchool?.principal_name && <Typography sx={{ fontSize: '10px' }}>{resolvedSchool.principal_name}</Typography>}
             </Box>
-            <Box sx={{ borderTop: '1.5px solid #333', pt: 0.1 }}><Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '12px', color: '#1a237e' }}>{resolvedSchool?.principal_name || l.headmaster}</Typography><Typography variant="caption" sx={{ display: 'block', fontSize: '9px' }}>{l.headmaster}</Typography></Box>
-          </Box>
+          ))}
+        </Box>
+
+        {/* Footer Small Print */}
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+           <Typography sx={{ fontSize: '8px', color: '#777' }}>Powered by: BDAPP.LIVE</Typography>
+           <Typography sx={{ fontSize: '8px', color: '#777' }}>Print Date: {dayjs().format('DD-MM-YYYY HH:mm')}</Typography>
         </Box>
       </Box>
     </Box>

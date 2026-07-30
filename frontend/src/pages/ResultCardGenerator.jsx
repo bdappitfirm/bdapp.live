@@ -1095,6 +1095,8 @@ export default function ResultCardGenerator() {
             mother_name: student.mother_name,
             guardian_name: student.guardian_name,
             address: student.address || school?.address,
+            class_name: `${student.classroom?.name || ''} ${student.section?.name ? `(${student.section.name})` : ''}`,
+            examination_name: `${examination?.academic_year || ''} ${examination?.name || ''}`.trim(),
             subjects: fetchedResults.map(r => r.subject?.name || r.subject_name)
           };
           const transRes = await api.post('/api/results/overall/translate_card/', payload);
@@ -1861,6 +1863,7 @@ export default function ResultCardGenerator() {
               school={translatedData ? { ...school, name: translatedData.school_name, address: translatedData.address } : (school || {})}
               schoolId={id}
               forceLanguage={forceLanguage}
+              translatedData={translatedData}
             />
           </Box>
         )}

@@ -2,6 +2,46 @@ import unicodedata
 import random
 import re
 
+BANGLA_CLASS_MAP = {
+    'প্লে': -3, 'play': -3,
+    'নার্সারি': -2, 'nursery': -2, 'শিশু': -2,
+    'কেজি': -1, 'kg': -1,
+    'প্রথম': 1, '১ম': 1, 'one': 1,
+    'দ্বিতীয়': 2, 'দ্বিতীয়': 2, '২য়': 2, 'two': 2,
+    'তৃতীয়': 3, 'তৃতীয়': 3, '৩য়': 3, 'three': 3,
+    'চতুর্থ': 4, '৪র্থ': 4, 'four': 4,
+    'পঞ্চম': 5, '৫ম': 5, 'five': 5,
+    'ষষ্ঠ': 6, '৬ষ্ঠ': 6, 'six': 6,
+    'সপ্তম': 7, '৭ম': 7, 'seven': 7,
+    'অষ্টম': 8, '৮ম': 8, 'eight': 8,
+    'নবম': 9, '৯ম': 9, 'nine': 9,
+    'দশম': 10, '১০ম': 10, 'ten': 10,
+    'একাদশ': 11, 'eleven': 11,
+    'দ্বাদশ': 12, 'twelve': 12,
+    'এসএসসি': 13, 'ssc': 13
+}
+
+def get_class_order(class_name):
+    """
+    Returns a numeric value representing the logical order of a class based on its name.
+    """
+    if not class_name:
+        return 999
+
+    n = str(class_name).lower().strip()
+
+    # 1. Direct match in map
+    for key, val in BANGLA_CLASS_MAP.items():
+        if key in n:
+            return val
+
+    # 2. Extract digits
+    match = re.search(r'\d+', n)
+    if match:
+        return int(match.group(0))
+
+    return 999
+
 def update_student_genders(school=None):
     """Update gender from profile if missing."""
     from academics.models import StudentProfile

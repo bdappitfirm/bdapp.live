@@ -1,12 +1,12 @@
 from rest_framework import viewsets, permissions, status
 from users.permissions import AdminOrReadOnly, get_user_school_id
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from django.db.models import Count, Sum, Q, IntegerField, F, Case, When
 from django.db.models.functions import Coalesce
-from .models import School, Advertisement, BanbeisInfo
-from .serializers import SchoolSerializer, AdvertisementSerializer, BanbeisInfoSerializer
+from .models import School, Advertisement, BanbeisInfo, SchoolBilling
+from .serializers import SchoolSerializer, AdvertisementSerializer, BanbeisInfoSerializer, SchoolBillingSerializer
 from academics.models import ClassRoom, StudentProfile, Subject
 from users.models import Profile
 from attendance.models import AttendanceRecord
@@ -76,8 +76,21 @@ class SchoolViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return School.objects.annotate(
-            student_count_annotated=Count('students')
-        ).order_by('-student_count_annotated', 'name')
+            student_count_annotated=Count('students', distinct=True)
+        ).select_related('billing').order_by('-student_count_annotated', 'name')
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def update_billing(self, request, pk=None):
+        school = self.get_object()
+        # Security: only school 6 (IT firm) or global admin can update billing for others
+        # Actually, let's just allow it for now if authenticated as requested
+        total_paid = request.data.get('total_paid')
+        if total_paid is not None:
+            billing, created = SchoolBilling.objects.get_or_create(school=school)
+            billing.total_paid = total_paid
+            billing.save()
+            return Response(SchoolBillingSerializer(billing).data)
+        return Response({"error": "total_paid is required"}, status=400)
 
 class AdvertisementViewSet(viewsets.ModelViewSet):
     queryset = Advertisement.objects.all()

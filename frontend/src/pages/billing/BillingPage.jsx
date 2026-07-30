@@ -21,9 +21,10 @@ export default function BillingPage() {
 
   const [schools, setSchools] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState(null);
-  const [studentCount, setStudentCount] = useState(300);
+  const [studentCount, setStudentCount] = useState(0);
   const [schoolLink, setSchoolLink] = useState('');
   const [ratePerStudent, setRatePerStudent] = useState(100);
+  const [previouslyPaid, setPreviouslyPaid] = useState(0);
   const [billDate, setBillDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [billNo, setBillDateNo] = useState(`INV-${dayjs().format('YYYY')}-SR-${Math.floor(Math.random() * 900) + 100}`);
   const [loading, setLoading] = useState(false);
@@ -41,10 +42,24 @@ export default function BillingPage() {
     try {
       const res = await api.get('/api/schools/');
       const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-      // Filter out school 6 itself if needed
       setSchools(list.filter(s => String(s.id) !== '6'));
     } catch (err) {
       console.error('Failed to fetch schools', err);
+    }
+  };
+
+  const handleSavePayment = async () => {
+    if (!selectedSchool) return;
+    try {
+      setLoading(true);
+      await api.post(`/api/schools/${selectedSchool.id}/update_billing/`, {
+        total_paid: previouslyPaid
+      });
+      toast.success('পরিশোধিত টাকা আপডেট হয়েছে');
+    } catch (err) {
+      toast.error('আপডেট করতে সমস্যা হয়েছে');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,6 +88,7 @@ export default function BillingPage() {
   const toBn = (n) => String(n).replace(/\d/g, d => "০১২৩৪৫৬৭৮৯"[d]);
 
   const totalAmount = studentCount * ratePerStudent;
+  const netPayable = totalAmount - previouslyPaid;
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
@@ -90,6 +106,8 @@ export default function BillingPage() {
                 setSelectedSchool(newValue);
                 if (newValue) {
                   setSchoolLink(`https://bdapp.live/school/${newValue.id}`);
+                  setStudentCount(newValue.student_count || 0);
+                  setPreviouslyPaid(newValue.billing?.total_paid || 0);
                 }
               }}
               renderInput={(params) => <TextField {...params} label="স্কুল নির্বাচন করুন" fullWidth />}
@@ -123,6 +141,16 @@ export default function BillingPage() {
           </Grid>
           <Grid item xs={12} md={2}>
             <TextField
+              label="পরিশোধিত টাকা"
+              type="number"
+              fullWidth
+              value={previouslyPaid}
+              onChange={(e) => setPreviouslyPaid(e.target.value)}
+              helperText="পূর্বে যত টাকা জমা দিয়েছে"
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
               label="তারিখ"
               type="date"
               fullWidth
@@ -130,7 +158,7 @@ export default function BillingPage() {
               onChange={(e) => setBillDate(e.target.value)}
             />
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid item xs={12} md={3}>
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
@@ -139,6 +167,15 @@ export default function BillingPage() {
                 fullWidth
               >
                 প্রিন্ট
+              </Button>
+              <Button
+                variant="contained"
+                color="success"
+                onClick={handleSavePayment}
+                disabled={loading || !selectedSchool}
+                fullWidth
+              >
+                টাকা সেভ করুন
               </Button>
               <Button
                 variant="outlined"
@@ -245,10 +282,28 @@ export default function BillingPage() {
             </TableRow>
             <TableRow>
               <TableCell colSpan={4} sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'right', p: 1.5 }}>
-                সর্বমোট (টাকায়) =
+                উপ-মোট (Sub-total) =
               </TableCell>
               <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }} align="center">
                 {totalAmount.toLocaleString()}/-
+              </TableCell>
+            </TableRow>
+            {previouslyPaid > 0 && (
+              <TableRow>
+                <TableCell colSpan={4} sx={{ border: '1px solid black', textAlign: 'right', p: 1.5 }}>
+                  (-) পূর্বের পরিশোধিত টাকা =
+                </TableCell>
+                <TableCell sx={{ border: '1px solid black' }} align="center">
+                  {previouslyPaid.toLocaleString()}/-
+                </TableCell>
+              </TableRow>
+            )}
+            <TableRow sx={{ bgcolor: '#e3f2fd' }}>
+              <TableCell colSpan={4} sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'right', p: 1.5 }}>
+                নিট প্রদেয় (Net Payable) =
+              </TableCell>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '1.2rem' }} align="center">
+                {netPayable.toLocaleString()}/-
               </TableCell>
             </TableRow>
           </TableBody>

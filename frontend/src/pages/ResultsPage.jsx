@@ -53,6 +53,7 @@ import { scopedGet } from '../utils/schoolApi';
 import { isAuthenticated } from '../utils/auth';
 import { useAuth } from '../context/AuthContext';
 import InputGuidance from '../components/InputGuidance';
+import { sortClassrooms } from '../utils/classroomUtils';
 
 // Examination types mapping (labels)
 const EXAM_TYPES = [
@@ -184,13 +185,9 @@ export default function ResultsPage() {
     scopedGet('/api/academics/classrooms/', id, {}, { timeout: 30000 })
       .then(res => {
         const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        if (role === 'teacher' && assignments.length) {
-          const allowedClassIds = Array.from(new Set(assignments.map(a => a.classroom)));
-          setClasses(data.filter(c => allowedClassIds.includes(c.id)));
-        } else {
-          setClasses(data);
-        }
-        if (selectedClass && !data.some(c => String(c.id) === String(selectedClass))) {
+        const sorted = sortClassrooms(data);
+        setClasses(sorted);
+        if (selectedClass && !sorted.some(c => String(c.id) === String(selectedClass))) {
           setSelectedClass('');
         }
         setLoadingClasses(false);
@@ -334,10 +331,6 @@ export default function ResultsPage() {
           return true;
         });
 
-        if (role === 'teacher' && assignments.length) {
-          const allowedSubjectIds = new Set(assignments.filter(a => String(a.classroom) === String(classId)).map(a => a.subject));
-          filtered = data.filter(s => allowedSubjectIds.has(s.id));
-        }
         setSubjects(filtered);
         if (selectedSubject && !filtered.some(s => String(s.id) === String(selectedSubject))) setSelectedSubject('');
         if (bulkForm.subject && !filtered.some(s => String(s.id) === String(bulkForm.subject))) setBulkForm(p => ({ ...p, subject: '' }));

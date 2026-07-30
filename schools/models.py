@@ -127,3 +127,11 @@ class OnboardingClassConfig(models.Model):
 
     def __str__(self):
         return f"{self.class_name} ({self.section_name}) - {self.school.name}"
+
+class SchoolBilling(models.Model):
+    school = models.OneToOneField(School, on_delete=models.CASCADE, related_name='billing')
+    total_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Billing for {self.school.name}"

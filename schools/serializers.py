@@ -2,7 +2,12 @@ from rest_framework import serializers
 from django.core.files.base import ContentFile
 import base64
 import re
-from .models import School, Advertisement, BanbeisInfo
+from .models import School, Advertisement, BanbeisInfo, SchoolBilling
+
+class SchoolBillingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchoolBilling
+        fields = ['total_paid', 'updated_at']
 
 class BanbeisInfoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -12,10 +17,11 @@ class BanbeisInfoSerializer(serializers.ModelSerializer):
 class SchoolSerializer(serializers.ModelSerializer):
     logo_thumbnail_url = serializers.SerializerMethodField()
     student_count = serializers.SerializerMethodField()
+    billing = SchoolBillingSerializer(read_only=True)
 
     class Meta:
         model = School
-        fields = ['id', 'name', 'ein', 'email', 'phone_number', 'address', 'principal_name', 'logo', 'logo_thumbnail', 'logo_thumbnail_url', 'principal_signature', 'school_seal', 'number_of_buildings', 'student_count']
+        fields = ['id', 'name', 'ein', 'email', 'phone_number', 'address', 'principal_name', 'logo', 'logo_thumbnail', 'logo_thumbnail_url', 'principal_signature', 'school_seal', 'number_of_buildings', 'student_count', 'billing']
     
     def get_student_count(self, obj):
         try:
