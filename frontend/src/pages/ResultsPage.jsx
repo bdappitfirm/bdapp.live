@@ -890,6 +890,11 @@ export default function ResultsPage() {
 
     const s = String(subjectName || '').trim().toLowerCase();
 
+    // English detection logic for ALL classes (usually 100 marks, no MCQ)
+    if (s.includes('english') || s.includes('ইংরেজি') || s.includes('ইংরেজী')) {
+        return { written: 100, mcq: 0, practical: 0 };
+    }
+
     // Robust substring matching for Science subjects in 9-10
     if (group === 'nine_ten') {
         if (s.includes('পদার্থ') || s.includes('physics')) return SUBJECT_MAXIMA.nine_ten['physics'];
@@ -2282,6 +2287,10 @@ export default function ResultsPage() {
                 onChange={(e) => handleMarksChange('mcq', e.target.value)}
                 placeholder={String(getMaxForField(getExamById(selectedExam), 'mcq', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? '')}
                 InputProps={{ inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
+                disabled={(() => {
+                  const sname = String((subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name || '').toLowerCase();
+                  return sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
+                })()}
               />
             </Grid>
             
@@ -2340,7 +2349,17 @@ export default function ResultsPage() {
                             <TextField type="number" size="small" value={m.written} onFocus={(e) => e.target.select()} onChange={(e) => setMultiSubjectMark(subject.id, 'written', e.target.value)} placeholder={String(getMaxForField(getExamById(selectedExam), 'written', subject.name) ?? '')} inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'written', subject.name) ?? undefined }} />
                           </TableCell>
                           <TableCell align="center">
-                            <TextField type="number" size="small" value={m.mcq} onFocus={(e) => e.target.select()} onChange={(e) => setMultiSubjectMark(subject.id, 'mcq', e.target.value)} placeholder={String(getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? '')} inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? undefined }} />
+                            <TextField
+                              type="number" size="small" value={m.mcq}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => setMultiSubjectMark(subject.id, 'mcq', e.target.value)}
+                              placeholder={String(getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? '')}
+                              inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? undefined }}
+                              disabled={(() => {
+                                const sname = String(subject.name || '').toLowerCase();
+                                return sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
+                              })()}
+                            />
                           </TableCell>
                           <TableCell align="center">
                             <TextField type="number" size="small" value={m.practical} onFocus={(e) => e.target.select()} onChange={(e) => setMultiSubjectMark(subject.id, 'practical', e.target.value)} placeholder={String(getMaxForField(getExamById(selectedExam), 'practical', subject.name) ?? '')} inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'practical', subject.name) ?? undefined }} />

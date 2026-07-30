@@ -86,7 +86,7 @@ const GlobalInstallPrompt = () => {
   );
 };
 
-const APP_VERSION = '2.1.1';
+const APP_VERSION = '2.1.2';
 const CACHE_VERSION_KEY = 'bdapp_cache_version';
 
 const CacheClearer = () => {

@@ -273,11 +273,13 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
 
   const displayResults = useMemo(() => {
     // 1. Deduplicate results: Keep highest total marks for same subject name
-    const deduplicated = [];
     const resultsMap = new Map();
     allRecalculated.forEach(r => {
         const name = (r.subject?.name || r.subject_name || '').toLowerCase().trim();
-        const normKey = name.replace(/\s*\(.*?\)\s*/g, '');
+        // For 9-10, don't normKey papers too aggressively to avoid merging 1st/2nd prematurely
+        const isPaper = /(১ম|২য়|২য়|1st|2nd|first|second|paper|পত্র)/i.test(name);
+        const normKey = (isClassNineOrTen && isPaper) ? name : name.replace(/\s*\(.*?\)\s*/g, '');
+
         if (!resultsMap.has(normKey) || r.total_obtained > resultsMap.get(normKey).total_obtained) {
             resultsMap.set(normKey, r);
         }
@@ -408,178 +410,187 @@ export default function ResultCard({ studentData, results: rawResults, overallRe
 
   return (
     <Box className="result-card-container" sx={{
-      width: '100%', maxWidth: '210mm', minHeight: '290mm', mx: 'auto', bgcolor: 'white', p: '10mm', position: 'relative',
-      border: '2px solid #1a237e', borderRadius: '2px', outline: '6px double #1a237e', outlineOffset: '-10px',
-      boxShadow: 'none !important', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always',
-      '@media print': { margin: 0, border: 'none', outline: '4px double #1a237e', outlineOffset: '-8px' }
+      width: '210mm', height: '297mm', mx: 'auto', bgcolor: 'white', p: '2mm', position: 'relative',
+      border: '8px solid #1a237e', // Outer Navy Frame
+      boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always',
+      WebkitPrintColorAdjust: 'exact',
+      printColorAdjust: 'exact',
+      display: 'flex', flexDirection: 'column',
+      '@media print': { margin: 0, border: '8px solid #1a237e !important' }
     }}>
-      {/* Background Watermark */}
-      <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '70%', opacity: 0.12, zIndex: 0, pointerEvents: 'none', display: 'flex', justifyContent: 'center' }}>
-        <img src={logoUrl} alt="" style={{ width: '100%', maxWidth: '500px', filter: 'grayscale(100%) brightness(1.2)' }} />
-      </Box>
+      {/* Inner Gold Frame - REAL BORDER for printing */}
+      <Box sx={{
+        height: '100%', width: '100%', border: '3px solid #ffd700', p: '10mm', boxSizing: 'border-box',
+        position: 'relative', display: 'flex', flexDirection: 'column',
+        '@media print': { border: '3px solid #ffd700 !important' }
+      }}>
+        {/* Background Watermark - Full Visibility */}
+        <Box sx={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          width: '80%', opacity: 0.12, zIndex: 0, pointerEvents: 'none',
+          display: 'flex', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <img src={logoUrl} alt="" style={{ width: '100%', maxWidth: '500px', filter: 'grayscale(10%)' }} />
+        </Box>
 
-      <Box sx={{ position: 'relative', zIndex: 1 }}>
-        {/* Header Section */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          {/* Left: Logo */}
-          <Box sx={{ width: '100px', height: '100px', display: 'flex', alignItems: 'center' }}>
-            <ImageWithFallback src={logoUrl} alt="Logo" width="100%" height="auto" />
-          </Box>
+        <Box sx={{ position: 'relative', zIndex: 1, flexGrow: 1 }}>
+          {/* Header Section */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5, gap: 1 }}>
+            {/* Left: Logo */}
+            <Box sx={{ width: '90px', minWidth: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ImageWithFallback src={logoUrl} alt="Logo" width="85px" height="auto" />
+            </Box>
 
-          {/* Center: School Info */}
-          <Box sx={{ flexGrow: 1, textAlign: 'center', px: 2 }}>
-            <Typography variant="h4" sx={{ fontWeight: 900, color: '#1a237e !important', fontSize: (schoolName?.length > 40) ? '1.4rem' : '2rem', mb: 0.5, letterSpacing: '1px', WebkitPrintColorAdjust: 'exact' }}>
-              {schoolName}
-            </Typography>
-            {resolvedSchool?.ein && (
-              <Typography sx={{ fontSize: '14px', color: '#333 !important', fontWeight: 'bold', mb: 0.5, WebkitPrintColorAdjust: 'exact' }}>
-                EIIN: {resolvedSchool.ein}
+            {/* Center: School Info */}
+            <Box sx={{ flexGrow: 1, textAlign: 'center', px: 1 }}>
+              <Typography variant="h4" sx={{
+                fontWeight: 900, color: '#1a237e !important',
+                fontSize: '1.25rem', // Force one line
+                mb: 0.3, letterSpacing: '0.1px', whiteSpace: 'nowrap',
+                WebkitPrintColorAdjust: 'exact'
+              }}>
+                {schoolName}
               </Typography>
-            )}
-            <Typography sx={{ color: '#555 !important', fontSize: '12px', mb: 1, WebkitPrintColorAdjust: 'exact' }}>
-              {translatedData?.address || resolvedSchool?.address || "" }
-            </Typography>
-            <Box sx={{ mt: 1, mx: 'auto', width: 'fit-content', px: 3, py: 0.4, border: '1.5px solid #1a237e', borderRadius: '4px', bgcolor: '#1a237e !important', color: 'white !important', WebkitPrintColorAdjust: 'exact' }}>
-              <Typography sx={{ fontWeight: 'bold', fontSize: '14px', letterSpacing: 2 }}>{l.reportTitle.toUpperCase()}</Typography>
+              {resolvedSchool?.ein && (
+                <Typography sx={{ fontSize: '12px', color: '#333 !important', fontWeight: 'bold', mb: 0.2, WebkitPrintColorAdjust: 'exact' }}>
+                  EIIN: {resolvedSchool.ein}
+                </Typography>
+              )}
+              <Typography sx={{ color: '#555 !important', fontSize: '10px', mb: 0.8, WebkitPrintColorAdjust: 'exact' }}>
+                {translatedData?.address || resolvedSchool?.address || "" }
+              </Typography>
+              <Box sx={{ mx: 'auto', width: 'fit-content', px: 3, py: 0.3, border: '1.5px solid #1a237e', borderRadius: '4px', bgcolor: '#1a237e !important', color: 'white !important', WebkitPrintColorAdjust: 'exact' }}>
+                <Typography sx={{ fontWeight: 900, fontSize: '13px', letterSpacing: 2 }}>{l.reportTitle.toUpperCase()}</Typography>
+              </Box>
+            </Box>
+
+            {/* Right: Grade Scale Table */}
+            <Box sx={{ width: '110px', minWidth: '110px' }}>
+              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #1a237e', bgcolor: 'transparent' }}>
+                <Table size="small" sx={{ '& td, & th': { fontSize: '7px', p: '1px 2px', border: '0.5px solid #1a237e', fontWeight: 'bold', lineHeight: 1 } }}>
+                  <TableHead><TableRow sx={{ bgcolor: '#f0f0f0' }}><TableCell align="center">Range</TableCell><TableCell align="center">G</TableCell><TableCell align="center">GP</TableCell></TableRow></TableHead>
+                  <TableBody>
+                    {[ ['80-100','A+','5.0'],['70-79','A','4.0'],['60-69','A-','3.5'],['50-59','B','3.0'],['40-49','C','2.0'],['33-39','D','1.0'],['00-32','F','0.0'] ].map((r, i) => (
+                      <TableRow key={i}><TableCell align="center">{r[0]}</TableCell><TableCell align="center">{r[1]}</TableCell><TableCell align="center">{r[2]}</TableCell></TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Box>
           </Box>
 
-          {/* Right: Photo & Grade Scale */}
-          <Stack spacing={1} alignItems="flex-end">
-            <Box sx={{ width: '90px', height: '105px', border: '2px solid #1a237e', p: '2px', bgcolor: 'white' }}>
+          {/* Student Info Box with Photo */}
+          <Box sx={{ border: '1.5px solid #1a237e', p: 1.5, mb: 1, position: 'relative', minHeight: '120px' }}>
+             {/* Photo on right corner of info box */}
+            <Box sx={{ position: 'absolute', right: '10px', top: '10px', width: '85px', height: '105px', border: '1.5px solid #1a237e', p: '2px', bgcolor: 'white', zIndex: 2 }}>
               <ImageWithFallback src={studentPhotoUrl} alt="Student" width="100%" height="100%" />
             </Box>
-            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #1a237e', width: '110px', bgcolor: 'transparent' }}>
-              <Table size="small" sx={{ '& td, & th': { fontSize: '8px', p: '1px 2px', border: '0.5px solid #1a237e' } }}>
-                <TableBody>
-                  {[ ['80-100','A+','5.0'],['70-79','A','4.0'],['60-69','A-','3.5'],['50-59','B','3.0'],['40-49','C','2.0'],['33-39','D','1.0'],['00-32','F','0.0'] ].map((r, i) => (
-                    <TableRow key={i}><TableCell align="center">{r[0]}</TableCell><TableCell align="center">{r[1]}</TableCell><TableCell align="center">{r[2]}</TableCell></TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Stack>
-        </Box>
 
-        {/* Student Info Details */}
-        <Box sx={{ border: '1px solid #1a237e', p: 1.5, mb: 2, bgcolor: 'rgba(26, 35, 126, 0.01)' }}>
-          <Grid container spacing={1}>
-            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>{l.studentName}</strong> <span style={{ borderBottom: '1px dotted #1a237e', flexGrow: 1, marginLeft: '8px' }}>{studentName}</span></Typography></Grid>
-            <Grid item xs={3}><Typography sx={{ fontSize: '14px' }}><strong>Roll No:</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{n(student.roll_number)}</span></Typography></Grid>
-            <Grid item xs={3}><Typography sx={{ fontSize: '14px' }}><strong>{l.class}</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{displayClass}</span></Typography></Grid>
+            <Grid container spacing={0.8} sx={{ pr: '105px' }}>
+              <Grid item xs={12}><Typography sx={{ fontSize: '13px' }}><strong>{l.studentName}</strong> <span style={{ borderBottom: '1px dotted #1a237e', paddingBottom: '1px', display: 'inline-block', minWidth: '220px' }}>{studentName}</span></Typography></Grid>
+              <Grid item xs={6}><Typography sx={{ fontSize: '13px' }}><strong>Father's Name:</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{translatedData?.father_name || student.father_name || 'N/A'}</span></Typography></Grid>
+              <Grid item xs={6}><Typography sx={{ fontSize: '13px' }}><strong>Mother's Name:</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{translatedData?.mother_name || student.mother_name || 'N/A'}</span></Typography></Grid>
 
-            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>Father's Name:</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{translatedData?.father_name || student.father_name || 'N/A'}</span></Typography></Grid>
-            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>{l.examination}</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{displayExam}</span></Typography></Grid>
+              <Grid item xs={4}><Typography sx={{ fontSize: '13px' }}><strong>Roll No:</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{n(student.roll_number)}</span></Typography></Grid>
+              <Grid item xs={4}><Typography sx={{ fontSize: '13px' }}><strong>{l.class}</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{displayClass}</span></Typography></Grid>
+              <Grid item xs={4}><Typography sx={{ fontSize: '13px' }}><strong>Group:</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{isLanguageBengali ? (studentGroupBn || 'সাধারণ') : (studentGroupEn || 'General')}</span></Typography></Grid>
 
-            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>Mother's Name:</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{translatedData?.mother_name || student.mother_name || 'N/A'}</span></Typography></Grid>
-            <Grid item xs={6}><Typography sx={{ fontSize: '14px' }}><strong>Group:</strong> <span style={{ borderBottom: '1px dotted #1a237e', marginLeft: '8px' }}>{isLanguageBengali ? (studentGroupBn || 'সাধারণ') : (studentGroupEn || 'General')}</span></Typography></Grid>
-          </Grid>
-        </Box>
-
-        {/* Results Table */}
-        <TableContainer component={Paper} elevation={0} sx={{ mb: 1, border: '1px solid #1a237e', borderRadius: 0 }}>
-          <Table size="small" sx={{ borderCollapse: 'collapse', '& td, & th': { border: '1px solid #1a237e !important', py: 0.5, px: 1, fontSize: '13px' } }}>
-            <TableHead>
-              <TableRow sx={{ bgcolor: '#f5f5f5 !important', WebkitPrintColorAdjust: 'exact' }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>{l.subjectName}</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '50px' }}>CQ</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '50px' }}>MCQ</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '50px' }}>PRAC</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '60px' }}>{l.total.toUpperCase()}</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '60px' }}>{l.grade.toUpperCase()}</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '60px' }}>{l.gpa.toUpperCase()}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {displayResults.main.map((r, idx) => (
-                <TableRow key={r.id || idx}>
-                  <TableCell sx={{ fontWeight: r.is_optional_detected ? 400 : 600 }}>{r.is_optional_detected ? `(Opt) ${r.subject?.name || r.subject_name}` : (r.subject?.name || r.subject_name)}</TableCell>
-                  <TableCell align="center">{formatMark(r.written_marks)}</TableCell>
-                  <TableCell align="center">{formatMark(r.mcq_marks)}</TableCell>
-                  <TableCell align="center">{formatMark(r.practical_marks)}</TableCell>
-                  <TableCell align="center"><strong>{n(r.total_obtained)}</strong></TableCell>
-                  <TableCell align="center"><strong>{r.grade}</strong></TableCell>
-                  <TableCell align="center"><strong>{n(r.gpa)}</strong></TableCell>
-                </TableRow>
-              ))}
-              <TableRow sx={{ bgcolor: '#f9f9f9 !important', WebkitPrintColorAdjust: 'exact' }}>
-                <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{l.overallResult} =</TableCell>
-                <TableCell align="center"><strong>{n(finalSummary.obtained)}/{n(finalSummary.possible)}</strong></TableCell>
-                <TableCell align="center"><strong>{finalSummary.isPassed ? finalSummary.grade : 'F'}</strong></TableCell>
-                <TableCell align="center"><strong>{n(finalSummary.cgpa)}</strong></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        {/* Continuous Assessment Section */}
-        {displayResults.coCurricular.length > 0 && (
-          <Box sx={{ mt: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 900, display: 'block', mb: 0.3, textAlign: 'center' }}>
-              --- {l.continuousAssessment.toUpperCase()} ---
-            </Typography>
-            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #1a237e', borderRadius: 0 }}>
-              <Table size="small" sx={{ '& td': { border: '1px solid #1a237e', fontSize: '11px', py: 0.3 } }}>
-                <TableBody>
-                  {displayResults.coCurricular.map((r, idx) => (
-                    <TableRow key={r.id || idx}>
-                      <TableCell sx={{ fontWeight: 600, width: '40%' }}>{r.subject?.name || r.subject_name}</TableCell>
-                      <TableCell align="center">Grade: <strong>{r.grade}</strong></TableCell>
-                      <TableCell align="center">GPA: <strong>{n(r.gpa)}</strong></TableCell>
-                      <TableCell align="center"><strong>{r.is_passed ? 'PASSED' : 'FAILED'}</strong></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        )}
-
-        {/* Footer Summary Blocks */}
-        <Grid container spacing={1} sx={{ mt: 1.5 }}>
-          {[ {l: l.finalStatus, v: finalSummary.isPassed ? l.passed : l.failed, c: finalSummary.isPassed ? '#2e7d32' : '#d32f2f'},
-             {l: l.overallGpa, v: n(finalSummary.cgpa), c: '#1a237e'},
-             {l: l.letterGrade, v: finalSummary.isPassed ? finalSummary.grade : 'F', c: '#1a237e'}
-          ].map((item, i) => (
-            <Grid item xs={4} key={i}>
-              <Box sx={{ border: '1px solid #1a237e', textAlign: 'center', py: 1 }}>
-                <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', fontSize: '10px' }}>{item.l.toUpperCase()}</Typography>
-                <Typography variant="h6" sx={{ color: item.c, fontWeight: 900, fontSize: '1.1rem' }}>{item.v}</Typography>
-              </Box>
+              <Grid item xs={12}><Typography sx={{ fontSize: '13px' }}><strong>{l.examination}</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{displayExam}</span></Typography></Grid>
+              <Grid item xs={12}><Typography sx={{ fontSize: '13px' }}><strong>Guardian:</strong> <span style={{ borderBottom: '1px dotted #1a237e' }}>{guardianName}</span></Typography></Grid>
             </Grid>
-          ))}
-        </Grid>
+          </Box>
 
-        {/* QR & Remarks Placeholder (Optional - based on image 2) */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, alignItems: 'center' }}>
-           <Box sx={{ width: '60px', height: '60px', border: '1px solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-             <Typography sx={{ fontSize: '8px', color: '#999' }}>QR CODE</Typography>
-           </Box>
-           <Box sx={{ flexGrow: 1, ml: 2, border: '1px solid #1a237e', p: 0.5, height: '50px' }}>
-             <Typography variant="caption" sx={{ fontSize: '9px', fontWeight: 'bold' }}>COMMENTS:</Typography>
-           </Box>
-        </Box>
+          {/* Results Table - Transparent for watermark visibility */}
+          <TableContainer component={Paper} elevation={0} sx={{ mb: 1, border: '1.5px solid #1a237e', borderRadius: 0, bgcolor: 'transparent' }}>
+            <Table size="small" sx={{ borderCollapse: 'collapse', bgcolor: 'transparent', '& td, & th': { border: '1px solid #1a237e !important', py: 0.5, px: 1.2, fontSize: '12.5px', bgcolor: 'transparent' } }}>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'rgba(245, 245, 245, 0.4) !important', WebkitPrintColorAdjust: 'exact' }}>
+                  <TableCell sx={{ fontWeight: 'bold' }}>{l.subjectName}</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', width: '45px' }}>CQ</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', width: '45px' }}>MCQ</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', width: '45px' }}>PRAC</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', width: '55px' }}>{l.total.toUpperCase()}</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', width: '55px' }}>{l.grade.toUpperCase()}</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', width: '55px' }}>{l.gpa.toUpperCase()}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody sx={{ bgcolor: 'transparent' }}>
+                {displayResults.main.map((r, idx) => (
+                  <TableRow key={r.id || idx} sx={{ bgcolor: 'transparent' }}>
+                    <TableCell sx={{ fontWeight: r.is_optional_detected ? 400 : 700 }}>{r.is_optional_detected ? `(Opt) ${r.subject?.name || r.subject_name}` : (r.subject?.name || r.subject_name)}</TableCell>
+                    <TableCell align="center">{formatMark(r.written_marks)}</TableCell>
+                    <TableCell align="center">{formatMark(r.mcq_marks)}</TableCell>
+                    <TableCell align="center">{formatMark(r.practical_marks)}</TableCell>
+                    <TableCell align="center"><strong>{n(r.total_obtained)}</strong></TableCell>
+                    <TableCell align="center"><strong>{r.grade}</strong></TableCell>
+                    <TableCell align="center"><strong>{n(r.gpa)}</strong></TableCell>
+                  </TableRow>
+                ))}
+                <TableRow sx={{ bgcolor: 'rgba(232, 234, 246, 0.3) !important', WebkitPrintColorAdjust: 'exact' }}>
+                  <TableCell colSpan={4} align="right" sx={{ fontWeight: '900', color: '#1a237e' }}>{l.overallResult.toUpperCase()} =</TableCell>
+                  <TableCell align="center"><strong>{n(finalSummary.obtained)}/{n(finalSummary.possible)}</strong></TableCell>
+                  <TableCell align="center"><strong>{finalSummary.isPassed ? finalSummary.grade : 'F'}</strong></TableCell>
+                  <TableCell align="center"><strong>{n(finalSummary.cgpa)}</strong></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-        {/* Signatures */}
-        <Box sx={{ mt: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          {[l.guardianSig, l.classTeacherSig, l.headmaster].map((sig, i) => (
-            <Box key={i} sx={{ textAlign: 'center', width: '30%' }}>
-              {i === 2 && (
-                <Box sx={{ height: '40px', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 0.5 }}>
-                   {resolvedSchool?.school_seal && <img src={getMediaUrl(resolvedSchool.school_seal)} alt="" style={{ position: 'absolute', maxHeight: '45px', opacity: 0.5, mixBlendMode: 'multiply' }} />}
-                   {resolvedSchool?.principal_signature && <img src={getMediaUrl(resolvedSchool.principal_signature)} alt="" style={{ position: 'absolute', maxHeight: '35px', zIndex: 2, mixBlendMode: 'multiply' }} />}
-                </Box>
-              )}
-              <Typography variant="body2" sx={{ borderTop: '1px solid #000', pt: 0.5, fontSize: '12px', fontWeight: 'bold' }}>{sig}</Typography>
-              {i === 2 && resolvedSchool?.principal_name && <Typography sx={{ fontSize: '10px' }}>{resolvedSchool.principal_name}</Typography>}
+          {/* Continuous Assessment Section */}
+          {displayResults.coCurricular.length > 0 && (
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 900, display: 'block', mb: 0.3, textAlign: 'center', color: '#1a237e', fontSize: '10px' }}>
+                --- {l.continuousAssessment.toUpperCase()} ---
+              </Typography>
+              <TableContainer component={Paper} elevation={0} sx={{ border: '1.5px solid #1a237e', borderRadius: 0, bgcolor: 'transparent' }}>
+                <Table size="small" sx={{ '& td': { border: '1px solid #1a237e', fontSize: '10.5px', py: 0.3, bgcolor: 'transparent' } }}>
+                  <TableBody>
+                    {displayResults.coCurricular.map((r, idx) => (
+                      <TableRow key={r.id || idx}>
+                        <TableCell sx={{ fontWeight: 600, width: '40%' }}>{r.subject?.name || r.subject_name}</TableCell>
+                        <TableCell align="center">Grade: <strong>{r.grade}</strong></TableCell>
+                        <TableCell align="center">GPA: <strong>{n(r.gpa)}</strong></TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 'bold', color: r.is_passed ? 'success.main' : 'error.main' }}>
+                          {r.is_passed ? 'PASSED' : 'FAILED'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Box>
-          ))}
-        </Box>
+          )}
 
-        {/* Footer Small Print */}
-        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-           <Typography sx={{ fontSize: '8px', color: '#777' }}>Powered by: BDAPP.LIVE</Typography>
-           <Typography sx={{ fontSize: '8px', color: '#777' }}>Print Date: {dayjs().format('DD-MM-YYYY HH:mm')}</Typography>
+          {/* Footer Summary Blocks */}
+          <Grid container spacing={1} sx={{ mt: 1.5 }}>
+            {[ {l: l.finalStatus, v: finalSummary.isPassed ? l.passed : l.failed, c: finalSummary.isPassed ? '#2e7d32' : '#d32f2f'},
+               {l: l.overallGpa, v: n(finalSummary.cgpa), c: '#1a237e'},
+               {l: l.letterGrade, v: finalSummary.isPassed ? finalSummary.grade : 'F', c: '#1a237e'}
+            ].map((item, i) => (
+              <Grid item xs={4} key={i}>
+                <Box sx={{ border: '1.2px solid #1a237e', textAlign: 'center', py: 1, bgcolor: 'white' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', fontSize: '9px', color: '#555' }}>{item.l.toUpperCase()}</Typography>
+                  <Typography variant="h6" sx={{ color: item.c, fontWeight: 900, fontSize: '1rem' }}>{item.v}</Typography>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Signatures */}
+          <Box sx={{ mt: 'auto', pt: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', px: 2 }}>
+            {[l.guardianSig, l.classTeacherSig, l.headmaster].map((sig, i) => (
+              <Box key={i} sx={{ textAlign: 'center', width: '30%' }}>
+                {i === 2 && (
+                  <Box sx={{ height: '45px', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 0.5 }}>
+                     {resolvedSchool?.school_seal && <img src={getMediaUrl(resolvedSchool.school_seal)} alt="" style={{ position: 'absolute', maxHeight: '50px', opacity: 0.5, mixBlendMode: 'multiply' }} />}
+                     {resolvedSchool?.principal_signature && <img src={getMediaUrl(resolvedSchool.principal_signature)} alt="" style={{ position: 'absolute', maxHeight: '35px', zIndex: 2, mixBlendMode: 'multiply' }} />}
+                  </Box>
+                )}
+                <Typography variant="body2" sx={{ borderTop: '1.2px solid #000', pt: 0.5, fontSize: '12px', fontWeight: 'bold' }}>{sig}</Typography>
+                {i === 2 && resolvedSchool?.principal_name && <Typography sx={{ fontSize: '10px', mt: 0.2 }}>{resolvedSchool.principal_name}</Typography>}
+              </Box>
+            ))}
+          </Box>
         </Box>
       </Box>
     </Box>

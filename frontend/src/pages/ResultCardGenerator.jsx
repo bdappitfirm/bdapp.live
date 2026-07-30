@@ -21,6 +21,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ResultCard from '../components/ResultCard';
+import SSCMarksheet from '../components/SSCMarksheet';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../components/Toast';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -128,6 +129,7 @@ export default function ResultCardGenerator() {
   const [forceLanguage, setForceLanguage] = useState(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translatedData, setTranslatedData] = useState(null);
+  const [layout, setLayout] = useState('standard');
 
 
   const isMounted = React.useRef(true);
@@ -572,19 +574,14 @@ export default function ResultCardGenerator() {
       const nm = normalizeSubjectName(subjName);
       const isUnwanted = (name) => {
         const n = String(name || '').trim().toLowerCase();
-        // Exact match check
         if (UNWANTED_SUBJECTS.some(u => n === u.toLowerCase())) return true;
-
-        // Don't filter out co-curricular subjects even if they contain keywords like 'test'
         if (CO_CURRICULAR_SUBJECTS.some(sub => n.includes(sub.toLowerCase()))) return false;
-
-        // Keyword contains check
         if (UNWANTED_KEYWORDS.some(u => n.includes(u.toLowerCase()))) return true;
         return false;
       };
 
       if (!nm || isUnwanted(nm) || isUnwanted(subjName)) continue;
-      
+
       const prev = map.get(nm);
       if (prev) {
         const prevExId = typeof prev.examination === 'object' ? prev.examination?.id : prev.examination;
@@ -1726,6 +1723,19 @@ export default function ResultCardGenerator() {
               </MenuItem>
             ))}
           </TextField>
+
+          {/* লেআউট নির্বাচন */}
+          <TextField
+            select
+            label="লেআউট নির্বাচন করুন"
+            value={layout}
+            onChange={(e) => setLayout(e.target.value)}
+            fullWidth
+            disabled={!selectedClass}
+          >
+            <MenuItem value="standard">স্ট্যান্ডার্ড লেআউট</MenuItem>
+            <MenuItem value="ssc">SSC বোর্ড লেআউট (নতুন)</MenuItem>
+          </TextField>
         </Stack>
 
         <Stack direction="row" spacing={2} flexWrap="wrap">
@@ -1837,34 +1847,45 @@ export default function ResultCardGenerator() {
       <Box className="result-display-area">
         {studentData && (
           <Box className="single-card-view">
-            <ResultCard
-              studentData={translatedData ? {
-                ...studentData,
-                student: {
-                  ...studentData.student,
-                  user: {
-                    ...studentData.student.user,
-                    first_name: translatedData.student_name?.split(' ')[0] || studentData.student.user.first_name,
-                    last_name: translatedData.student_name?.split(' ').slice(1).join(' ') || studentData.student.user.last_name
-                  },
-                  father_name: translatedData.father_name || studentData.student.father_name,
-                  mother_name: translatedData.mother_name || studentData.student.mother_name,
-                  guardian_name: translatedData.guardian_name || studentData.student.guardian_name,
-                  address: translatedData.address || studentData.student.address
-                }
-              } : studentData}
-              results={translatedData ? results.map(r => {
-                const name = r.subject?.name || r.subject_name;
-                const transName = translatedData.subjects?.[name] || translatedData.subjects?.[name.toLowerCase()] || name;
-                return { ...r, subject: { ...r.subject, name: transName }, subject_name: transName };
-              }) : results}
-              overallResult={overallResult}
-              examination={overrideLogo ? { ...(examination || {}), school_logo: overrideLogo } : examination}
-              school={translatedData ? { ...school, name: translatedData.school_name, address: translatedData.address } : (school || {})}
-              schoolId={id}
-              forceLanguage={forceLanguage}
-              translatedData={translatedData}
-            />
+            {layout === 'ssc' ? (
+              <SSCMarksheet
+                studentData={studentData}
+                results={results}
+                overallResult={overallResult}
+                examination={examination}
+                school={school || {}}
+                forceLanguage={forceLanguage}
+              />
+            ) : (
+              <ResultCard
+                studentData={translatedData ? {
+                  ...studentData,
+                  student: {
+                    ...studentData.student,
+                    user: {
+                      ...studentData.student.user,
+                      first_name: translatedData.student_name?.split(' ')[0] || studentData.student.user.first_name,
+                      last_name: translatedData.student_name?.split(' ').slice(1).join(' ') || studentData.student.user.last_name
+                    },
+                    father_name: translatedData.father_name || studentData.student.father_name,
+                    mother_name: translatedData.mother_name || studentData.student.mother_name,
+                    guardian_name: translatedData.guardian_name || studentData.student.guardian_name,
+                    address: translatedData.address || studentData.student.address
+                  }
+                } : studentData}
+                results={translatedData ? results.map(r => {
+                  const name = r.subject?.name || r.subject_name;
+                  const transName = translatedData.subjects?.[name] || translatedData.subjects?.[name.toLowerCase()] || name;
+                  return { ...r, subject: { ...r.subject, name: transName }, subject_name: transName };
+                }) : results}
+                overallResult={overallResult}
+                examination={overrideLogo ? { ...(examination || {}), school_logo: overrideLogo } : examination}
+                school={translatedData ? { ...school, name: translatedData.school_name, address: translatedData.address } : (school || {})}
+                schoolId={id}
+                forceLanguage={forceLanguage}
+                translatedData={translatedData}
+              />
+            )}
           </Box>
         )}
 
@@ -1873,14 +1894,24 @@ export default function ResultCardGenerator() {
             {bulkCards.map((card, idx) => (
               <Box key={`${card.studentData.student.id}-${idx}`} className="bulk-sheet">
                 <Box className="bulk-card-wrap">
-                  <ResultCard
-                    studentData={card.studentData}
-                    results={card.results}
-                    overallResult={card.overallResult}
-                    examination={card.examination}
-                    school={school || {}}
-                    schoolId={id}
-                  />
+                  {layout === 'ssc' ? (
+                    <SSCMarksheet
+                      studentData={card.studentData}
+                      results={card.results}
+                      overallResult={card.overallResult}
+                      examination={card.examination}
+                      school={school || {}}
+                    />
+                  ) : (
+                    <ResultCard
+                      studentData={card.studentData}
+                      results={card.results}
+                      overallResult={card.overallResult}
+                      examination={card.examination}
+                      school={school || {}}
+                      schoolId={id}
+                    />
+                  )}
                 </Box>
               </Box>
             ))}

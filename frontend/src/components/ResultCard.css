@@ -10,19 +10,6 @@
    to prevent affecting other print pages like Admission/ID cards.
 */
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 8mm !important;
-  }
-
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    background-color: white !important;
-    color-scheme: light !important;
-  }
-
   /* Force background colors only inside result card */
   .result-card-container {
     width: 100% !important;
