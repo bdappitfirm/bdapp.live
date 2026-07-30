@@ -752,7 +752,7 @@ export default function ResultCardGenerator() {
     return 'F';
   };
 
-  const handleSearch = async (examIdOverride = null, targetLang = null) => {
+  const handleSearch = async (examIdOverride = null, targetLang = null, skipCache = false) => {
     if (!selectedStudent || (!selectedExamType && !examIdOverride)) {
       toast.warning('Please select class, student, and exam type');
       return;
@@ -764,11 +764,16 @@ export default function ResultCardGenerator() {
 
     try {
       // Get student details
-      const studentRes = await api.get(`/api/academics/students/${selectedStudent}/`);
+      const studentRes = await api.get(`/api/academics/students/${selectedStudent}/`, { _skipCache: skipCache });
       const student = studentRes.data;
+
+      if (!student || !student.id) {
+          throw new Error('Student data not found');
+      }
 
       let baseStudentData = { student: overrideLogo ? { ...student, school_logo: overrideLogo } : student };
       setStudentData(baseStudentData);
+      // ...
 
       let matchingExams = [];
       if (examIdOverride) {
@@ -860,7 +865,7 @@ export default function ResultCardGenerator() {
           classroom: selectedClass, 
           page_size: 1000 
         };
-        const broadRes = await scopedGet('/api/results/results/', id, broadParams, { timeout: 20000 });
+        const broadRes = await scopedGet('/api/results/results/', id, broadParams, { timeout: 20000, _skipCache: skipCache });
         const broadArr = Array.isArray(broadRes.data) ? broadRes.data : (broadRes.data?.results || []);
         
         if (broadArr.length > 0) {
@@ -921,7 +926,7 @@ export default function ResultCardGenerator() {
         const exId = chosenExam?.id || null;
         
         // Method 1: Try student-specific combined overall result (Best for rank calculation)
-        if (selectedExamType && selectedClass) {
+        if (selectedExamType && selectedClass && student?.id) {
           try {
             const combinedRes = await api.get('/api/results/overall/combined_by_exam_type/', {
               params: {
@@ -1815,9 +1820,15 @@ export default function ResultCardGenerator() {
           <Button
             variant="text"
             startIcon={<RefreshIcon />}
-            onClick={handleReset}
+            onClick={() => {
+              if (selectedStudent) {
+                handleSearch(null, forceLanguage, true);
+              } else {
+                handleReset();
+              }
+            }}
           >
-            রিসেট
+            {selectedStudent ? 'রিফ্রেশ করুন' : 'রিসেট'}
           </Button>
         </Stack>
 
@@ -1858,29 +1869,11 @@ export default function ResultCardGenerator() {
               />
             ) : (
               <ResultCard
-                studentData={translatedData ? {
-                  ...studentData,
-                  student: {
-                    ...studentData.student,
-                    user: {
-                      ...studentData.student.user,
-                      first_name: translatedData.student_name?.split(' ')[0] || studentData.student.user.first_name,
-                      last_name: translatedData.student_name?.split(' ').slice(1).join(' ') || studentData.student.user.last_name
-                    },
-                    father_name: translatedData.father_name || studentData.student.father_name,
-                    mother_name: translatedData.mother_name || studentData.student.mother_name,
-                    guardian_name: translatedData.guardian_name || studentData.student.guardian_name,
-                    address: translatedData.address || studentData.student.address
-                  }
-                } : studentData}
-                results={translatedData ? results.map(r => {
-                  const name = r.subject?.name || r.subject_name;
-                  const transName = translatedData.subjects?.[name] || translatedData.subjects?.[name.toLowerCase()] || name;
-                  return { ...r, subject: { ...r.subject, name: transName }, subject_name: transName };
-                }) : results}
+                studentData={studentData}
+                results={results}
                 overallResult={overallResult}
                 examination={overrideLogo ? { ...(examination || {}), school_logo: overrideLogo } : examination}
-                school={translatedData ? { ...school, name: translatedData.school_name, address: translatedData.address } : (school || {})}
+                school={school || {}}
                 schoolId={id}
                 forceLanguage={forceLanguage}
                 translatedData={translatedData}
@@ -1944,6 +1937,11 @@ export default function ResultCardGenerator() {
             .result-display-area {
               margin: 0 !important;
               padding: 0 !important;
+            }
+
+            /* If SSC Marksheet is visible, hide everything else explicitly */
+            body:has(.ssc-print-root) .single-card-view > *:not(.ssc-print-root) {
+                display: none !important;
             }
 
             .bulk-sheet {

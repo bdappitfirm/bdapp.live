@@ -1,225 +1,298 @@
-.ssc-marksheet-container {
+/*
+   SSCMarksheet Board Design
+   Optimized for A4 Printing (210mm x 297mm)
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+.ssc-print-root {
     width: 210mm;
-    max-width: 98%;
     min-height: 297mm;
-    padding: 10mm;
-    margin: 20px auto;
+    padding: 5mm;
+    margin: 0 auto;
     background-color: #fff;
     box-sizing: border-box;
-    font-family: 'Times New Roman', Times, serif;
+    font-family: 'Times New Roman', serif;
     color: #000;
     position: relative;
-    border: 1px solid #ddd;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
 }
 
-.ssc-marksheet-inner {
-    border: 2px solid #2e7d32; /* Green border like many boards */
+.ssc-border-outer {
+    border: 5pt double #444; /* Thick double border like the board transcript */
     padding: 10mm;
     height: 100%;
-    min-height: 270mm;
-    display: flex;
-    flex-direction: column;
+    min-height: 275mm;
+    box-sizing: border-box;
     position: relative;
-    background-color: #fdfdf5; /* Slight yellowish tint often seen in marksheets */
+    background: #fdfdf5; /* Classic transcript off-white/yellowish tint */
 }
 
-.ssc-header {
+/* Header Styles */
+.ssc-header-container {
     text-align: center;
-    margin-bottom: 20px;
+    position: relative;
+    margin-bottom: 5mm;
 }
 
 .ssc-board-name {
-    font-size: 20px !important;
-    font-weight: bold !important;
-    color: #1a237e !important;
+    font-size: 16pt;
+    font-weight: bold;
+    margin: 0;
     text-transform: uppercase;
 }
 
 .ssc-country {
-    font-size: 16px !important;
-    font-weight: bold !important;
-    margin-bottom: 10px !important;
+    font-size: 12pt;
+    font-weight: bold;
+    margin: 2pt 0;
 }
 
-.ssc-exam-info {
-    margin: 10px 0;
+.ssc-exam-name {
+    font-size: 13pt;
+    font-weight: bold;
+    margin: 5pt 0;
+}
+
+.ssc-emblem {
+    width: 60pt;
+    height: auto;
+    margin: 5pt auto;
+    display: block;
+}
+
+.ssc-serial-section {
+    position: absolute;
+    top: 30pt;
+    left: 5pt;
+    font-size: 10pt;
+    text-align: left;
 }
 
 .ssc-transcript-title {
-    font-size: 18px !important;
-    font-weight: bold !important;
+    font-size: 14pt;
+    font-weight: bold;
     text-decoration: underline;
-    margin-top: 5px !important;
+    margin-top: 10pt;
 }
 
-.ssc-grade-scale {
+/* Grade Scale (Top Right) */
+.ssc-grade-scale-box {
     position: absolute;
-    top: 20mm;
-    right: 10mm;
+    top: 5mm;
+    right: 5mm;
 }
 
 .ssc-grade-table {
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: 7.5pt;
 }
 
 .ssc-grade-table th, .ssc-grade-table td {
     border: 1px solid #000;
-    padding: 2px 5px;
+    padding: 1pt 3pt;
     text-align: center;
 }
 
-.ssc-student-details {
-    margin-top: 30px;
-    margin-bottom: 20px;
+/* Student Info */
+.ssc-info-grid {
+    margin: 5mm 5mm 2mm 5mm;
+    font-size: 11pt;
 }
 
-.ssc-details-row {
+.ssc-info-row {
     display: flex;
-    margin-bottom: 8px;
-    font-size: 14px;
+    margin-bottom: 4pt;
+    align-items: baseline;
 }
 
-.ssc-details-row.half {
-    width: 50%;
+.ssc-info-label {
+    width: 130pt;
+    flex-shrink: 0;
 }
 
-.ssc-details-grid {
-    display: flex;
-    flex-wrap: wrap;
+.ssc-info-colon {
+    width: 15pt;
 }
 
-.ssc-label {
-    width: 150px;
-    display: inline-block;
-}
-
-.ssc-colon {
-    width: 20px;
-    display: inline-block;
-}
-
-.ssc-value {
+.ssc-info-value {
     flex-grow: 1;
-    border-bottom: 1px dotted #000;
-}
-
-.ssc-value.bold {
+    font-style: italic;
     font-weight: bold;
+    border-bottom: 1px dotted #555;
+    padding-left: 5pt;
 }
 
-.ssc-results-wrapper {
-    margin-top: 20px;
+.ssc-info-multi {
+    display: flex;
+    justify-content: space-between;
+}
+
+.ssc-info-item {
+    display: flex;
+    width: 48%;
+}
+
+/* Results Table */
+.ssc-results-container {
+    margin: 2mm 5mm;
     position: relative;
-    flex-grow: 1;
+    min-height: 120mm;
 }
 
-.ssc-table-watermark {
+.ssc-watermark-wrapper {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    opacity: 0.1;
+    width: 350pt;
+    height: 350pt;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     z-index: 0;
     pointer-events: none;
-    width: 60%;
 }
 
-.ssc-table-watermark img {
+.ssc-watermark {
     width: 100%;
-    height: auto;
+    max-height: 100%;
+    opacity: 0.1;
+    filter: grayscale(20%);
 }
 
-.ssc-results-table {
+.ssc-main-table {
     width: 100%;
     border-collapse: collapse;
     position: relative;
     z-index: 1;
-    background-color: transparent;
+    background: transparent;
+    font-size: 10.5pt;
 }
 
-.ssc-results-table th, .ssc-results-table td {
+.ssc-main-table th, .ssc-main-table td {
     border: 1px solid #000;
-    padding: 8px;
-    background-color: transparent;
+    padding: 4pt 6pt;
 }
 
-.ssc-results-table th {
-    background-color: #e8f5e9; /* Light green header */
-}
-
-.ssc-results-table .empty-row td {
-    height: 30px;
-}
-
-.gpa-label {
-    text-align: right;
+.ssc-main-table th {
+    background-color: #e8e8e8;
     font-weight: bold;
-    padding-right: 20px !important;
 }
 
-.gpa-value {
+.ssc-center-text { text-align: center; }
+
+.ssc-gpa-cell {
     font-weight: bold;
-    font-size: 16px;
+    font-size: 12pt;
+    vertical-align: middle;
 }
 
-.ssc-footer {
-    margin-top: 40px;
+/* Optional Subject Header */
+.ssc-section-header {
+    background-color: #f2f2f2;
+    font-weight: bold;
+    font-size: 9pt;
+    text-align: left;
+}
+
+/* Continuous Assessment */
+.ssc-ca-section {
+    margin: 5mm 5mm;
+}
+
+.ssc-ca-title {
+    font-weight: bold;
+    font-size: 10pt;
+    margin-bottom: 2pt;
+    text-decoration: underline;
+}
+
+.ssc-ca-table {
+    width: 60%;
+    border-collapse: collapse;
+    font-size: 9pt;
+}
+
+.ssc-ca-table td, .ssc-ca-table th {
+    border: 1px solid #000;
+    padding: 2pt 5pt;
+}
+
+/* Footer */
+.ssc-footer-container {
+    margin-top: auto;
+    padding: 5mm;
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
 }
 
-.ssc-date-section {
-    font-size: 12px;
+.ssc-date-box {
+    font-size: 10pt;
 }
 
-.ssc-signature-section {
+.ssc-sig-box {
     text-align: center;
+    position: relative;
 }
 
-.sig-line {
+.ssc-sig-line {
+    width: 150pt;
     border-top: 1px solid #000;
-    width: 200px;
-    margin-bottom: 5px;
+    margin-top: 20pt;
 }
 
-.bold {
-    font-weight: bold;
+.ssc-sig-text {
+    font-size: 10pt;
+    margin-top: 3pt;
 }
 
-/* Print Specifics */
+.ssc-sig-wave {
+    position: absolute;
+    top: -15pt;
+    left: 20%;
+    width: 100pt;
+    opacity: 0.8;
+}
+
+/* PRINT MEDIA QUERIES */
 @media print {
-    .ssc-marksheet-container {
+    body * {
+        visibility: hidden;
+    }
+
+    .ssc-print-root, .ssc-print-root * {
+        visibility: visible;
+    }
+
+    .ssc-print-root {
+        position: absolute;
+        left: 0;
+        top: 0;
         margin: 0 !important;
-        box-shadow: none !important;
-        border: none !important;
         padding: 0 !important;
-        width: 100% !important;
-        background-color: white !important;
+        border: none !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        overflow: hidden !important;
+        background: #fff !important;
     }
 
-    .ssc-marksheet-inner {
-        border-width: 2px !important;
+    .ssc-border-outer {
+        border-width: 2pt !important;
+        height: 290mm !important;
+        background-color: #fdfdf0 !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
-        background-color: #fdfdf5 !important;
-        height: auto !important;
-        min-height: 270mm !important;
-    }
-
-    .ssc-results-table th {
-        background-color: #e8f5e9 !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-    }
-
-    .ssc-table-watermark {
-        opacity: 0.12 !important;
-    }
-
-    .ssc-value {
-        border-bottom: 1px dotted #000 !important;
     }
 }

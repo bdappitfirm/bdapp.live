@@ -1595,7 +1595,7 @@ export default function ResultsPage() {
                 .filter(isMajorExam)
                 .map(exam => (
                   <MenuItem key={exam.id} value={exam.id}>
-                    {(exam.name || 'বিষয়')} — {getExamTypeLabel(exam.exam_type)}
+                    {getExamYear(exam) ? `[${getExamYear(exam)}] ` : ''}{(exam.name || 'বিষয়')} — {getExamTypeLabel(exam.exam_type)}
                   </MenuItem>
                 ))}
             </TextField>
