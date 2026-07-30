@@ -3,13 +3,11 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Paper, Stack, Button, TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PrintIcon from '@mui/icons-material/Print';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import api from '../utils/api';
 import { scopedGet } from '../utils/schoolApi';
 import { useAcademics } from '../context/AcademicsContext';
 import { useSchool } from '../context/SchoolContext';
-import { useToast } from '../components/Toast';
 
 const UNWANTED_SUBJECTS = [
   'আরবি', 'বাংলা', 'ভৌৌতবিজ্ঞান', 'ইংরেজি', 'সামাজিক বিজ্ঞান',
@@ -27,7 +25,6 @@ export default function ClassResultsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const toast = useToast();
   const { classrooms, refreshClassrooms } = useAcademics();
   const { school: schoolInfo } = useSchool();
   const [selectedClass, setSelectedClass] = useState('');
@@ -42,6 +39,48 @@ export default function ClassResultsPage() {
   const [loading, setLoading] = useState(false);
   const [overallTotals, setOverallTotals] = useState(new Map());
   const [noYearMessage, setNoYearMessage] = useState('');
+
+  const updateUrl = useCallback((cls, sec, type, exam, year) => {
+    const params = new URLSearchParams();
+    if (cls) params.set('classroom', cls);
+    if (sec) params.set('section', sec);
+    if (type) params.set('type', type);
+    if (exam) params.set('exam', exam);
+    if (year) params.set('year', year);
+    navigate(`${location.pathname}?${params.toString()}`);
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const cls = params.get('classroom');
+    const sec = params.get('section');
+    const type = params.get('type');
+    const exam = params.get('exam');
+    const year = params.get('year');
+    if (cls) setSelectedClass(cls);
+    if (sec) setSelectedSection(sec);
+    if (type) setSelectedExamType(type);
+    if (exam) setSelectedExamId(exam);
+    if (year) setSelectedYear(year);
+  }, [location.search]);
+
+  useEffect(() => { if (id) refreshClassrooms(id).catch(() => {}); }, [id, refreshClassrooms]);
+
+  useEffect(() => {
+    if (!selectedClass) { setSections([]); setStudents([]); return; }
+    scopedGet('/api/academics/sections/', id, { classroom: selectedClass }).then(res => {
+      setSections(Array.isArray(res.data) ? res.data : (res.data?.results || []));
+    }).catch(() => setSections([]));
+
+    (async () => {
+        const params = { classroom: selectedClass, page_size: 500 };
+        if (selectedSection) params.section = selectedSection;
+        try {
+            const res = await scopedGet('/api/academics/students/', id, params);
+            setStudents(res.data.results || res.data || []);
+        } catch { setStudents([]); }
+    })();
+  }, [id, selectedClass, selectedSection]);
 
   const normalizeExamType = (t, name = '') => {
     const n = String(name || '').toLowerCase();
@@ -73,92 +112,58 @@ export default function ClassResultsPage() {
     return m;
   }, [resultsByStudent]);
 
-  const updateUrl = useCallback((cls, sec, type, exam, year) => {
-    const params = new URLSearchParams();
-    if (cls) params.set('classroom', cls);
-    if (sec) params.set('section', sec);
-    if (type) params.set('type', type);
-    if (exam) params.set('exam', exam);
-    if (year) params.set('year', year);
-    navigate(`${location.pathname}?${params.toString()}`);
-  }, [location.pathname, navigate]);
-
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const cls = params.get('classroom');
-    const sec = params.get('section');
-    const type = params.get('type');
-    const exam = params.get('exam');
-    const year = params.get('year');
-    if (cls) setSelectedClass(cls);
-    if (sec) setSelectedSection(sec);
-    if (type) setSelectedExamType(type);
-    if (exam) setSelectedExamId(exam);
-    if (year) setSelectedYear(parseInt(year, 10) || new Date().getFullYear());
-  }, [location.search]);
-
-  const loadData = useCallback(async (quiet = false) => {
     if (!selectedClass) { setExaminations([]); setResultsByStudent(new Map()); return; }
-    if (!quiet) setLoading(true);
+    setLoading(true);
+    scopedGet('/api/results/examinations/', id, { classroom: selectedClass, year: selectedYear }).then(async res => {
+        let all = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        const filterType = selectedExamType || 'all';
+        let exams = filterType === 'all' ? all : all.filter(e => normalizeExamType(e.exam_type, e.name) === filterType);
+        if (selectedExamId) exams = exams.filter(e => String(e.id) === String(selectedExamId));
+        setExaminations(exams);
 
-    try {
-      const exRes = await scopedGet('/api/results/examinations/', id, {
-        classroom: selectedClass,
-        year: selectedYear
-      }, { _skipCache: !quiet });
+        const byStudent = new Map();
+        try {
+            // Efficiently fetch ALL results for the classroom and year in one call
+            const rRes = await scopedGet(`/api/results/results/`, id, {
+                classroom: selectedClass,
+                year: selectedYear,
+                page_size: 5000
+            });
+            const arr = rRes.data.results || rRes.data || [];
 
-      let all = Array.isArray(exRes.data) ? exRes.data : (exRes.data?.results || []);
-      const filterType = selectedExamType || 'all';
-      let exams = filterType === 'all' ? all : all.filter(e => normalizeExamType(e.exam_type, e.name) === filterType);
-      if (selectedExamId) exams = exams.filter(e => String(e.id) === String(selectedExamId));
-      setExaminations(exams);
+            // Only keep results that belong to the matching exams
+            const validExamIds = new Set(exams.map(e => String(e.id)));
 
-      const byStudent = new Map();
-      const rRes = await scopedGet(`/api/results/results/`, id, {
-        classroom: selectedClass,
-        year: selectedYear,
-        page_size: 5000
-      }, { _skipCache: !quiet });
-
-      const arr = rRes.data.results || rRes.data || [];
-      const validExamIds = new Set(exams.map(e => String(e.id)));
-
-      for (const r of arr) {
-        const exId = String(r.examination?.id || r.examination);
-        if (validExamIds.has(exId)) {
-          const sid = String(typeof r.student === 'object' ? r.student?.id : r.student);
-          if (!byStudent.has(sid)) byStudent.set(sid, []);
-          byStudent.get(sid).push(r);
+            for (const r of arr) {
+                const exId = String(r.examination?.id || r.examination);
+                if (validExamIds.has(exId)) {
+                    const sid = String(typeof r.student === 'object' ? r.student?.id : r.student);
+                    if (!byStudent.has(sid)) byStudent.set(sid, []);
+                    byStudent.get(sid).push(r);
+                }
+            }
+        } catch (err) {
+            console.error("Result fetch error:", err);
         }
-      }
 
-      setResultsByStudent(byStudent);
-      if (byStudent.size === 0) setNoYearMessage('কোনো তথ্য পাওয়া যায়নি');
-      else setNoYearMessage('');
+        setResultsByStudent(byStudent);
+        if (byStudent.size === 0) setNoYearMessage('কোনো তথ্য পাওয়া যায়নি');
+        else setNoYearMessage('');
 
-      const mt = new Map();
-      for (const [sid, arr] of byStudent.entries()) {
-        const tot = arr.reduce((s, r) => {
-          const nm = String(r.subject?.name || r.subject_name || '').toLowerCase();
-          const isCoCurricular = CO_CURRICULAR_SUBJECTS.some(sub => nm.includes(sub.toLowerCase()));
-          if (isCoCurricular) return s;
-          return s + (parseFloat(r.total_obtained || 0));
-        }, 0);
-        mt.set(sid, tot);
-      }
-      setOverallTotals(mt);
-      if (!quiet) toast.success('তথ্য আপডেট হয়েছে');
-    } catch (err) {
-      console.error("Data load error:", err);
-      if (!quiet) toast.error('তথ্য লোড করতে সমস্যা হয়েছে');
-    } finally {
-      if (!quiet) setLoading(false);
-    }
-  }, [id, selectedClass, selectedYear, selectedExamType, selectedExamId, toast]);
-
-  useEffect(() => {
-    loadData(true);
-  }, [loadData]);
+        const mt = new Map();
+        for (const [sid, arr] of byStudent.entries()) {
+            const tot = arr.reduce((s, r) => {
+              const nm = String(r.subject?.name || r.subject_name || '').toLowerCase();
+              const isCoCurricular = CO_CURRICULAR_SUBJECTS.some(sub => nm.includes(sub.toLowerCase()));
+              if (isCoCurricular) return s;
+              return s + (parseFloat(r.total_obtained || 0));
+            }, 0);
+            mt.set(sid, tot);
+        }
+        setOverallTotals(mt);
+    }).finally(() => setLoading(false));
+  }, [id, selectedClass, selectedExamType, selectedSection, selectedYear, selectedExamId]);
 
   const displaySubjects = useMemo(() => {
     const set = new Set();
@@ -218,7 +223,6 @@ export default function ClassResultsPage() {
         <Typography variant="h4"><AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />ক্লাস রেজাল্টস</Typography>
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>ব্যাক</Button>
-          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => loadData(false)}>রিফ্রেশ</Button>
           <Button variant="contained" startIcon={<PrintIcon />} onClick={() => window.print()}>প্রিন্ট</Button>
         </Stack>
       </Stack>

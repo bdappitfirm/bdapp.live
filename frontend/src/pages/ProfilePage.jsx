@@ -42,9 +42,7 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState({
     username: '',
     first_name: '',
-    first_name_en: '',
     last_name: '',
-    last_name_en: '',
     email: '',
     phone_number: '',
     gender: '',
@@ -53,7 +51,6 @@ export default function ProfilePage() {
     section: '',
     category: '',
     designation: '',
-    designation_en: '',
     educational_qualification: '',
     assigned_subject: ''
   });
@@ -104,9 +101,7 @@ export default function ProfilePage() {
       setFormData({
         username: userData.username || '',
         first_name: userData.first_name || '',
-        first_name_en: userData.first_name_en || '',
         last_name: userData.last_name || '',
-        last_name_en: userData.last_name_en || '',
         email: userData.email || '',
         phone_number: userData.phone_number || '',
         gender: profileData.gender || '',
@@ -115,7 +110,6 @@ export default function ProfilePage() {
         section: profileData.section?.id || '',
         category: profileData.category?.id || profileData.category || '',
         designation: profileData.designation || '',
-        designation_en: profileData.designation_en || '',
         educational_qualification: profileData.educational_qualification || '',
         assigned_subject: profileData.assigned_subject || userData.assigned_subject || ''
       });
@@ -278,9 +272,7 @@ export default function ProfilePage() {
         const userPayload = {
           username: uname,
           first_name: formData.first_name,
-          first_name_en: formData.first_name_en,
           last_name: formData.last_name,
-          last_name_en: formData.last_name_en,
           email: formData.email,
           phone_number: formData.phone_number
         };
@@ -292,7 +284,6 @@ export default function ProfilePage() {
         const profilePayload = {
           gender: formData.gender,
           designation: formData.designation,
-          designation_en: formData.designation_en,
           educational_qualification: formData.educational_qualification,
           assigned_subject: formData.assigned_subject,
           category: formData.category,
@@ -562,17 +553,6 @@ export default function ProfilePage() {
                   helperText={formErrors.first_name || ''}
                 />
               </Grid>
-              {editing && (
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="First Name (English)"
-                    name="first_name_en"
-                    value={formData.first_name_en}
-                    onChange={handleInputChange}
-                    fullWidth
-                  />
-                </Grid>
-              )}
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Last Name"
@@ -585,17 +565,6 @@ export default function ProfilePage() {
                   helperText={formErrors.last_name || ''}
                 />
               </Grid>
-              {editing && (
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Last Name (English)"
-                    name="last_name_en"
-                    value={formData.last_name_en}
-                    onChange={handleInputChange}
-                    fullWidth
-                  />
-                </Grid>
-              )}
               <Grid size={{ xs: 12 }}>
                 <TextField
                   label="Email"
@@ -645,17 +614,6 @@ export default function ProfilePage() {
                   disabled={!editing}
                 />
               </Grid>
-              {editing && (
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Designation (English)"
-                    name="designation_en"
-                    value={formData.designation_en}
-                    onChange={handleInputChange}
-                    fullWidth
-                  />
-                </Grid>
-              )}
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Educational Qualification"

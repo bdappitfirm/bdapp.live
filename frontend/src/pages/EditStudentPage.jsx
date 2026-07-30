@@ -17,9 +17,7 @@ export default function EditStudentPage() {
   const [form, setForm] = useState({
     username: '',
     first_name: '',
-    first_name_en: '',
     last_name: '',
-    last_name_en: '',
     email: '',
     phone_number: '',
     roll_number: '',
@@ -29,16 +27,12 @@ export default function EditStudentPage() {
     blood_group: '',
     gender: '',
     guardian_name: '',
-    guardian_name_en: '',
     father_name: '',
-    father_name_en: '',
     mother_name: '',
-    mother_name_en: '',
     admission_date: '',
     birth_date: '',
     optional_subject_id: '',
     address: '',
-    address_en: '',
     remarks: '',
     voter_number: ''
   });
@@ -111,9 +105,7 @@ export default function EditStudentPage() {
         setForm({
           username: s.user?.username || s.username || '',
           first_name: s.user?.first_name || s.first_name || '',
-          first_name_en: s.user?.first_name_en || s.first_name_en || '',
           last_name: s.user?.last_name || s.last_name || '',
-          last_name_en: s.user?.last_name_en || s.last_name_en || '',
           email: s.user?.email || s.email || '',
           phone_number: s.user?.phone_number || s.phone_number || '',
           roll_number: s.roll_number || '',
@@ -123,16 +115,12 @@ export default function EditStudentPage() {
           blood_group: s.blood_group || '',
           gender: s.gender || '',
           guardian_name: s.guardian_name || '',
-          guardian_name_en: s.guardian_name_en || '',
           father_name: s.father_name || '',
-          father_name_en: s.father_name_en || '',
           mother_name: s.mother_name || '',
-          mother_name_en: s.mother_name_en || '',
           admission_date: s.admission_date || '',
           birth_date: s.birth_date || '',
           optional_subject_id: s.optional_subject?.id || s.optional_subject || '',
           address: s.address || '',
-          address_en: s.address_en || '',
           remarks: s.remarks || '',
           voter_number: s.voter_number || ''
         });
@@ -286,13 +274,7 @@ export default function EditStudentPage() {
               <TextField id="student-name-edit" fullWidth label="নাম (First Name)" value={form.first_name} onFocus={() => updateStep('#student-name-edit')} onChange={e => setForm({...form, first_name: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({...form, first_name_en: e.target.value})} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
               <TextField id="last-name-edit" fullWidth label="পদবী (Last Name)" value={form.last_name} onFocus={() => updateStep('#last-name-edit')} onChange={e => setForm({...form, last_name: e.target.value})} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField fullWidth label="পদবী (ইংরেজিতে)" value={form.last_name_en} onChange={e => setForm({...form, last_name_en: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField id="username-edit" fullWidth label="ইউজার আইডি (Username)" value={form.username} onFocus={() => updateStep('#username-edit')} onChange={e => setForm({...form, username: e.target.value})} />
@@ -322,22 +304,13 @@ export default function EditStudentPage() {
               <TextField id="guardian-name-edit" fullWidth label="অভিভাবকের নাম" value={form.guardian_name} onFocus={() => updateStep('#guardian-name-edit')} onChange={e => setForm({...form, guardian_name: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="অভিভাবকের নাম (ইংরেজিতে)" value={form.guardian_name_en} onChange={e => setForm({...form, guardian_name_en: e.target.value})} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField fullWidth label="মোবাইল নম্বর" value={form.phone_number} onChange={e => setForm({...form, phone_number: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth label="পিতার নাম" value={form.father_name} onChange={e => setForm({...form, father_name: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="পিতার নাম (ইংরেজিতে)" value={form.father_name_en} onChange={e => setForm({...form, father_name_en: e.target.value})} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField fullWidth label="মাতার নাম" value={form.mother_name} onChange={e => setForm({...form, mother_name: e.target.value})} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="মাতার নাম (ইংরেজিতে)" value={form.mother_name_en} onChange={e => setForm({...form, mother_name_en: e.target.value})} />
             </Grid>
           </Grid>
 
@@ -347,9 +320,6 @@ export default function EditStudentPage() {
           <Grid container spacing={2}>
             <Grid item xs={12}>
               <TextField fullWidth multiline rows={2} label="ঠিকানা" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField fullWidth multiline rows={2} label="ঠিকানা (ইংরেজিতে)" value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth label="ভোটার আইডি/জন্ম নিবন্ধন নম্বর" value={form.voter_number} onChange={e => setForm({...form, voter_number: e.target.value})} />

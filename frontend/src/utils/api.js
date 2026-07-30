@@ -141,15 +141,7 @@ api.interceptors.response.use(
       // Clear cache on mutations to avoid stale data
       try {
         await db.genericCache.clear();
-        // Also clear specific tables to ensure fresh data on next fetch
-        await Promise.all([
-          db.students.clear(),
-          db.results.clear(),
-          db.examinations.clear(),
-          db.fees.clear(),
-          db.attendance.clear()
-        ]);
-        console.log('🧹 All offline caches cleared due to mutation:', response.config.url);
+        console.log('🧹 Generic cache cleared due to mutation:', response.config.url);
       } catch (e) {
         console.warn('Cache clear failed:', e);
       }

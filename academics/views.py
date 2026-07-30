@@ -313,7 +313,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                 if digit_ids:
                     sections = Section.objects.filter(id__in=digit_ids)
                     for section in sections:
-                        name = str(section.name or '').lower()
+                        name = section.name.lower()
                         if 'বিজ্ঞান' in name or 'science' in name:
                             q_filter |= Q(section_id=section.id) | Q(student_group='science')
                         elif 'মানবিক' in name or 'arts' in name:

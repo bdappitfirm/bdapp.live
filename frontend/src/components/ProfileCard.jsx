@@ -77,17 +77,13 @@ export default function ProfileCard({
     username: '',
     password: '',
     first_name: '',
-    first_name_en: '',
     last_name: '',
-    last_name_en: '',
     email: '',
     phone_number: '',
     blood_group: '',
     occupation: '',
-    occupation_en: '',
     income: '',
     designation: '',
-    designation_en: '',
     gender: ''
   });
   const [formErrors, setFormErrors] = useState({});
@@ -161,17 +157,13 @@ export default function ProfileCard({
       username: user?.username || '',
       password: '',
       first_name: user?.first_name || '',
-      first_name_en: user?.first_name_en || '',
       last_name: user?.last_name || '',
-      last_name_en: user?.last_name_en || '',
       email: user?.email || '',
       phone_number: user?.phone_number || '',
       blood_group: (profile?.blood_group ?? profile?.user?.blood_group ?? ''),
       occupation: (profile?.occupation ?? profile?.user?.occupation ?? ''),
-      occupation_en: (profile?.occupation_en ?? profile?.user?.occupation_en ?? ''),
       income: (profile?.income ?? profile?.user?.income ?? '') !== '' ? String(profile?.income ?? profile?.user?.income ?? '') : '',
       designation: profile?.designation || '',
-      designation_en: profile?.designation_en || '',
       gender: profile?.gender || '',
       group: profile?.group || ''
     });
@@ -546,18 +538,14 @@ export default function ProfileCard({
       if (formData.username) fd.append('username', formData.username);
       if (formData.password) fd.append('password', formData.password);
       fd.append('first_name', formData.first_name || '');
-      fd.append('first_name_en', formData.first_name_en || '');
       fd.append('last_name', formData.last_name || '');
-      fd.append('last_name_en', formData.last_name_en || '');
       fd.append('email', formData.email || '');
       fd.append('phone_number', formData.phone_number || '');
       fd.append('blood_group', formData.blood_group || '');
       fd.append('occupation', formData.occupation || '');
-      fd.append('occupation_en', formData.occupation_en || '');
       fd.append('income', formData.income || '');
-      if (showDesignation || formData.designation || formData.designation_en) {
+      if (showDesignation) {
         fd.append('designation', formData.designation || '');
-        fd.append('designation_en', formData.designation_en || '');
       }
       if ((roleLower === 'student' || localProfile?.classroom || localProfile?.roll_number || localProfile?.student_custom_id) && formData.gender) {
         fd.append('gender', formData.gender);
@@ -1121,13 +1109,7 @@ export default function ProfileCard({
                   <TextField id="edit-first-name" name="first_name" label="First Name" value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} fullWidth error={!!formErrors.first_name} helperText={formErrors.first_name || ''} />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField id="edit-first-name-en" name="first_name_en" label="First Name (English)" value={formData.first_name_en} onChange={(e) => setFormData({ ...formData, first_name_en: e.target.value })} fullWidth />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField id="edit-last-name" name="last_name" label="Last Name" value={formData.last_name} onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} fullWidth error={!!formErrors.last_name} helperText={formErrors.last_name || ''} />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField id="edit-last-name-en" name="last_name_en" label="Last Name (English)" value={formData.last_name_en} onChange={(e) => setFormData({ ...formData, last_name_en: e.target.value })} fullWidth />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
                   <TextField id="edit-email" name="email" label="Email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} fullWidth error={!!formErrors.email} helperText={formErrors.email || ''} />
@@ -1172,17 +1154,13 @@ export default function ProfileCard({
                   <TextField label="Occupation" value={formData.occupation} onChange={(e) => setFormData({ ...formData, occupation: e.target.value })} fullWidth />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField label="Occupation (English)" value={formData.occupation_en} onChange={(e) => setFormData({ ...formData, occupation_en: e.target.value })} fullWidth />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField label="Monthly Income" type="number" value={formData.income} onChange={(e) => setFormData({ ...formData, income: e.target.value })} fullWidth inputProps={{ min: 0 }} />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField id="edit-designation" name="designation" label="পদবী (Designation)" value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} placeholder="e.g., সভাপতি, সাধারণ সম্পাদক, সদস্য" fullWidth error={!!formErrors.designation} helperText={formErrors.designation || 'Committee member designation'} />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField id="edit-designation-en" name="designation_en" label="Designation (English)" value={formData.designation_en} onChange={(e) => setFormData({ ...formData, designation_en: e.target.value })} fullWidth />
-                </Grid>
+                {showDesignation && (
+                  <Grid size={{ xs: 12 }}>
+                    <TextField id="edit-designation" name="designation" label="পদবী (Designation)" value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} placeholder="e.g., সভাপতি, সাধারণ সম্পাদক, সদস্য" fullWidth error={!!formErrors.designation} helperText={formErrors.designation || 'Committee member designation'} />
+                  </Grid>
+                )}
               </Grid>
             </Box>
             {enableLinkStudents && schoolId && ((roleLower === 'parent') || forceLinkStudents) && (

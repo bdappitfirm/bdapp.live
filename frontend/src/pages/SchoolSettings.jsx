@@ -30,14 +30,11 @@ export default function SchoolSettings() {
   
   const [formData, setFormData] = useState({
     name: '',
-    name_en: '',
     ein: '',
     email: '',
     phone_number: '',
     address: '',
-    address_en: '',
     principal_name: '',
-    principal_name_en: '',
     number_of_buildings: 1
   });
 
@@ -84,14 +81,11 @@ export default function SchoolSettings() {
       setSchool(res.data);
       setFormData({
         name: res.data.name || '',
-        name_en: res.data.name_en || '',
         ein: res.data.ein || '',
         email: res.data.email || '',
         phone_number: res.data.phone_number || '',
         address: res.data.address || '',
-        address_en: res.data.address_en || '',
         principal_name: res.data.principal_name || '',
-        principal_name_en: res.data.principal_name_en || '',
         number_of_buildings: res.data.number_of_buildings || 1
       });
     } catch (err) {
@@ -281,13 +275,6 @@ export default function SchoolSettings() {
                 fullWidth
                 required
               />
-              <TextField
-                label="স্কুলের নাম (ইংরেজিতে)"
-                name="name_en"
-                value={formData.name_en}
-                onChange={handleInputChange}
-                fullWidth
-              />
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <TextField
@@ -329,25 +316,9 @@ export default function SchoolSettings() {
                 </Grid>
               </Grid>
               <TextField
-                label="প্রধান শিক্ষকের নাম (ইংরেজিতে)"
-                name="principal_name_en"
-                value={formData.principal_name_en}
-                onChange={handleInputChange}
-                fullWidth
-              />
-              <TextField
                 label="ঠিকানা"
                 name="address"
                 value={formData.address}
-                onChange={handleInputChange}
-                fullWidth
-                multiline
-                rows={2}
-              />
-              <TextField
-                label="ঠিকানা (ইংরেজিতে)"
-                name="address_en"
-                value={formData.address_en}
                 onChange={handleInputChange}
                 fullWidth
                 multiline

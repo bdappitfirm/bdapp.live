@@ -4,16 +4,13 @@ import os
 
 class School(models.Model):
     name = models.CharField(max_length=255)
-    name_en = models.CharField(max_length=255, blank=True, null=True, verbose_name="School Name (English)")
     ein = models.CharField(max_length=50, blank=True, null=True, verbose_name="EIIN Number")
     email = models.EmailField(blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True)
-    address_en = models.CharField(max_length=255, blank=True, null=True, verbose_name="Address (English)")
     logo = models.ImageField(upload_to='school_logos/', blank=True, null=True)
     logo_thumbnail = models.ImageField(upload_to='school_logos_thumb/', blank=True, null=True)
     principal_name = models.CharField(max_length=255, blank=True, null=True)
-    principal_name_en = models.CharField(max_length=255, blank=True, null=True, verbose_name="Principal Name (English)")
     principal_signature = models.ImageField(upload_to='school_signatures/', blank=True, null=True, help_text="Principal's signature (PNG/JPG/JPEG)")
     school_seal = models.ImageField(upload_to='school_seals/', blank=True, null=True, help_text="School seal (PNG/JPG/JPEG)")
     number_of_buildings = models.IntegerField(default=1, blank=True, null=True, verbose_name="Number of Buildings")

@@ -58,16 +58,13 @@ export default function TeachersPage() {
   const [selectedTeacherProfile, setSelectedTeacherProfile] = useState(null);
   const [editFormData, setEditFormData] = useState({
     first_name: '',
-    first_name_en: '',
     last_name: '',
-    last_name_en: '',
     email: '',
     username: '',
     password: '', // Password field for editing
     phone_number: '',
     educational_qualification: '',
     designation: '',
-    designation_en: '',
     blood_group: '',
     index_number: '',
     joining_date: '',
@@ -168,16 +165,13 @@ export default function TeachersPage() {
 
     setEditFormData({
       first_name: teacher.first_name || '',
-      first_name_en: teacher.first_name_en || '',
       last_name: teacher.last_name || '',
-      last_name_en: teacher.last_name_en || '',
       email: teacher.email || '',
       username: teacher.username || '',
       password: '',
       phone_number: teacher.phone_number || '',
       educational_qualification: teacher.educational_qualification || '',
       designation: profile?.designation || '',
-      designation_en: profile?.designation_en || '',
       blood_group: profile?.blood_group || '',
       index_number: profile?.index_number || '',
       joining_date: profile?.joining_date || '',
@@ -417,14 +411,11 @@ export default function TeachersPage() {
         formData.append('password', editFormData.password);
       }
       formData.append('first_name', editFormData.first_name || '');
-      formData.append('first_name_en', editFormData.first_name_en || '');
       formData.append('last_name', editFormData.last_name || '');
-      formData.append('last_name_en', editFormData.last_name_en || '');
       formData.append('email', editFormData.email || '');
       formData.append('phone_number', editFormData.phone_number || '');
       formData.append('educational_qualification', editFormData.educational_qualification || '');
       formData.append('designation', editFormData.designation || '');
-      formData.append('designation_en', editFormData.designation_en || '');
       formData.append('blood_group', editFormData.blood_group || '');
       formData.append('index_number', editFormData.index_number || '');
       formData.append('joining_date', editFormData.joining_date || '');
@@ -1082,22 +1073,10 @@ export default function TeachersPage() {
               onChange={(e) => setEditFormData({...editFormData, first_name: e.target.value})}
             />
             <TextField
-              label="First Name (English)"
-              fullWidth
-              value={editFormData.first_name_en || ''}
-              onChange={(e) => setEditFormData({...editFormData, first_name_en: e.target.value})}
-            />
-            <TextField
               label="Last Name"
               fullWidth
               value={editFormData.last_name || ''}
               onChange={(e) => setEditFormData({...editFormData, last_name: e.target.value})}
-            />
-            <TextField
-              label="Last Name (English)"
-              fullWidth
-              value={editFormData.last_name_en || ''}
-              onChange={(e) => setEditFormData({...editFormData, last_name_en: e.target.value})}
             />
             <TextField
               label="Email"
@@ -1110,12 +1089,6 @@ export default function TeachersPage() {
               fullWidth
               value={editFormData.designation || ''}
               onChange={(e) => setEditFormData({...editFormData, designation: e.target.value})}
-            />
-            <TextField
-              label="Designation (English)"
-              fullWidth
-              value={editFormData.designation_en || ''}
-              onChange={(e) => setEditFormData({...editFormData, designation_en: e.target.value})}
             />
             <TextField
               label="Username (Login ID)"

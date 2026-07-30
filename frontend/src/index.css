@@ -11,7 +11,6 @@ html {
   /* Force scrollbar to prevent layout jump when content loads */
   overflow-y: scroll;
   -webkit-tap-highlight-color: transparent;
-  scroll-behavior: smooth;
 }
 
 body {
@@ -25,7 +24,6 @@ body {
   line-height: 1.5;
   /* Prevent horizontal shaking */
   overflow-x: hidden;
-  position: relative;
 }
 
 /* Disable transitions during initial mount/load to prevent shaking */
@@ -73,11 +71,6 @@ body {
 
 /* Global Print Styles */
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 0 !important;
-  }
-
   .no-print,
   .MuiSnackbar-root,
   .MuiAlert-root,
@@ -93,16 +86,10 @@ body {
   body, html {
     background-color: white !important;
     height: auto !important;
+    overflow: visible !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
-    overflow: visible !important;
-  }
-
-  /* Make sure the main content is visible and takes full space */
-  #root {
-    padding: 0 !important;
-    margin: 0 !important;
   }
 
   .MuiPaper-root, .MuiCard-root {

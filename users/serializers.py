@@ -35,7 +35,7 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'is_superuser', 'is_staff', 'photo', 'photo_url', 'phone_number', 'mobile_number', 'educational_qualification']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_superuser', 'is_staff', 'photo', 'photo_url', 'phone_number', 'mobile_number', 'educational_qualification']
         read_only_fields = ['id', 'photo_url', 'mobile_number', 'is_superuser', 'is_staff']
     
     def get_photo_url(self, obj):
@@ -67,7 +67,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'id', 'user', 'school', 'role', 'effective_role', 'gender', 'blood_group',
-            'occupation', 'occupation_en', 'income', 'designation', 'designation_en', 'index_number', 'joining_date',
+            'occupation', 'income', 'designation', 'index_number', 'joining_date',
             'assigned_subject', 'assigned_subject_name',
             'class_teacher_classroom', 'class_teacher_section',
             'class_teacher_classroom_name', 'class_teacher_section_name'
@@ -197,8 +197,6 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     first_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     last_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    first_name_en = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    last_name_en = serializers.CharField(write_only=True, required=False, allow_blank=True)
     email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     phone_number = serializers.CharField(write_only=True, required=False, allow_blank=True)
     educational_qualification = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -222,10 +220,9 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 
-            'first_name_en', 'last_name_en',
-            'email', 'phone_number', 'educational_qualification', 'photo',
-            'school', 'school_id', 'role', 'gender', 'designation', 'designation_en', 'blood_group',
-            'occupation', 'occupation_en', 'income', 'index_number', 'joining_date',
+            'email', 'phone_number', 'educational_qualification', 'photo', 
+            'school', 'school_id', 'role', 'gender', 'designation', 'blood_group',
+            'occupation', 'income', 'index_number', 'joining_date',
             'assigned_subject', 'assigned_subject_name',
             'class_teacher_classroom', 'class_teacher_section',
             'class_teacher_classroom_name', 'class_teacher_section_name'
@@ -238,8 +235,6 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         password = validated_data.get('password')
         first_name = validated_data.get('first_name', '')
         last_name = validated_data.get('last_name', '')
-        first_name_en = validated_data.get('first_name_en', '')
-        last_name_en = validated_data.get('last_name_en', '')
         email = validated_data.get('email', '')
         phone_number = validated_data.get('phone_number', '')
         educational_qualification = validated_data.get('educational_qualification', '')
@@ -286,16 +281,19 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
                 # Surface a clean validation error instead of 500
                 raise serializers.ValidationError({'username': 'This username is already taken.'})
             raise
-        if first_name_en: user.first_name_en = first_name_en
-        if last_name_en: user.last_name_en = last_name_en
         if phone_number and hasattr(user, 'phone_number'):
             try:
                 user.phone_number = phone_number
                 user.save(update_fields=['phone_number'])
             except Exception:
                 pass
-        if first_name_en or last_name_en:
-            user.save()
+        if educational_qualification and hasattr(user, 'educational_qualification'):
+            try:
+                user.educational_qualification = educational_qualification
+                user.save(update_fields=['educational_qualification'])
+            except Exception:
+                pass
+        return user
 
     def create(self, validated_data):
         role = self.role_value or 'student'
@@ -323,8 +321,6 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password', None)
         first_name = validated_data.pop('first_name', None)
         last_name = validated_data.pop('last_name', None)
-        first_name_en = validated_data.pop('first_name_en', None)
-        last_name_en = validated_data.pop('last_name_en', None)
         email = validated_data.pop('email', None)
         phone_number = validated_data.pop('phone_number', None)
         educational_qualification = validated_data.pop('educational_qualification', None)
@@ -344,12 +340,6 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             user_updated = True
         if last_name is not None:
             user.last_name = last_name
-            user_updated = True
-        if first_name_en is not None:
-            user.first_name_en = first_name_en
-            user_updated = True
-        if last_name_en is not None:
-            user.last_name_en = last_name_en
             user_updated = True
         if email is not None:
             user.email = email
@@ -377,10 +367,8 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
                 'role': role,
                 'gender': validated_data.get('gender') if 'gender' in validated_data else None,
                 'designation': designation,
-                'designation_en': validated_data.get('designation_en', ''),
                 'blood_group': validated_data.get('blood_group') if 'blood_group' in validated_data else None,
                 'occupation': validated_data.get('occupation') if 'occupation' in validated_data else None,
-                'occupation_en': validated_data.get('occupation_en', ''),
                 'income': validated_data.get('income') if 'income' in validated_data else None,
                 'index_number': validated_data.get('index_number') if 'index_number' in validated_data else None,
                 'joining_date': validated_data.get('joining_date') if 'joining_date' in validated_data else None,
@@ -397,8 +385,6 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password', None)
         first_name = validated_data.pop('first_name', None)
         last_name = validated_data.pop('last_name', None)
-        first_name_en = validated_data.pop('first_name_en', None)
-        last_name_en = validated_data.pop('last_name_en', None)
         email = validated_data.pop('email', None)
         phone_number = validated_data.pop('phone_number', None)
         educational_qualification = validated_data.pop('educational_qualification', None)
@@ -424,12 +410,6 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         if last_name is not None:
             user.last_name = last_name
             user_updated = True
-        if first_name_en is not None:
-            user.first_name_en = first_name_en
-            user_updated = True
-        if last_name_en is not None:
-            user.last_name_en = last_name_en
-            user_updated = True
         if email is not None:
             user.email = email
             user_updated = True
@@ -451,10 +431,8 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         
         # Update profile fields
         instance.designation = validated_data.get('designation', instance.designation)
-        instance.designation_en = validated_data.get('designation_en', instance.designation_en)
         instance.blood_group = validated_data.get('blood_group', instance.blood_group)
         instance.occupation = validated_data.get('occupation', instance.occupation)
-        instance.occupation_en = validated_data.get('occupation_en', instance.occupation_en)
         instance.income = validated_data.get('income', instance.income)
         instance.index_number = validated_data.get('index_number', instance.index_number)
         instance.joining_date = validated_data.get('joining_date', instance.joining_date)

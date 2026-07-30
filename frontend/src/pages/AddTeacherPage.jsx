@@ -16,14 +16,11 @@ export default function AddTeacherPage() {
     username: '',
     password: '',
     first_name: '',
-    first_name_en: '',
     last_name: '',
-    last_name_en: '',
     email: '',
     phone_number: '',
     educational_qualification: '',
     designation: '',
-    designation_en: '',
     blood_group: '',
     index_number: '',
     joining_date: '',
@@ -152,14 +149,11 @@ export default function AddTeacherPage() {
       if (uname) fd.append('username', uname);
       fd.append('password', form.password || '12345678');
       fd.append('first_name', form.first_name || '');
-      fd.append('first_name_en', form.first_name_en || '');
       fd.append('last_name', form.last_name || '');
-      fd.append('last_name_en', form.last_name_en || '');
       fd.append('email', form.email || '');
       fd.append('phone_number', form.phone_number || '');
       fd.append('educational_qualification', form.educational_qualification || '');
       fd.append('designation', form.designation || '');
-      fd.append('designation_en', form.designation_en || '');
       fd.append('blood_group', form.blood_group || '');
       fd.append('index_number', form.index_number || '');
       fd.append('joining_date', form.joining_date || '');
@@ -253,12 +247,7 @@ export default function AddTeacherPage() {
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField label="First Name" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} helperText={formErrors.first_name || 'Provide either a username or first name'} error={!!formErrors.first_name} fullWidth />
-            <TextField label="First Name (English)" value={form.first_name_en} onChange={e => setForm({ ...form, first_name_en: e.target.value })} fullWidth />
-          </Stack>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField label="Last Name" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} fullWidth error={!!formErrors.last_name} helperText={formErrors.last_name || ''} />
-            <TextField label="Last Name (English)" value={form.last_name_en} onChange={e => setForm({ ...form, last_name_en: e.target.value })} fullWidth />
           </Stack>
 
           <TextField label="Phone Number" value={form.phone_number} onChange={e => setForm({ ...form, phone_number: e.target.value })} placeholder="+8801712345678" error={!!formErrors.phone_number} helperText={formErrors.phone_number || ''} />
@@ -272,23 +261,14 @@ export default function AddTeacherPage() {
             helperText={formErrors.educational_qualification || 'Optional - শিক্ষাগত যোগ্যতা লিখুন'} 
           />
           
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField
-              label="পদবী (Designation)"
-              value={form.designation}
-              onChange={e => setForm({ ...form, designation: e.target.value })}
-              placeholder="e.g., Assistant Teacher, Lecturer, Demonstrator"
-              error={!!formErrors.designation}
-              helperText={formErrors.designation || 'Optional - শিক্ষকের পদবী'}
-              fullWidth
-            />
-            <TextField
-              label="পদবী (ইংরেজিতে)"
-              value={form.designation_en}
-              onChange={e => setForm({ ...form, designation_en: e.target.value })}
-              fullWidth
-            />
-          </Stack>
+          <TextField 
+            label="পদবী (Designation)" 
+            value={form.designation} 
+            onChange={e => setForm({ ...form, designation: e.target.value })} 
+            placeholder="e.g., Assistant Teacher, Lecturer, Demonstrator"
+            error={!!formErrors.designation} 
+            helperText={formErrors.designation || 'Optional - শিক্ষকের পদবী'} 
+          />
           
           <TextField 
             select

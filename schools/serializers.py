@@ -21,7 +21,7 @@ class SchoolSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = School
-        fields = ['id', 'name', 'name_en', 'ein', 'email', 'phone_number', 'address', 'address_en', 'principal_name', 'principal_name_en', 'logo', 'logo_thumbnail', 'logo_thumbnail_url', 'principal_signature', 'school_seal', 'number_of_buildings', 'student_count', 'billing']
+        fields = ['id', 'name', 'ein', 'email', 'phone_number', 'address', 'principal_name', 'logo', 'logo_thumbnail', 'logo_thumbnail_url', 'principal_signature', 'school_seal', 'number_of_buildings', 'student_count', 'billing']
     
     def get_student_count(self, obj):
         try:
