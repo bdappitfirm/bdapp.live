@@ -15,7 +15,9 @@ export default function AddParentPage() {
     username: '',
     password: '',
     first_name: '',
+    first_name_en: '',
     last_name: '',
+    last_name_en: '',
     email: '',
     phone_number: ''
   });
@@ -158,9 +160,11 @@ export default function AddParentPage() {
       cleanFormData.append('username', uname || `${form.phone_number || Date.now()}`);
       cleanFormData.append('password', form.password || '123456');
       cleanFormData.append('first_name', form.first_name);
-      
+      cleanFormData.append('first_name_en', form.first_name_en || '');
+
       // Add optional fields if they have values
       if (form.last_name) cleanFormData.append('last_name', form.last_name);
+      if (form.last_name_en) cleanFormData.append('last_name_en', form.last_name_en);
       if (form.email) cleanFormData.append('email', form.email);
       if (form.phone_number) cleanFormData.append('phone_number', form.phone_number);
       if (photoFile) cleanFormData.append('photo', photoFile);
@@ -387,13 +391,28 @@ export default function AddParentPage() {
               fullWidth 
               required
             />
-            <TextField 
+            <TextField
+              label="নাম (ইংরেজিতে)"
+              value={form.first_name_en}
+              onChange={e => setForm({ ...form, first_name_en: e.target.value })}
+              fullWidth
+            />
+          </Stack>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField
               label="পদবী/উপাধি" 
               value={form.last_name} 
               onChange={e => setForm({ ...form, last_name: e.target.value })} 
               fullWidth 
               error={!!formErrors.last_name} 
               helperText={formErrors.last_name || ''} 
+            />
+            <TextField
+              label="পদবী/উপাধি (ইংরেজিতে)"
+              value={form.last_name_en}
+              onChange={e => setForm({ ...form, last_name_en: e.target.value })}
+              fullWidth
             />
           </Stack>
 

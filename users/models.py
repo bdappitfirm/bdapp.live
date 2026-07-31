@@ -5,6 +5,8 @@ from .image_utils import resize_image, create_thumbnail
 
 
 class User(AbstractUser):
+    first_name_en = models.CharField(max_length=150, blank=True, null=True, verbose_name="First Name (English)")
+    last_name_en = models.CharField(max_length=150, blank=True, null=True, verbose_name="Last Name (English)")
     photo = models.ImageField(upload_to='user_photos/', null=True, blank=True)
     thumbnail = models.ImageField(upload_to='user_thumbnails/', null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True, help_text='Phone number with country code (e.g., +8801712345678)')
@@ -60,6 +62,7 @@ class Profile(models.Model):
         ('other', 'Other'),
     ], blank=True, null=True)
     designation = models.CharField(max_length=100, blank=True, null=True, help_text='Designation/Role for committee members')
+    designation_en = models.CharField(max_length=100, blank=True, null=True, verbose_name="Designation (English)")
     blood_group = models.CharField(max_length=10, choices=[
         ('A+', 'A+'),
         ('A-', 'A-'),
@@ -71,6 +74,7 @@ class Profile(models.Model):
         ('O-', 'O-'),
     ], blank=True, null=True, help_text='Blood group of the user')
     occupation = models.CharField(max_length=120, blank=True, null=True, help_text='Occupation of the user (parent/guardian)')
+    occupation_en = models.CharField(max_length=120, blank=True, null=True, verbose_name="Occupation (English)")
     income = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True, help_text='Monthly income (numeric)')
     
     # Teacher-specific fields

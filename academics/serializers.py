@@ -32,7 +32,7 @@ class SimpleUserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone_number', 'photo', 'thumbnail', 'photo_url', 'thumbnail_url', 'mobile_number', 'educational_qualification']
+        fields = ['id', 'username', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo', 'thumbnail', 'photo_url', 'thumbnail_url', 'mobile_number', 'educational_qualification']
     
     def get_photo_url(self, obj):
         try:
@@ -208,10 +208,16 @@ class StudentProfileSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     first_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     last_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    first_name_en = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    last_name_en = serializers.CharField(write_only=True, required=False, allow_blank=True)
     email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     phone_number = serializers.CharField(write_only=True, required=False, allow_blank=True)
     optional_subject_id = serializers.PrimaryKeyRelatedField(source='optional_subject', queryset=Subject.objects.all(), write_only=True, allow_null=True, required=False)
     guardian_name = serializers.CharField(required=False, allow_blank=True)
+    guardian_name_en = serializers.CharField(required=False, allow_blank=True)
+    father_name_en = serializers.CharField(required=False, allow_blank=True)
+    mother_name_en = serializers.CharField(required=False, allow_blank=True)
+    address_en = serializers.CharField(required=False, allow_blank=True)
     photo = serializers.ImageField(write_only=True, required=False)
     student_custom_id = serializers.CharField(read_only=True)
     group = serializers.CharField(source='student_group', required=False, allow_null=True, allow_blank=True)
@@ -234,7 +240,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StudentProfile
-        fields = ['id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 'email', 'phone_number', 'photo', 'school', 'school_id', 'classroom', 'classroom_id', 'section', 'section_id', 'roll_number', 'group', 'student_group', 'blood_group', 'gender', 'birth_date', 'student_custom_id', 'optional_subject', 'optional_subject_id', 'guardian', 'guardian_id', 'guardian_name', 'father', 'father_id', 'father_name', 'mother', 'mother_id', 'mother_name', 'admission_date', 'address', 'remarks', 'voter_number', 'subjects_list']
+        fields = ['id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo', 'school', 'school_id', 'classroom', 'classroom_id', 'section', 'section_id', 'roll_number', 'group', 'student_group', 'blood_group', 'gender', 'birth_date', 'student_custom_id', 'optional_subject', 'optional_subject_id', 'guardian', 'guardian_id', 'guardian_name', 'guardian_name_en', 'father', 'father_id', 'father_name', 'father_name_en', 'mother', 'mother_id', 'mother_name', 'mother_name_en', 'admission_date', 'address', 'address_en', 'remarks', 'voter_number', 'subjects_list']
         read_only_fields = ['school']
 
     def create(self, validated_data):
@@ -244,17 +250,46 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             sid = self.initial_data.get('school') or self.initial_data.get('school_id')
             if sid: school = School.objects.filter(pk=sid).first()
         if not school: raise serializers.ValidationError({'school': 'This field is required.'})
-        user_data = {k: validated_data.pop(k, '') for k in ['username', 'password', 'first_name', 'last_name', 'email', 'phone_number', 'photo']}
-        if not user_data['username']:
-            base = re.sub(r'[^a-z]', '', user_data['first_name'].lower()) or 'student'
+
+        user_fields = ['username', 'password', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo']
+        user_data = {f: validated_data.pop(f, '') for f in user_fields if f in validated_data or f in ['username', 'password', 'first_name', 'last_name', 'email']}
+
+        if not user_data.get('username'):
+            base = re.sub(r'[^a-z]', '', (user_data.get('first_name') or 'student').lower()) or 'student'
             user_data['username'] = f"{base}{User.objects.count() + 1}"
-        user = User.objects.create_user(username=user_data['username'], password=user_data['password'] or '12345678', first_name=user_data['first_name'], last_name=user_data['last_name'], email=user_data['email'])
+
+        user = User.objects.create_user(
+            username=user_data['username'],
+            password=user_data['password'] or '12345678',
+            first_name=user_data['first_name'] or '',
+            last_name=user_data['last_name'] or '',
+            email=user_data['email'] or ''
+        )
+
+        # Update English names and other fields not in create_user
+        user_updated = False
+        if user_data.get('first_name_en'):
+            user.first_name_en = user_data['first_name_en']
+            user_updated = True
+        if user_data.get('last_name_en'):
+            user.last_name_en = user_data['last_name_en']
+            user_updated = True
+        if user_data.get('phone_number'):
+            user.phone_number = user_data['phone_number']
+            user_updated = True
+        if user_data.get('photo'):
+            user.photo = user_data['photo']
+            user_updated = True
+
+        if user_updated:
+            user.save()
+
         Profile.objects.update_or_create(user=user, defaults={'school': school, 'role': 'student', 'gender': validated_data.get('gender')})
         return StudentProfile.objects.create(user=user, school=school, **validated_data)
 
     def update(self, instance, validated_data):
         if not self.birth_date_db_exists(): validated_data.pop('birth_date', None)
-        user_fields = ['username', 'password', 'first_name', 'last_name', 'email', 'phone_number', 'photo']
+        user_fields = ['username', 'password', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo']
         user_data = {f: validated_data.pop(f) for f in user_fields if f in validated_data}
         if user_data:
             user = instance.user
@@ -267,6 +302,8 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             if 'password' in user_data and user_data['password']: user.set_password(user_data['password']); user_updated = True
             if 'first_name' in user_data: user.first_name = user_data['first_name']; user_updated = True
             if 'last_name' in user_data: user.last_name = user_data['last_name']; user_updated = True
+            if 'first_name_en' in user_data: user.first_name_en = user_data['first_name_en']; user_updated = True
+            if 'last_name_en' in user_data: user.last_name_en = user_data['last_name_en']; user_updated = True
             if 'email' in user_data: user.email = user_data['email']; user_updated = True
             if 'phone_number' in user_data: user.phone_number = user_data['phone_number']; user_updated = True
             if 'photo' in user_data: user.photo = user_data['photo']; user_updated = True

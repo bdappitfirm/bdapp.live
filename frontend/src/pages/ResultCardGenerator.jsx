@@ -73,8 +73,7 @@ function safeGroupSubjects(results, unwantedCheck) {
 }
 
 const UNWANTED_SUBJECTS = [
-  'আরবি', 'বাংলা', 'ভৌৌতবিজ্ঞান', 'ইংরেজি', 'সামাজিক বিজ্ঞান',
-  'ইংরেজী', 'সমাজ', 'ধর্ম', 'ইংরেজি-1', 'ইংরেজি-2', 'বাংলা-1', 'বাংলা-2'
+  'ভৌৌতবিজ্ঞান', 'সামাজিক বিজ্ঞান'
 ];
 
 const UNWANTED_KEYWORDS = [
@@ -601,15 +600,17 @@ export default function ResultCardGenerator() {
           const rt = getTotalMaxForResult(r);
           let { grade: rGrade, gpa: rGpa } = (r.grade && r.gpa) ? { grade: r.grade, gpa: r.gpa } : calculateGradeAndGPA(ro, rt);
           let rPassed = (r.is_passed !== undefined && r.is_passed !== null) ? r.is_passed : computeSubjectPass(r.subject?.name || r.subject_name || nm, rw, rmq, rp, exams, r.examination);
-          const chosen = ro >= po ? { base: r, w: rw, m: rmq, p: rp, o: ro, t: rt, grade: rGrade, gpa: rGpa, pass: rPassed } : { base: prev, w: pw, m: pmq, p: pp, o: po, t: pt, grade: pGrade, gpa: pGpa, pass: pPassed };
+
+          // Priority logic: Always prefer the result with the LATEST date, not necessarily the highest mark
+          const prevDate = new Date(prev.created_at || prev.updated_at || 0).getTime();
+          const currDate = new Date(r.created_at || r.updated_at || 0).getTime();
+
+          const useCurr = currDate >= prevDate;
+          const chosen = useCurr ? { base: r, w: rw, m: rmq, p: rp, o: ro, t: rt, grade: rGrade, gpa: rGpa, pass: rPassed } : { base: prev, w: parseFloat(prev.written_marks)||0, m: parseFloat(prev.mcq_marks)||0, p: parseFloat(prev.practical_marks)||0, o: parseFloat(prev.total_obtained)||0, t: getTotalMaxForResult(prev), grade: prev.grade, gpa: prev.gpa, pass: prev.is_passed };
+          // Keep original name so ResultCard merging logic can detect 1st/2nd paper
           let cleanName = chosen.base.subject?.name || chosen.base.subject_name || nm;
           cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
-          const clsObj = classrooms.find(c => parseInt(c.id, 10) === parseInt(selectedClass, 10)) || {};
-          const nm2 = String(clsObj?.name || '').toLowerCase();
-          const isNineTen = /নবম|nine|\b9\b|দশম|ten|\b10\b/.test(nm2);
-          if (isNineTen) {
-            cleanName = cleanName.replace(/[- ]?(১ম|২য়|২য়|1st|2nd|first|second)([- ]?(paper|পত্র))?/gi, '').trim();
-          }
+
           map.set(nm, {
             ...chosen.base,
             written_marks: chosen.w,
@@ -635,14 +636,10 @@ export default function ResultCardGenerator() {
           const t = getTotalMaxForResult(base);
           let { grade, gpa } = (base.grade && base.gpa) ? { grade: base.grade, gpa: base.gpa } : calculateGradeAndGPA(o, t);
           let passed = (base.is_passed !== undefined && base.is_passed !== null) ? base.is_passed : computeSubjectPass(base.subject?.name || base.subject_name || nm, w, m, p, exams, base.examination);
+          // Keep original name so ResultCard merging logic can detect 1st/2nd paper
           let cleanName = base.subject?.name || base.subject_name || nm;
           cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
-          const clsObj = classrooms.find(c => parseInt(c.id, 10) === parseInt(selectedClass, 10)) || {};
-          const nm2 = String(clsObj?.name || '').toLowerCase();
-          const isNineTen = /নবম|nine|\b9\b|দশম|ten|\b10\b/.test(nm2);
-          if (isNineTen) {
-            cleanName = cleanName.replace(/[- ]?(১ম|২য়|২য়|1st|2nd|first|second)([- ]?(paper|পত্র))?/gi, '').trim();
-          }
+
           map.set(nm, {
             ...base,
             written_marks: w,
@@ -667,14 +664,7 @@ export default function ResultCardGenerator() {
         let passed = (r.is_passed !== undefined && r.is_passed !== null) ? r.is_passed : computeSubjectPass(r.subject?.name || r.subject_name || nm, w, m, p, exams, r.examination);
         let cleanName = r.subject?.name || r.subject_name || nm;
         cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
-        {
-          const clsObj = classrooms.find(c => parseInt(c.id, 10) === parseInt(selectedClass, 10)) || {};
-          const nm = String(clsObj?.name || '').toLowerCase();
-          const isNineTen = /নবম|nine|\b9\b|দশম|ten|\b10\b/.test(nm);
-          if (isNineTen) {
-            cleanName = cleanName.replace(/[- ]?(১ম|২য়|২য়|1st|2nd|first|second)([- ]?(paper|পত্র))?/gi, '').trim();
-          }
-        }
+
         map.set(nm, {
           ...r,
           written_marks: w,
@@ -1861,16 +1851,16 @@ export default function ResultCardGenerator() {
                 studentData={translatedData ? {
                   ...studentData,
                   student: {
-                    ...studentData.student,
+                    ...(studentData?.student || {}),
                     user: {
-                      ...studentData.student.user,
-                      first_name: translatedData.student_name?.split(' ')[0] || studentData.student.user.first_name,
-                      last_name: translatedData.student_name?.split(' ').slice(1).join(' ') || studentData.student.user.last_name
+                      ...(studentData?.student?.user || {}),
+                      first_name: translatedData.student_name?.split(' ')[0] || studentData?.student?.user?.first_name || '',
+                      last_name: translatedData.student_name?.split(' ').slice(1).join(' ') || studentData?.student?.user?.last_name || ''
                     },
-                    father_name: translatedData.father_name || studentData.student.father_name,
-                    mother_name: translatedData.mother_name || studentData.student.mother_name,
-                    guardian_name: translatedData.guardian_name || studentData.student.guardian_name,
-                    address: translatedData.address || studentData.student.address
+                    father_name: translatedData.father_name || studentData?.student?.father_name || '',
+                    mother_name: translatedData.mother_name || studentData?.student?.mother_name || '',
+                    guardian_name: translatedData.guardian_name || studentData?.student?.guardian_name || '',
+                    address: translatedData.address || studentData?.student?.address || ''
                   }
                 } : studentData}
                 results={translatedData ? results.map(r => {
@@ -1901,6 +1891,7 @@ export default function ResultCardGenerator() {
                       overallResult={card.overallResult}
                       examination={card.examination}
                       school={school || {}}
+                      forceLanguage={forceLanguage}
                     />
                   ) : (
                     <ResultCard
@@ -1910,6 +1901,7 @@ export default function ResultCardGenerator() {
                       examination={card.examination}
                       school={school || {}}
                       schoolId={id}
+                      forceLanguage={forceLanguage}
                     />
                   )}
                 </Box>
@@ -1941,9 +1933,11 @@ export default function ResultCardGenerator() {
               print-color-adjust: exact !important;
             }
 
-            .result-display-area {
+            .result-display-area, .single-card-view {
               margin: 0 !important;
               padding: 0 !important;
+              display: block !important;
+              visibility: visible !important;
             }
 
             .bulk-sheet {

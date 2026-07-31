@@ -2,24 +2,61 @@
 .result-card-container {
   font-family: 'Roboto', 'Arial', sans-serif;
   box-shadow: none !important;
+  background-color: white !important;
+  border: none !important;
 }
 
 /*
    Print Specific Optimizations
-   Note: Styles are strictly scoped to .result-card-container
-   to prevent affecting other print pages like Admission/ID cards.
 */
 @media print {
-  /* Force background colors only inside result card */
-  .result-card-container {
-    width: 100% !important;
-    max-width: none !important;
+  @page {
+    size: A4 portrait;
+    margin: 0 !important;
+  }
+
+  body {
     margin: 0 !important;
     padding: 0 !important;
+  }
+
+  .result-card-container {
+    width: 190mm !important;
+    height: 277mm !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
     background-color: white !important;
-    border: none !important;
+    border: 5px solid #1a237e !important;
     box-shadow: none !important;
     display: block !important;
+    position: relative !important;
+    overflow: hidden !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box !important;
+    filter: none !important;
+    box-shadow: none !important;
+  }
+
+  .result-card-container .MuiBox-root {
+    box-sizing: border-box !important;
+  }
+
+  /* Force grid and cell colors */
+  .result-card-container .MuiTableCell-root {
+    border: 1pt solid #1a237e !important;
+  }
+
+  .result-card-container table {
+    border-right: 1pt solid #1a237e !important;
+  }
+
+  .result-card-container .grade-f {
+    color: red !important;
+    -webkit-print-color-adjust: exact !important;
   }
 
   /* Universal reset for result card elements to ensure clarity */

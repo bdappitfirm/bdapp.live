@@ -10,14 +10,12 @@ import { useAcademics } from '../context/AcademicsContext';
 import { useSchool } from '../context/SchoolContext';
 
 const UNWANTED_SUBJECTS = [
-  'আরবি', 'বাংলা', 'ভৌৌতবিজ্ঞান', 'ইংরেজি', 'সামাজিক বিজ্ঞান',
-  'ইংরেজী', 'সমাজ', 'ধর্ম', 'ইংরেজি-1', 'ইংরেজি-2', 'বাংলা-1', 'বাংলা-2'
+  'ভৌৌতবিজ্ঞান', 'সামাজিক বিজ্ঞান'
 ];
 
 const CO_CURRICULAR_SUBJECTS = [
   'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'Physical Education', 'Physical Education and Health',
-  'ক্যারিয়ার শিক্ষা', 'ক্যারিয়ার শিক্ষা', 'Career Education', 'ক্যারিয়ার', 'ক্যারিয়ার',
-  'Word Collection Achievement Test', 'WCAT',
+  'ক্যারিয়ার শিক্ষা', 'ক্যারিয়ার শিক্ষা', 'Career Education', 'Word Collection Achievement Test', 'WCAT',
   'বই পড়া', 'বই পড়া'
 ];
 
@@ -124,13 +122,23 @@ export default function ClassResultsPage() {
 
         const byStudent = new Map();
         try {
-            // Efficiently fetch ALL results for the classroom and year in one call
+            // Broad fetch: get results for this class and year
             const rRes = await scopedGet(`/api/results/results/`, id, {
                 classroom: selectedClass,
                 year: selectedYear,
                 page_size: 5000
             });
-            const arr = rRes.data.results || rRes.data || [];
+            let arr = rRes.data.results || rRes.data || [];
+
+            // Fallback: If no results found for this year, try fetching all results for the class
+            // (in case year tagging is inconsistent)
+            if (arr.length === 0) {
+                const fallbackRes = await scopedGet(`/api/results/results/`, id, {
+                    classroom: selectedClass,
+                    page_size: 5000
+                });
+                arr = fallbackRes.data.results || fallbackRes.data || [];
+            }
 
             // Only keep results that belong to the matching exams
             const validExamIds = new Set(exams.map(e => String(e.id)));
@@ -147,12 +155,27 @@ export default function ClassResultsPage() {
             console.error("Result fetch error:", err);
         }
 
-        setResultsByStudent(byStudent);
-        if (byStudent.size === 0) setNoYearMessage('কোনো তথ্য পাওয়া যায়নি');
+        // Clean duplicates: Only keep the latest record for each (student, subject)
+        const cleanedByStudent = new Map();
+        for (const [sid, results] of byStudent.entries()) {
+            const subjectMap = new Map();
+            for (const r of results) {
+                const subjName = String(r.subject?.name || r.subject_name || '').toLowerCase().trim();
+                const recordDate = new Date(r.updated_at || r.created_at || 0).getTime();
+
+                if (!subjectMap.has(subjName) || recordDate > subjectMap.get(subjName).date) {
+                    subjectMap.set(subjName, { record: r, date: recordDate });
+                }
+            }
+            cleanedByStudent.set(sid, Array.from(subjectMap.values()).map(v => v.record));
+        }
+
+        setResultsByStudent(cleanedByStudent);
+        if (cleanedByStudent.size === 0) setNoYearMessage('কোনো তথ্য পাওয়া যায়নি');
         else setNoYearMessage('');
 
         const mt = new Map();
-        for (const [sid, arr] of byStudent.entries()) {
+        for (const [sid, arr] of cleanedByStudent.entries()) {
             const tot = arr.reduce((s, r) => {
               const nm = String(r.subject?.name || r.subject_name || '').toLowerCase();
               const isCoCurricular = CO_CURRICULAR_SUBJECTS.some(sub => nm.includes(sub.toLowerCase()));
