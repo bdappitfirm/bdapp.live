@@ -99,7 +99,8 @@ export default function StudentListPage() {
               address: s.address,
               phone_number: s.phone_number,
               birth_date: bDate,
-              admission_date: aDate
+              admission_date: aDate,
+              roll_number: s.roll_number
           };
       });
       await scopedPost(`/api/academics/students/bulk_update_students/`, id, { updates });
@@ -240,7 +241,7 @@ export default function StudentListPage() {
                 {schoolInfo?.logo && <Box component="img" src={schoolInfo.logo} sx={{ height: '16mm', ml: 2 }} />}
             </Box>
             <TableContainer component={Paper} sx={{ mb: 2, boxShadow: 'none', p: 0 }}>
-              <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1300px' : '1100px', borderCollapse: 'collapse' }}>
+              <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1350px' : '1150px', borderCollapse: 'collapse' }}>
                 <colgroup>
                   <col style={{ width: '30px' }} />
                   <col style={{ width: '130px' }} />
@@ -249,8 +250,8 @@ export default function StudentListPage() {
                   <col style={{ width: '115px' }} />
                   <col style={{ width: '75px' }} />
                   <col style={{ width: '75px' }} />
-                  <col style={{ width: '30px' }} />
                   <col style={{ width: '60px' }} />
+                  <col style={{ width: '80px' }} />
                   {isNineTen && (
                     <>
                       <col style={{ width: '80px' }} />
@@ -303,7 +304,9 @@ export default function StudentListPage() {
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.manual_admission_date || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'manual_admission_date', e.target.value)} style={{ textAlign: 'center' }} />
                         </TableCell>
-                        <TableCell align="center" sx={{ p: 0, m: 0 }}>{s.roll_number || ''}</TableCell>
+                        <TableCell sx={{ p: 0, m: 0 }}>
+                          <input className="sl-cell-input" value={s.roll_number || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'roll_number', e.target.value)} style={{ textAlign: 'center' }} />
+                        </TableCell>
                         <TableCell align="center" sx={{ p: 0, m: 0 }}>{s.section?.name || ''}</TableCell>
                         {isNineTen && (
                           <>

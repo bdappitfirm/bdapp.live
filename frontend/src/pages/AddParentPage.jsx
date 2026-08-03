@@ -6,6 +6,7 @@ import { Box, Paper, Typography, TextField, Stack, Button, Alert, Chip, Autocomp
 import SaveIcon from '@mui/icons-material/Save';
 import PhotoUpload from '../components/PhotoUpload';
 import { useToast } from '../components/Toast';
+import { transliterateBangla } from '../utils/helpers';
 
 export default function AddParentPage() {
   const { id } = useParams();
@@ -385,7 +386,10 @@ export default function AddParentPage() {
             <TextField 
               label="নাম (আবশ্যক)" 
               value={form.first_name} 
-              onChange={e => setForm({ ...form, first_name: e.target.value })} 
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, first_name: val, first_name_en: transliterateBangla(val) });
+              }}
               helperText={formErrors.first_name || 'অভিভাবকের নাম লিখুন'} 
               error={!!formErrors.first_name} 
               fullWidth 
@@ -403,7 +407,10 @@ export default function AddParentPage() {
             <TextField
               label="পদবী/উপাধি" 
               value={form.last_name} 
-              onChange={e => setForm({ ...form, last_name: e.target.value })} 
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, last_name: val, last_name_en: transliterateBangla(val) });
+              }}
               fullWidth 
               error={!!formErrors.last_name} 
               helperText={formErrors.last_name || ''} 

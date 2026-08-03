@@ -145,3 +145,77 @@ export const getCleanDisplayName = (firstName, lastName, fallback = '') => {
 
   return result.join(' ');
 };
+
+/**
+ * A rule-based transliterator for Bangla to English phonetic spelling.
+ * Improved for common names and clearer phonetic mappings.
+ */
+export const transliterateBangla = (text) => {
+  if (!text || typeof text !== 'string') return text;
+
+  // Check if text contains Bangla characters (\u0980-\u09FF)
+  if (!/[\u0980-\u09FF]/.test(text)) return text;
+
+  // Mapping of Bangla characters to English phonetic equivalents
+  const mapping = {
+    'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
+    'চ': 'ch', 'ছ': 'sh', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
+    'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
+    'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
+    'প': 'p', 'ফ': 'p', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
+    'য': 'z', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
+    'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y', 'ৎ': 't', 'ং': 'ng', 'ঃ': 'h', 'ঁ': 'n',
+    'অ': 'o', 'আ': 'a', 'ই': 'i', 'ঈ': 'i', 'উ': 'u', 'ঊ': 'u', 'ঋ': 'ri',
+    'এ': 'e', 'ঐ': 'oi', 'ও': 'o', 'ঔ': 'ou',
+    'া': 'a', 'ি': 'i', 'ী': 'i', 'ু': 'u', 'ূ': 'u', 'ৃ': 'ri',
+    'ে': 'e', 'ৈ': 'oi', 'ো': 'o', 'ৌ': 'ou',
+    '্': '', '্য': 'y', '্র': 'r', '্ব': 'b', '্ল': 'l'
+  };
+
+  let result = text;
+
+  // Common titles and honorifics
+  result = result.replace(/মো: /g, 'Md. ')
+                 .replace(/মোঃ /g, 'Md. ')
+                 .replace(/মোসাম্মৎ/g, 'Mst.')
+                 .replace(/মোসা:/g, 'Mst.')
+                 .replace(/মোসাঃ/g, 'Mst.');
+
+  // Special handling for common name suffixes and patterns
+  result = result.replace(/উদ্দীন/g, 'uddin')
+                 .replace(/ইসলাম/g, 'islam')
+                 .replace(/রহমান/g, 'rahman')
+                 .replace(/আহমেদ/g, 'ahmed')
+                 .replace(/খান/g, 'khan')
+                 .replace(/চৌধুরী/g, 'chowdhury')
+                 .replace(/বেগম/g, 'begum')
+                 .replace(/মন্ডল/g, 'mondal')
+                 .replace(/বিশ্বাস/g, 'biswas')
+                 .replace(/সরকার/g, 'sarkar');
+
+  let output = "";
+  for (let i = 0; i < result.length; i++) {
+    const char = result[i];
+
+    // Handle inherent vowel 'o' for some cases or specific character combinations
+    // For simplicity in names, we stay with basic mapping but can add rules here.
+
+    if (mapping[char] !== undefined) {
+      output += mapping[char];
+    } else {
+      output += char;
+    }
+  }
+
+  // Cleanup: remove multiple spaces, fix capitalization
+  output = output.replace(/\s+/g, ' ').trim();
+
+  // Return with proper casing (Capitalize Each Word)
+  return output.split(' ').map(word => {
+    if (!word) return '';
+    // Handle honorifics that should stay abbreviated
+    if (word.toLowerCase() === 'md') return 'Md.';
+    if (word.toLowerCase() === 'mst') return 'Mst.';
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
+};

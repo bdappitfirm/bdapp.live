@@ -1,114 +1,75 @@
-/* Result Card Standard Styles */
+/* Result Card Final Stable CSS */
 .result-card-container {
-  font-family: 'Roboto', 'Arial', sans-serif;
+  font-family: 'Times New Roman', Times, serif;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color: #000 !important;
+  background-color: #fff4e5 !important;
+  box-sizing: border-box;
   box-shadow: none !important;
-  background-color: white !important;
-  border: none !important;
+  filter: none !important;
 }
 
-/*
-   Print Specific Optimizations
-*/
 @media print {
   @page {
     size: A4 portrait;
     margin: 0 !important;
   }
-
   body {
     margin: 0 !important;
     padding: 0 !important;
-  }
-
-  .result-card-container {
-    width: 190mm !important;
-    height: 277mm !important;
-    max-width: none !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
     background-color: white !important;
-    border: 5px solid #1a237e !important;
+    orphans: 3 !important;
+    widows: 3 !important;
+  }
+  .result-card-container {
+    width: 210mm !important;
+    height: 285mm !important;
+    min-height: 285mm !important;
+    max-height: 285mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
     box-shadow: none !important;
-    display: block !important;
+    filter: none !important;
+    background-color: #fff4e5 !important;
+    border: 15px solid transparent !important;
+    border-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M0 50 Q 25 0 50 50 T 100 50'/%3E%3Cpath d='M0 50 Q 25 100 50 50 T 100 50'/%3E%3Cpath d='M50 0 Q 0 25 50 50 T 50 100'/%3E%3Cpath d='M50 0 Q 100 25 50 50 T 50 100'/%3E%3C/g%3E%3C/svg%3E") 25 repeat !important;
     position: relative !important;
     overflow: hidden !important;
-    page-break-after: avoid !important;
     page-break-inside: avoid !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    box-sizing: border-box !important;
-    filter: none !important;
-    box-shadow: none !important;
-  }
-
-  .result-card-container .MuiBox-root {
+    break-inside: avoid-page !important;
     box-sizing: border-box !important;
   }
-
-  /* Force grid and cell colors */
-  .result-card-container .MuiTableCell-root {
-    border: 1pt solid #1a237e !important;
+  .result-card-signatures {
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    break-before: avoid-page !important;
+    page-break-before: avoid !important;
+  }
+  .result-card-main-content {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  .result-card-main-content table,
+  .result-card-main-content thead,
+  .result-card-main-content tbody,
+  .result-card-main-content tr,
+  .result-card-main-content td,
+  .result-card-main-content th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .result-card-main-content tr {
+    orphans: 2 !important;
+    widows: 2 !important;
   }
 
-  .result-card-container table {
-    border-right: 1pt solid #1a237e !important;
-  }
-
-  .result-card-container .grade-f {
-    color: red !important;
-    -webkit-print-color-adjust: exact !important;
-  }
-
-  /* Universal reset for result card elements to ensure clarity */
-  .result-card-container * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    filter: none !important;
-  }
-
-  /* Table header persistence */
-  .result-card-container .table-header-row,
-  .result-card-container .header-cell {
-    background-color: #1a237e !important;
-    color: white !important;
-  }
-
-  /* Stripes and highlights */
-  .result-card-container .MuiTableRow-root[style*="rgba(0, 0, 0, 0.03)"] {
-    background-color: #f5f5f5 !important;
-  }
-  .result-card-container .MuiTableRow-root[style*="rgba(255, 249, 196, 0.6)"] {
-    background-color: #fff9c4 !important;
-  }
-  .result-card-container .MuiTableRow-root[style*="rgba(232, 234, 246, 0.7)"] {
-    background-color: #e8eaf6 !important;
-  }
-
-  /* Final result badge */
-  .result-card-container .MuiTypography-h6[style*="border"] {
-    border: 2px solid #1a237e !important;
-    background-color: #f8f9fa !important;
-  }
-
-  /* Table borders for professional look */
-  .result-card-container .MuiTableCell-root {
-    border-bottom: 1px solid #1a237e !important;
-    border-right: 0.5pt solid rgba(26, 35, 126, 0.2) !important;
-  }
-  .result-card-container .MuiTableCell-root:last-child {
-    border-right: none !important;
-  }
-
-  /* Hide UI components during print */
-  .no-print,
-  button,
-  header,
-  footer,
-  nav,
-  .MuiSnackbar-root,
-  .MuiDialog-root {
+  .extra-border-side,
+  .extra-border-topbottom {
     display: none !important;
+    visibility: hidden !important;
+    position: static !important;
   }
+
+  .no-print { display: none !important; }
 }

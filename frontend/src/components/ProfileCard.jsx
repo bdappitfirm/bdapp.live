@@ -40,7 +40,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import PhotoUpload from './PhotoUpload';
 import { useToast } from './Toast';
 import api from '../utils/api';
-import { canEdit, canDelete } from '../utils/helpers';
+import { canEdit, canDelete, transliterateBangla } from '../utils/helpers';
 import { getMediaUrl } from '../utils/media';
 
 /**
@@ -77,7 +77,9 @@ export default function ProfileCard({
     username: '',
     password: '',
     first_name: '',
+    first_name_en: '',
     last_name: '',
+    last_name_en: '',
     email: '',
     phone_number: '',
     blood_group: '',
@@ -157,7 +159,9 @@ export default function ProfileCard({
       username: user?.username || '',
       password: '',
       first_name: user?.first_name || '',
+      first_name_en: user?.first_name_en || '',
       last_name: user?.last_name || '',
+      last_name_en: user?.last_name_en || '',
       email: user?.email || '',
       phone_number: user?.phone_number || '',
       blood_group: (profile?.blood_group ?? profile?.user?.blood_group ?? ''),
@@ -362,8 +366,7 @@ export default function ProfileCard({
         guardian_id: updatedStudent?.guardian_id,
         guardian: updatedStudent?.guardian
       });
-      toast.success('Student unlinked successfully');
-      
+
       // Force immediate refresh - don't wait
       if (onUpdate) {
         try {
@@ -372,8 +375,6 @@ export default function ProfileCard({
           console.log('Refresh completed after unlink');
         } catch (refreshError) {
           console.error('Error refreshing after unlink:', refreshError);
-          // Even if refresh fails, show success since the unlink worked
-          toast.info('Student unlinked, but refresh failed. Please reload the page.');
         }
       }
       
@@ -511,7 +512,6 @@ export default function ProfileCard({
 
       // Refresh after linking to reflect changes
       if (failed.length < selectedStudentIds.length) {
-        toast.success('Students linked successfully');
         if (onUpdate) onUpdate();
       }
       setLinkDialogOpen(false);
@@ -538,7 +538,9 @@ export default function ProfileCard({
       if (formData.username) fd.append('username', formData.username);
       if (formData.password) fd.append('password', formData.password);
       fd.append('first_name', formData.first_name || '');
+      fd.append('first_name_en', formData.first_name_en || '');
       fd.append('last_name', formData.last_name || '');
+      fd.append('last_name_en', formData.last_name_en || '');
       fd.append('email', formData.email || '');
       fd.append('phone_number', formData.phone_number || '');
       fd.append('blood_group', formData.blood_group || '');
@@ -593,15 +595,12 @@ export default function ProfileCard({
           income: formData.income || (prev?.user?.income || '')
         }
       }));
-      toast.success('Profile updated successfully!');
       setEditDialogOpen(false);
       if (onUpdate) onUpdate();
     } catch (err) {
       console.error(err);
       const n = err.normalized || { message: 'Failed to update profile', fieldErrors: {}, suggestions: [] };
       setFormErrors(n.fieldErrors || {});
-      toast.error(n.message);
-      if (n.suggestions?.length) toast.info('Suggestions: ' + n.suggestions.join(', '));
     } finally {
       setSaving(false);
     }
@@ -657,13 +656,10 @@ export default function ProfileCard({
         }
       }
 
-      toast.success('Profile deleted successfully!');
       setDeleteDialogOpen(false);
       if (onUpdate) onUpdate();
     } catch (err) {
       console.error(err);
-      const detail = err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Failed to delete profile. Please try again.';
-      toast.error(typeof detail === 'string' ? detail : 'Failed to delete profile. Please try again.');
     } finally {
       setDeleting(false);
     }
@@ -1106,10 +1102,64 @@ export default function ProfileCard({
                   <TextField id="edit-password" name="password" label="নতুন পাসওয়ার্ড" type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} fullWidth helperText="পরিবর্তন না করতে চাইলে ফাঁকা রাখুন" />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField id="edit-first-name" name="first_name" label="First Name" value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} fullWidth error={!!formErrors.first_name} helperText={formErrors.first_name || ''} />
+                  <TextField
+                    id="edit-first-name"
+                    name="first_name"
+                    label="নাম (First Name)"
+                    value={formData.first_name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const translated = transliterateBangla(val);
+                      setFormData({
+                        ...formData,
+                        first_name: val,
+                        first_name_en: translated
+                      });
+                    }}
+                    fullWidth
+                    error={!!formErrors.first_name}
+                    helperText={formErrors.first_name || ''}
+                  />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField id="edit-last-name" name="last_name" label="Last Name" value={formData.last_name} onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} fullWidth error={!!formErrors.last_name} helperText={formErrors.last_name || ''} />
+                  <TextField
+                    id="edit-first-name-en"
+                    name="first_name_en"
+                    label="First Name (English)"
+                    value={formData.first_name_en}
+                    onChange={(e) => setFormData({ ...formData, first_name_en: e.target.value })}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    id="edit-last-name"
+                    name="last_name"
+                    label="পদবী (Last Name)"
+                    value={formData.last_name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const translated = transliterateBangla(val);
+                      setFormData({
+                        ...formData,
+                        last_name: val,
+                        last_name_en: translated
+                      });
+                    }}
+                    fullWidth
+                    error={!!formErrors.last_name}
+                    helperText={formErrors.last_name || ''}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    id="edit-last-name-en"
+                    name="last_name_en"
+                    label="Last Name (English)"
+                    value={formData.last_name_en}
+                    onChange={(e) => setFormData({ ...formData, last_name_en: e.target.value })}
+                    fullWidth
+                  />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
                   <TextField id="edit-email" name="email" label="Email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} fullWidth error={!!formErrors.email} helperText={formErrors.email || ''} />

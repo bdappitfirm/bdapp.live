@@ -80,7 +80,7 @@ export default function StudentsPage() {
     const searchQ = params.get('q');
 
     setSelectedClass(cls ? Number(cls) : null);
-    setSelectedSection(sec === 'UNASSIGNED' ? 'UNASSIGNED' : (sec ? Number(sec) : null));
+    setSelectedSection(sec === 'UNASSIGNED' || sec === 'ALL' ? sec : (sec ? Number(sec) : null));
     setQ(searchQ || '');
   }, [location.search]);
 
@@ -146,7 +146,14 @@ export default function StudentsPage() {
   useEffect(() => {
     if (selectedClass && selectedSection) {
       setSliceLoading(true);
-      const filters = selectedSection === 'UNASSIGNED' ? { classroom: selectedClass, section: 'null' } : { classroom: selectedClass, section: selectedSection };
+      let filters = {};
+      if (selectedSection === 'ALL') {
+        filters = { classroom: selectedClass };
+      } else if (selectedSection === 'UNASSIGNED') {
+        filters = { classroom: selectedClass, section: 'null' };
+      } else {
+        filters = { classroom: selectedClass, section: selectedSection };
+      }
 
       // Rely on api.js interceptor for offline fallback
       fetchStudentsScoped(id, filters)
@@ -204,7 +211,7 @@ export default function StudentsPage() {
                         <>
                             <Typography variant="h4" sx={{ mx: 1 }}>/</Typography>
                             <Typography variant="h5" component="span" sx={{ opacity: 0.9 }}>
-                                {selectedSection === 'UNASSIGNED' ? 'শাখা ছাড়া' : `শাখা: ${currentClassSections.find(s => s.id === selectedSection)?.name || ''}`}
+                                {selectedSection === 'ALL' ? 'সব শাখা একসাথে' : (selectedSection === 'UNASSIGNED' ? 'শাখা ছাড়া' : `শাখা: ${currentClassSections.find(s => s.id === selectedSection)?.name || ''}`)}
                             </Typography>
                         </>
                     )}
@@ -248,6 +255,16 @@ export default function StudentsPage() {
                     <GroupIcon sx={{ mr: 1 }} /> শাখা নির্বাচন করুন
                 </Typography>
                 <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6} md={4}>
+                        <Paper
+                            sx={{ p: 4, textAlign: 'center', cursor: 'pointer', borderRadius: 3, transition: '0.2s', border: '2px solid #1976d2', bgcolor: 'primary.50', '&:hover': { boxShadow: 6, bgcolor: 'primary.100' } }}
+                            onClick={() => handleSectionSelect('ALL')}
+                        >
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main' }}>সব শাখা একসাথে</Typography>
+                            <Chip label={`${classSummary.find(c => c.id === selectedClass)?.count || 0} জন শিক্ষার্থী`} color="primary" size="small" sx={{ my: 1 }} />
+                            <Typography variant="body2" color="text.secondary">সকল শাখার শিক্ষার্থী একসাথে দেখুন</Typography>
+                        </Paper>
+                    </Grid>
                     {currentClassSections.map((s, idx) => (
                         <Grid item xs={12} sm={6} md={4} key={s.id}>
                             <Paper

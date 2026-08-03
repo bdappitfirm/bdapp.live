@@ -11,7 +11,9 @@ import {
   Tabs,
   Tab,
   MenuItem,
-  Alert
+  Alert,
+  Backdrop,
+  CircularProgress
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PrintIcon from '@mui/icons-material/Print';
@@ -143,6 +145,9 @@ function IDCardGenerator() {
 
   return (
     <Box sx={{ p: 3 }}>
+      <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={loading}>
+        <CircularProgress color="inherit" />
+      </Backdrop>
       <Paper elevation={0} sx={{ mb: 3, p: 3, background: 'linear-gradient(135deg, #00b09b 0%, #96c93d 100%)', color: 'white', borderRadius: 3 }} className="no-print">
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Box><Typography variant="h4" sx={{ fontWeight: 'bold' }}><BadgeIcon sx={{ mr: 1 }} /> আইডি কার্ড জেনারেটর</Typography></Box>

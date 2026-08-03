@@ -578,27 +578,32 @@ const SchoolDashboard = () => {
                 {schoolData?.bn_name || schoolData?.name || 'Dashboard'}
               </Typography>
             </Stack>
+
+            {/* Login/User Icon moved here - 20px after school name */}
+            <Box sx={{ ml: '20px', display: 'flex', alignItems: 'center' }}>
+              {user ? (
+                <>
+                  <IconButton onClick={handleUserMenuOpen} color="inherit" sx={{ p: 0.5 }}>
+                    <Avatar src={user?.photo_url || user?.photo} sx={{ width: { xs: 30, sm: 36 }, height: { xs: 30, sm: 36 }, border: '2px solid #fff' }} />
+                  </IconButton>
+                  <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleUserMenuClose}>
+                    <MuiMenuItem onClick={() => { handleUserMenuClose(); navigate(`/school/${id}/profile`); }}>প্রোফাইল</MuiMenuItem>
+                    {isSuperUser && <MuiMenuItem onClick={() => { handleUserMenuClose(); setAdsOpen(true); }}>বিজ্ঞাপন</MuiMenuItem>}
+                    <Divider />
+                    <MuiMenuItem onClick={logout} sx={{ color: 'error.main' }}>লগআউট</MuiMenuItem>
+                  </Menu>
+                </>
+              ) : (
+                <Button color="inherit" size="small" onClick={() => navigate('/login')} sx={{ bgcolor: '#fff', color: '#1e3a8a', fontWeight: 'bold', minWidth: 'auto', px: 1.5 }}>লগইন</Button>
+              )}
+            </Box>
           </Box>
 
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', px: 1 }}>
           </Box>
 
           <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
-            {user ? (
-              <>
-                <IconButton onClick={handleUserMenuOpen} color="inherit">
-                  <Avatar src={user?.photo_url || user?.photo} sx={{ width: { xs: 30, sm: 36 }, height: { xs: 30, sm: 36 }, border: '2px solid #fff' }} />
-                </IconButton>
-                <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleUserMenuClose}>
-                  <MuiMenuItem onClick={() => { handleUserMenuClose(); navigate(`/school/${id}/profile`); }}>প্রোফাইল</MuiMenuItem>
-                  {isSuperUser && <MuiMenuItem onClick={() => { handleUserMenuClose(); setAdsOpen(true); }}>বিজ্ঞাপন</MuiMenuItem>}
-                  <Divider />
-                  <MuiMenuItem onClick={logout} sx={{ color: 'error.main' }}>লগআউট</MuiMenuItem>
-                </Menu>
-              </>
-            ) : (
-              <Button color="inherit" size="small" onClick={() => navigate('/login')} sx={{ bgcolor: '#fff', color: '#1e3a8a', fontWeight: 'bold' }}>লগইন</Button>
-            )}
+            {/* Right side is now empty or can be used for other things */}
           </Box>
         </Toolbar>
       </AppBar>

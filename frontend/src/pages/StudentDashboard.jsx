@@ -1077,8 +1077,6 @@ class StudentDashboard extends React.Component {
           },
           loadingResultCard: false
         });
-        if (allResults.length > 0) this.props.toast.success(`Result card loaded for selected exam (${allResults.length} subjects)`);
-        else this.props.toast.info('No results found for the selected exam type.');
         return;
       }
 

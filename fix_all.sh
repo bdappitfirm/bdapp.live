@@ -18,18 +18,6 @@ $VENV_PYTHON manage.py migrate --noinput || {
     $VENV_PYTHON manage.py migrate --noinput
 }
 
-# 1.5 Fix existing database marks and recalculate grades
-if [ -f "fix_database_marks.py" ]; then
-    echo "🧹 Auditing and fixing database marks..."
-    $VENV_PYTHON fix_database_marks.py
-fi
-
-# 1.6 Fix optional subjects for Class 9-10
-if [ -f "fix_optional_subjects.py" ]; then
-    echo "🌱 Fixing optional subjects for Class 9-10..."
-    $VENV_PYTHON fix_optional_subjects.py
-fi
-
 # 2. Update Static Files (Needed for CSS/JS changes)
 echo "🎨 Updating static files..."
 $VENV_PYTHON manage.py collectstatic --noinput

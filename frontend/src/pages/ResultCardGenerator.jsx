@@ -14,7 +14,9 @@ import {
   Paper,
   IconButton,
   Tooltip,
-  Alert
+  Alert,
+  CircularProgress,
+  Backdrop
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PrintIcon from '@mui/icons-material/Print';
@@ -76,9 +78,7 @@ const UNWANTED_SUBJECTS = [
   'ভৌৌতবিজ্ঞান', 'সামাজিক বিজ্ঞান'
 ];
 
-const UNWANTED_KEYWORDS = [
-  'অর্ধ-বার্ষিক', 'বার্ষিক', 'অর্ধবার্ষিক', 'test', 'model test'
-];
+const UNWANTED_KEYWORDS = [];
 
 const CO_CURRICULAR_SUBJECTS = [
   'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'Physical Education', 'Physical Education and Health',
@@ -125,7 +125,7 @@ export default function ResultCardGenerator() {
   const [examination, setExamination] = useState(null);
   const [overrideLogo, setOverrideLogo] = useState('');
   const [noYearMessage, setNoYearMessage] = useState('');
-  const [forceLanguage, setForceLanguage] = useState(null);
+  const [forceLanguage, setForceLanguage] = useState('en');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translatedData, setTranslatedData] = useState(null);
   const [layout, setLayout] = useState('standard');
@@ -389,28 +389,35 @@ export default function ResultCardGenerator() {
   };
   const normalizeSubjectName = (name) => {
     const base = String(name || '').replace(/\s*\(.*?\)\s*/g, '').replace(/\u200d/g, '').trim();
+    const lower = base.toLowerCase();
+
+    // Normalize Unicode for য় vs য়
+    const normalized = lower.replace(/\u09df/g, '\u09af\u09bc');
+
     const clsObj = classrooms.find(c => parseInt(c.id, 10) === parseInt(selectedClass, 10)) || {};
     const nm = String(clsObj?.name || '').toLowerCase();
     const isNineTen = /নবম|nine|\b9\b|দশম|ten|\b10\b/.test(nm);
+
+    const paperNo = (/(১ম|1st|first)/i.test(normalized) ? 1 : (/(২য়|২য়|2nd|second)/i.test(normalized) ? 2 : null));
+
     if (!isNineTen) {
-      const lower = base.trim().toLowerCase();
-      if (/(ict|আইসিটি|তথ্য\s*ও\s*(যোগাযোগ|যোগযোগ)\s*প্রযুক্তি)/i.test(lower)) return 'ict';
-      if (/(বাংলাদেশ\s*ও\s*বিশ্বপরিচয়|বাংলাদেশ\s*ও\s*বিশ্বপরিয়|bangladesh\s*and\s*global\s*studies|bgs)/i.test(lower)) return 'bgs';
-      if (/(english|ইংরেজি|ইংরেজী)/i.test(lower)) return lower;
-      if (/(গণিত|গনিত|math)/i.test(lower)) return 'math';
-      return lower;
+      if (/(ict|আইসিটি|তথ্য\s*ও\s*(যোগাযোগ|যোগযোগ)\s*প্রযুক্তি)/i.test(normalized)) return 'ict';
+      if (/(বাংলাদেশ\s*ও\s*বিশ্বপরিচ[য়য়]|bangladesh\s*and\s*global\s*studies|bgs)/i.test(normalized)) return 'bgs';
+      if (/(বাংলা|bangla)/i.test(normalized)) return paperNo ? `bangla__paper${paperNo}` : 'bangla';
+      if (/(english|ইংরেজি|ইংরেজী)/i.test(normalized)) return paperNo ? `english__paper${paperNo}` : 'english';
+      if (/(গণিত|গনিত|math)/i.test(normalized)) return paperNo ? `math__paper${paperNo}` : 'math';
+      return normalized;
     }
-    const lower = base.toLowerCase();
-    const paperNo = (/(১ম|1st|first)/i.test(lower) ? 1 : (/(২য়|২য়|2nd|second)/i.test(lower) ? 2 : null));
 
     // Distinguish Higher Math from General Math
-    if (lower.includes('উচ্চতর') || lower.includes('higher')) return 'higher_math';
+    if (normalized.includes('উচ্চতর') || normalized.includes('higher')) return 'higher_math';
 
-    if (/(বাংলা|bangla|bengali)/i.test(lower)) return paperNo ? `bangla__paper${paperNo}` : 'bangla';
-    if (/(english|ইংরেজি|ইংরেজী)/i.test(lower)) return paperNo ? `english__paper${paperNo}` : 'english';
-    if (/(গণিত|গনিত|math)/i.test(lower)) return paperNo ? `math__paper${paperNo}` : 'math';
-    const s = base.replace(/[- ]?(১ম|২য়|২য়|1st|2nd|first|second)([- ]?(paper|পত্র))?/gi, '').trim();
-    return s.toLowerCase();
+    if (/(বাংলা|bangla|bengali)/i.test(normalized)) return paperNo ? `bangla__paper${paperNo}` : 'bangla';
+    if (/(english|ইংরেজি|ইংরেজী)/i.test(normalized)) return paperNo ? `english__paper${paperNo}` : 'english';
+    if (/(গণিত|গনিত|math)/i.test(normalized)) return paperNo ? `math__paper${paperNo}` : 'math';
+
+    const s = normalized.replace(/[- ]?(১ম|২য়|২য়|1st|2nd|first|second)([- ]?(paper|পত্র))?/gi, '').trim();
+    return s;
   };
 
   const calculateGradeAndGPA = (obtained, total) => {
@@ -579,7 +586,7 @@ export default function ResultCardGenerator() {
         return false;
       };
 
-      if (!nm || isUnwanted(nm) || isUnwanted(subjName)) continue;
+      if (!nm || isUnwanted(subjName)) continue;
 
       const prev = map.get(nm);
       if (prev) {
@@ -1076,10 +1083,10 @@ export default function ResultCardGenerator() {
         setIsTranslating(true);
         try {
           const payload = {
-            school_name: school?.name,
-            student_name: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim(),
-            father_name: student.father_name,
-            mother_name: student.mother_name,
+            school_name: school?.name_en || school?.name,
+            student_name: `${student.user?.first_name_en || student.user?.first_name || ''} ${student.user?.last_name_en || student.user?.last_name || ''}`.trim(),
+            father_name: student.father_name_en || student.father_name,
+            mother_name: student.mother_name_en || student.mother_name,
             guardian_name: student.guardian_name,
             address: student.address || school?.address,
             class_name: `${student.classroom?.name || ''} ${student.section?.name ? `(${student.section.name})` : ''}`,
@@ -1153,25 +1160,22 @@ export default function ResultCardGenerator() {
       window.scrollTo(0, 0);
 
       const canvas = await html2canvas(cardEl, {
-        scale: 3,
+        scale: 4, // Increased scale for better clarity
         useCORS: true,
-        allowTaint: false,
+        allowTaint: true,
         logging: false,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#fff4e5', // Matching ResultCard bgcolor
         onclone: (clonedDoc) => {
-          // Fix for MUI elements that might lose color in capture
-          const chips = clonedDoc.querySelectorAll('.MuiChip-root');
-          chips.forEach(chip => {
-            chip.style.opacity = '1';
-            chip.style.visibility = 'visible';
-          });
+          const container = clonedDoc.querySelector('.result-card-container');
+          if (container) {
+             // Force border for html2canvas as it often ignores borderImage
+             container.style.border = '2px solid #000';
+             container.style.boxShadow = 'none';
+          }
 
-          const watermarks = clonedDoc.querySelectorAll('.result-card-container > div');
-          watermarks.forEach(div => {
-            const op = parseFloat(div.style.opacity || '0');
-            if (op > 0 && op <= 0.3) {
-              div.style.opacity = Math.max(0.05, op * 0.6).toFixed(2);
-            }
+          const watermarks = clonedDoc.querySelectorAll('.result-card-container img');
+          watermarks.forEach(img => {
+            img.style.display = 'block';
           });
         }
       });
@@ -1211,219 +1215,46 @@ export default function ResultCardGenerator() {
     }
   };
 
-  const buildCardForStudent = async (stuId) => {
+  const buildCardForStudent = async (stuId, preFetchedStudent = null, preFetchedResults = null, preFetchedOverall = null) => {
     try {
-      const studentRes = await api.get(`/api/academics/students/${stuId}/`);
-      const student = studentRes.data;
+      const student = preFetchedStudent || (await api.get(`/api/academics/students/${stuId}/`).then(r => r.data));
       const selType = normalizeExamType(selectedExamType);
       let matchingExams = examinations.filter(exam =>
         normalizeExamType(exam.exam_type, exam.name) === selType &&
         getClassroomId(exam.classroom) === selectedClass
       );
-      if (matchingExams.length === 0) {
-        const fallbackExams = examinations.filter(ex => getClassroomId(ex.classroom) === selectedClass);
-        let alt = [];
-        if (selType === 'annual') alt = fallbackExams.filter(ex => /(বার্ষিক|final|annual)/i.test(String(ex.name || '')));
-        else if (selType === 'half_yearly') alt = fallbackExams.filter(ex => /(অর্ধ|half|mid)/i.test(String(ex.name || '')));
-        else if (selType === 'terminal') alt = fallbackExams.filter(ex => /(টার্মিনাল|terminal|term)/i.test(String(ex.name || '')));
-        else if (selType === 'model') alt = fallbackExams.filter(ex => /(মডেল|model)/i.test(String(ex.name || '')));
-        else if (selType === 'test') alt = fallbackExams.filter(ex => /(টেস্ট|test|monthly)/i.test(String(ex.name || '')));
-        else if (selType === 'first_term') alt = fallbackExams.filter(ex => /(first\s*term|প্রথম\s*টার্ম)/i.test(String(ex.name || '')));
-        if (alt.length > 0) matchingExams = alt;
-      }
-      let chosenExam = null;
-      try {
-        const examResList = await Promise.all(matchingExams.map(ex => api.get(`/api/results/examinations/${ex.id}/`, { params: { school: id } }).then(r => r.data).catch(() => null)));
-        const valid = examResList.filter(Boolean);
-        const validSorted = [...valid].sort((a, b) => new Date(b.exam_date || 0) - new Date(a.exam_date || 0));
-        chosenExam = validSorted[0] || valid[0] || null;
-      } catch (_) {
-        chosenExam = matchingExams[0] || null;
-      }
-      const originalMatching = [...matchingExams];
-      matchingExams = originalMatching.length ? originalMatching : (chosenExam ? [chosenExam] : []);
-      let fetchedResults = [];
-      for (const ex of matchingExams) {
-        try {
-          const params = { examination: ex.id, student: stuId, page_size: 1000 };
-          if (selectedSection) params.section = selectedSection;
-          const resultsRes = await scopedGet('/api/results/results/', id, params, { timeout: 15000 });
-          const arr = Array.isArray(resultsRes.data) ? resultsRes.data : (resultsRes.data?.results || []);
-          fetchedResults = fetchedResults.concat(arr);
-        } catch (_) {}
-      }
-      if ((!fetchedResults || fetchedResults.length === 0) && matchingExams.length > 1) {
-        const sortedPossible = [...matchingExams].sort((a, b) => new Date(b.exam_date || 0) - new Date(a.exam_date || 0));
-        for (const ex of sortedPossible) {
+
+      let fetchedResults = preFetchedResults;
+      if (!fetchedResults) {
+        fetchedResults = [];
+        for (const ex of matchingExams) {
           try {
             const params = { examination: ex.id, student: stuId, page_size: 1000 };
-            if (selectedSection) params.section = selectedSection;
-            const resA = await scopedGet('/api/results/results/', id, params, { timeout: 15000 });
-            const arrA = Array.isArray(resA.data) ? resA.data : (resA.data?.results || []);
-            if (arrA && arrA.length) {
-              fetchedResults = arrA;
-              matchingExams = [ex];
-              chosenExam = ex;
-              break;
-            }
+            const resultsRes = await scopedGet('/api/results/results/', id, params);
+            const arr = Array.isArray(resultsRes.data) ? resultsRes.data : (resultsRes.data?.results || []);
+            fetchedResults = fetchedResults.concat(arr);
           } catch (_) {}
         }
       }
+
       const merged = dedupeAndFillResults(fetchedResults, matchingExams);
-      let overall = null;
-      try {
-        const exId = chosenExam?.id || null;
-        
-        // Method 1: Try student-specific combined overall result (Best for rank calculation)
-        if (selectedExamType && selectedClass) {
-          try {
-            const combinedRes = await api.get('/api/results/overall/combined_by_exam_type/', {
-              params: {
-                student: stuId,
-                exam_type: selectedExamType,
-                classroom: selectedClass,
-                section: selectedSection,
-                year: selectedYear
-              }
-            });
-            if (combinedRes.data && combinedRes.data.rank) {
-              overall = {
-                percentage: combinedRes.data.percentage,
-                rank: combinedRes.data.rank,
-                is_passed: combinedRes.data.is_passed,
-                total_marks_obtained: combinedRes.data.total_marks_obtained,
-                total_marks_possible: combinedRes.data.total_marks_possible,
-                cgpa: combinedRes.data.cgpa,
-                grade: combinedRes.data.grade
-              };
-            }
-          } catch (err) {
-            console.warn('Combined by exam type failed in buildCardForStudent', err);
-          }
-        }
-
-        // Method 2: Try single student overall result
-        if (!overall && exId) {
-          try {
-            const res = await api.get('/api/results/overall/', { 
-              params: { student: stuId, examination: exId } 
-            });
-            const results = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-            const me = results[0];
-            if (me) {
-              overall = {
-                percentage: me.percentage,
-                rank: Number(me.rank || me.position || 0) || null,
-                is_passed: me.is_passed,
-                total_marks_obtained: me.total_marks_obtained,
-                total_marks_possible: me.total_marks_possible,
-                cgpa: me.cgpa,
-                grade: me.grade
-              };
-            }
-          } catch (err) {
-            console.warn('Single student overall fetch failed in buildCardForStudent', err);
-          }
-        }
-
-        // Method 3: Fallback to list-based approach (Even for single exam)
-        if (!overall && selectedExamType && selectedClass) {
-          try {
-            const combinedRes = await api.get('/api/results/overall/combined_rank_list_by_exam_type/', {
-              params: {
-                exam_type: selectedExamType,
-                classroom: selectedClass,
-                section: selectedSection,
-                school: id,
-                year: selectedYear,
-                page_size: 2500 // Increased to handle large schools
-              }
-            });
-            const list = Array.isArray(combinedRes.data) ? combinedRes.data : (combinedRes.data?.results || []);
-            const me = (list || []).find(item => {
-              const sid = item?.student?.id ?? item?.student_id;
-              return String(sid) === String(stuId);
-            });
-            if (me) {
-              overall = {
-                percentage: me.percentage,
-                rank: Number(me.rank || me.position || 0) || null,
-                is_passed: me.is_passed,
-                total_marks_obtained: me.total_marks_obtained,
-                total_marks_possible: me.total_marks_possible,
-                cgpa: me.cgpa,
-                grade: me.grade
-              };
-            }
-          } catch (err) {
-            console.warn('Combined rank fetch failed in buildCardForStudent', err);
-          }
-        }
-        
-        // Method 4: Final fallback to single exam list fetch
-        if (!overall && exId) {
-          const classOverallRes = await scopedGet('/api/results/overall/', id, { examination: exId, page_size: 2500 }, { timeout: 15000 });
-          const list = Array.isArray(classOverallRes.data) ? classOverallRes.data : (classOverallRes.data?.results || []);
-          const me = (list || []).find(item => {
-            const sid = item?.student?.id ?? item?.student_id;
-            return String(sid) === String(stuId);
-          });
-          if (me) {
-            overall = {
-              percentage: me.percentage,
-              rank: Number(me.rank || me.position || 0) || null,
-              is_passed: me.is_passed,
-              total_marks_obtained: me.total_marks_obtained,
-              total_marks_possible: me.total_marks_possible,
-              cgpa: me.cgpa,
-              grade: me.grade
-            };
-          }
-        }
-      } catch (_) {
-        overall = null;
+      let overall = preFetchedOverall;
+      if (!overall && matchingExams[0]?.id) {
+         try {
+           const res = await api.get('/api/results/overall/', { params: { student: stuId, examination: matchingExams[0].id } });
+           const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+           if (list[0]) {
+             overall = {
+               percentage: list[0].percentage, rank: Number(list[0].rank || 0), is_passed: list[0].is_passed,
+               total_marks_obtained: list[0].total_marks_obtained, total_marks_possible: list[0].total_marks_possible,
+               cgpa: list[0].cgpa, grade: list[0].grade
+             };
+           }
+         } catch (_) {}
       }
 
-      // IMPROVED FALLBACK FOR BULK
-      if (!overall && merged.length > 0) {
-        const totalObtained = merged.reduce((sum, r) => sum + (parseFloat(r.total_obtained) || 0), 0);
-        const totalPossible = merged.reduce((sum, r) => sum + (parseFloat(r.total_marks) || 100), 0);
-
-        const grouped = {};
-        merged.forEach(r => {
-          const name = (r.subject?.name || r.subject_name || '').toLowerCase();
-          let baseName = name;
-          if (name.includes('bangla') || name.includes('বাংলা')) baseName = 'bangla';
-          else if (name.includes('english') || name.includes('ইংরেজি') || name.includes('ইংরেজী')) baseName = 'english';
-          if (!grouped[baseName]) grouped[baseName] = [];
-          grouped[baseName].push(parseFloat(r.gpa) || 0);
-        });
-
-        let sumGP = 0;
-        const subCount = Object.keys(grouped).length;
-        Object.values(grouped).forEach(gpas => {
-          sumGP += gpas.reduce((a, b) => a + b, 0) / gpas.length;
-        });
-
-        const finalGPA = subCount > 0 ? Math.min(5, sumGP / subCount) : 0;
-        overall = {
-          total_marks_obtained: totalObtained,
-          total_marks_possible: totalPossible,
-          cgpa: finalGPA.toFixed(2),
-          grade: getGradeFromCgpa(finalGPA),
-          is_passed: merged.every(r => r.is_passed)
-        };
-      }
-      const examObj = chosenExam || (merged.length ? merged[0]?.examination : null);
-      return {
-        studentData: { student },
-        results: merged,
-        overallResult: overall,
-        examination: examObj
-      };
-    } catch (_) {
-      return null;
-    }
+      return { studentData: { student }, results: merged, overallResult: overall, examination: matchingExams[0] };
+    } catch (_) { return null; }
   };
 
   const handleGenerateBulkCards = async () => {
@@ -1437,26 +1268,76 @@ export default function ResultCardGenerator() {
     }
     setBulkLoading(true);
     setBulkCards([]);
+    setForceLanguage('en');
+
     try {
-      const list = students.filter(s => {
+      const sectionList = students.filter(s => {
         const secId = (typeof s.section === 'object') ? (s.section?.id ?? s.section?.section_id) : s.section_id;
         return String(secId || '') === String(selectedSection || '');
       });
-      const cards = [];
-      const studentIdsDone = new Set();
-      for (const s of list) {
-        if (studentIdsDone.has(s.id)) continue;
-        studentIdsDone.add(s.id);
-        const card = await buildCardForStudent(s.id);
+
+      if (sectionList.length === 0) {
+          toast.error('এই সেকশনে কোনো শিক্ষার্থী পাওয়া যায়নি');
+          setBulkLoading(false);
+          return;
+      }
+
+      // 1. Fetch EVERYTHING in bulk first - This is the KEY to speed
+      const [rRes, oRes] = await Promise.all([
+        scopedGet('/api/results/results/', id, { classroom: selectedClass, section: selectedSection, year: selectedYear, page_size: 10000 }),
+        api.get('/api/results/overall/combined_rank_list_by_exam_type/', {
+          params: { exam_type: selectedExamType, classroom: selectedClass, section: selectedSection, school: id, year: selectedYear, page_size: 2000 }
+        }).catch(() => ({ data: [] }))
+      ]);
+
+      const rList = Array.isArray(rRes.data) ? rRes.data : (rRes.data?.results || []);
+      const oList = Array.isArray(oRes.data) ? oRes.data : (oRes.data?.results || []);
+
+      const resultsByStudent = {};
+      rList.forEach(r => {
+        const sid = r.student?.id ?? r.student_id ?? r.student;
+        if (!resultsByStudent[sid]) resultsByStudent[sid] = [];
+        resultsByStudent[sid].push(r);
+      });
+
+      const overallByStudent = {};
+      oList.forEach(o => {
+        const sid = o.student?.id ?? o.student_id ?? o.student;
+        overallByStudent[sid] = {
+          percentage: o.percentage, rank: Number(o.rank || 0), is_passed: o.is_passed,
+          total_marks_obtained: o.total_marks_obtained, total_marks_possible: o.total_marks_possible,
+          cgpa: o.cgpa, grade: o.grade
+        };
+      });
+
+      const selType = normalizeExamType(selectedExamType);
+      const matchingExams = examinations.filter(exam =>
+        normalizeExamType(exam.exam_type, exam.name) === selType &&
+        getClassroomId(exam.classroom) === selectedClass
+      );
+
+      // 2. Fast synchronous generation
+      const allGeneratedCards = [];
+      // 3. Fast generation
+      for (let i = 0; i < sectionList.length; i++) {
+        const s = sectionList[i];
+        const card = await buildCardForStudent(s.id, s, resultsByStudent[s.id], overallByStudent[s.id]);
         if (card) {
-          cards.push(card);
+          allGeneratedCards.push(card);
+          // Batch update every student to keep it sequential but responsive
+          setBulkCards([...allGeneratedCards]);
+          // Short delay for stability
+          await new Promise(r => setTimeout(r, 10));
         }
       }
-      setBulkCards(cards);
-      if (!cards.length) {
-        toast.warning('কোনো কার্ড তৈরি হয়নি');
-      } else {
-        toast.success(`মোট ${cards.length} শিক্ষার্থীর কার্ড তৈরি হয়েছে`);
+
+      toast.success('সব কার্ড জেনারেট সম্পন্ন');
+
+      // Automatically trigger print if requested
+      if (allGeneratedCards.length > 0) {
+        setTimeout(() => {
+          handleBulkPrint();
+        }, 500);
       }
     } finally {
       setBulkLoading(false);
@@ -1469,15 +1350,19 @@ export default function ResultCardGenerator() {
       return;
     }
 
-    toast.info('প্রিন্ট ডায়ালগ খুলছে, দয়া করে অপেক্ষা করুন...');
+    toast.info('প্রিন্ট ডায়ালগ খুলছে...');
 
-    // Instead of setting states which causes re-renders, we use CSS classes
+    // Ensure all cards are visible in the DOM before printing
     document.body.classList.add('bulk-print-active');
 
+    // Faster response
     setTimeout(() => {
       window.print();
-      document.body.classList.remove('bulk-print-active');
-    }, 1500);
+      // We don't remove the class immediately to avoid layout shifts if the user cancels
+      setTimeout(() => {
+        document.body.classList.remove('bulk-print-active');
+      }, 1000);
+    }, 100);
   };
 
   const handleDownloadBulkPDF = async () => {
@@ -1498,9 +1383,16 @@ export default function ResultCardGenerator() {
 
       for (let i = 0; i < cardElements.length; i++) {
         const canvas = await html2canvas(cardElements[i], {
-          scale: 2,
+          scale: 3,
           useCORS: true,
-          backgroundColor: '#ffffff'
+          allowTaint: true,
+          backgroundColor: '#fff4e5',
+          onclone: (clonedDoc) => {
+            const container = clonedDoc.querySelectorAll('.result-card-container')[i];
+            if (container) {
+               container.style.border = '2px solid #000';
+            }
+          }
         });
 
         const imgData = canvas.toDataURL('image/png', 0.8);
@@ -1532,6 +1424,8 @@ export default function ResultCardGenerator() {
     setResults([]);
     setOverallResult(null);
     setSelectedSection('');
+    setForceLanguage('en');
+    setTranslatedData(null);
     toast.info('Form reset');
   };
 
@@ -1612,7 +1506,7 @@ export default function ResultCardGenerator() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, '@media print': { p: 0, m: 0 } }}>
       {/* Header */}
       <Stack className="no-print" direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
         <Typography variant="h4">
@@ -1831,7 +1725,9 @@ export default function ResultCardGenerator() {
         )}
       </Paper>
 
-      
+      <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={loading || bulkLoading || isTranslating}>
+        <CircularProgress color="inherit" />
+      </Backdrop>
 
       {/* Result Card Display */}
       <Box className="result-display-area">
@@ -1839,11 +1735,29 @@ export default function ResultCardGenerator() {
           <Box className="single-card-view">
             {layout === 'ssc' ? (
               <SSCMarksheet
-                studentData={studentData}
-                results={results}
+                studentData={translatedData ? {
+                  ...studentData,
+                  student: {
+                    ...(studentData?.student || {}),
+                    user: {
+                      ...(studentData?.student?.user || {}),
+                      first_name: translatedData.student_name?.split(' ')[0] || studentData?.student?.user?.first_name || '',
+                      last_name: translatedData.student_name?.split(' ').slice(1).join(' ') || studentData?.student?.user?.last_name || ''
+                    },
+                    father_name: translatedData.father_name || studentData?.student?.father_name || '',
+                    mother_name: translatedData.mother_name || studentData?.student?.mother_name || '',
+                    guardian_name: translatedData.guardian_name || studentData?.student?.guardian_name || '',
+                    address: translatedData.address || studentData?.student?.address || ''
+                  }
+                } : studentData}
+                results={translatedData ? results.map(r => {
+                  const name = r.subject?.name || r.subject_name;
+                  const transName = translatedData.subjects?.[name] || translatedData.subjects?.[name.toLowerCase()] || name;
+                  return { ...r, subject: { ...r.subject, name: transName }, subject_name: transName };
+                }) : results}
                 overallResult={overallResult}
-                examination={examination}
-                school={school || {}}
+                examination={overrideLogo ? { ...(examination || {}), school_logo: overrideLogo } : examination}
+                school={translatedData ? { ...school, name: translatedData.school_name, address: translatedData.address } : (school || {})}
                 forceLanguage={forceLanguage}
               />
             ) : (
@@ -1890,7 +1804,7 @@ export default function ResultCardGenerator() {
                       results={card.results}
                       overallResult={card.overallResult}
                       examination={card.examination}
-                      school={school || {}}
+                      school={translatedData ? { ...school, name: translatedData.school_name, address: translatedData.address } : (school || {})}
                       forceLanguage={forceLanguage}
                     />
                   ) : (
@@ -1921,7 +1835,12 @@ export default function ResultCardGenerator() {
       <style>
         {`
           @media print {
-            .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiSnackbar-root, .MuiAlert-root {
+            @page {
+              size: A4 portrait;
+              margin: 0 !important;
+            }
+
+            .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiSnackbar-root, .MuiAlert-root, .MuiTabs-root {
               display: none !important;
             }
 
@@ -1929,28 +1848,118 @@ export default function ResultCardGenerator() {
               margin: 0 !important;
               padding: 0 !important;
               background: white !important;
+              width: 100% !important;
+              height: auto !important;
+              overflow: visible !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
 
-            .result-display-area, .single-card-view {
+            #root, main, .result-display-area, .bulk-print-mode {
+              display: flex !important;
+              flex-direction: column !important;
+              align-items: center !important;
               margin: 0 !important;
               padding: 0 !important;
-              display: block !important;
-              visibility: visible !important;
-            }
-
-            .bulk-sheet {
-              page-break-after: always !important;
-              break-after: page !important;
-              margin: 0 !important;
-              padding: 0 !important;
-            }
-
-            .bulk-card-wrap {
               width: 100% !important;
+              height: auto !important;
+              overflow: visible !important;
+            }
+
+            .single-card-view {
               display: flex !important;
               justify-content: center !important;
+              align-items: flex-start !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100% !important;
+              min-height: 290mm !important;
+              height: auto !important;
+              max-height: none !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid-page !important;
+              position: relative !important;
+              overflow: visible !important;
+              orphans: 3 !important;
+              widows: 3 !important;
+              box-sizing: border-box !important;
+            }
+
+            .bulk-sheet, .bulk-card-wrap {
+              display: block !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 215mm !important;
+              min-height: 290mm !important;
+              height: 290mm !important;
+              max-height: 290mm !important;
+              page-break-after: always !important;
+              break-after: page !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid-page !important;
+              position: relative !important;
+              overflow: hidden !important;
+              orphans: 3 !important;
+              widows: 3 !important;
+              box-sizing: border-box !important;
+            }
+
+            .result-card-container {
+              box-shadow: none !important;
+              filter: none !important;
+              outline: none !important;
+              margin: 0 auto !important;
+              width: 215mm !important;
+              height: 290mm !important;
+              min-height: 290mm !important;
+              max-height: 290mm !important;
+              display: block !important;
+              transform: none !important;
+              position: relative !important;
+              left: 0 !important;
+              top: 0 !important;
+              overflow: hidden !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid-page !important;
+              box-sizing: border-box !important;
+            }
+
+            .result-card-signatures {
+              position: absolute !important;
+              left: 0 !important;
+              right: 0 !important;
+              bottom: 5mm !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid-page !important;
+              break-before: avoid-page !important;
+            }
+
+            .result-card-main-content {
+              page-break-inside: auto !important;
+              break-inside: auto !important;
+              break-after: avoid-page !important;
+              padding-bottom: 34mm !important;
+            }
+
+            .result-card-main-content table {
+              page-break-inside: auto !important;
+              break-inside: auto !important;
+            }
+
+            .result-card-main-content tr {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+
+            .extra-border-side,
+            .extra-border-topbottom {
+              display: none !important;
+              visibility: hidden !important;
+            }
+
+            * {
+              box-shadow: none !important;
+              filter: none !important;
             }
           }
         `}

@@ -17,10 +17,11 @@ class ExaminationSerializer(serializers.ModelSerializer):
     classroom_name = serializers.CharField(source='classroom.name', read_only=True)
     section_name = serializers.CharField(source='section.name', read_only=True)
     slots = ExamSlotSerializer(many=True, read_only=True)
-    
+    academic_year = serializers.ReadOnlyField(source='year')
+
     class Meta:
         model = Examination
-        fields = ['id', 'school', 'name', 'exam_type', 'classroom', 'classroom_name', 'section', 'section_name', 'exam_date', 'start_time', 'end_time', 'total_marks', 'pass_marks', 'written_max', 'mcq_max', 'practical_max', 'slots']
+        fields = ['id', 'school', 'name', 'exam_type', 'classroom', 'classroom_name', 'section', 'section_name', 'exam_date', 'start_time', 'end_time', 'total_marks', 'pass_marks', 'written_max', 'mcq_max', 'practical_max', 'slots', 'year', 'academic_year']
 
 
 class ResultSerializer(serializers.ModelSerializer):

@@ -7,6 +7,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import PhotoUpload from '../components/PhotoUpload';
 import { normalizeApiError } from '../utils/errorUtils';
 import { useToast } from '../components/Toast';
+import { transliterateBangla } from '../utils/helpers';
 import InputGuidance from '../components/InputGuidance';
 
 export default function AddStudentPage() {
@@ -19,7 +20,9 @@ export default function AddStudentPage() {
     username: '',
     password: '',
     first_name: '',
+    first_name_en: '',
     last_name: '',
+    last_name_en: '',
     email: '',
     phone_number: '',
     roll_number: '',
@@ -29,12 +32,16 @@ export default function AddStudentPage() {
     blood_group: '',
     gender: '',
     guardian_name: '',
+    guardian_name_en: '',
     father_name: '',
+    father_name_en: '',
     mother_name: '',
+    mother_name_en: '',
     birth_date: '',
     optional_subject_id: '',
     admission_date: new Date().toISOString().split('T')[0],
     address: '',
+    address_en: '',
     remarks: '',
     voter_number: ''
   });
@@ -237,10 +244,38 @@ export default function AddStudentPage() {
           <Typography variant="h6">ব্যক্তিগত তথ্য</Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
-              <TextField id="student-name-input" fullWidth label="শিক্ষার্থীর নাম (First Name) *" value={form.first_name} onFocus={() => updateStep('#student-name-input')} onChange={e => setForm({...form, first_name: e.target.value})} error={!!formErrors.first_name} helperText={formErrors.first_name} />
+              <TextField
+                id="student-name-input"
+                fullWidth
+                label="শিক্ষার্থীর নাম (First Name) *"
+                value={form.first_name}
+                onFocus={() => updateStep('#student-name-input')}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm({...form, first_name: val, first_name_en: transliterateBangla(val)});
+                }}
+                error={!!formErrors.first_name}
+                helperText={formErrors.first_name}
+              />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField id="last-name-input" fullWidth label="পদবী/বংশ (Last Name)" value={form.last_name} onFocus={() => updateStep('#last-name-input')} onChange={e => setForm({...form, last_name: e.target.value})} />
+              <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({...form, first_name_en: e.target.value})} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                id="last-name-input"
+                fullWidth
+                label="পদবী/বংশ (Last Name)"
+                value={form.last_name}
+                onFocus={() => updateStep('#last-name-input')}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm({...form, last_name: val, last_name_en: transliterateBangla(val)});
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth label="পদবী (ইংরেজিতে)" value={form.last_name_en} onChange={e => setForm({...form, last_name_en: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField id="username-input" fullWidth label="ইউজার আইডি (Username)" value={form.username} onFocus={() => updateStep('#username-input')} onChange={e => setForm({...form, username: e.target.value})} helperText="খালি রাখলে স্বয়ংক্রিয়ভাবে তৈরি হবে" error={usernameCheck.available === false} />
@@ -287,16 +322,52 @@ export default function AddStudentPage() {
           <Typography variant="h6">অভিভাবকের তথ্য</Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
-              <TextField id="guardian-name-input" fullWidth label="অভিভাবকের নাম *" value={form.guardian_name} onFocus={() => updateStep('#guardian-name-input')} onChange={e => setForm({...form, guardian_name: e.target.value})} helperText="এটি দিয়ে স্বয়ংক্রিয়ভাবে অভিভাবক প্রোফাইল তৈরি হবে" />
+              <TextField
+                id="guardian-name-input"
+                fullWidth
+                label="অভিভাবকের নাম *"
+                value={form.guardian_name}
+                onFocus={() => updateStep('#guardian-name-input')}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm({...form, guardian_name: val, guardian_name_en: transliterateBangla(val)});
+                }}
+                helperText="এটি দিয়ে স্বয়ংক্রিয়ভাবে অভিভাবক প্রোফাইল তৈরি হবে"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth label="অভিভাবকের নাম (ইংরেজিতে)" value={form.guardian_name_en} onChange={e => setForm({...form, guardian_name_en: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth label="মোবাইল নম্বর" value={form.phone_number} onChange={e => setForm({...form, phone_number: e.target.value})} placeholder="017XXXXXXXX" />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="পিতার নাম" value={form.father_name} onChange={e => setForm({...form, father_name: e.target.value})} />
+              <TextField
+                fullWidth
+                label="পিতার নাম"
+                value={form.father_name}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm({...form, father_name: val, father_name_en: transliterateBangla(val)});
+                }}
+              />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="মাতার নাম" value={form.mother_name} onChange={e => setForm({...form, mother_name: e.target.value})} />
+              <TextField fullWidth label="পিতার নাম (ইংরেজিতে)" value={form.father_name_en} onChange={e => setForm({...form, father_name_en: e.target.value})} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="মাতার নাম"
+                value={form.mother_name}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm({...form, mother_name: val, mother_name_en: transliterateBangla(val)});
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth label="মাতার নাম (ইংরেজিতে)" value={form.mother_name_en} onChange={e => setForm({...form, mother_name_en: e.target.value})} />
             </Grid>
           </Grid>
 
@@ -308,7 +379,20 @@ export default function AddStudentPage() {
               <TextField fullWidth label="ভর্তির তারিখ" type="date" value={form.admission_date} onChange={e => setForm({...form, admission_date: e.target.value})} InputLabelProps={{ shrink: true }} />
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth label="ঠিকানা" multiline rows={2} value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+              <TextField
+                fullWidth
+                label="ঠিকানা"
+                multiline
+                rows={2}
+                value={form.address}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm({...form, address: val, address_en: transliterateBangla(val)});
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth label="ঠিকানা (ইংরেজিতে)" multiline rows={2} value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} />
             </Grid>
           </Grid>
 

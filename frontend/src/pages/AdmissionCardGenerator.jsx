@@ -20,7 +20,8 @@ import {
   DialogContent,
   DialogActions,
   IconButton,
-  Tooltip
+  Tooltip,
+  Backdrop
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PrintIcon from '@mui/icons-material/Print';
@@ -501,6 +502,9 @@ export default function AdmissionCardGenerator() {
 
   return (
     <Box sx={{ p: 3 }}>
+      <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={loading || loadingExams}>
+        <CircularProgress color="inherit" />
+      </Backdrop>
       {/* Header */}
       <Paper 
         elevation={0}

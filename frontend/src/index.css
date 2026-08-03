@@ -27,9 +27,10 @@ body {
 }
 
 /* Disable transitions during initial mount/load to prevent shaking */
-.MuiPaper-root, .MuiCard-root {
+.MuiPaper-root, .MuiCard-root, * {
   /* removed transitions that caused jittering */
   transition: none !important;
+  animation: none !important;
 }
 
 /* Custom Scrollbar */
@@ -71,6 +72,11 @@ body {
 
 /* Global Print Styles */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 0 !important;
+  }
+
   .no-print,
   .MuiSnackbar-root,
   .MuiAlert-root,
@@ -90,6 +96,8 @@ body {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+    orphans: 3 !important;
+    widows: 3 !important;
   }
 
   .MuiPaper-root, .MuiCard-root {
@@ -97,6 +105,26 @@ body {
     border: none !important;
     background-image: none !important;
     transition: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  table, thead, tbody, tfoot, tr, th, td {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  tr {
+    orphans: 2 !important;
+    widows: 2 !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
   }
 
   * {

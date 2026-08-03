@@ -5,6 +5,7 @@ import api from '../utils/api';
 import { Box, Paper, Typography, TextField, Stack, Button, Alert, Chip } from '@mui/material';
 import PhotoUpload from '../components/PhotoUpload';
 import { useToast } from '../components/Toast';
+import { transliterateBangla } from '../utils/helpers';
 
 export default function AddCommitteePage() {
   const { id } = useParams(); // school id
@@ -135,17 +136,48 @@ export default function AddCommitteePage() {
           </Stack>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField label="First Name" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} helperText={formErrors.first_name || 'Provide either a username or first name'} error={!!formErrors.first_name} fullWidth />
+            <TextField
+              label="First Name"
+              value={form.first_name}
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, first_name: val, first_name_en: transliterateBangla(val) });
+              }}
+              helperText={formErrors.first_name || 'Provide either a username or first name'}
+              error={!!formErrors.first_name}
+              fullWidth
+            />
             <TextField label="First Name (English)" value={form.first_name_en} onChange={e => setForm({ ...form, first_name_en: e.target.value })} fullWidth />
           </Stack>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField label="Last Name" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} fullWidth error={!!formErrors.last_name} helperText={formErrors.last_name || ''} />
+            <TextField
+              label="Last Name"
+              value={form.last_name}
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, last_name: val, last_name_en: transliterateBangla(val) });
+              }}
+              fullWidth
+              error={!!formErrors.last_name}
+              helperText={formErrors.last_name || ''}
+            />
             <TextField label="Last Name (English)" value={form.last_name_en} onChange={e => setForm({ ...form, last_name_en: e.target.value })} fullWidth />
           </Stack>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField label="Designation" value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="e.g., President, Secretary, Treasurer" error={!!formErrors.designation} helperText={formErrors.designation || 'Committee role or position'} fullWidth />
+            <TextField
+              label="Designation"
+              value={form.designation}
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, designation: val, designation_en: transliterateBangla(val) });
+              }}
+              placeholder="e.g., President, Secretary, Treasurer"
+              error={!!formErrors.designation}
+              helperText={formErrors.designation || 'Committee role or position'}
+              fullWidth
+            />
             <TextField label="Designation (English)" value={form.designation_en} onChange={e => setForm({ ...form, designation_en: e.target.value })} fullWidth />
           </Stack>
 

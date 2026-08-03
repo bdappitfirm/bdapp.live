@@ -5,14 +5,16 @@
 
 .ssc-board-transcript-root {
     width: 210mm;
-    min-height: 297mm;
-    padding: 5mm;
-    margin: 10px auto;
+    height: 297mm;
+    padding: 0;
+    margin: 0 auto;
     background-color: #fff;
     box-sizing: border-box;
     font-family: 'Times New Roman', Times, serif;
     color: #000;
     position: relative;
+    box-shadow: none !important;
+    filter: none !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
 }
@@ -333,11 +335,12 @@
     .ssc-board-transcript-root {
         position: relative !important;
         width: 210mm !important;
-        height: 297mm !important;
+        height: 296mm !important;
         padding: 0 !important;
         margin: 0 !important;
         border: none !important;
         box-shadow: none !important;
+        filter: none !important;
     }
 
     .transcript-outer-container {

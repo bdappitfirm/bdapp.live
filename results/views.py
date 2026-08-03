@@ -231,14 +231,25 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
             sid = get_user_school_id(request.user, request)
             if not sid: return Response([])
             
-            # Get ALL exams for the school, sorted by latest first (exam_date desc, then id desc)
-            exams = Examination.objects.filter(school_id=sid).order_by('-exam_date', '-id')
-            if not exams.exists():
+            # Get latest exam for EACH classroom to show a complete school-wide summary
+            year = request.query_params.get('year')
+            exams_qs = Examination.objects.filter(school_id=sid)
+            if year:
+                exams_qs = exams_qs.filter(year=year)
+
+            if not exams_qs.exists():
                 return Response([])
-            
-            # Get the LATEST exam
-            latest_exam = exams.first()
-            exam_ids = [latest_exam.id]
+
+            # Find the latest exam ID for each classroom
+            class_ids = exams_qs.values_list('classroom_id', flat=True).distinct()
+            exam_ids = []
+            for cid in class_ids:
+                latest = exams_qs.filter(classroom_id=cid).order_by('-exam_date', '-id').first()
+                if latest:
+                    exam_ids.append(latest.id)
+
+            if not exam_ids:
+                return Response([])
             
             # Get all results for this exam
             results = Result.objects.filter(examination_id__in=exam_ids).select_related(
@@ -252,6 +263,8 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
             
             # First, group results by student to get per-student data
             student_results = {}
+            max_results_per_class = {} # To detect missing subjects
+
             for r in results:
                 if not r.student_id:
                     continue
@@ -264,7 +277,13 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
                 student_results[r.student_id]['results'].append(r)
                 if not r.is_passed:
                     student_results[r.student_id]['failed_count'] += 1
-            
+
+                # Track max subjects per class
+                c_name = r.student.classroom.name if r.student.classroom else 'Unknown'
+                cnt = len(student_results[r.student_id]['results'])
+                if c_name not in max_results_per_class or cnt > max_results_per_class[c_name]:
+                    max_results_per_class[c_name] = cnt
+
             # Now build summary per classroom
             summary = {}
             for student in all_students:
@@ -278,6 +297,8 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
                         'total': 0,
                         'absent': 0,
                         'passed': 0,
+                        'incomplete': 0,
+                        'inc_1': 0, 'inc_2': 0, 'inc_3': 0, 'inc_4': 0, 'inc_5_plus': 0,
                         'failed_1': 0,
                         'failed_2': 0,
                         'failed_3': 0,
@@ -299,6 +320,26 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
                 else:
                     # Has results: check pass/fail and failed count
                     student_data = student_results[student.id]
+
+                    # Detect Incomplete Subjects
+                    incomplete_sub_count = 0
+                    for r in student_data['results']:
+                        if (float(r.written_marks or 0) == 0 and
+                            float(r.mcq_marks or 0) == 0 and
+                            float(r.practical_marks or 0) == 0):
+                            incomplete_sub_count += 1
+
+                    missing_count = max_results_per_class.get(c_name, 0) - len(student_data['results'])
+                    total_inc = incomplete_sub_count + max(0, missing_count)
+
+                    if total_inc > 0:
+                        summary[c_name]['incomplete'] += 1
+                        if total_inc == 1: summary[c_name]['inc_1'] += 1
+                        elif total_inc == 2: summary[c_name]['inc_2'] += 1
+                        elif total_inc == 3: summary[c_name]['inc_3'] += 1
+                        elif total_inc == 4: summary[c_name]['inc_4'] += 1
+                        else: summary[c_name]['inc_5_plus'] += 1
+
                     if student_data['failed_count'] == 0:
                         summary[c_name]['passed'] += 1
                     else:

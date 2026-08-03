@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Typography, Card, Avatar, CardMedia, Button,
-  Stack, Paper, useMediaQuery
+  Stack, useMediaQuery
 } from "@mui/material";
 import { useTheme } from '@mui/material/styles';
 import SchoolCarousel from "../components/SchoolCarousel";
@@ -11,7 +11,6 @@ import { getMediaUrl } from "../utils/media";
 import { useAuth } from "../context/AuthContext";
 import { isAuthenticated } from "../utils/auth";
 import logo from "../components/bdschooapplogo.png";
-import welcomeBg from "../components/welcome_bg.jpg";
 
 const AdSlot = React.memo(({ items, slotIndex = 0 }) => {
   const [idx, setIdx] = useState(0);
@@ -49,8 +48,8 @@ const WelcomePage = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const theme = useTheme();
-  const isMobile = useMediaQuery('(max-width:768px)');
-  const isTablet = useMediaQuery('(min-width:769px) and (max-width:1024px)');
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user } = useAuth();
 
   const [numSlots, setNumSlots] = useState(3);
@@ -75,12 +74,8 @@ const WelcomePage = () => {
 
       if (schoolRes.status === 'fulfilled') {
         const data = schoolRes.value.data;
-        // Handle both array and paginated response
         const schoolsArr = Array.isArray(data) ? data : (data?.results || []);
         setSchools(schoolsArr);
-        console.log(`WelcomePage: Loaded ${schoolsArr.length} schools`);
-      } else {
-        console.warn("WelcomePage: Schools fetch failed. It might be due to network or empty cache.");
       }
 
       if (adsRes.status === 'fulfilled') {
@@ -101,9 +96,6 @@ const WelcomePage = () => {
       
       if (isAuth && lastSchoolId && user) {
         const username = String(user?.username || user?.user?.username || '').toLowerCase().trim();
-
-        // BDAdmin is a superuser, they should NOT be redirected
-        // All other users should go directly to their school dashboard
         if (username !== 'bdadmin') {
           navigate(`/school/${lastSchoolId}`, { replace: true });
         }
@@ -115,28 +107,17 @@ const WelcomePage = () => {
 
   useEffect(() => {
     fetchData();
-
-    // Also log the service worker registration
-    if ('serviceWorker' in navigator) {
-      console.log('WelcomePage: Service Worker API available');
-      navigator.serviceWorker.ready.then((registration) => {
-        console.log('WelcomePage: Service Worker registered:', registration);
-      }).catch((err) => {
-        console.error('WelcomePage: Service Worker registration error:', err);
-      });
-    }
   }, [fetchData]);
 
   return (
     <Box sx={{
       minHeight: "100vh",
-      bgcolor: "#f0f2f5", // Facebook style background
+      bgcolor: "#f0f2f5",
       position: 'relative',
       overflowX: 'hidden'
     }}>
 
-      {/* BIG CENTER ROTATING LOGO (zIndex: 0) - CENTERED 75% WIDTH */}
-      <Box sx={{ 
+      <Box sx={{
         position: 'fixed', 
         top: 0, 
         left: 0, 
@@ -159,7 +140,7 @@ const WelcomePage = () => {
             maxWidth: '1000px',
             maxHeight: '1000px',
             opacity: 0.12,
-            animation: 'spin360 80s linear infinite', // Slightly slower for better stability
+            animation: 'spin360 80s linear infinite',
             filter: 'none',
             willChange: 'transform',
             backfaceVisibility: 'hidden',
@@ -169,7 +150,6 @@ const WelcomePage = () => {
         />
       </Box>
 
-      {/* ADD CSS FOR ROTATION */}
       <style>{`
         @keyframes spin360 {
           from { transform: rotate(0deg) translateZ(0); }
@@ -178,17 +158,16 @@ const WelcomePage = () => {
       `}</style>
 
       {/* CONTENT LAYER (zIndex: 10+) */}
-      <Box sx={{ position: 'relative', zIndex: 10 }}>
-
+      <Box sx={{ position: 'relative', zIndex: 10, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Box sx={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
             gap: 2,
             p: 0,
-            pt: 0, // No top padding
             overflowX: 'auto',
             width: '100%',
+            maxWidth: '100vw',
             mt: { xs: -1, sm: 0 }
           }}>
             {Array.from({ length: numSlots }, (_, i) => (
@@ -196,30 +175,52 @@ const WelcomePage = () => {
             ))}
           </Box>
 
-          <Box sx={{ p: { xs: 0.5, sm: 2 }, mt: { xs: -2, sm: -4 } }}>
+          <Box sx={{ p: { xs: 1, sm: 4 }, mt: { xs: -2, sm: -4 }, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><Typography variant="h5" color="white">লোড হচ্ছে...</Typography></Box>
             ) : (
-                <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-                    <Box sx={{ mb: { xs: 1, sm: 4 } }}><SchoolCarousel schools={schools} /></Box>
-                    <Typography variant="h6" color="white" align="center" sx={{ mb: 1, fontWeight: 'bold', textShadow: '2px 2px 4px rgba(0,0,0,0.5)', fontSize: { xs: '1rem', sm: '1.4rem' } }}>সকল স্কুল তালিকা</Typography>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(280px, 1fr))', md: 'repeat(auto-fill, minmax(300px, 1fr))' }, gap: { xs: 1.5, sm: 2 } }}>
+                <Box sx={{ width: '100%', maxWidth: 1200, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Box sx={{ mb: { xs: 2, sm: 6 }, width: '100%', display: 'flex', justifyContent: 'center' }}>
+                        <SchoolCarousel schools={schools} />
+                    </Box>
+                    <Typography variant="h6" color="white" align="center" sx={{ mb: 3, fontWeight: 'bold', textShadow: '2px 2px 4px rgba(0,0,0,0.5)', fontSize: { xs: '1.2rem', sm: '1.8rem' } }}>সকল স্কুল তালিকা</Typography>
+                    <Box sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: { xs: 2, sm: 4 },
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        width: '100%',
+                        px: { xs: 1, sm: 2 }
+                    }}>
                         {schools.map(s => (
-                            <Card key={s.id} sx={{ cursor: 'pointer', p: 2, borderRadius: 4, transition: '0.3s', '&:hover': { transform: 'translateY(-5px)', boxShadow: 10 } }} onClick={() => {
-                                if (isAuthenticated()) {
-                                    navigate(`/school/${s.id}`);
-                                } else {
-                                    navigate(`/login?next=${encodeURIComponent(`/school/${s.id}`)}`);
-                                }
-                            }}>
-                                <Stack direction="row" spacing={2} alignItems="center">
-                                    <Avatar src={getMediaUrl(s.logo_thumbnail_url || s.logo)} sx={{ width: 50, height: 50 }} />
+                            <Box key={s.id} sx={{ width: { xs: '100%', sm: 300, md: 340 }, display: 'flex', justifyContent: 'center' }}>
+                                <Card sx={{
+                                    cursor: 'pointer',
+                                    p: 2.5,
+                                    borderRadius: 5,
+                                    transition: 'all 0.3s ease',
+                                    width: '100%',
+                                    bgcolor: 'rgba(255, 255, 255, 0.9)',
+                                    backdropFilter: 'blur(10px)',
+                                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                                    '&:hover': { transform: 'translateY(-8px)', boxShadow: '0 12px 48px rgba(0,0,0,0.2)' }
+                                }} onClick={() => {
+                                    if (isAuthenticated()) {
+                                        navigate(`/school/${s.id}`);
+                                    } else {
+                                        navigate(`/login?next=${encodeURIComponent(`/school/${s.id}`)}`);
+                                    }
+                                }}>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                        <Avatar src={getMediaUrl(s.logo_thumbnail_url || s.logo)} sx={{ width: 50, height: 50 }} />
                                     <Box sx={{ overflow: 'hidden' }}>
                                         <Typography variant="h6" noWrap sx={{ fontWeight: 'bold', color: '#1a237e' }}>{s.name}</Typography>
                                         <Typography variant="caption" color="text.secondary" noWrap display="block">{s.address || 'ঠিকানা নেই'}</Typography>
                                     </Box>
-                                </Stack>
-                            </Card>
+                                    </Stack>
+                                </Card>
+                            </Box>
                         ))}
                     </Box>
                 </Box>

@@ -110,12 +110,10 @@ def calculate_student_overall_result(examination, student):
     results_to_calculate = main_results if main_results else results_to_process
     count = len(results_to_calculate)
 
-    # Calculate totals
+    # Calculate totals (Main subjects only)
     total_obtained = sum(float(r.total_obtained) for r in results_to_calculate)
-    if optional_result:
-        total_obtained += float(optional_result.total_obtained)
 
-    # Improved total_possible calculation based on individual subject maxima
+    # Improved total_possible calculation (Main subjects only)
     group = _class_group(getattr(examination.classroom, "name", None))
     total_possible = 0
     for r in results_to_calculate:
@@ -125,12 +123,14 @@ def calculate_student_overall_result(examination, student):
         else:
             total_possible += float(examination.total_marks)
 
+    # Optional Marks Bonus (Above 40%) - Following standard merit rules
     if optional_result:
+        opt_obtained = float(optional_result.total_obtained)
         maxima = get_subject_maxima(group, getattr(optional_result.subject, "name", None))
-        if maxima:
-            total_possible += (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0)))
-        else:
-            total_possible += float(examination.total_marks)
+        opt_possible = (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0))) if maxima else 100
+        opt_threshold = opt_possible * 0.4
+        if opt_obtained > opt_threshold:
+            total_obtained += (opt_obtained - opt_threshold)
 
     percentage = (total_obtained / total_possible * 100) if total_possible > 0 else 0
     
@@ -220,6 +220,9 @@ def calculate_student_overall_result(examination, student):
     else:
         grade = 'F'
 
+    # Calculate failed subjects count for ranking
+    failed_subjects_count = sum(1 for r in results_to_calculate if not r.is_passed)
+
     # Create or update overall result
     overall_result, created = StudentOverallResult.objects.update_or_create(
         examination=examination,
@@ -231,7 +234,8 @@ def calculate_student_overall_result(examination, student):
             'percentage': percentage,
             'cgpa': cgpa,
             'grade': grade,
-            'is_passed': is_passed
+            'is_passed': is_passed,
+            'failed_subjects_count': failed_subjects_count
         }
     )
     
@@ -251,26 +255,54 @@ def calculate_ranks(examination):
     
     if sections.exists():
         for section in sections:
-            # Get all overall results for this examination and this section, ordered by CGPA and percentage
+            # Get all overall results for this examination and this section
+            # Order by CGPA (desc), failed count (asc), percentage (desc), total marks (desc)
             overall_results = StudentOverallResult.objects.filter(
                 examination=examination,
                 student__section=section
-            ).order_by('-cgpa', '-percentage', '-total_marks_obtained')
+            ).order_by('-cgpa', 'failed_subjects_count', '-percentage', '-total_marks_obtained')
             
-            # Assign ranks within the section
-            for rank, result in enumerate(overall_results, start=1):
-                if result.rank != rank:
-                    result.rank = rank
+            # Assign ranks within the section with tie-breaking logic
+            last_rank = 0
+            last_values = None
+            for i, result in enumerate(overall_results, start=1):
+                # Criteria for tie-breaking
+                current_values = (
+                    result.cgpa,
+                    result.failed_subjects_count,
+                    result.percentage,
+                    result.total_marks_obtained
+                )
+
+                if current_values != last_values:
+                    last_rank = i
+                    last_values = current_values
+
+                if result.rank != last_rank:
+                    result.rank = last_rank
                     result.save(update_fields=['rank'])
     else:
         # Fallback to class-wide ranking if no sections are defined
         overall_results = StudentOverallResult.objects.filter(
             examination=examination
-        ).order_by('-cgpa', '-percentage', '-total_marks_obtained')
+        ).order_by('-cgpa', 'failed_subjects_count', '-percentage', '-total_marks_obtained')
         
-        for rank, result in enumerate(overall_results, start=1):
-            if result.rank != rank:
-                result.rank = rank
+        last_rank = 0
+        last_values = None
+        for i, result in enumerate(overall_results, start=1):
+            current_values = (
+                result.cgpa,
+                result.failed_subjects_count,
+                result.percentage,
+                result.total_marks_obtained
+            )
+
+            if current_values != last_values:
+                last_rank = i
+                last_values = current_values
+
+            if result.rank != last_rank:
+                result.rank = last_rank
                 result.save(update_fields=['rank'])
 
 

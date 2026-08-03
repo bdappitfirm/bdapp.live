@@ -110,7 +110,28 @@ $uploadFiles = @()
 if (Test-Path "backend_minimal.tar") { $uploadFiles += "backend_minimal.tar" }
 if (Test-Path "frontend.tar.gz") { $uploadFiles += "frontend.tar.gz" }
 $uploadFiles += "fix_all.sh"
-scp @uploadFiles "${USER}@${VPS_IP}:/root/"
+
+$maxRetries = 3
+$retryCount = 0
+$success = $false
+
+while (-not $success -and $retryCount -lt $maxRetries) {
+    if ($retryCount -gt 0) {
+        Write-Host "Retrying upload (Attempt $($retryCount + 1) of $maxRetries)..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 5
+    }
+    scp @uploadFiles "${USER}@${VPS_IP}:/root/"
+    if ($LASTEXITCODE -eq 0) {
+        $success = $true
+    } else {
+        $retryCount++
+    }
+}
+
+if (-not $success) {
+    Write-Error "Upload failed after $maxRetries attempts! Aborting deployment. Please check your internet connection and try again."
+    exit 1
+}
 
 Write-Host "Running Deployment on VPS (Extraction & Restart)..." -ForegroundColor Cyan
 $remoteCmd = "cd /root; " +

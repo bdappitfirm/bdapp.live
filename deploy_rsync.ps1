@@ -28,6 +28,11 @@ tar -czf $zipName --exclude="media" --exclude="staticfiles" --exclude=".venv" --
 # 3. Upload using pscp.exe
 Write-Host "Uploading update bundle to server..." -ForegroundColor Yellow
 .\pscp.exe -v $zipName "${USER}@${VPS_IP}:/tmp/deploy_latest.tar.gz"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Upload failed! Please check your internet connection."
+    if (Test-Path $zipName) { Remove-Item $zipName }
+    exit 1
+}
 
 # 4. Force Extract and Run Fix on Server
 Write-Host "Extracting and applying changes on server..." -ForegroundColor Cyan

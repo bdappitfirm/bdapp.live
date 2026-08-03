@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import {
@@ -30,6 +30,7 @@ import {
   InputLabel,
   Select,
   CircularProgress,
+  Backdrop,
   IconButton,
   Autocomplete,
   Tooltip,
@@ -74,7 +75,7 @@ const UNWANTED_SUBJECTS = [
 ];
 
 const UNWANTED_KEYWORDS = [
-  'অর্ধ-বার্ষিক', 'বার্ষিক', 'অর্ধবার্ষিক', 'test', 'model test'
+  'model test'
 ];
 
 const CO_CURRICULAR_SUBJECTS = [
@@ -114,6 +115,7 @@ export default function ResultsPage() {
   // Results
   const [results, setResults] = useState([]);
   const [overallResults, setOverallResults] = useState([]);
+  const [tab0SubjectFilter, setTab0SubjectFilter] = useState('');
   const [downloadAnchor, setDownloadAnchor] = useState(null);
 
   const handleDownloadClick = (event) => setDownloadAnchor(event.currentTarget);
@@ -147,6 +149,61 @@ export default function ResultsPage() {
   const [bulkYear, setBulkYear] = useState('');
   const [bulkStudents, setBulkStudents] = useState([]);
   const [bulkMarks, setBulkMarks] = useState({});
+  const autoSaveTimeouts = useRef({});
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+
+  const performAutoSave = useCallback((examId, studentId, subjectId, updatedMarks) => {
+    if (!examId || !studentId || !subjectId) return;
+    setIsAutoSaving(true);
+
+    const writtenMarks = updatedMarks.written !== '' ? parseFloat(updatedMarks.written) : 0;
+    const mcqMarks = updatedMarks.mcq !== '' ? parseFloat(updatedMarks.mcq) : 0;
+    const practicalMarks = updatedMarks.practical !== '' ? parseFloat(updatedMarks.practical) : 0;
+
+    const resultData = {
+      examination: parseInt(examId),
+      school_id: id,
+      results: [
+        {
+          examination: parseInt(examId),
+          student_id: parseInt(studentId),
+          subject_id: parseInt(subjectId),
+          written_marks: writtenMarks,
+          mcq_marks: mcqMarks,
+          practical_marks: practicalMarks
+        }
+      ]
+    };
+
+    api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, resultData)
+      .then(res => {
+        // Silently succeed
+      })
+      .catch(err => {
+        console.error('Auto-save failed:', err);
+      })
+      .finally(() => {
+        setIsAutoSaving(false);
+      });
+  }, [id]);
+
+  const handleEditMarksChange = (field, value) => {
+    const newEditMarks = { ...editMarks, [field]: value };
+    setEditMarks(newEditMarks);
+
+    if (editingResult) {
+      const examId = editingResult.examination?.id || editingResult.examination;
+      const studentId = editingResult.student?.id || editingResult.student;
+      const subjectId = editingResult.subject?.id || editingResult.subject;
+      const saveKey = `${studentId}-${subjectId}`;
+      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
+      autoSaveTimeouts.current[saveKey] = setTimeout(() => {
+        performAutoSave(examId, studentId, subjectId, newEditMarks);
+        delete autoSaveTimeouts.current[saveKey];
+      }, 500);
+    }
+  };
+
   const [bulkSaving, setBulkSaving] = useState(false);
   // Edit/Delete state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -161,23 +218,6 @@ export default function ResultsPage() {
   const [summaryExamType, setSummaryExamType] = useState('annual');
   const [summaryYear, setSummaryYear] = useState(new Date().getFullYear());
   const toast = useToast();
-
-  const guidanceSteps = [
-    { selector: '#bulk-marks-input-btn', text: 'মার্কস ইনপুট দিতে এখানে ক্লিক করুন', autoNext: false },
-    { selector: '#bulk-class-select', text: 'শ্রেণি সিলেক্ট করুন', autoNext: false },
-    { selector: '#bulk-section-select', text: 'সেকশন সিলেক্ট করুন', autoNext: false },
-    { selector: '#bulk-subject-select', text: 'বিষয় সিলেক্ট করুন', autoNext: false },
-    { selector: '#bulk-save-btn', text: 'সবশেষে ফলাফল সংরক্ষণ করুন', autoNext: false }
-  ];
-
-  const updateStep = (selector) => {
-    const currentIdx = guidanceSteps.findIndex(s => s.selector === selector);
-    if (currentIdx !== -1 && currentIdx < guidanceSteps.length - 1) {
-      setTourStep(currentIdx + 2);
-    } else if (currentIdx === guidanceSteps.length - 1) {
-      setTourStep(guidanceSteps.length);
-    }
-  };
 
   const loadClasses = useCallback(() => {
     setLoadingClasses(true);
@@ -202,13 +242,9 @@ export default function ResultsPage() {
     setLoading(true);
     scopedGet('/api/results/examinations/', id, {}, { timeout: 30000 })
       .then(res => {
-        console.log('Examinations API response:', res.data);
         const data = Array.isArray(res.data) ? res.data : res.data.results || [];
         setExaminations(data);
         setLoading(false);
-        if (data.length === 0) {
-          toast.info('No examinations found for this school');
-        }
       })
       .catch(err => {
         console.error('Error loading examinations:', err);
@@ -237,35 +273,32 @@ export default function ResultsPage() {
   }, [id, toast]);
 
   const loadResults = useCallback((examId, sectionId = null) => {
-    if (!examId || (!sectionId && !selectedSectionMain)) {
-      console.log('loadResults deferred: exam or section missing');
+    if (!examId) {
       setResults([]);
       setOverallResults([]);
       return;
     }
     const effectiveSection = sectionId || selectedSectionMain;
-    console.log('Loading results for examination:', examId, 'Section:', effectiveSection);
-    setLoading(true);
+    // Removed loading indicators
 
-    scopedGet('/api/results/results/', id, {
+    const params = {
       examination: examId,
-      section: effectiveSection === 'UNASSIGNED' ? 'null' : effectiveSection,
       page_size: 500
-    }, { timeout: 15000 })
+    };
+    if (effectiveSection) {
+      params.section = effectiveSection === 'UNASSIGNED' ? 'null' : effectiveSection;
+    }
+
+    scopedGet('/api/results/results/', id, params, { timeout: 15000 })
       .then(resultsRes => {
         const resultsData = Array.isArray(resultsRes.data) ? resultsRes.data : (resultsRes.data?.results || []);
         setResults(resultsData);
-        return scopedGet('/api/results/overall/', id, {
-          examination: examId,
-          section: effectiveSection === 'UNASSIGNED' ? 'null' : effectiveSection,
-          page_size: 500
-        }, { timeout: 15000 });
+        return scopedGet('/api/results/overall/', id, params, { timeout: 15000 });
       })
       .then(overallRes => {
         const overallData = Array.isArray(overallRes.data) ? overallRes.data : (overallRes.data?.results || []);
         setOverallResults(overallData);
         setLoading(false);
-        toast.success('Results loaded');
       })
       .catch(async err => {
         console.error('Error loading results:', err);
@@ -390,17 +423,6 @@ export default function ResultsPage() {
     loadExaminations();
   }, [id, navigate, loadClasses, loadExaminations]);
 
-  useEffect(() => {
-    // ডিরেকশন সেট করার লজিক - শুধুমাত্র টিচার এবং এডমিনদের জন্য
-    const isGuidanceAllowed = role === 'teacher' || role === 'admin' || isSuperUser;
-    if (isGuidanceAllowed && tourStep === 0) {
-      const timer = setTimeout(() => {
-        setTourStep(1);
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [role, isSuperUser, tourStep]);
-
   // Open Edit dialog prefilled with selected result
   const handleOpenEdit = (result) => {
     if (!isAuthenticated()) {
@@ -431,21 +453,36 @@ export default function ResultsPage() {
     try {
       setSavingEdit(true);
       const examId = parseInt(editingResult.examination?.id || editingResult.examination);
+      const studentId = editingResult.student?.id || editingResult.student;
+      const subjectId = editingResult.subject?.id || editingResult.subject;
+      const saveKey = `${studentId}-${subjectId}`;
+      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
+      delete autoSaveTimeouts.current[saveKey];
+
       const w = parseFloat(editMarks.written) || 0;
       const m = parseFloat(editMarks.mcq) || 0;
       const p = parseFloat(editMarks.practical) || 0;
-      await api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, {
-        school_id: id,
-        results: [{
-          student_id: parseInt(editingResult.student?.id || editingResult.student, 10),
-          subject_id: parseInt(editingResult.subject?.id || editingResult.subject, 10),
+
+      if (editingResult.id) {
+        await api.patch(`/api/results/results/${editingResult.id}/`, {
           written_marks: w,
           mcq_marks: m,
           practical_marks: p,
           remarks: editingResult.remarks || ''
-        }]
-      });
-      toast.success('Result updated successfully (bulk)');
+        });
+      } else {
+        await api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, {
+          school_id: id,
+          results: [{
+            student_id: parseInt(studentId, 10),
+            subject_id: parseInt(subjectId, 10),
+            written_marks: w,
+            mcq_marks: m,
+            practical_marks: p,
+            remarks: editingResult.remarks || ''
+          }]
+        });
+      }
       handleCloseEdit();
       setSelectedExam(examId);
       loadResults(examId);
@@ -474,12 +511,10 @@ export default function ResultsPage() {
     if (!deleteDialog.item) return;
     try {
       await api.delete(`/api/results/results/${deleteDialog.item.id}/`);
-      toast.success('Result deleted');
       setDeleteDialog({ open: false, item: null });
       loadResults(selectedExam);
     } catch (e) {
       console.error('Delete failed:', e?.response?.data || e);
-      toast.error('Failed to delete result');
     }
   };
   
@@ -547,11 +582,14 @@ export default function ResultsPage() {
     const type = (exam.exam_type || '').toLowerCase();
 
     // Allowed if type matches standard types
-    if (['half_yearly', 'annual', 'terminal', 'test', 'model', 'first_term', 'final'].includes(type)) return true;
+    if (['half_yearly', 'annual', 'terminal', 'test', 'model', 'first_term', 'final', 'pre_test'].includes(type)) return true;
 
     // Keywords for main exams and evaluations
-    const keywords = ['অর্ধ', 'বার্ষিক', 'সাময়িক', 'half', 'yearly', 'annual', 'terminal', 'test', 'মডেল', 'মূল্যায়ন', 'পরীক্ষা', 'সাপ্তাহিক'];
-    return keywords.some(k => name.includes(k));
+    const keywords = [
+        'অর্ধ', 'বার্ষিক', 'সাময়িক', 'half', 'yearly', 'annual', 'terminal', 'test', 'মডেল', 'মূল্যায়ন', 'পরীক্ষা', 'সাপ্তাহিক',
+        'নির্বাচনী', 'প্রাক', 'প্রাক-নির্বাচনী', 'pre-test', 'pre_test', 'নির্বাচনি'
+    ];
+    return keywords.some(k => name.includes(k.toLowerCase()));
   };
 
   const handleClassChange = (e) => {
@@ -592,10 +630,19 @@ export default function ResultsPage() {
       if (v < 0) v = 0;
       if (Number.isFinite(max)) v = Math.min(v, max);
     }
-    setMultiSubjectMarks(prev => ({
-      ...prev,
-      [sid]: { ...(prev[sid] || { written: '', mcq: '', practical: '' }), [field]: v }
-    }));
+    setMultiSubjectMarks(prev => {
+      const newMarksForSubject = { ...(prev[sid] || { written: '', mcq: '', practical: '' }), [field]: v };
+      const next = { ...prev, [sid]: newMarksForSubject };
+
+      const saveKey = `${selectedStudent}-${sid}`;
+      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
+      autoSaveTimeouts.current[saveKey] = setTimeout(() => {
+        performAutoSave(selectedExam, selectedStudent, sid, newMarksForSubject);
+        delete autoSaveTimeouts.current[saveKey];
+      }, 500);
+
+      return next;
+    });
   };
 
   const loadExistingMarksForStudent = React.useCallback(async (examId, studentId) => {
@@ -984,6 +1031,14 @@ export default function ResultsPage() {
       
       setCalculatedGrade(grade);
     }
+
+    // Auto-save logic
+    const saveKey = `${selectedStudent}-${selectedSubject}`;
+    if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
+    autoSaveTimeouts.current[saveKey] = setTimeout(() => {
+      performAutoSave(selectedExam, selectedStudent, selectedSubject, newMarks);
+      delete autoSaveTimeouts.current[saveKey];
+    }, 500);
   };
   
   const verifyPersistedResult = async (examId, studentId, subjectId) => {
@@ -1223,12 +1278,15 @@ export default function ResultsPage() {
   };
 
   const handleExamChange = (e) => {
-    const examId = parseInt(e.target.value, 10);
-    if (!Number.isNaN(examId)) {
+    const examId = e.target.value;
+    if (examId) {
       setSelectedExam(examId);
+      setTab0SubjectFilter('');
       loadResults(examId, selectedSectionMain);
     } else {
       setSelectedExam('');
+      setResults([]);
+      setOverallResults([]);
     }
   };
 
@@ -1255,7 +1313,6 @@ export default function ResultsPage() {
     if (!classes.length) {
       loadClasses();
     }
-    if (tourStep === 1) setTourStep(2);
     setBulkDialogOpen(true);
     // Reset everything to empty for better performance
     setBulkForm({ classroom: '', section: null, subject: '', exam: '' });
@@ -1379,7 +1436,19 @@ export default function ResultsPage() {
       if (v < 0) v = 0;
       if (Number.isFinite(max)) v = Math.min(v, max);
     }
-    setBulkMarks(prev => ({ ...prev, [sid]: { ...(prev[sid] || {}), [field]: v } }));
+    setBulkMarks(prev => {
+      const newMarksForStudent = { ...(prev[sid] || {}), [field]: v };
+      const next = { ...prev, [sid]: newMarksForStudent };
+
+      const saveKey = `${sid}-${bulkForm.subject}`;
+      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
+      autoSaveTimeouts.current[saveKey] = setTimeout(() => {
+        performAutoSave(bulkForm.exam || selectedExam, sid, bulkForm.subject, newMarksForStudent);
+        delete autoSaveTimeouts.current[saveKey];
+      }, 500);
+
+      return next;
+    });
   };
 
   const handleKeyDown = (e, studentId, field) => {
@@ -1427,13 +1496,10 @@ export default function ResultsPage() {
     };
     try {
       await api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, payload);
-      toast.success('বাল্ক ফলাফল সংরক্ষণ হয়েছে');
       closeBulkDialog();
       loadResults(examId);
     } catch (e) {
       console.error('Bulk save error:', e?.response?.data || e);
-      const msg = (e?.response?.status === 403 && (e?.response?.data?.detail)) ? e.response.data.detail : 'বাল্ক ফল সংরক্ষণ ব্যর্থ';
-      toast.error(msg);
     } finally {
       setBulkSaving(false);
     }
@@ -1455,7 +1521,8 @@ export default function ResultsPage() {
 
   const isClassNineOrTen = () => {
     try {
-      const clsObj = classes.find(c => c.id === parseInt(selectedClass));
+      const clsId = parseInt(selectedClass);
+      const clsObj = classes.find(c => parseInt(c.id) === clsId);
       const name = String(clsObj?.name || '').toLowerCase();
       return /নবম|দশম|\b9\b|\b10\b/.test(name);
     } catch (_) { return false; }
@@ -1558,6 +1625,7 @@ export default function ResultsPage() {
               value={selectedClass}
               onChange={handleClassChange}
               sx={{ minWidth: 200 }}
+              inputProps={{ autoComplete: 'off' }}
             >
               {classes.map(classroom => (
                 <MenuItem key={classroom.id} value={classroom.id}>
@@ -1576,6 +1644,7 @@ export default function ResultsPage() {
               }}
               sx={{ minWidth: 200 }}
               disabled={!selectedClass}
+              inputProps={{ autoComplete: 'off' }}
             >
               <MenuItem value="">নির্বাচন করুন</MenuItem>
               {sectionsMain.map(sec => (
@@ -1589,6 +1658,7 @@ export default function ResultsPage() {
               onChange={handleExamChange}
               sx={{ minWidth: 250 }}
               fullWidth
+              inputProps={{ autoComplete: 'off' }}
             >
               {(selectedClass ? getExamsForClass(selectedClass) : examinations)
                 .filter(isMajorExam)
@@ -1637,9 +1707,7 @@ export default function ResultsPage() {
         `}
       </style>
 
-      {loading && <TableSkeleton rows={10} columns={10} />}
-
-      {!loading && examinations.length === 0 && (
+      {examinations.length === 0 && (
         <EmptyState
           icon={AssessmentIcon}
           title="No examinations yet"
@@ -1659,88 +1727,110 @@ export default function ResultsPage() {
 
       {/* Tab 1: Subject-wise Results */}
       {tabValue === 0 && (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'primary.main' }}>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>রোল</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">লিখিত</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">এমসিকিউ</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">প্র্যাকটিক্যাল</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">মোট</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">গ্রেড</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">জিপিএ</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">অবস্থা</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">অ্যাকশন</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results.map((result, idx) => {
-                const student = result.student;
-                const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username;
-                return (
-                  <TableRow key={idx} hover>
-                    <TableCell>{student.roll_number || result.student_roll_number || '-'}</TableCell>
-                    <TableCell>{studentName}</TableCell>
-                    <TableCell>{result.subject?.name}</TableCell>
-                    <TableCell align="center">{parseFloat(result.written_marks) || 0}</TableCell>
-                    <TableCell align="center">{parseFloat(result.mcq_marks) || 0}</TableCell>
-                    <TableCell align="center">{parseFloat(result.practical_marks) || 0}</TableCell>
-                    <TableCell align="center">
-                      {(() => {
-                        const w = parseFloat(result.written_marks) || 0;
-                        const m = parseFloat(result.mcq_marks) || 0;
-                        const p = parseFloat(result.practical_marks) || 0;
-                        const total = w + m + p;
-                        return <strong>{total}</strong>;
-                      })()}
-                    </TableCell>
-                    {(() => {
-                      const serverGrade = result.grade;
-                      const serverGpa = result.gpa;
-                      const serverPassed = result.is_passed;
-                      const failed = serverPassed === false;
-                      const grade = failed ? 'F' : (serverGrade || 'F');
-                      const gpa = failed ? '0.00' : ((serverGpa !== undefined && serverGpa !== null) ? parseFloat(serverGpa) : '0.00');
-                      const s = getGradeStyle(grade);
-                      let passed = !!serverPassed;
-                      try {
-                        const subjName = result.subject?.name || '';
-                        const stuId = typeof result.student === 'object' ? result.student?.id : result.student;
-                        if (isClassNineOrTen() && isBanglaPaper(subjName) && stuId) {
-                          if (banglaCombinedPassForStudent(stuId)) passed = true;
-                        }
-                      } catch (_) {}
-                      return (
-                        <>
-                          <TableCell align="center">
-                            <Chip label={grade} size="small" sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 'bold' }} />
-                          </TableCell>
-                          <TableCell align="center">{gpa}</TableCell>
-                          <TableCell align="center">
-                            <Chip label={passed ? 'Passed' : 'Failed'} color={passed ? 'success' : 'error'} size="small" />
-                          </TableCell>
-                        </>
-                      );
-                    })()}
-                    <TableCell align="center">
-                      <Stack direction="row" spacing={1} justifyContent="center">
-                        <ProtectedButton size="small" color="primary" onClick={() => handleOpenEdit(result)}>
-                          <EditIcon fontSize="small" />
-                        </ProtectedButton>
-                        <ProtectedButton size="small" color="error" onClick={() => handleOpenDelete(result)}>
-                          <DeleteIcon fontSize="small" />
-                        </ProtectedButton>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Box>
+          <Stack direction="row" spacing={2} sx={{ mb: 2 }} className="no-print">
+            <TextField
+              select
+              label="বিষয় ফিল্টার"
+              value={tab0SubjectFilter}
+              onChange={(e) => setTab0SubjectFilter(e.target.value)}
+              sx={{ minWidth: 200 }}
+              size="small"
+              inputProps={{ autoComplete: 'off' }}
+            >
+              <MenuItem value="">সব বিষয়</MenuItem>
+              {Array.from(new Set(results.map(r => r.subject?.name || r.subject_name))).filter(Boolean).map(name => (
+                <MenuItem key={name} value={name}>{name}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'primary.main' }}>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>রোল</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">লিখিত</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">এমসিকিউ</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">প্র্যাকটিক্যাল</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">মোট</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">গ্রেড</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">জিপিএ</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">অবস্থা</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center" className="no-print">অ্যাকশন</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results
+                  .filter(r => !tab0SubjectFilter || (r.subject?.name || r.subject_name) === tab0SubjectFilter)
+                  .sort((a, b) => {
+                    const studentA = typeof a.student === 'object' ? a.student : (students.find(s => s.id === a.student) || {});
+                    const studentB = typeof b.student === 'object' ? b.student : (students.find(s => s.id === b.student) || {});
+                    const rollA = parseInt(String(studentA.roll_number || a.student_roll_number || '').replace(/\D/g, ''), 10);
+                    const rollB = parseInt(String(studentB.roll_number || b.student_roll_number || '').replace(/\D/g, ''), 10);
+                    if (!isNaN(rollA) && !isNaN(rollB) && rollA !== rollB) return rollA - rollB;
+                    return String(studentA.roll_number || '').localeCompare(String(studentB.roll_number || ''), undefined, { numeric: true });
+                  })
+                  .map((result, idx) => {
+                    const student = typeof result.student === 'object' ? result.student : (students.find(s => s.id === result.student) || {});
+                    const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || result.student_name || 'N/A';
+                    const roll = student.roll_number || result.student_roll_number || '-';
+                    const w = parseFloat(result.written_marks) || 0;
+                    const m = parseFloat(result.mcq_marks) || 0;
+                    const p = parseFloat(result.practical_marks) || 0;
+                    const total = w + m + p;
+                    const isAbsent = total === 0;
+
+                    return (
+                      <TableRow key={idx} hover>
+                        <TableCell>{roll}</TableCell>
+                        <TableCell>{studentName}</TableCell>
+                        <TableCell>{result.subject?.name || result.subject_name}</TableCell>
+                        <TableCell align="center">{isAbsent ? 'Absent' : w}</TableCell>
+                        <TableCell align="center">{isAbsent ? 'Absent' : m}</TableCell>
+                        <TableCell align="center">{isAbsent ? 'Absent' : p}</TableCell>
+                        <TableCell align="center">
+                          <strong>{isAbsent ? 'Absent' : total}</strong>
+                        </TableCell>
+                        {(() => {
+                          const serverGrade = result.grade;
+                          const serverGpa = result.gpa;
+                          const serverPassed = result.is_passed;
+                          const failed = serverPassed === false;
+                          const grade = failed ? 'F' : (serverGrade || 'F');
+                          const gpa = failed ? '0.00' : ((serverGpa !== undefined && serverGpa !== null) ? parseFloat(serverGpa).toFixed(2) : '0.00');
+                          const s = getGradeStyle(grade);
+                          let passed = !!serverPassed;
+                          return (
+                            <>
+                              <TableCell align="center">
+                                <Chip label={grade} size="small" sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 'bold' }} />
+                              </TableCell>
+                              <TableCell align="center">{gpa}</TableCell>
+                              <TableCell align="center">
+                                <Chip label={passed ? 'Passed' : 'Failed'} color={passed ? 'success' : 'error'} size="small" />
+                              </TableCell>
+                            </>
+                          );
+                        })()}
+                        <TableCell align="center" className="no-print">
+                          <Stack direction="row" spacing={1} justifyContent="center">
+                            <ProtectedButton size="small" color="primary" onClick={() => handleOpenEdit(result)}>
+                              <EditIcon fontSize="small" />
+                            </ProtectedButton>
+                            <ProtectedButton size="small" color="error" onClick={() => handleOpenDelete(result)}>
+                              <DeleteIcon fontSize="small" />
+                            </ProtectedButton>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
       )}
 
       {/* Tab 2: Overall Results */}
@@ -1749,7 +1839,6 @@ export default function ResultsPage() {
           <Table>
             <TableHead>
               <TableRow sx={{ bgcolor: 'secondary.main' }}>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Rank</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Roll</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Student Name</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Total Obtained</TableCell>
@@ -1758,38 +1847,31 @@ export default function ResultsPage() {
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">CGPA</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Grade</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Status</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Rank</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {overallResults
                 .sort((a, b) => {
-                  // Sort by rank first (if available), then by CGPA, then by percentage
-                  if (a.rank && b.rank) return a.rank - b.rank;
-                  if (a.rank && !b.rank) return -1;
-                  if (!a.rank && b.rank) return 1;
-                  
-                  // If no rank, sort by CGPA (descending)
-                  const cgpaA = parseFloat(a.cgpa) || 0;
-                  const cgpaB = parseFloat(b.cgpa) || 0;
-                  if (cgpaB !== cgpaA) return cgpaB - cgpaA;
-                  
-                  // If CGPA is tied, sort by percentage (descending)
-                  const percentageA = parseFloat(a.percentage) || 0;
-                  const percentageB = parseFloat(b.percentage) || 0;
-                  return percentageB - percentageA;
+                  const studentA = typeof a.student === 'object' ? a.student : (students.find(s => s.id === a.student) || {});
+                  const studentB = typeof b.student === 'object' ? b.student : (students.find(s => s.id === b.student) || {});
+                  const rollA = parseInt(String(studentA.roll_number || a.student_roll_number || '').replace(/\D/g, ''), 10);
+                  const rollB = parseInt(String(studentB.roll_number || b.student_roll_number || '').replace(/\D/g, ''), 10);
+                  if (!isNaN(rollA) && !isNaN(rollB) && rollA !== rollB) return rollA - rollB;
+                  return String(studentA.roll_number || '').localeCompare(String(studentB.roll_number || ''), undefined, { numeric: true });
                 })
                 .map((result, idx) => {
-                  const student = result.student;
-                  const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username;
+                  const student = typeof result.student === 'object' ? result.student : (students.find(s => s.id === result.student) || {});
+                  const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || result.student_name || 'N/A';
+                  const roll = student.roll_number || result.student_roll_number || '-';
                   return (
                     <TableRow key={idx} hover>
-                      <TableCell><strong>{result.rank || idx + 1}</strong></TableCell>
-                      <TableCell>{student.roll_number || result.student_roll_number || '-'}</TableCell>
+                      <TableCell>{roll}</TableCell>
                       <TableCell>{studentName}</TableCell>
                       <TableCell align="center">{result.total_marks_obtained}</TableCell>
                       <TableCell align="center">{result.total_marks_possible}</TableCell>
                       <TableCell align="center">{result.percentage}%</TableCell>
-                      <TableCell align="center"><strong>{result.cgpa}</strong></TableCell>
+                      <TableCell align="center"><strong>{parseFloat(result.cgpa || 0).toFixed(2)}</strong></TableCell>
                       <TableCell align="center">
                         {(() => { const s = getGradeStyle(result.grade); return (
                           <Chip label={result.grade} size="small" sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 'bold' }} />
@@ -1798,6 +1880,7 @@ export default function ResultsPage() {
                       <TableCell align="center">
                         <Chip label={isPassed(result) ? 'Passed' : 'Failed'} color={isPassed(result) ? 'success' : 'error'} size="small" />
                       </TableCell>
+                      <TableCell align="center"><strong>{result.rank || '-'}</strong></TableCell>
                     </TableRow>
                   );
                 })}
@@ -1869,6 +1952,7 @@ export default function ResultsPage() {
               value={summaryExamType}
               onChange={(e) => setSummaryExamType(e.target.value)}
               sx={{ minWidth: 220 }}
+              inputProps={{ autoComplete: 'off' }}
             >
               {EXAM_TYPES.map(t => (
                 <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
@@ -1883,6 +1967,7 @@ export default function ResultsPage() {
               }}
               type="number"
               sx={{ width: 140 }}
+              inputProps={{ autoComplete: 'off' }}
             />
             <Button
               variant="contained"
@@ -1897,7 +1982,12 @@ export default function ResultsPage() {
                     const secArr = Array.isArray(secRes.data) ? secRes.data : (secRes.data?.results || []);
                     const exRes = await scopedGet('/api/results/examinations/', id, { classroom: classroom.id }, { timeout: 20000 });
                     const exArr = Array.isArray(exRes.data) ? exRes.data : (exRes.data?.results || []);
-                    const exam = exArr.find(e => (String(e.exam_type || '').toLowerCase() === String(summaryExamType).toLowerCase()) && (parseInt(e.academic_year, 10) === parseInt(summaryYear, 10)));
+                    const targetYear = parseInt(summaryYear, 10);
+                    let exam = exArr.find(e => (String(e.exam_type || '').toLowerCase() === String(summaryExamType).toLowerCase()) && (parseInt(e.academic_year || e.year, 10) === targetYear));
+                    if (!exam && exArr.length > 0) {
+                      const sorted = [...exArr].sort((a, b) => (parseInt(b.academic_year || b.year, 10) || 0) - (parseInt(a.academic_year || a.year, 10) || 0));
+                      exam = sorted[0];
+                    }
                     for (const section of secArr) {
                       const stuRes = await scopedGet('/api/academics/students/', id, { classroom: classroom.id, section: section.id }, { timeout: 30000 });
                       const studentsArr = Array.isArray(stuRes.data) ? stuRes.data : (stuRes.data?.results || []);
@@ -1926,31 +2016,32 @@ export default function ResultsPage() {
                           continue;
                         }
                         present += 1;
+
                         let anyFail = list.some(it => (it?.grade === 'F') || (it?.is_passed === false));
+
+                        // Combined pass logic for Bangla
                         try {
-                          const clsObj = classes.find(c => c.id === classroom.id);
-                          const clsName = String(clsObj?.name || classroom.name || '').toLowerCase();
+                          const clsName = String(classroom.name || '').toLowerCase();
                           const is910 = /নবম|দশম|\b9\b|\b10\b/.test(clsName);
                           if (is910) {
-                            const combinedPass = banglaCombinedPassForStudent(sid);
-                            if (combinedPass) {
-                              const adjusted = list.filter(it => {
-                                const nm = it.subject?.name || it.subject_name || '';
-                                const fail = (it?.grade === 'F') || (it?.is_passed === false);
-                                if (!fail) return false;
-                                return isBanglaPaper(nm);
-                              });
-                              if (adjusted.length) {
+                            const banglaResults = list.filter(r => isBanglaPaper(r.subject?.name || r.subject_name));
+                            if (banglaResults.length > 0) {
+                              const passMarks = parseFloat(exam.pass_marks) || 33;
+                              const banglaTotal = banglaResults.reduce((s, r) => s + (parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0), 0);
+                              const combinedPass = banglaTotal >= (passMarks * (banglaResults.length === 1 ? 1 : 2));
+
+                              if (combinedPass) {
+                                // If combined pass is true, we ignore Bangla failures when checking anyFail
                                 anyFail = list.some(it => {
                                   const nm = it.subject?.name || it.subject_name || '';
-                                  const fail = (it?.grade === 'F') || (it?.is_passed === false);
-                                  if (!fail) return false;
-                                  return !isBanglaPaper(nm);
+                                  if (isBanglaPaper(nm)) return false;
+                                  return (it?.grade === 'F') || (it?.is_passed === false);
                                 });
                               }
                             }
                           }
                         } catch (_) {}
+
                         if (anyFail) failed += 1; else passed += 1;
                       }
                       allRows.push({
@@ -2026,7 +2117,10 @@ export default function ResultsPage() {
       >
         <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', py: 1.5 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">নতুন ফলাফল যোগ করুন</Typography>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography variant="h6">নতুন ফলাফল যোগ করুন</Typography>
+              {isAutoSaving && <Chip label="সংরক্ষণ হচ্ছে..." size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', height: 20, fontSize: '0.65rem' }} />}
+            </Stack>
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
@@ -2189,6 +2283,7 @@ export default function ResultsPage() {
                       label="শিক্ষার্থী নির্বাচন করুন"
                       variant="outlined"
                       placeholder="নাম বা রোল নম্বর লিখুন..."
+                      autoComplete="off"
                       InputProps={{
                         ...params.InputProps,
                         endAdornment: (
@@ -2272,7 +2367,8 @@ export default function ResultsPage() {
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => handleMarksChange('written', e.target.value)}
                 placeholder={String(getMaxForField(getExamById(selectedExam), 'written', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? '')}
-                InputProps={{ inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'written', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
+                autoComplete="off"
+                InputProps={{ autoComplete: 'off', inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'written', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
               />
             </Grid>
             
@@ -2285,7 +2381,8 @@ export default function ResultsPage() {
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => handleMarksChange('mcq', e.target.value)}
                 placeholder={String(getMaxForField(getExamById(selectedExam), 'mcq', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? '')}
-                InputProps={{ inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
+                autoComplete="off"
+                InputProps={{ autoComplete: 'off', inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
                 disabled={(() => {
                   const sname = String((subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name || '').toLowerCase();
                   return sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
@@ -2302,7 +2399,8 @@ export default function ResultsPage() {
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => handleMarksChange('practical', e.target.value)}
                 placeholder={String(getMaxForField(getExamById(selectedExam), 'practical', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? '')}
-                InputProps={{ inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'practical', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
+                autoComplete="off"
+                InputProps={{ autoComplete: 'off', inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'practical', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
               />
             </Grid>
 
@@ -2345,7 +2443,7 @@ export default function ResultsPage() {
                         <TableRow key={subject.id}>
                           <TableCell>{subject.name}</TableCell>
                           <TableCell align="center">
-                            <TextField type="number" size="small" value={m.written} onFocus={(e) => e.target.select()} onChange={(e) => setMultiSubjectMark(subject.id, 'written', e.target.value)} placeholder={String(getMaxForField(getExamById(selectedExam), 'written', subject.name) ?? '')} inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'written', subject.name) ?? undefined }} />
+                            <TextField type="number" size="small" value={m.written} onFocus={(e) => e.target.select()} onChange={(e) => setMultiSubjectMark(subject.id, 'written', e.target.value)} placeholder={String(getMaxForField(getExamById(selectedExam), 'written', subject.name) ?? '')} autoComplete="off" inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'written', subject.name) ?? undefined, autoComplete: 'off' }} />
                           </TableCell>
                           <TableCell align="center">
                             <TextField
@@ -2353,7 +2451,8 @@ export default function ResultsPage() {
                               onFocus={(e) => e.target.select()}
                               onChange={(e) => setMultiSubjectMark(subject.id, 'mcq', e.target.value)}
                               placeholder={String(getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? '')}
-                              inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? undefined }}
+                              autoComplete="off"
+                              inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? undefined, autoComplete: 'off' }}
                               disabled={(() => {
                                 const sname = String(subject.name || '').toLowerCase();
                                 return sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
@@ -2361,7 +2460,7 @@ export default function ResultsPage() {
                             />
                           </TableCell>
                           <TableCell align="center">
-                            <TextField type="number" size="small" value={m.practical} onFocus={(e) => e.target.select()} onChange={(e) => setMultiSubjectMark(subject.id, 'practical', e.target.value)} placeholder={String(getMaxForField(getExamById(selectedExam), 'practical', subject.name) ?? '')} inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'practical', subject.name) ?? undefined }} />
+                            <TextField type="number" size="small" value={m.practical} onFocus={(e) => e.target.select()} onChange={(e) => setMultiSubjectMark(subject.id, 'practical', e.target.value)} placeholder={String(getMaxForField(getExamById(selectedExam), 'practical', subject.name) ?? '')} autoComplete="off" inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'practical', subject.name) ?? undefined, autoComplete: 'off' }} />
                           </TableCell>
                           <TableCell align="center"><strong>{total}</strong></TableCell>
                         </TableRow>
@@ -2454,9 +2553,9 @@ export default function ResultsPage() {
                 label="লিখিত"
                 value={editMarks.written}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setEditMarks({ ...editMarks, written: e.target.value })}
+                onChange={(e) => handleEditMarksChange('written', e.target.value)}
                 fullWidth
-                inputProps={{ min: 0 }}
+                inputProps={{ min: 0, autoComplete: 'off' }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
@@ -2465,9 +2564,9 @@ export default function ResultsPage() {
                 label="এমসিকিউ"
                 value={editMarks.mcq}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setEditMarks({ ...editMarks, mcq: e.target.value })}
+                onChange={(e) => handleEditMarksChange('mcq', e.target.value)}
                 fullWidth
-                inputProps={{ min: 0 }}
+                inputProps={{ min: 0, autoComplete: 'off' }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
@@ -2476,9 +2575,9 @@ export default function ResultsPage() {
                 label="প্র্যাকটিক্যাল"
                 value={editMarks.practical}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setEditMarks({ ...editMarks, practical: e.target.value })}
+                onChange={(e) => handleEditMarksChange('practical', e.target.value)}
                 fullWidth
-                inputProps={{ min: 0 }}
+                inputProps={{ min: 0, autoComplete: 'off' }}
               />
             </Grid>
           </Grid>
@@ -2501,9 +2600,9 @@ export default function ResultsPage() {
       />
 
       <InputGuidance
-        steps={guidanceSteps}
-        activeStep={tourStep - 1}
-        onStepComplete={(step) => setTourStep(step + 1)}
+        steps={[]}
+        activeStep={-1}
+        onStepComplete={() => {}}
       />
 
       <Dialog
@@ -2521,7 +2620,10 @@ export default function ResultsPage() {
       >
         <DialogTitle sx={{ bgcolor: 'secondary.main', color: 'white', py: 1.5 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">মার্কস ইনপুট করুন (বাল্ক)</Typography>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography variant="h6">মার্কস ইনপুট করুন (বাল্ক)</Typography>
+              {isAutoSaving && <Chip label="সংরক্ষণ হচ্ছে..." size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', height: 20, fontSize: '0.65rem' }} />}
+            </Stack>
             <Button
               variant="contained"
               color="success"
@@ -2540,7 +2642,6 @@ export default function ResultsPage() {
                 <InputLabel>শ্রেণি</InputLabel>
                 <Select
                   value={bulkForm.classroom}
-                  onFocus={() => updateStep('#bulk-class-select')}
                   onChange={(e) => {
                     const v = e.target.value;
                     setBulkForm(prev => ({ ...prev, classroom: v, section: [], exam: '', subject: '' }));
@@ -2548,7 +2649,6 @@ export default function ResultsPage() {
                     loadSectionsByClass(v);
                     loadSubjectsByClass(v);
                     loadExaminationsByClass(v);
-                    updateStep('#bulk-section-select');
                   }}
                   label="শ্রেণি"
                   disabled={loadingClasses}
@@ -2565,7 +2665,6 @@ export default function ResultsPage() {
                 <Select
                   multiple
                   value={bulkForm.section || []}
-                  onFocus={() => updateStep('#bulk-section-select')}
                   onChange={(e) => {
                     const value = e.target.value;
                     if (value.includes("")) {
@@ -2581,7 +2680,6 @@ export default function ResultsPage() {
                       loadStudentsByClass(bulkForm.classroom, value);
                       loadSubjectsByClass(bulkForm.classroom, value);
                     }
-                    updateStep('#bulk-subject-select');
                   }}
                   renderValue={(selected) => {
                     if (selected.length === 0) return 'সব সেকশন (All)';
@@ -2630,6 +2728,7 @@ export default function ResultsPage() {
                 value={bulkYear}
                 onChange={(e) => setBulkYear(e.target.value)}
                 disabled={!bulkForm.classroom}
+                inputProps={{ autoComplete: 'off' }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 2 }}>
@@ -2637,10 +2736,8 @@ export default function ResultsPage() {
                 <InputLabel>বিষয়</InputLabel>
                 <Select
                   value={bulkForm.subject}
-                  onFocus={() => updateStep('#bulk-subject-select')}
                   onChange={(e) => {
                     setBulkForm(prev => ({ ...prev, subject: e.target.value }));
-                    updateStep('#bulk-save-btn');
                   }}
                   label="বিষয়"
                   disabled={!bulkForm.classroom || loadingSubjects}
@@ -2672,15 +2769,22 @@ export default function ResultsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  bulkStudents.map(s => {
-                    const name = `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() || s.user?.username;
-                    const m = bulkMarks[s.id] || { written: '', mcq: '', practical: '' };
-                    const examObj = getExamById(bulkForm.exam || selectedExam);
-                    const subjName = (subjects.find(sub => sub.id === parseInt(bulkForm.subject)) || {}).name;
-                    const isOptional = String(bulkForm.subject) === String(s.optional_subject?.id || s.optional_subject);
+                  [...bulkStudents]
+                    .sort((a, b) => {
+                      const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
+                      const br = parseInt(String(b.roll_number || '').replace(/\D/g, ''), 10);
+                      if (!isNaN(ar) && !isNaN(br) && ar !== br) return ar - br;
+                      return String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true });
+                    })
+                    .map(s => {
+                      const name = `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() || s.user?.username;
+                      const m = bulkMarks[s.id] || { written: '', mcq: '', practical: '' };
+                      const examObj = getExamById(bulkForm.exam || selectedExam);
+                      const subjName = (subjects.find(sub => sub.id === parseInt(bulkForm.subject)) || {}).name;
+                      const isOptional = String(bulkForm.subject) === String(s.optional_subject?.id || s.optional_subject);
 
-                    return (
-                      <TableRow key={s.id} hover sx={{ bgcolor: isOptional ? 'rgba(76, 175, 80, 0.05)' : 'inherit' }}>
+                      return (
+                        <TableRow key={s.id} hover sx={{ bgcolor: isOptional ? 'rgba(76, 175, 80, 0.05)' : 'inherit' }}>
                         <TableCell>{s.roll_number || '-'}</TableCell>
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: isOptional ? 'bold' : 'normal' }}>
@@ -2694,7 +2798,8 @@ export default function ResultsPage() {
                             onChange={(e) => setBulkMark(s.id, 'written', e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, s.id, 'written')}
                             placeholder={String(getMaxForField(examObj, 'written', subjName, bulkForm.classroom) ?? '')}
-                            inputProps={{ 'data-student-id': s.id, 'data-field': 'written', style: { textAlign: 'center', width: '50px' } }}
+                            autoComplete="off"
+                            inputProps={{ 'data-student-id': s.id, 'data-field': 'written', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
                           />
                         </TableCell>
                         <TableCell align="center">
@@ -2704,7 +2809,8 @@ export default function ResultsPage() {
                             onChange={(e) => setBulkMark(s.id, 'mcq', e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, s.id, 'mcq')}
                             placeholder={String(getMaxForField(examObj, 'mcq', subjName, bulkForm.classroom) ?? '')}
-                            inputProps={{ 'data-student-id': s.id, 'data-field': 'mcq', style: { textAlign: 'center', width: '50px' } }}
+                            autoComplete="off"
+                            inputProps={{ 'data-student-id': s.id, 'data-field': 'mcq', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
                             disabled={String(subjName).includes('ইংরেজি') || String(subjName).includes('English')}
                           />
                         </TableCell>
@@ -2715,7 +2821,8 @@ export default function ResultsPage() {
                             onChange={(e) => setBulkMark(s.id, 'practical', e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, s.id, 'practical')}
                             placeholder={String(getMaxForField(examObj, 'practical', subjName, bulkForm.classroom) ?? '')}
-                            inputProps={{ 'data-student-id': s.id, 'data-field': 'practical', style: { textAlign: 'center', width: '50px' } }}
+                            autoComplete="off"
+                            inputProps={{ 'data-student-id': s.id, 'data-field': 'practical', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
                           />
                         </TableCell>
                       </TableRow>

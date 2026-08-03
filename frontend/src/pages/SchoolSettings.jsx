@@ -18,6 +18,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { transliterateBangla } from '../utils/helpers';
 
 export default function SchoolSettings() {
   const { id } = useParams();
@@ -113,7 +114,15 @@ export default function SchoolSettings() {
       const count = parseInt(value) || 1;
       setFormData({ ...formData, number_of_buildings: count });
     } else {
-      setFormData({ ...formData, [name]: value });
+      let updates = { [name]: value };
+      if (name === 'name') {
+        updates.name_en = transliterateBangla(value);
+      } else if (name === 'address') {
+        updates.address_en = transliterateBangla(value);
+      } else if (name === 'principal_name') {
+        updates.principal_name_en = transliterateBangla(value);
+      }
+      setFormData(prev => ({ ...prev, ...updates }));
     }
   };
 

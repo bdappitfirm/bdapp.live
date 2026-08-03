@@ -7,6 +7,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoUpload from '../components/PhotoUpload';
 import { normalizeApiError } from '../utils/errorUtils';
+import { transliterateBangla } from '../utils/helpers';
 
 export default function AddTeacherPage() {
   const { id } = useParams();
@@ -252,12 +253,32 @@ export default function AddTeacherPage() {
           </Stack>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField label="First Name" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} helperText={formErrors.first_name || 'Provide either a username or first name'} error={!!formErrors.first_name} fullWidth />
+            <TextField
+              label="First Name"
+              value={form.first_name}
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, first_name: val, first_name_en: transliterateBangla(val) });
+              }}
+              helperText={formErrors.first_name || 'Provide either a username or first name'}
+              error={!!formErrors.first_name}
+              fullWidth
+            />
             <TextField label="First Name (English)" value={form.first_name_en} onChange={e => setForm({ ...form, first_name_en: e.target.value })} fullWidth />
           </Stack>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField label="Last Name" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} fullWidth error={!!formErrors.last_name} helperText={formErrors.last_name || ''} />
+            <TextField
+              label="Last Name"
+              value={form.last_name}
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, last_name: val, last_name_en: transliterateBangla(val) });
+              }}
+              fullWidth
+              error={!!formErrors.last_name}
+              helperText={formErrors.last_name || ''}
+            />
             <TextField label="Last Name (English)" value={form.last_name_en} onChange={e => setForm({ ...form, last_name_en: e.target.value })} fullWidth />
           </Stack>
 
@@ -276,7 +297,10 @@ export default function AddTeacherPage() {
             <TextField
               label="পদবী (Designation)"
               value={form.designation}
-              onChange={e => setForm({ ...form, designation: e.target.value })}
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, designation: val, designation_en: transliterateBangla(val) });
+              }}
               placeholder="e.g., Assistant Teacher, Lecturer, Demonstrator"
               error={!!formErrors.designation}
               helperText={formErrors.designation || 'Optional - শিক্ষকের পদবী'}

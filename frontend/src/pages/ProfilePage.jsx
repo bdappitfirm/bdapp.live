@@ -27,6 +27,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PhotoUpload from '../components/PhotoUpload';
 import { useToast } from '../components/Toast';
+import { transliterateBangla } from '../utils/helpers';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 
 export default function ProfilePage() {
@@ -120,7 +121,6 @@ export default function ProfilePage() {
         assigned_subject: profileData.assigned_subject || userData.assigned_subject || ''
       });
       
-      toast.success('Profile loaded successfully');
       setLoading(false);
     } catch (err) {
       console.error('Profile loading error:', err);
@@ -184,21 +184,29 @@ export default function ProfilePage() {
       // Handle different API response formats
       const userData = res.data.user || res.data;
       setUser(userData);
-      
-      toast.success('Photo uploaded successfully!');
     } catch (err) {
       console.error('Photo upload error:', err);
-      toast.error('Failed to upload photo: ' + (err.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    let updates = { [name]: value };
+
+    if (name === 'first_name') {
+      updates.first_name_en = transliterateBangla(value);
+    } else if (name === 'last_name') {
+      updates.last_name_en = transliterateBangla(value);
+    } else if (name === 'designation') {
+      updates.designation_en = transliterateBangla(value);
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      ...updates
+    }));
   };
   const handlePasswordChange = (e) => {
     setPasswordForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -266,7 +274,6 @@ export default function ProfilePage() {
         setUser(userData);
         setEditing(false);
         setFormErrors({});
-        toast.success('Profile created successfully!');
       } else {
         // Update existing profile (user fields)
         let uname = formData.username;
@@ -305,27 +312,23 @@ export default function ProfilePage() {
         // Change password if provided
         if (passwordForm.new_password) {
           if (!passwordForm.old_password) {
-            toast.error('পুরানো পাসওয়ার্ড দিন');
+            // silent
           } else if (passwordForm.new_password !== passwordForm.confirm_password) {
-            toast.error('নতুন পাসওয়ার্ড মিলছে না');
+            // silent
           } else {
             try {
               const pres = await api.post('/api/users/password/change/', passwordForm);
               if (pres.data?.success) {
-                toast.success('পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে');
                 setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });
-              } else {
-                toast.error(pres.data?.error || 'পাসওয়ার্ড পরিবর্তন ব্যর্থ');
               }
             } catch (e) {
-              toast.error(e.response?.data?.error || 'পাসওয়ার্ড পরিবর্তন ব্যর্থ');
+              // silent
             }
           }
         }
 
         setEditing(false);
         setFormErrors({});
-        toast.success('প্রোফাইল আপডেট হয়েছে');
       }
       
       // Reload profile to ensure we have the latest data
