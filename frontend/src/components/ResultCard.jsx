@@ -7,7 +7,7 @@ import { getMediaUrl } from '../utils/media';
 
 const toBn = (v) => String(v ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
 
-const CLASS_9_10_REGEX = /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10/i;
+const CLASS_9_10_REGEX = /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10|৯ম|১০ম/i;
 
 const getSubjectOrderWeight = (r, isOptional, group = '') => {
   if (!r) return 9999;
@@ -328,7 +328,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         if (spec.mcq > 0 && m < Math.round(spec.mcq * 0.33)) isPassed = false;
         if (spec.pr > 0 && p < Math.round(spec.pr * 0.33)) isPassed = false;
       }
-      return { ...r, total_obtained: obtained, total_possible: totalPossible, grade: isPassed ? computeGrade(percentage) : 'F', gpa: isPassed ? computeGpa(percentage).toFixed(2) : '0.00', is_passed: isPassed, is_optional_detected: isOptionalSubject(r, student, isClassNineOrTen) };
+      return { ...r, total_obtained: obtained, total_possible: totalPossible, grade: isPassed ? computeGrade(percentage) : 'F', gpa: isPassed ? computeGpa(percentage).toFixed(2) : '0.00', is_passed: isPassed, is_optional_detected: isOptionalSubject(r, student, isClassNineOrTen), spec };
     });
   }, [rawResults, isClassNineOrTen, student]);
 
@@ -363,10 +363,12 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         const scienceOnly = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর', 'bgs', 'বাংলাদেশ ও বিশ্ব'];
         const commerceOnly = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়'];
         const artsOnly = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি'];
-        const commonScience = ['general science', 'বিজ্ঞান'];
+
+        // Exact match for general science to avoid filtering out 'পদার্থ বিজ্ঞান'
+        const isGeneralScience = (name === 'science' || name === 'বিজ্ঞান' || name === 'general science' || name === 'সাধারণ বিজ্ঞান');
 
         if (group.includes('science') || group.includes('বিজ্ঞান')) {
-            if (listMatch(name, commerceOnly.concat(artsOnly).concat(commonScience))) return false;
+            if (listMatch(name, commerceOnly.concat(artsOnly)) || isGeneralScience) return false;
         } else if (group.includes('commerce') || group.includes('business') || group.includes('ব্যবসায়')) {
             if (listMatch(name, scienceOnly.concat(artsOnly))) return false;
         } else if (group.includes('arts') || group.includes('humanities') || group.includes('মানবিক')) {
@@ -397,14 +399,14 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         const sumObtained = papers.bangla.reduce((s, r) => s + r.total_obtained, 0);
         const totalPossible = papers.bangla.reduce((s, r) => s + r.total_possible, 0);
         const allPassed = papers.bangla.every(r => r.is_passed);
-        merged.push({ id: 'merged-bangla', subject: { name: 'Bangla (1st + 2nd)' }, written_marks: papers.bangla.map(r => r.written_marks || '0').join('+'), mcq_marks: papers.bangla.map(r => r.mcq_marks || '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: Math.round(sumObtained), total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed });
+        merged.push({ id: 'merged-bangla', subject: { name: 'Bangla (1st + 2nd)' }, written_marks: papers.bangla.map(r => r.written_marks || '0').join('+'), mcq_marks: papers.bangla.map(r => r.mcq_marks || '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: Math.round(sumObtained), total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 1, pr: 0 } });
         papers.bangla.forEach(r => handledSubjectIds.add(r.subject?.id || r.subject));
       }
       if (papers.english.length > 0) {
         const sumObtained = papers.english.reduce((s, r) => s + r.total_obtained, 0);
         const totalPossible = papers.english.reduce((s, r) => s + r.total_possible, 0);
         const allPassed = papers.english.every(r => r.is_passed);
-        merged.push({ id: 'merged-english', subject: { name: 'English (1st + 2nd)' }, written_marks: papers.english.map(r => r.written_marks || '0').join('+'), mcq_marks: papers.english.map(r => r.mcq_marks || '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: Math.round(sumObtained), total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed });
+        merged.push({ id: 'merged-english', subject: { name: 'English (1st + 2nd)' }, written_marks: papers.english.map(r => r.written_marks || '0').join('+'), mcq_marks: papers.english.map(r => r.mcq_marks || '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: Math.round(sumObtained), total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 0, pr: 0 } });
         papers.english.forEach(r => handledSubjectIds.add(r.subject?.id || r.subject));
       }
       mainResults.forEach(r => { if (!handledSubjectIds.has(r.subject?.id || r.subject)) merged.push(r); });
@@ -598,9 +600,9 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                     <TableRow key={r.id || idx}>
                       <TableCell align="center">{idx + 1}</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>{sName}</TableCell>
-                      <TableCell align="center">{formatMark(r.written_marks)}</TableCell>
-                      <TableCell align="center">{formatMark(r.mcq_marks)}</TableCell>
-                      <TableCell align="center">{formatMark(r.practical_marks)}</TableCell>
+                      <TableCell align="center">{r.spec?.cq > 0 ? formatMark(r.written_marks) : '--'}</TableCell>
+                      <TableCell align="center">{r.spec?.mcq > 0 ? formatMark(r.mcq_marks) : '--'}</TableCell>
+                      <TableCell align="center">{r.spec?.pr > 0 ? formatMark(r.practical_marks) : '--'}</TableCell>
                       <TableCell align="center" sx={{ fontWeight: 'bold' }}>{formatMark(r.display_total || Math.round(r.total_obtained))}</TableCell>
                       <TableCell align="center" sx={{ color: r.grade === 'F' ? 'red' : 'inherit', fontWeight: 'bold' }}>{r.grade}</TableCell>
                       <TableCell align="center" sx={{ fontWeight: 'bold' }}>{n(r.gpa)}</TableCell>
