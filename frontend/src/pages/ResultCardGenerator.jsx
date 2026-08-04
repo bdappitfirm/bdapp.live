@@ -161,11 +161,16 @@ export default function ResultCardGenerator() {
     const qExam = qs.get('exam_type');
     const qExamId = qs.get('exam');
     const qSection = qs.get('section');
+    const qYear = qs.get('year') || qs.get('academic_year');
     const qLogo = qs.get('logo') || qs.get('school_logo');
     const qAuto = qs.get('auto');
     let timeout;
     (async () => {
       try {
+        if (qYear) {
+          const numYear = parseInt(qYear, 10);
+          if (!Number.isNaN(numYear)) setSelectedYear(numYear);
+        }
         if (qClass) {
           const numClass = parseInt(qClass, 10);
           setSelectedClass(Number.isNaN(numClass) ? '' : numClass);
@@ -228,7 +233,8 @@ export default function ResultCardGenerator() {
           }
         }
         if (qAuto === '1' && qClass && qStudent && (qExam || qExamId)) {
-          timeout = setTimeout(() => handleSearch(qExamId || null), 200);
+          const autoYear = qYear ? parseInt(qYear, 10) : selectedYear;
+          timeout = setTimeout(() => handleSearch(qExamId || null, null, autoYear), 200);
         }
       } catch (e) {
         console.warn('Deep link setup failed:', e);
@@ -749,12 +755,13 @@ export default function ResultCardGenerator() {
     return 'F';
   };
 
-  const handleSearch = async (examIdOverride = null, targetLang = null) => {
+  const handleSearch = async (examIdOverride = null, targetLang = null, yearOverride = null) => {
     if (!selectedStudent || (!selectedExamType && !examIdOverride)) {
       toast.warning('Please select class, student, and exam type');
       return;
     }
 
+    const effectiveYear = yearOverride || selectedYear;
     setLoading(true);
     setForceLanguage(targetLang);
     setTranslatedData(null);
@@ -797,7 +804,7 @@ export default function ResultCardGenerator() {
         } else {
           // Fallback 2: derive exam from student's existing results
           try {
-            const rs = await scopedGet('/api/results/results/', id, { student: student.id, year: selectedYear, page_size: 2000 }, { timeout: 20000 });
+            const rs = await scopedGet('/api/results/results/', id, { student: student.id, year: effectiveYear, page_size: 2000 }, { timeout: 20000 });
             let arr = Array.isArray(rs.data) ? rs.data : (rs.data?.results || []);
             if (!arr.length) {
               const rsNoYear = await scopedGet('/api/results/results/', id, { student: student.id, page_size: 2000 }, { timeout: 20000 });
@@ -822,8 +829,8 @@ export default function ResultCardGenerator() {
             setStudentData(null);
             setResults([]);
             setOverallResult(null);
-            setNoYearMessage(`দুঃখিত ${selectedYear} সালের রেজাল্ট এই স্কুলে এখনও ইনপুট দেওয়া হয়নি, দয়া করে অত্র বিদ্যালয়ের প্রধান শিক্ষক অথবা এ্যাডমিনের সাথে যোগাযোগ করুন। ধন্যবাদ।`);
-            toast.error(`দুঃখিত ${selectedYear} সালের রেজাল্ট পাওয়া যায়নি`);
+            setNoYearMessage(`দুঃখিত ${effectiveYear} সালের রেজাল্ট এই স্কুলে এখনও ইনপুট দেওয়া হয়নি, দয়া করে অত্র বিদ্যালয়ের প্রধান শিক্ষক অথবা এ্যাডমিনের সাথে যোগাযোগ করুন। ধন্যবাদ।`);
+            toast.error(`দুঃখিত ${effectiveYear} সালের রেজাল্ট পাওয়া যায়নি`);
             setLoading(false);
             return;
           }
@@ -1840,7 +1847,7 @@ export default function ResultCardGenerator() {
               margin: 0 !important;
             }
 
-            .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiSnackbar-root, .MuiAlert-root, .MuiTabs-root {
+            .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiSnackbar-root, .MuiAlert-root, .MuiTabs-root, .MuiBackdrop-root {
               display: none !important;
             }
 
@@ -1867,40 +1874,30 @@ export default function ResultCardGenerator() {
             }
 
             .single-card-view {
-              display: flex !important;
-              justify-content: center !important;
-              align-items: flex-start !important;
+              display: block !important;
               margin: 0 !important;
               padding: 0 !important;
               width: 100% !important;
-              min-height: 290mm !important;
               height: auto !important;
-              max-height: none !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
               position: relative !important;
               overflow: visible !important;
-              orphans: 3 !important;
-              widows: 3 !important;
-              box-sizing: border-box !important;
             }
 
             .bulk-sheet, .bulk-card-wrap {
               display: block !important;
               margin: 0 !important;
               padding: 0 !important;
-              width: 215mm !important;
-              min-height: 290mm !important;
-              height: 290mm !important;
-              max-height: 290mm !important;
+              width: 100% !important;
+              height: calc(280mm - 5px) !important;
+              max-height: calc(280mm - 5px) !important;
               page-break-after: always !important;
               break-after: page !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
               position: relative !important;
               overflow: hidden !important;
-              orphans: 3 !important;
-              widows: 3 !important;
               box-sizing: border-box !important;
             }
 
@@ -1909,26 +1906,22 @@ export default function ResultCardGenerator() {
               filter: none !important;
               outline: none !important;
               margin: 0 auto !important;
-              width: 215mm !important;
-              height: 290mm !important;
-              min-height: 290mm !important;
-              max-height: 290mm !important;
+              width: calc(200mm + 55px) !important;
+              height: calc(280mm - 5px) !important;
               display: block !important;
-              transform: none !important;
               position: relative !important;
-              left: 0 !important;
-              top: 0 !important;
               overflow: hidden !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
               box-sizing: border-box !important;
+              visibility: visible !important;
             }
 
             .result-card-signatures {
               position: absolute !important;
               left: 0 !important;
               right: 0 !important;
-              bottom: 5mm !important;
+              bottom: 15mm !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
               break-before: avoid-page !important;

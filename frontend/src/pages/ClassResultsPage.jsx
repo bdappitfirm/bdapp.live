@@ -3,6 +3,9 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Paper, Stack, Button, TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress, Backdrop } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PrintIcon from '@mui/icons-material/Print';
+import DownloadIcon from '@mui/icons-material/Download';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import api from '../utils/api';
 import { scopedGet } from '../utils/schoolApi';
@@ -13,8 +16,10 @@ const UNWANTED_SUBJECTS = [];
 
 const CO_CURRICULAR_SUBJECTS = [
   'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'Physical Education', 'Physical Education and Health',
-  'ক্যারিয়ার শিক্ষা', 'ক্যারিয়ার শিক্ষা', 'Career Education', 'Word Collection Achievement Test', 'WCAT',
-  'বই পড়া', 'বই পড়া'
+  'ক্যারিয়ার শিক্ষা', 'ক্যারিয়ার শিক্ষা', 'Career Education', 'ক্যারিয়ার', 'ক্যারিয়ার',
+  'Word Collection Achievement Test', 'WCAT', 'Word Achievement',
+  'বই পড়া', 'বই পড়া', 'চারু ও কারুকলা', 'Arts and Crafts', 'Continuous Assessment', 'ধারাবাহিক মূল্যায়ন', 'Life and Work',
+  'Work and Life', 'Work and Life Education', 'কর্ম ও জীবনমুখী শিক্ষা', 'কর্ম ও জীবনমুখী'
 ];
 
 export default function ClassResultsPage() {
@@ -35,6 +40,7 @@ export default function ClassResultsPage() {
   const [loading, setLoading] = useState(false);
   const [overallTotals, setOverallTotals] = useState(new Map());
   const [noYearMessage, setNoYearMessage] = useState('');
+  const [downloading, setDownloadInProgress] = useState(false);
 
   const updateUrl = useCallback((cls, sec, type, exam, year) => {
     const params = new URLSearchParams();
@@ -80,6 +86,14 @@ export default function ClassResultsPage() {
 
   const normalizeExamType = (t, name = '') => {
     const n = String(name || '').toLowerCase();
+    const type = String(t || '').toLowerCase();
+
+    // For Class 9/10, Pre-Test is effectively Half-Yearly
+    const isNineTen = isClassNineOrTen;
+    if (isNineTen) {
+        if (/pre-test|প্রাক-নির্বাচনী/.test(n) || type === 'pre_test') return 'half_yearly';
+    }
+
     if (/বার্ষিক|annual|yearly|final/.test(n)) return 'annual';
     if (/অর্ধ|half|mid|semi/.test(n)) return 'half_yearly';
     if (/টার্মিনাল|terminal|term/.test(n)) return 'terminal';
@@ -95,14 +109,21 @@ export default function ClassResultsPage() {
         'test': 'test',
         'pre_test': 'pre_test'
     };
-    return typeMap[String(t).toLowerCase()] || 'annual';
+    return typeMap[type] || 'annual';
   };
 
   const isClassNineOrTen = useMemo(() => {
     const cls = classrooms.find(c => String(c.id) === String(selectedClass));
     if (!cls) return false;
     const text = String(cls.name || '').toLowerCase();
-    return /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10/.test(text);
+    return /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10|৯ম|১০ম/.test(text);
+  }, [selectedClass, classrooms]);
+
+  const isClassTen = useMemo(() => {
+    const cls = classrooms.find(c => String(c.id) === String(selectedClass));
+    if (!cls) return false;
+    const text = String(cls.name || '').toLowerCase();
+    return /দশম|ssc|\b10\b|\bten\b|class\s*10|১০ম/.test(text);
   }, [selectedClass, classrooms]);
 
   const getStudentResultsMap = useCallback((sid) => {
@@ -136,13 +157,17 @@ export default function ClassResultsPage() {
       const pr = parseFloat(r.practical_marks) || 0;
       const total = w + mcq + pr; // Recalculate to reflect latest edits
 
+      const hasMarks = (w !== null && w !== undefined && w !== '') ||
+                       (mcq !== null && mcq !== undefined && mcq !== '') ||
+                       (pr !== null && pr !== undefined && pr !== '');
+
       const parts = [];
-      if (w > 0) parts.push(w);
-      if (mcq > 0) parts.push(mcq);
-      if (pr > 0) parts.push(pr);
+      if (w !== '' && w !== null) parts.push(w);
+      if (mcq !== '' && mcq !== null) parts.push(mcq);
+      if (pr !== '' && pr !== null) parts.push(pr);
       const components = parts.length > 0 ? `(${parts.join('+')})` : '';
 
-      const finalVal = total > 0 ? `${Math.round(total)}${components}` : 'Absent';
+      const finalVal = hasMarks ? `${Math.round(total)}${components}` : 'Absent';
       m.set(key, { total, display: finalVal, grade: r.grade, is_passed: r.is_passed });
     }
 
@@ -151,13 +176,15 @@ export default function ClassResultsPage() {
         if (papers.bangla.length > 0) {
             const sum = papers.bangla.reduce((s, r) => s + ((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)), 0);
             const compStr = papers.bangla.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0))).join('+');
-            const displayVal = sum > 0 ? `${Math.round(sum)}(${compStr})` : 'Absent';
+            const hasAnyMarks = papers.bangla.some(r => (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
+            const displayVal = hasAnyMarks ? `${Math.round(sum)}(${compStr})` : 'Absent';
             m.set('merged-bangla', { total: sum, display: displayVal });
         }
         if (papers.english.length > 0) {
             const sum = papers.english.reduce((s, r) => s + ((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)), 0);
             const compStr = papers.english.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0))).join('+');
-            const displayVal = sum > 0 ? `${Math.round(sum)}(${compStr})` : 'Absent';
+            const hasAnyMarks = papers.english.some(r => (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
+            const displayVal = hasAnyMarks ? `${Math.round(sum)}(${compStr})` : 'Absent';
             m.set('merged-english', { total: sum, display: displayVal });
         }
     }
@@ -167,8 +194,8 @@ export default function ClassResultsPage() {
 
   useEffect(() => {
     if (!selectedClass) { setExaminations([]); setResultsByStudent(new Map()); return; }
-    // Removed setLoading(true) for faster feel
-    scopedGet('/api/results/examinations/', id, { classroom: selectedClass, page_size: 1000 }).then(async res => {
+    setLoading(true);
+    scopedGet('/api/results/examinations/', id, { classroom: selectedClass, year: selectedYear, page_size: 1000 }).then(async res => {
         let all = Array.isArray(res.data) ? res.data : (res.data?.results || []);
         const filterType = selectedExamType || 'all';
         let exams = filterType === 'all' ? all : all.filter(e => normalizeExamType(e.exam_type, e.name) === filterType);
@@ -177,16 +204,70 @@ export default function ClassResultsPage() {
 
         const byStudent = new Map();
         try {
-            // Broad fetch: get results for this class
-            const rRes = await scopedGet(`/api/results/results/`, id, {
-                classroom: selectedClass,
-                page_size: 5000
-            });
-            let arr = rRes.data.results || rRes.data || [];
+            // Optimized multi-page fetch: send year + section + exam filters to backend to minimize payload
+            const fetchAllPages = async () => {
+                let allItems = [];
+                let page = 1;
+                let hasNext = true;
+                const maxPages = 5; // Year+section filtering reduces payload drastically
 
-            // Only keep results that belong to the class
+                while (hasNext && page <= maxPages) {
+                    const rParams = {
+                        classroom: selectedClass,
+                        page: page,
+                        page_size: 1000
+                    };
+                    if (selectedYear) rParams.year = selectedYear;
+                    if (selectedSection) rParams.section = selectedSection;
+                    if (selectedExamId) rParams.examination = selectedExamId;
+
+                    const rRes = await scopedGet(`/api/results/results/`, id, rParams, { timeout: 60000 });
+                    const data = rRes.data;
+                    const items = Array.isArray(data) ? data : (data.results || []);
+                    allItems = allItems.concat(items);
+
+                    if (data.next && items.length > 0 && items.length >= (rParams.page_size || 1000)) {
+                        page++;
+                    } else {
+                        hasNext = false;
+                    }
+                }
+
+                // Fallback: if strict year+section returned 0 and we had filters, retry ONE PAGE WITHOUT year+section
+                if (allItems.length === 0 && (selectedYear || selectedSection || selectedExamId)) {
+                    try {
+                        const fbParams = { classroom: selectedClass, page: 1, page_size: 1000 };
+                        if (selectedExamId) fbParams.examination = selectedExamId;
+                        const fbRes = await scopedGet('/api/results/results/', id, fbParams, { timeout: 45000 });
+                        const fbData = fbRes.data;
+                        allItems = Array.isArray(fbData) ? fbData : (fbData.results || []);
+                    } catch (_) { /* ignore fallback error */ }
+                }
+                return allItems;
+            };
+
+            let arr = await fetchAllPages();
+
+            // Filter by year on frontend to remain responsive to year changes
+            if (selectedYear) {
+                const yearStr = String(selectedYear);
+                arr = arr.filter(r => {
+                    const ex = r.examination || {};
+                    const exYear = String(ex.year || ex.academic_year || '');
+                    const dateYear = ex.exam_date ? String(new Date(ex.exam_date).getFullYear()) : '';
+
+                    // If no year info, keep it (to be safe)
+                    if (!exYear && !dateYear) return true;
+
+                    return exYear === yearStr || dateYear === yearStr ||
+                           (ex.name && ex.name.includes(yearStr));
+                });
+            }
+
+            // Group by student
             for (const r of arr) {
-                const sid = String(typeof r.student === 'object' ? r.student?.id : r.student);
+                const sid = String(r.student?.id || r.student || '');
+                if (!sid || sid === 'undefined') continue;
                 if (!byStudent.has(sid)) byStudent.set(sid, []);
                 byStudent.get(sid).push(r);
             }
@@ -239,13 +320,29 @@ export default function ClassResultsPage() {
     let hasBangla = false;
     let hasEnglish = false;
 
-    // Get current classroom/section group
+    // Detect group from: (1) section name, (2) classroom name, (3) MAJORITY of students' group field
     const cls = classrooms.find(c => String(c.id) === String(selectedClass));
     const sec = sections.find(s => String(s.id) === String(selectedSection));
     const groupName = (String(cls?.name || '') + ' ' + String(sec?.name || '')).toLowerCase();
-    const isScienceGroup = groupName.includes('science') || groupName.includes('বিজ্ঞান');
-    const isCommerceGroup = groupName.includes('commerce') || groupName.includes('business') || groupName.includes('ব্যবসায়') || groupName.includes('business studies');
-    const isHumanitiesGroup = groupName.includes('arts') || groupName.includes('humanities') || groupName.includes('মানবিক');
+    let isScienceGroup = groupName.includes('science') || groupName.includes('বিজ্ঞান');
+    let isCommerceGroup = groupName.includes('commerce') || groupName.includes('business') || groupName.includes('ব্যবসায়') || groupName.includes('business studies');
+    let isHumanitiesGroup = groupName.includes('arts') || groupName.includes('humanities') || groupName.includes('মানবিক');
+
+    if (!isScienceGroup && !isCommerceGroup && !isHumanitiesGroup && students.length > 0) {
+        const gCounts = { science: 0, commerce: 0, humanities: 0 };
+        for (const s of students) {
+            const g = String(s.student_group || s.group || '').toLowerCase();
+            if (g === 'science' || g.includes('বিজ্ঞান')) gCounts.science++;
+            else if (g === 'commerce' || g === 'business' || g.includes('ব্যবসায়') || g.includes('বাণিজ্য')) gCounts.commerce++;
+            else if (g === 'arts' || g === 'humanities' || g.includes('মানবিক') || g.includes('কলা')) gCounts.humanities++;
+        }
+        const mx = Math.max(gCounts.science, gCounts.commerce, gCounts.humanities);
+        if (mx > 0) {
+            if (mx === gCounts.science) isScienceGroup = true;
+            else if (mx === gCounts.commerce) isCommerceGroup = true;
+            else if (mx === gCounts.humanities) isHumanitiesGroup = true;
+        }
+    }
 
     for (const [sid, arr] of resultsByStudent.entries()) {
       if (!currentStudentIds.has(sid)) continue;
@@ -287,21 +384,21 @@ export default function ClassResultsPage() {
     const getWeight = (name) => {
         const clean = name.toLowerCase();
 
-        // Priority: Check BGS first to avoid matching "Bangla"
-        if (clean.includes('বাংলাদেশ') || clean.includes('bangladesh') || clean.includes('bgs')) {
-            if (isScienceGroup) return 60;
-            if (!isClassNineOrTen) return 60;
-            return 75; // Humanities/Commerce history/science logic
-        }
-
         if (clean === 'merged-bangla' || (clean.includes('বাংলা') && !clean.includes('বাংলাদেশ')) || (clean.includes('bangla') && !clean.includes('bangladesh'))) return 10;
-        if (clean === 'merged-english' || clean.includes('english') || clean.includes('ইংরেজি')) return 20;
+        if (clean === 'merged-english' || clean.includes('english') || clean.includes('ইংরেজি') || clean.includes('ইংরেজী')) return 20;
+
         if (clean.includes('গণিত') || clean.includes('math')) {
             if (clean.includes('উচ্চতর') || clean.includes('higher')) return 1000;
             return 30;
         }
         if (clean.includes('ইসলাম') || clean.includes('islam') || clean.includes('ধর্ম') || clean.includes('religion')) return 40;
         if (clean.includes('আইসিটি') || clean.includes('ict') || clean.includes('তথ্য')) return 50;
+
+        if (clean.includes('বাংলাদেশ') || clean.includes('bangladesh') || clean.includes('bgs')) {
+            if (isScienceGroup) return 60;
+            if (!isClassNineOrTen) return 60;
+            return 75;
+        }
 
         if (isScienceGroup) {
             if (clean.includes('পদার্থ') || clean.includes('physics')) return 70;
@@ -320,7 +417,7 @@ export default function ClassResultsPage() {
             }
         }
 
-        if (clean.includes('কৃষি') || clean.includes('agriculture') || clean.includes('গার্হস্থ্য') || clean.includes('home science') || clean.includes('উচ্চতর') || clean.includes('higher')) return 1000;
+        if (clean.includes('কৃষি') || clean.includes('agriculture') || clean.includes('গার্হস্থ্য') || clean.includes('home science')) return 1000;
         return 200;
     };
 
@@ -370,9 +467,9 @@ export default function ClassResultsPage() {
         const fullName = `${fn} ${ln}`.trim();
 
         const isTC = fullName === 'TC' || fn === 'TC' || ln === 'TC' || username === 'TC';
-        const hasNoName = !fn && !ln;
+        const hasNoInfo = !fn && !ln && !username;
 
-        return !isTC && !hasNoName;
+        return !isTC && !hasNoInfo;
     });
     list.sort((a, b) => {
         const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
@@ -383,39 +480,74 @@ export default function ClassResultsPage() {
     return list;
   }, [students]);
 
+  const handleDownloadPDF = async () => {
+    const tableEl = document.querySelector('.cr-table-wrap');
+    if (!tableEl) return;
+    setDownloadInProgress(true);
+    try {
+      const originalScrollY = window.scrollY;
+      window.scrollTo(0, 0);
+
+      // Add a temporary class to force print styles during capture
+      document.body.classList.add('pdf-capture-active');
+
+      const canvas = await html2canvas(tableEl, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 1400 // Landscape-ish width
+      });
+
+      document.body.classList.remove('pdf-capture-active');
+      window.scrollTo(0, originalScrollY);
+
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5;
+      const imgWidth = pdfWidth - (margin * 2);
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = margin;
+
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight + margin;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+
+      const className = classrooms.find(c => String(c.id) === String(selectedClass))?.name || 'Class';
+      const sectionName = sections.find(s => String(s.id) === String(selectedSection))?.name || 'All';
+      pdf.save(`Results_${className}_${sectionName}_${selectedYear}.pdf`);
+    } catch (err) {
+      console.error('PDF Error:', err);
+    } finally {
+      setDownloadInProgress(false);
+    }
+  };
+
   return (
     <Box className="cr-print-container" sx={{ p: { xs: 1, sm: 3 }, "@media print": { p: 0, m: 0 } }}>
-      {/* Print-only Header */}
-      <Box className="print-only cr-print-only" sx={{ display: 'none', flexDirection: 'column', alignItems: 'center', mb: 1, mt: 0, borderBottom: '1px solid #000', pb: 1, width: '100%' }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ width: '100%', px: 1 }}>
-          {schoolInfo?.logo ? (
-            <Box component="img" src={schoolInfo.logo} sx={{ height: '20mm', objectFit: 'contain' }} />
-          ) : <Box sx={{ width: '20mm' }} />}
-
-          <Box sx={{ textAlign: 'center', flex: 1, px: 1 }}>
-            <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#000', mb: 0.2, fontSize: '1.2rem !important', lineHeight: 1.1 }}>
-              {schoolInfo?.bn_name || schoolInfo?.name}
-            </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 'medium', color: '#333', fontSize: '0.9rem !important' }}>
-              শ্রেণিভিত্তিক ফলাফল (Class Results)
-            </Typography>
-            <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 'bold', fontSize: '0.8rem !important' }}>
-              শ্রেণি: {classrooms.find(c => String(c.id) === String(selectedClass))?.name || '---'} |
-              শাখা: {sections.find(s => String(s.id) === String(selectedSection))?.name || 'সব'} |
-              সাল: {selectedYear}
-            </Typography>
-          </Box>
-
-          {schoolInfo?.logo ? (
-            <Box component="img" src={schoolInfo.logo} sx={{ height: '20mm', objectFit: 'contain' }} />
-          ) : <Box sx={{ width: '20mm' }} />}
-        </Stack>
-      </Box>
-
       <Stack className="no-print" direction={{ xs: 'column', sm: 'row' }} alignItems="center" justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
         <Typography variant="h4"><AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />ক্লাস রেজাল্টস</Typography>
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>ব্যাক</Button>
+          <Button
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            onClick={handleDownloadPDF}
+            disabled={downloading || !sortedStudents.length}
+            color="secondary"
+          >
+            {downloading ? 'ডাউনলোড হচ্ছে...' : 'পিডিএফ ডাউনলোড'}
+          </Button>
           <Button variant="contained" startIcon={<PrintIcon />} onClick={() => window.print()}>প্রিন্ট</Button>
         </Stack>
       </Stack>
@@ -435,7 +567,7 @@ export default function ClassResultsPage() {
       </Paper>
 
       {sortedStudents.length > 0 && (
-          <Box sx={{ width: '100%', overflow: { xs: 'hidden', print: 'visible' }, display: { print: 'block' } }}>
+          <Box className="cr-table-wrap" sx={{ width: '100%', overflow: { xs: 'hidden', print: 'visible' }, display: { print: 'block' } }}>
             <TableContainer component={Paper} sx={{
               boxShadow: 'none',
               overflowX: 'auto',
@@ -448,17 +580,53 @@ export default function ClassResultsPage() {
                 tableLayout: 'fixed'
               }}>
                 <colgroup><col style={{ width: '5%' }} /><col style={{ width: '13%' }} /><col style={{ width: '6%' }} /><col style={{ width: '6%' }} />{displaySubjects.map((_, i) => (<col key={i} style={{ width: `${70 / displaySubjects.length}%` }} />))}</colgroup>
-                <TableHead>
-                  <TableRow sx={{ bgcolor: 'primary.main', backgroundImage: 'none' }}>
-                    <TableCell sx={{ color: 'white', textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }}>রোল</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }}>নাম</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }} align="center">মোট</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }} align="center">মেধাস্থান</TableCell>
+                <TableHead sx={{ display: 'table-header-group', "@media print": { display: 'table-header-group !important' } }}>
+                  {/* Print-only School Header Row within TableHead to repeat on every page */}
+                  <TableRow className="print-only" sx={{ display: 'none', "@media print": { display: 'table-row !important' } }}>
+                    <TableCell colSpan={displaySubjects.length + 4} sx={{ border: 'none !important', p: 0, pb: 1 }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', mb: 1 }}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ width: '100%', px: 1 }}>
+                                {schoolInfo?.logo ? (
+                                    <Box component="img" src={schoolInfo.logo} sx={{ height: '18mm', objectFit: 'contain' }} />
+                                ) : <Box sx={{ width: '18mm' }} />}
+
+                                <Box sx={{ textAlign: 'center', flex: 1, px: 1 }}>
+                                    <Typography sx={{ fontWeight: 900, color: '#000', fontSize: '20px !important', lineHeight: 1.2 }}>
+                                        {schoolInfo?.bn_name || schoolInfo?.name || 'স্কুলের নাম'}
+                                    </Typography>
+                                        <Typography sx={{ fontWeight: 'bold', color: '#000', fontSize: '16px !important', mt: 0.1 }}>
+                                        শ্রেণি ভিত্তিক ফলাফল ({
+                                          selectedExamId ? (examinations.find(e => String(e.id) === String(selectedExamId))?.name || (isClassTen ? 'প্রাক-নির্বাচনী' : 'অর্ধ বার্ষিক')) :
+                                          (selectedExamType === 'all' ? (isClassTen ? `প্রাক-নির্বাচনী-${selectedYear}` : `অর্ধ বার্ষিক-${selectedYear}`) :
+                                           (selectedExamType === 'half_yearly' ? (isClassTen ? `প্রাক-নির্বাচনী-${selectedYear}` : `অর্ধবার্ষিক পরীক্ষা-${selectedYear}`) :
+                                            (selectedExamType === 'annual' ? `বার্ষিক পরীক্ষা-${selectedYear}` :
+                                             (selectedExamType === 'test' ? `টেস্ট পরীক্ষা-${selectedYear}` :
+                                              (selectedExamType === 'terminal' ? `টার্মিনাল পরীক্ষা-${selectedYear}` : (isClassTen ? `প্রাক-নির্বাচনী-${selectedYear}` : `অর্ধ বার্ষিক-${selectedYear}`))))))
+                                        })
+                                    </Typography>
+                                    <Typography sx={{ fontWeight: 'bold', fontSize: '12px !important', mt: 0.3, borderBottom: '1.5px solid #000', pb: 0.5, display: 'inline-block' }}>
+                                        শ্রেণি : {classrooms.find(c => String(c.id) === String(selectedClass))?.name || '---'} |
+                                        শাখা : {sections.find(s => String(s.id) === String(selectedSection))?.name || 'সব'}
+                                    </Typography>
+                                </Box>
+
+                                {schoolInfo?.logo ? (
+                                    <Box component="img" src={schoolInfo.logo} sx={{ height: '18mm', objectFit: 'contain' }} />
+                                ) : <Box sx={{ width: '18mm' }} />}
+                            </Stack>
+                        </Box>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow sx={{ bgcolor: '#f0f0f0', backgroundImage: 'none', "@media print": { bgcolor: '#f0f0f0 !important' } }}>
+                    <TableCell sx={{ color: 'black', textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }}>রোল</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }}>নাম</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }} align="center">মোট</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }} align="center">মেধাস্থান</TableCell>
                     {displaySubjects.map(s => (
                       <TableCell
                         key={s.key}
                         sx={{
-                          color: 'white',
+                          color: 'black',
                           textAlign: 'center',
                           fontWeight: 'bold',
                           fontSize: '0.75rem',
@@ -486,9 +654,41 @@ export default function ClassResultsPage() {
                         <TableCell align="center">{meritRanks.get(String(stu.id)) || '--'}</TableCell>
                         {displaySubjects.map(sub => {
                           const r = resMap.get(sub.key);
-                          if (!r) return <TableCell key={sub.key} align="center">Absent</TableCell>;
+                          if (!r) {
+                            // Logic for religion and optional subjects:
+                            // Hide 'Absent' if student has marks in an alternative subject
+                            const keys = Array.from(resMap.keys());
+                            const lowSub = sub.key.toLowerCase();
+
+                            const isReligion = lowSub.includes('ইসলাম') || lowSub.includes('islam') ||
+                                             lowSub.includes('হিন্দু') || lowSub.includes('hindu') ||
+                                             lowSub.includes('ধর্ম') || lowSub.includes('religion');
+
+                            const isOptional = lowSub.includes('কৃষি') || lowSub.includes('agriculture') ||
+                                             lowSub.includes('উচ্চতর') || lowSub.includes('higher') ||
+                                             lowSub.includes('গার্হস্থ্য') || lowSub.includes('home science');
+
+                            if (isReligion) {
+                                const hasOtherReligion = keys.some(k =>
+                                    (k.includes('ইসলাম') || k.includes('islam') || k.includes('হিন্দু') || k.includes('hindu') || k.includes('ধর্ম') || k.includes('religion')) &&
+                                    k !== lowSub
+                                );
+                                if (hasOtherReligion) return <TableCell key={sub.key} align="center">--</TableCell>;
+                            }
+
+                            if (isOptional) {
+                                const hasOtherOptional = keys.some(k =>
+                                    (k.includes('কৃষি') || k.includes('agriculture') || k.includes('উচ্চতর') || k.includes('higher') || k.includes('গার্হস্থ্য') || k.includes('home science')) &&
+                                    k !== lowSub
+                                );
+                                if (hasOtherOptional) return <TableCell key={sub.key} align="center">--</TableCell>;
+                            }
+
+                            return <TableCell key={sub.key} align="center" sx={{ color: 'red' }}>Absent</TableCell>;
+                          }
+                          const isAbs = String(r.display || '').includes('Absent');
                           return (
-                            <TableCell key={sub.key} align="center">
+                            <TableCell key={sub.key} align="center" sx={{ color: isAbs ? 'red' : 'inherit' }}>
                               {r.display || r.total || 'Absent'}
                             </TableCell>
                           );
@@ -561,24 +761,22 @@ export default function ClassResultsPage() {
             .cr-print-container table {
               width: 100% !important;
               border-collapse: collapse !important;
-              table-layout: auto !important;
+              table-layout: fixed !important;
               margin: 0 !important;
               padding: 0 !important;
               box-shadow: none !important;
               border: 0.5pt solid #000 !important;
-              page-break-inside: auto !important;
-              page-break-before: avoid !important;
-              break-before: avoid !important;
             }
 
-            .cr-print-container thead,
-            .cr-print-container tbody,
-            .cr-print-container tfoot {
+            .cr-print-container thead {
               display: table-header-group !important;
-              page-break-inside: auto !important;
-              break-inside: auto !important;
             }
-
+            .cr-print-container tbody {
+              display: table-row-group !important;
+            }
+            .cr-print-container tfoot {
+              display: table-footer-group !important;
+            }
             .cr-print-container tr {
               page-break-inside: avoid !important;
               page-break-after: auto !important;
@@ -588,7 +786,6 @@ export default function ClassResultsPage() {
             .cr-print-container th,
             .cr-print-container td {
               border: 0.5pt solid #000 !important;
-              color: black !important;
               padding: 4px 2px !important;
               font-size: 8pt !important;
               overflow: visible !important;
@@ -598,6 +795,8 @@ export default function ClassResultsPage() {
               line-height: 1.1 !important;
               page-break-inside: auto !important;
               break-inside: auto !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
 
             /* Name Column Specific */
@@ -616,6 +815,7 @@ export default function ClassResultsPage() {
 
             .cr-print-container th {
               background-color: #f0f0f0 !important;
+              color: black !important;
               font-weight: bold !important;
             }
 
@@ -632,6 +832,17 @@ export default function ClassResultsPage() {
               box-shadow: none !important;
               text-shadow: none !important;
             }
+          }
+
+          /* PDF Capture Styles to mimic print */
+          .pdf-capture-active .print-only {
+            display: table-row !important;
+          }
+          .pdf-capture-active .no-print {
+            display: none !important;
+          }
+          .pdf-capture-active .cr-table-wrap {
+            padding: 10px;
           }
         `}
       </style>

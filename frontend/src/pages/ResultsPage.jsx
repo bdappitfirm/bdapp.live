@@ -655,13 +655,13 @@ export default function ResultsPage() {
         for (const r of arr) {
           const sid = r.subject?.id || r.subject;
           if (sid) {
-            const w = parseFloat(r.written_marks);
-            const m = parseFloat(r.mcq_marks);
-            const p = parseFloat(r.practical_marks);
+            const w = r.written_marks;
+            const m = r.mcq_marks;
+            const p = r.practical_marks;
             next[sid] = {
-              written: w !== 0 ? w : '',
-              mcq: m !== 0 ? m : '',
-              practical: p !== 0 ? p : ''
+              written: (w !== null && w !== undefined && w !== '') ? parseFloat(w) : '',
+              mcq: (m !== null && m !== undefined && m !== '') ? parseFloat(m) : '',
+              practical: (p !== null && p !== undefined && p !== '') ? parseFloat(p) : ''
             };
           }
         }
@@ -708,9 +708,9 @@ export default function ResultsPage() {
     if (selectedStudent && selectedSubject && multiSubjectMarks[selectedSubject]) {
       const existing = multiSubjectMarks[selectedSubject];
     setMarks({
-      written: existing.written !== undefined && existing.written !== null && parseFloat(existing.written) !== 0 ? existing.written : '',
-      mcq: existing.mcq !== undefined && existing.mcq !== null && parseFloat(existing.mcq) !== 0 ? existing.mcq : '',
-      practical: existing.practical !== undefined && existing.practical !== null && parseFloat(existing.practical) !== 0 ? existing.practical : ''
+      written: existing.written !== undefined && existing.written !== null && existing.written !== '' ? existing.written : '',
+      mcq: existing.mcq !== undefined && existing.mcq !== null && existing.mcq !== '' ? existing.mcq : '',
+      practical: existing.practical !== undefined && existing.practical !== null && existing.practical !== '' ? existing.practical : ''
     });
     }
   }, [selectedStudent, selectedSubject, multiSubjectMarks]);
@@ -728,13 +728,13 @@ export default function ResultsPage() {
       for (const r of arr) {
         const sid = r.student?.id || r.student;
         if (sid) {
-          const w = parseFloat(r.written_marks);
-          const m = parseFloat(r.mcq_marks);
-          const p = parseFloat(r.practical_marks);
+          const w = r.written_marks;
+          const m = r.mcq_marks;
+          const p = r.practical_marks;
           newBulkMarks[sid] = {
-            written: w !== 0 ? w : '',
-            mcq: m !== 0 ? m : '',
-            practical: p !== 0 ? p : ''
+            written: (w !== null && w !== undefined && w !== '') ? parseFloat(w) : '',
+            mcq: (m !== null && m !== undefined && m !== '') ? parseFloat(m) : '',
+            practical: (p !== null && p !== undefined && p !== '') ? parseFloat(p) : ''
           };
         }
       }
@@ -1478,7 +1478,7 @@ export default function ResultsPage() {
     if (examObj && examObj.total_marks) {
       toast.info(`এই বাল্ক ইনপুটে হিসাব হবে মোট ${examObj.total_marks} ধরে`);
     }
-    const rows = (bulkStudents || []).map(s => ({ sid: s.id, m: bulkMarks[s.id] || {} })).filter(r => ((parseFloat(r.m.written) || 0) + (parseFloat(r.m.mcq) || 0) + (parseFloat(r.m.practical) || 0)) > 0);
+    const rows = (bulkStudents || []).map(s => ({ sid: s.id, m: bulkMarks[s.id] || {} })).filter(r => r.m.written !== '' || r.m.mcq !== '' || r.m.practical !== '');
     if (rows.length === 0) { toast.info('কোনো নম্বর প্রদান করা হয়নি'); return; }
     setBulkSaving(true);
     const payload = {
@@ -1776,22 +1776,27 @@ export default function ResultsPage() {
                     const student = typeof result.student === 'object' ? result.student : (students.find(s => s.id === result.student) || {});
                     const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || result.student_name || 'N/A';
                     const roll = student.roll_number || result.student_roll_number || '-';
-                    const w = parseFloat(result.written_marks) || 0;
-                    const m = parseFloat(result.mcq_marks) || 0;
-                    const p = parseFloat(result.practical_marks) || 0;
-                    const total = w + m + p;
-                    const isAbsent = total === 0;
+                    const w = result.written_marks;
+                    const m = result.mcq_marks;
+                    const p = result.practical_marks;
+                    const fw = parseFloat(w) || 0;
+                    const fm = parseFloat(m) || 0;
+                    const fp = parseFloat(p) || 0;
+                    const total = fw + fm + fp;
+                    const isAbsent = (w === null || w === undefined || w === '' || w === '--') &&
+                                     (m === null || m === undefined || m === '' || m === '--') &&
+                                     (p === null || p === undefined || p === '' || p === '--');
 
                     return (
                       <TableRow key={idx} hover>
                         <TableCell>{roll}</TableCell>
                         <TableCell>{studentName}</TableCell>
                         <TableCell>{result.subject?.name || result.subject_name}</TableCell>
-                        <TableCell align="center">{isAbsent ? 'Absent' : w}</TableCell>
-                        <TableCell align="center">{isAbsent ? 'Absent' : m}</TableCell>
-                        <TableCell align="center">{isAbsent ? 'Absent' : p}</TableCell>
+                        <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (w === null || w === undefined || w === '' ? '' : w)}</TableCell>
+                        <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (m === null || m === undefined || m === '' ? '' : m)}</TableCell>
+                        <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (p === null || p === undefined || p === '' ? '' : p)}</TableCell>
                         <TableCell align="center">
-                          <strong>{isAbsent ? 'Absent' : total}</strong>
+                          <strong>{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : total}</strong>
                         </TableCell>
                         {(() => {
                           const serverGrade = result.grade;
@@ -2147,11 +2152,14 @@ export default function ResultsPage() {
                         examination: examId,
                         student_id: parseInt(selectedStudent),
                         subject_id: s.id,
-                        written_marks: parseFloat(m.written) || 0,
-                        mcq_marks: parseFloat(m.mcq) || 0,
-                        practical_marks: parseFloat(m.practical) || 0
+                        written_marks: m.written !== '' ? parseFloat(m.written) : 0,
+                        mcq_marks: m.mcq !== '' ? parseFloat(m.mcq) : 0,
+                        practical_marks: m.practical !== '' ? parseFloat(m.practical) : 0
                       };
-                    }).filter(r => (r.written_marks || 0) + (r.mcq_marks || 0) + (r.practical_marks || 0) > 0);
+                    }).filter(r => {
+                      const m = multiSubjectMarks[r.subject_id];
+                      return m && (m.written !== '' || m.mcq !== '' || m.practical !== '');
+                    });
                     if (rows.length === 0) { toast.info('কোনো বিষয়ের নম্বর প্রদান করা হয়নি'); setSavingResult(false); return; }
                     const payload = { examination: examId, school_id: id, results: rows };
                     await api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, payload);
@@ -2500,11 +2508,14 @@ export default function ResultsPage() {
                     examination: examId,
                     student_id: parseInt(selectedStudent),
                     subject_id: s.id,
-                    written_marks: parseFloat(m.written) || 0,
-                    mcq_marks: parseFloat(m.mcq) || 0,
-                    practical_marks: parseFloat(m.practical) || 0
+                    written_marks: m.written !== '' ? parseFloat(m.written) : 0,
+                    mcq_marks: m.mcq !== '' ? parseFloat(m.mcq) : 0,
+                    practical_marks: m.practical !== '' ? parseFloat(m.practical) : 0
                   };
-                }).filter(r => (r.written_marks || 0) + (r.mcq_marks || 0) + (r.practical_marks || 0) > 0);
+                }).filter(r => {
+                    const m = multiSubjectMarks[r.subject_id];
+                    return m && (m.written !== '' || m.mcq !== '' || m.practical !== '');
+                });
                 if (rows.length === 0) { toast.info('কোনো বিষয়ের নম্বর প্রদান করা হয়নি'); setSavingResult(false); return; }
                 const payload = { examination: examId, school_id: id, results: rows };
                 await api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, payload);

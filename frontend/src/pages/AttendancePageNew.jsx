@@ -212,7 +212,15 @@ export default function AttendancePageNew() {
       // 2. Fetch Attendance Records for the selected date
       let records = [];
       try {
-        const attendanceRes = await api.get(`/api/attendance/records/`, { params: { school: id, date, page_size: 1000 } });
+        const attendanceRes = await api.get(`/api/attendance/records/`, {
+            params: {
+                school: id,
+                date,
+                classroom: selectedClassroom,
+                section: selectedSection || undefined,
+                page_size: 1000
+            }
+        });
         records = Array.isArray(attendanceRes.data) ? attendanceRes.data : (attendanceRes.data?.results || []);
       } catch (attErr) {
         console.error('Attendance records fetch failed. Status:', attErr.response?.status);
@@ -224,6 +232,26 @@ export default function AttendancePageNew() {
       records.forEach(r => {
         if (r.student) attMap[r.student] = r.present;
       });
+
+      // 3. Merge with pending records from sync queue for real-time consistency on mobile
+      try {
+        const allQueued = await db.syncQueue.toArray();
+        const relevantQueued = allQueued.filter(item =>
+            item.url.includes('/api/attendance/records/bulk_save/') &&
+            item.method.toLowerCase() === 'post'
+        );
+
+        relevantQueued.forEach(item => {
+            const body = item.body;
+            if (body && Array.isArray(body.records)) {
+                body.records.forEach(rec => {
+                    if (rec.date === date && rec.student) {
+                        attMap[rec.student] = rec.present;
+                    }
+                });
+            }
+        });
+      } catch (qErr) { console.warn('Failed to check sync queue:', qErr); }
 
       const initialAtt = {};
       rawStudents.forEach(s => {

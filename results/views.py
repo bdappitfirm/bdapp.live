@@ -13,6 +13,12 @@ from django.db.models import Q
 from datetime import datetime
 import math
 
+
+class FlexiblePageNumberPagination(pagination.PageNumberPagination):
+    page_size = 100
+    page_size_query_param = 'page_size'
+    max_page_size = 3000
+
 class ExamSlotViewSet(viewsets.ModelViewSet):
     queryset = ExamSlot.objects.all()
     serializer_class = ExamSlotSerializer
@@ -37,21 +43,26 @@ class ExaminationViewSet(viewsets.ModelViewSet):
     queryset = Examination.objects.all()
     serializer_class = ExaminationSerializer
     permission_classes = [IsAuthenticated]
+
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
+        base_related = ('classroom', 'section')
         if not sid:
             if is_global_admin(self.request.user):
-                return Examination.objects.all().select_related('classroom', 'section').prefetch_related('slots')
+                return Examination.objects.all().select_related(*base_related).prefetch_related('slots')
             return Examination.objects.none()
 
-        # Global admin viewing everything
         if is_global_admin(self.request.user) and not sid:
-            qs = Examination.objects.all().select_related('classroom', 'section').prefetch_related('slots')
+            qs = Examination.objects.all().select_related(*base_related).prefetch_related('slots')
         else:
-            qs = Examination.objects.filter(school_id=sid).select_related('classroom', 'section').prefetch_related('slots')
+            qs = Examination.objects.filter(school_id=sid).select_related(*base_related).prefetch_related('slots')
 
         cid = self.request.query_params.get('classroom')
         if cid: qs = qs.filter(classroom_id=cid)
+
+        exam_type = self.request.query_params.get('exam_type')
+        if exam_type:
+            qs = qs.filter(exam_type=exam_type)
 
         year = self.request.query_params.get('year')
         if year:
@@ -110,23 +121,38 @@ class ResultViewSet(viewsets.ModelViewSet):
     queryset = Result.objects.all()
     serializer_class = ResultSerializer
     permission_classes = [IsAuthenticated]
+
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
+        base_select = (
+            'examination',
+            'examination__classroom',
+            'examination__section',
+            'student',
+            'student__user',
+            'student__classroom',
+            'student__section',
+            'student__optional_subject',
+            'subject'
+        )
         if not sid:
             if is_global_admin(self.request.user):
-                return Result.objects.all().select_related('examination', 'student__user', 'subject')
-            return Result.objects.none()
-
-        # Start with results for the current school (or all for global admin)
-        if is_global_admin(self.request.user) and not sid:
-            qs = Result.objects.all().select_related('examination', 'student__user', 'subject')
+                qs = Result.objects.all().select_related(*base_select).prefetch_related('examination__slots')
+            else:
+                return Result.objects.none()
         else:
-            qs = Result.objects.filter(examination__school_id=sid).select_related('examination', 'student__user', 'subject')
+            if is_global_admin(self.request.user) and not sid:
+                qs = Result.objects.all().select_related(*base_select).prefetch_related('examination__slots')
+            else:
+                qs = Result.objects.filter(examination__school_id=sid).select_related(*base_select).prefetch_related('examination__slots')
 
-        # Strict filtering based on query parameters to prevent data leakage
         eid = self.request.query_params.get('examination')
         if eid:
             qs = qs.filter(examination_id=eid)
+
+        exam_type = self.request.query_params.get('exam_type')
+        if exam_type:
+            qs = qs.filter(examination__exam_type=exam_type)
 
         section_id = self.request.query_params.get('section')
         if section_id:
@@ -221,6 +247,9 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
             qs = qs.filter(student__section_id=section_id)
         if year:
              qs = qs.filter(Q(examination__year=year) | Q(examination__exam_date__year=year))
+
+        # Optimize large list fetches by prefetching related data
+        qs = qs.select_related('student__user', 'examination__classroom')
 
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
