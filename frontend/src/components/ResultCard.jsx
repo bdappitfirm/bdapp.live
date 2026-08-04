@@ -416,13 +416,25 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       'সরকারি': 'GOVT.', 'সরকারী': 'GOVT.',
       'বালিকা': 'GIRLS', 'বালক': 'BOYS',
       'মাদ্রাসা': 'MADRASAH', 'প্রাথমিক': 'PRIMARY',
-      'হামানকর্দ্দি': 'HAMANKARDI', 'হামান কর্দ্দি': 'HAMANKARDI', 'হামা নকর্দ্দি': 'HAMANKARDI', 'পল্লী মঙ্গল': 'POLLI MONGOL'
+      'হামানকর্দ্দি': 'HAMANKARDI', 'হামান কর্দ্দি': 'HAMANKARDI', 'হামা নকর্দ্দি': 'HAMANKARDI', 'পল্লী মঙ্গল': 'POLLI MONGOL',
+      'দ্বারকানাথ': 'DWARKANATH', 'হাই স্কুল': 'HIGH SCHOOL', 'হাইস্কুল': 'HIGH SCHOOL', 'ডি.এন.': 'D.N.',
+      'বহরিয়া': 'BAHORIA'
     };
     Object.entries(bnToEn).forEach(([bn, en]) => {
-      name = name.replace(new RegExp(bn, 'g'), en);
+      // Escape dots for regex
+      const safeBn = bn.replace(/\./g, '\\.');
+      name = name.replace(new RegExp(safeBn, 'g'), en);
     });
     return name.toUpperCase();
   }, [resolvedSchool, forceLanguage]);
+
+  const schoolFontSize = useMemo(() => {
+    if (!schoolName || schoolName === "N/A") return '48px !important';
+    const words = schoolName.split(/\s+/).filter(Boolean).length;
+    if (words <= 3) return '48px !important';
+    if (words === 4) return '36px !important';
+    return '28px !important';
+  }, [schoolName]);
 
   const l = labels[forceLanguage] || labels.en;
   const n = (v) => forceLanguage === 'bn' ? toBn(v) : v;
@@ -796,13 +808,13 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       borderStyle: 'solid',
       borderColor: 'transparent',
       borderImage: `${SVG_BORDER} 25 25 25 25 round`,
-      transition: 'none',
+      transition: 'none !important',
       '& *': { transition: 'none !important' },
       '&::before': { content: '""', position: 'absolute', top: '-25px', left: '-25px', right: '-25px', bottom: '0px', border: '1.5px solid #000', borderBottom: 'none', pointerEvents: 'none', zIndex: 15 },
       '&::after': { content: '""', position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', border: '1.5px solid #000', borderBottom: 'none', pointerEvents: 'none', zIndex: 15 },
       '@media print': {
         margin: '0 auto !important',
-        paddingTop: '10mm !important',
+        paddingTop: '0mm !important',
         bgcolor: '#fff4e5 !important',
         height: 'calc(280mm - 5px) !important',
         width: 'calc(200mm + 55px) !important',
@@ -838,26 +850,19 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             pb: '0mm'
           }
         }}>
-          <Box sx={{ textAlign: 'center', mb: 0.5, mt: 1 }}>
-            <Typography sx={{
-              fontWeight: 900,
-              color: '#000 !important',
-              fontSize: (() => {
-                const words = safeSchoolName.split(/\s+/).filter(Boolean).length;
-                if (words <= 3) return '46px';
-                if (words === 4) return '38px';
-                if (words === 5) return '30px';
-                return '24px';
-              })(),
-              mb: 0.2,
-              letterSpacing: safeSchoolName.length > 30 ? '-1.0px' : 'normal',
-              whiteSpace: 'nowrap',
-              overflow: 'visible',
-              width: '100%',
-              display: 'block',
-              textAlign: 'center',
-              lineHeight: 1
-            }}>{safeSchoolName}</Typography>
+          <Box sx={{ textAlign: 'center', mb: 0.5, mt: 1, height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
+            <Typography className="school-name-header" sx={{
+              fontSize: schoolFontSize,
+              letterSpacing: schoolName.length > 30 ? '-1.0px' : 'normal',
+              lineHeight: 1.1,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              '@media print': {
+                fontSize: schoolFontSize,
+              }
+            }}>{schoolName.toUpperCase()}</Typography>
             {resolvedSchool?.ein && (<Typography sx={{ fontSize: '12px', color: '#000 !important', fontWeight: 'bold', mb: 0.2 }}>EIIN: {resolvedSchool.ein}</Typography>)}
           </Box>
 

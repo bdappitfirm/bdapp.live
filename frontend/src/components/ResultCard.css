@@ -23,7 +23,7 @@
     widows: 3 !important;
   }
   .result-card-container {
-    width: calc(200mm + 55px) !important;
+    width: 210mm !important;
     height: calc(280mm - 5px) !important;
     min-height: calc(280mm - 5px) !important;
     max-height: calc(280mm - 5px) !important;
@@ -74,4 +74,17 @@
   }
 
   .no-print { display: none !important; }
+}
+
+.school-name-header {
+  font-family: 'Times New Roman', Times, serif !important;
+  font-weight: 900 !important;
+  color: #000 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  margin-bottom: 5px !important;
+  white-space: nowrap !important;
+  width: 100% !important;
+  display: block !important;
+  text-transform: uppercase !important;
 }
