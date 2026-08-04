@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import AttendanceRecord
+from .models import AttendanceRecord, StudentAttendanceSummary
 from django.db import connection
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
@@ -73,3 +73,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
                 'name': f"{u.first_name} {u.last_name}".strip() or u.username
             }
         except Exception: return None
+
+class StudentAttendanceSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StudentAttendanceSummary
+        fields = '__all__'

@@ -36,3 +36,21 @@ class AttendanceRecord(models.Model):
 
     def __str__(self):
         return f"{self.student.user.username} - {self.date}"
+
+class StudentAttendanceSummary(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='attendance_summaries')
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='attendance_summaries')
+    year = models.IntegerField()
+    # Store monthly data as JSON: {"1": {"present": 20, "absent": 2}, "2": ...}
+    monthly_data = models.JSONField(default=dict)
+    total_present = models.IntegerField(default=0, help_text="Automatically calculated total present days")
+    total_absent = models.IntegerField(default=0, help_text="Automatically calculated total absent days")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('student', 'year')
+        verbose_name = "Student Attendance Summary"
+        verbose_name_plural = "Student Attendance Summaries"
+
+    def __str__(self):
+        return f"{self.student.user.username} - {self.year} Summary"

@@ -50,6 +50,7 @@ import { TableSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ProtectedButton from '../components/ProtectedButton';
+import AttendanceReportDialog from '../components/AttendanceReportDialog';
 import { scopedGet } from '../utils/schoolApi';
 import { isAuthenticated } from '../utils/auth';
 import { useAuth } from '../context/AuthContext';
@@ -148,6 +149,7 @@ export default function ResultsPage() {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState({ classroom: '', section: null, subject: '', exam: '' });
   const [bulkYear, setBulkYear] = useState('');
+  const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [bulkStudents, setBulkStudents] = useState([]);
   const [bulkMarks, setBulkMarks] = useState({});
   const [criticalError, setCriticalError] = useState(null);
@@ -1601,15 +1603,34 @@ export default function ResultsPage() {
           রেজাল্ট ও পরীক্ষা
         </Typography>
 
-        <Box sx={{ flexGrow: 1, display: { xs: 'none', sm: 'flex' }, justifyContent: 'center' }}>
+        <Box sx={{ flexGrow: 1, display: { xs: 'none', sm: 'flex' }, justifyContent: 'center', alignItems: 'center', gap: 2 }}>
           <Button
             id="bulk-marks-input-btn"
             variant="contained"
             color="secondary"
             onClick={openBulkDialog}
-            sx={{ fontWeight: 'bold', px: 4 }}
+            sx={{ fontWeight: 'bold', px: 2 }}
           >
             মার্কস ইনপুট করুন
+          </Button>
+
+          <Button
+            variant="contained"
+            color="info"
+            onClick={() => setAttendanceDialogOpen(true)}
+            sx={{ fontWeight: 'bold', px: 2, color: 'white' }}
+          >
+            হাজিরা রিপোর্ট
+          </Button>
+
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={handleOpenAddResultsDialog}
+            sx={{ fontWeight: 'bold', px: 2 }}
+          >
+            ফলাফল তৈরি করুন
           </Button>
         </Box>
 
@@ -1621,23 +1642,34 @@ export default function ResultsPage() {
           >
             ব্যাক
           </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleOpenAddResultsDialog}
-            sx={{ display: 'inline-flex' }}
-          >
-            ফলাফল তৈরি করুন
-          </Button>
-          {/* Mobile view specific for Bulk Button */}
+
+          {/* Mobile buttons */}
           <Button
             variant="contained"
             color="secondary"
+            size="small"
             onClick={openBulkDialog}
             sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
           >
             মার্কস ইনপুট
+          </Button>
+          <Button
+            variant="contained"
+            color="info"
+            size="small"
+            onClick={() => setAttendanceDialogOpen(true)}
+            sx={{ display: { xs: 'inline-flex', sm: 'none' }, color: 'white' }}
+          >
+            হাজিরা
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={handleOpenAddResultsDialog}
+            sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
+          >
+            ফলাফল
           </Button>
         </Stack>
       </Stack>
@@ -2627,6 +2659,13 @@ export default function ResultsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <AttendanceReportDialog
+        open={attendanceDialogOpen}
+        onClose={() => setAttendanceDialogOpen(false)}
+        classes={classes}
+        schoolId={id}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog

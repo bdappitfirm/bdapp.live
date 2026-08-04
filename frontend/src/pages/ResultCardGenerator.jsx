@@ -1141,6 +1141,34 @@ export default function ResultCardGenerator() {
         }
       } catch (_) {}
 
+      // Fetch Attendance Summary with fallback
+      try {
+        const attRes = await api.get('/api/attendance/summaries/', {
+          params: {
+            student: student.id,
+            year: effectiveYear,
+            school: id
+          }
+        });
+        const attData = attRes.data;
+        const summaries = Array.isArray(attData) ? attData : (attData?.results || []);
+
+        if (summaries && summaries.length > 0) {
+          setStudentData(prev => ({ ...prev, attendance_summary: summaries[0] }));
+        } else {
+          // Try fetching without year filter as fallback
+          const fallbackRes = await api.get('/api/attendance/summaries/', {
+            params: { student: student.id, school: id }
+          });
+          const fSummaries = Array.isArray(fallbackRes.data) ? fallbackRes.data : (fallbackRes.data?.results || []);
+          if (fSummaries[0]) {
+            setStudentData(prev => ({ ...prev, attendance_summary: fSummaries[0] }));
+          }
+        }
+      } catch (attErr) {
+        console.warn('Attendance fetch failed:', attErr);
+      }
+
       toast.success(`Result card generated with ${Array.isArray(results) ? results.length : 0} subjects!`);
     } catch (err) {
       console.error(err);

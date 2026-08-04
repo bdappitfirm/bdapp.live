@@ -1021,6 +1021,23 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             </>
           )}
 
+          {/* Attendance Summary */}
+          {studentData?.attendance_summary && (
+            <Box sx={{ mt: 1, mb: 1, border: '1.5px solid #000', p: 1, borderRadius: 0, bgcolor: '#fdfaea' }}>
+              <Typography sx={{ fontWeight: 'bold', fontSize: '14px', mb: 0.5, textDecoration: 'underline', color: '#000', display: 'block' }}>
+                {forceLanguage === 'bn' ? 'হাজিরা সংক্রান্ত তথ্য:' : 'Attendance Information:'}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 4 }}>
+                <Typography sx={{ fontSize: '13px', color: '#000' }}>
+                  {forceLanguage === 'bn' ? 'মোট উপস্থিতি:' : 'Total Presence:'} <b>{n(studentData.attendance_summary.total_present ?? 0)}</b>
+                </Typography>
+                <Typography sx={{ fontSize: '13px', color: '#000' }}>
+                  {forceLanguage === 'bn' ? 'মোট অনুপস্থিতি:' : 'Total Absence:'} <b>{n(studentData.attendance_summary.total_absent ?? 0)}</b>
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
           <Box className="result-card-signatures" sx={{
             position: 'relative',
             mt: 'auto',
