@@ -70,7 +70,8 @@ const Dashboard = () => {
   }, [schoolId]);
 
   const generateSummary = React.useCallback(async () => {
-    if (!schoolId) return;
+    if (!schoolId || summaryLoading) return;
+    console.log('📊 Dashboard: Generating summary for school', schoolId);
     setSummaryLoading(true);
     try {
       const clsRes = await scopedGet('/api/academics/classrooms/', schoolId, {}, { timeout: 20000 });

@@ -72,9 +72,16 @@ const sortSubjectsByOrder = (arr, allResults, group = '') => {
 };
 
 const SUB_MAP = {
+  'হিসাব বিজ্ঞান': 'Accounting',
+  'হিসাববিজ্ঞান': 'Accounting',
+  'হিসাব': 'Accounting',
+  'Accounting': 'Accounting',
+  'ব্যবসায় উদ্যোগ': 'Business Entrepreneurship',
+  'ব্যবসায় শিক্ষা': 'Business Studies',
   'গণিত': 'Mathematics',
   'উচ্চতর গণিত': 'Higher Mathematics',
   'বিজ্ঞান': 'Science',
+  'সাধারণ বিজ্ঞান': 'Science',
   'বাংলাদেশ ও বিশ্বপরিচয়': 'BGS',
   'বাংলাদেশ ও বিশ্বপরিচয়': 'BGS',
   'বাংলাদেশ ও বিশ্ব পরিচয়': 'BGS',
@@ -82,26 +89,29 @@ const SUB_MAP = {
   'বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা': 'History of Bangladesh & World Civilization',
   'বাংলাদেশ ও বিশ্ব সভ্যতা': 'History of Bangladesh & World Civilization',
   'পৌরনীতি ও নাগরিকতা': 'Civics & Citizenship',
+  'পৌরণীতি ও নাগরিকতা': 'Civics & Citizenship',
   'পৌরনীতি': 'Civics',
-  'কৃষি শিক্ষা': 'Agriculture',
-  'কৃষি': 'Agriculture',
-  'গার্হস্থ্য বিজ্ঞান': 'Home Science',
-  'গার্হস্থ্য': 'Home Science',
-  'Home Science': 'Home Science',
+  'পৌরণীতি': 'Civics',
+  'কৃষি শিক্ষা': 'Agriculture / Home Science',
+  'কৃষি': 'Agriculture / Home Science',
+  'গার্হস্থ্য বিজ্ঞান': 'Agriculture / Home Science',
+  'গার্হস্থ্য': 'Agriculture / Home Science',
+  'Home Science': 'Agriculture / Home Science',
   'ইসলাম ও নৈতিক শিক্ষা': 'Religion (Islam)',
   'হিন্দুধর্ম ও নৈতিক শিক্ষা': 'Religion (Hindu)',
   'খ্রিস্টধর্ম ও নৈতিক শিক্ষা': 'Religion (Christian)',
   'বৌদ্ধধর্ম ও নৈতিক শিক্ষা': 'Religion (Buddhist)',
   'তথ্য ও যোগাযোগ প্রযুক্তি': 'ICT',
+  'আইসিটি': 'ICT',
+  'ict': 'ICT',
   'বাংলা ১ম পত্র': 'Bangla 1st Paper',
   'বাংলা ২য় পত্র': 'Bangla 2nd Paper',
   'ইংরেজি ১ম পত্র': 'English 1st Paper',
   'ইংরেজি ২য় পত্র': 'English 2nd Paper',
   'শারীরিক শিক্ষা ও স্বাস্থ্য': 'Physical Education',
+  'শারীরিক শিক্ষা': 'Physical Education',
   'চারু ও কারুকলা': 'Arts & Crafts',
   'কর্ম ও জীবনমুখী শিক্ষা': 'Work & Life Education',
-  'কৃষি শিক্ষা': 'Agriculture',
-  'গার্হস্থ্য বিজ্ঞান': 'Home Science',
   'বাংলা-১ম পত্র': 'Bangla 1st Paper',
   'বাংলা-২য় পত্র': 'Bangla 2nd Paper',
   'ইংরেজি-১ম পত্র': 'English 1st Paper',
@@ -136,16 +146,18 @@ const SUB_MAP = {
   'Arts and Crafts': 'Arts & Crafts',
   'Work and Life Education': 'Work & Life Education',
   'Career Education': 'Career Education',
-  'Agriculture Studies': 'Agriculture',
-  'Home Science': 'Home Science',
+  'Agriculture Studies': 'Agriculture / Home Science',
+  'Agriculture': 'Agriculture / Home Science',
+  'Home Science': 'Agriculture / Home Science',
   'Physics': 'Physics',
   'Chemistry': 'Chemistry',
   'Biology': 'Biology',
   'Business Entrepreneurship': 'Business Entrepreneurship',
   'হিসাব বিজ্ঞান': 'Accounting',
   'হিসাববিজ্ঞান': 'Accounting',
+  'ব্যবসায় উদ্যোগ': 'Business Entrepreneurship',
+  'ব্যবসায় শিক্ষা': 'Business Studies',
   'ফিন্যান্স ও ব্যাংকিং': 'Finance & Banking',
-  'ফিন্যান্স ও ব্যাংকিং ': 'Finance & Banking',
   'পৌরনীতি ও নাগরিকতা': 'Civics & Citizenship',
   'ভূগোল ও পরিবেশ': 'Geography & Environment',
   'ভূগোল': 'Geography',
@@ -155,16 +167,6 @@ const SUB_MAP = {
   'রসায়ন': 'Chemistry',
   'জীববিজ্ঞান': 'Biology',
   'জীব বিজ্ঞান': 'Biology',
-  'গার্হস্থ্য বিজ্ঞান': 'Home Science',
-  'গার্হস্থ্য': 'Home Science',
-  'কৃষি শিক্ষা': 'Agriculture',
-  'কৃষি': 'Agriculture',
-  'শারীরিক শিক্ষা ও স্বাস্থ্য': 'Physical Education',
-  'শারীরিক শিক্ষা': 'Physical Education',
-  'চারু ও কারুকলা': 'Arts & Crafts',
-  'তথ্য ও যোগাযোগ প্রযুক্তি': 'ICT',
-  'আইসিটি': 'ICT',
-  'ict': 'ICT',
   'বই পড়া': 'Book Reading',
   'বই পড়া': 'Book Reading',
   'ক্যারিয়ার শিক্ষা': 'Career Education',
@@ -182,8 +184,8 @@ const BN_TO_EN_PAPER_REGEX_2 = /[২2][য়য়]\s*(পত্র|paper)/gi;
 const OPT_SUB_MAP = {
   'উচ্চতর গণিত': 'Higher Mathematics',
   'উচ্চতর গনিত': 'Higher Mathematics',
-  'কৃষি শিক্ষা': 'Agriculture',
-  'গার্হস্থ্য বিজ্ঞান': 'Home Science',
+  'কৃষি শিক্ষা': 'Agriculture / Home Science',
+  'গার্হস্থ্য বিজ্ঞান': 'Agriculture / Home Science',
   'ইসলাম শিক্ষা': 'Religion (Islam)',
   'পদার্থ বিজ্ঞান': 'Physics',
   'রসায়ন': 'Chemistry',
@@ -198,7 +200,7 @@ const OPT_SUB_MAP = {
 const BN_TO_EN_CLASS_MAP = { 'প্রথম': 'One', 'দ্বিতীয়': 'Two', 'তৃতীয়': 'Three', 'চতুর্থ': 'Four', 'পঞ্চম': 'Five', 'ষষ্ঠ': 'Six', 'সপ্তম': 'Seven', 'অষ্টম': 'Eight', 'নবম': 'Nine', 'দশম': 'Ten', 'শ্রেণী': '', 'শ্রেণি': '', 'Class': '' };
 const ORD_MAP = { 'Sixth': 'Six', 'Seventh': 'Seven', 'Eighth': 'Eight', 'Ninth': 'Nine', 'Tenth': 'Ten' };
 
-const SEC_MAP = { 'মানবিক': 'Humanities', 'বিজ্ঞান': 'Science', 'ব্যবসায় শিক্ষা': 'Commerce', 'ব্যবসা': 'Commerce', 'ক': 'A', 'খ': 'B', 'গ': 'C', 'ঘ': 'D', 'এ': 'A', 'বি': 'B', 'সি': 'C', 'ডি': 'D' };
+const SEC_MAP = { 'মানবিক': 'Humanities', 'বিজ্ঞান': 'Science', 'ব্যবসায় শিক্ষা': 'Commerce', 'ব্যবসা': 'Commerce', 'ব্যবসায়': 'Commerce', 'ব্যবসায়': 'Commerce', 'ক': 'A', 'খ': 'B', 'গ': 'C', 'ঘ': 'D', 'এ': 'A', 'বি': 'B', 'সি': 'C', 'ডি': 'D' };
 
 const SVG_BORDER = `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5'%3E%3Cpath d='M0 50 Q 25 0 50 50 T 100 50'/%3E%3Cpath d='M0 50 Q 25 100 50 50 T 100 50'/%3E%3Cpath d='M50 0 Q 0 25 50 50 T 50 100'/%3E%3Cpath d='M50 0 Q 100 25 50 50 T 50 100'/%3E%3Cg transform='rotate(45,50,50)'%3E%3Cpath d='M20 50 Q 35 20 50 50 T 80 50'/%3E%3Cpath d='M20 50 Q 35 80 50 50 T 80 50'/%3E%3Cpath d='M50 20 Q 20 35 50 50 T 50 80'/%3E%3Cpath d='M50 20 Q 80 35 50 50 T 50 80'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`;
 
@@ -246,7 +248,7 @@ const getSubjectMaxima = (name, isClassNineOrTen) => {
     if (lower.includes('বাংলা') || lower.includes('bangla')) return { cq: 70, mcq: 30, pr: 0 };
   } else {
     if (lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics')) return { cq: 35, mcq: 15, pr: 0 };
-    if ((lower.includes('বাংলা') || lower.includes('bangla')) && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second'))) return { cq: 35, mcq: 15, pr: 0 };
+    if ((lower.includes('বাংলা') || lower.includes('bangla')) && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii'))) return { cq: 35, mcq: 15, pr: 0 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
   return { cq: 70, mcq: 30, pr: 0 };
@@ -443,21 +445,28 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     if (actualResults.length === 0) return [];
 
     return actualResults.map(r => {
-      const w = parseFloat(r.written_marks) || 0;
-      const m = parseFloat(r.mcq_marks) || 0;
-      const p = parseFloat(r.practical_marks) || 0;
+      const hasW = r.written_marks !== null && r.written_marks !== undefined && r.written_marks !== '';
+      const hasM = r.mcq_marks !== null && r.mcq_marks !== undefined && r.mcq_marks !== '';
+      const hasP = r.practical_marks !== null && r.practical_marks !== undefined && r.practical_marks !== '';
+
+      const w = hasW ? parseFloat(r.written_marks) : 0;
+      const m = hasM ? parseFloat(r.mcq_marks) : 0;
+      const p = hasP ? parseFloat(r.practical_marks) : 0;
+
       const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen);
       const totalPossible = spec.cq + spec.mcq + spec.pr || 100;
       const obtained = w + m + p;
+      const isActuallyAbsent = !hasW && !hasM && !hasP;
+
       const percentage = (obtained / totalPossible) * 100;
       const passThreshold = Math.round(totalPossible * 0.33);
-      let isPassed = obtained >= passThreshold;
+      let isPassed = !isActuallyAbsent && obtained >= passThreshold;
       if (isClassNineOrTen && !isCoCurricular(r.subject?.name || r.subject_name, isClassNineOrTen) && !isOptionalSubject(r, student, isClassNineOrTen)) {
         if (spec.cq > 0 && w < Math.round(spec.cq * 0.33)) isPassed = false;
         if (spec.mcq > 0 && m < Math.round(spec.mcq * 0.33)) isPassed = false;
         if (spec.pr > 0 && p < Math.round(spec.pr * 0.33)) isPassed = false;
       }
-      return { ...r, total_obtained: obtained, total_possible: totalPossible, grade: isPassed ? computeGrade(percentage) : 'F', gpa: isPassed ? computeGpa(percentage).toFixed(2) : '0.00', is_passed: isPassed, is_optional_detected: isOptionalSubject(r, student, isClassNineOrTen), spec };
+      return { ...r, total_obtained: obtained, isActuallyAbsent, total_possible: totalPossible, grade: isPassed ? computeGrade(percentage) : 'F', gpa: isPassed ? computeGpa(percentage).toFixed(2) : '0.00', is_passed: isPassed, is_optional_detected: isOptionalSubject(r, student, isClassNineOrTen), spec };
     });
   }, [rawResults, isClassNineOrTen, student]);
 
@@ -490,7 +499,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         const group = String(studentGroup).toLowerCase();
         const name = (r.subject?.name || r.subject_name || '').toLowerCase();
 
-        const scienceOnly = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর', 'bgs', 'বাংলাদেশ ও বিশ্ব'];
+        const scienceOnly = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর', 'bgs', 'বাংলাদেশ ও বিশ্ব', 'bangladesh and global', 'bangladesh & global'];
         const commerceOnly = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়'];
         const artsOnly = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি'];
 
@@ -509,6 +518,38 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     function listMatch(text, list) { return list.some(kw => text.includes(kw)); }
     let mainResults = filteredResults.filter(r => !isCoCurricular(r.subject?.name || r.subject_name, isClassNineOrTen) && !isOptionalSubject(r, student, isClassNineOrTen));
     let optionalResults = filteredResults.filter(r => isOptionalSubject(r, student, isClassNineOrTen));
+
+    // For Class 9-10, limit to exactly one optional subject if multiple exist
+    if (isClassNineOrTen && optionalResults.length > 1) {
+      const assignedOpt = student?.optional_subject;
+      const optId = assignedOpt?.id || assignedOpt;
+      const optName = String(assignedOpt?.name || '').toLowerCase();
+      let primary = null;
+      if (optId || optName) {
+        primary = optionalResults.find(r => (optId && String(optId) === String(r.subject?.id || r.subject)) || (optName && (r.subject?.name || r.subject_name || '').toLowerCase().includes(optName)));
+      }
+      if (!primary) {
+        const group = String(studentGroup).toLowerCase();
+        if (group.includes('science') || group.includes('বিজ্ঞান')) {
+          primary = optionalResults.find(r => {
+            const sn = (r.subject?.name || r.subject_name || '').toLowerCase();
+            return sn.includes('উচ্চতর') || sn.includes('higher');
+          });
+        } else if (group.includes('commerce') || group.includes('business') || group.includes('ব্যবসায়') || group.includes('arts') || group.includes('humanities') || group.includes('মানবিক')) {
+          primary = optionalResults.find(r => {
+            const sn = (r.subject?.name || r.subject_name || '').toLowerCase();
+            return sn.includes('কৃষি') || sn.includes('agriculture');
+          });
+        }
+
+        if (!primary) {
+          optionalResults.sort((a, b) => (parseFloat(b.gpa) || 0) - (parseFloat(a.gpa) || 0));
+          primary = optionalResults[0];
+        }
+      }
+      if (primary) optionalResults = [primary];
+    }
+
     let coCurricularResults = filteredResults.filter(r => isCoCurricular(r.subject?.name || r.subject_name, isClassNineOrTen));
     if (isClassNineOrTen) {
       const merged = [];
@@ -529,14 +570,16 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         const sumObtained = papers.bangla.reduce((s, r) => s + r.total_obtained, 0);
         const totalPossible = papers.bangla.reduce((s, r) => s + r.total_possible, 0);
         const allPassed = papers.bangla.every(r => r.is_passed);
-        merged.push({ id: 'merged-bangla', subject: { name: 'Bangla (1st+2nd)' }, written_marks: papers.bangla.map(r => r.written_marks || '0').join('+'), mcq_marks: papers.bangla.map(r => r.mcq_marks || '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: Math.round(sumObtained), total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 1, pr: 0 } });
+        const anyMarks = papers.bangla.some(r => !r.isActuallyAbsent);
+        merged.push({ id: 'merged-bangla', subject: { name: 'Bangla (1st+2nd)' }, written_marks: papers.bangla.map(r => (r.written_marks !== null && r.written_marks !== '') ? r.written_marks : '0').join('+'), mcq_marks: papers.bangla.map(r => (r.mcq_marks !== null && r.mcq_marks !== '') ? r.mcq_marks : '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: anyMarks ? Math.round(sumObtained) : null, total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 1, pr: 0 }, isActuallyAbsent: !anyMarks });
         papers.bangla.forEach(r => handledSubjectIds.add(r.subject?.id || r.subject));
       }
       if (papers.english.length > 0) {
         const sumObtained = papers.english.reduce((s, r) => s + r.total_obtained, 0);
         const totalPossible = papers.english.reduce((s, r) => s + r.total_possible, 0);
         const allPassed = papers.english.every(r => r.is_passed);
-        merged.push({ id: 'merged-english', subject: { name: 'English (1st+2nd)' }, written_marks: papers.english.map(r => r.written_marks || '0').join('+'), mcq_marks: papers.english.map(r => r.mcq_marks || '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: Math.round(sumObtained), total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 0, pr: 0 } });
+        const anyMarks = papers.english.some(r => !r.isActuallyAbsent);
+        merged.push({ id: 'merged-english', subject: { name: 'English (1st+2nd)' }, written_marks: papers.english.map(r => (r.written_marks !== null && r.written_marks !== '') ? r.written_marks : '0').join('+'), mcq_marks: papers.english.map(r => (r.mcq_marks !== null && r.mcq_marks !== '') ? r.mcq_marks : '0').join('+'), practical_marks: '--', total_obtained: sumObtained, display_total: anyMarks ? Math.round(sumObtained) : null, total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 0, pr: 0 }, isActuallyAbsent: !anyMarks });
         papers.english.forEach(r => handledSubjectIds.add(r.subject?.id || r.subject));
       }
       mainResults.forEach(r => { if (!handledSubjectIds.has(r.subject?.id || r.subject)) merged.push(r); });
@@ -553,7 +596,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       if (gpa === 0) hasFail = true;
       sumGpa += gpa; count++;
     });
-    const opt = allRecalculated.find(r => isOptionalSubject(r, student, isClassNineOrTen));
+    const opt = displayResults.optional[0];
     let bonus = 0;
     if (opt) {
       const optGpa = parseFloat(opt.gpa);
@@ -565,7 +608,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     const cgpa = (count > 0 && !hasFail) ? Math.min(5.0, (sumGpa + bonus) / count) : 0;
     const finalCgpaStr = cgpa.toFixed(2);
     return { obtained: Math.round(totalObtained), possible: Math.round(totalPossible), cgpa: finalCgpaStr, isPassed: !hasFail && count > 0, grade: getGradeFromCgpa(finalCgpaStr) };
-  }, [displayResults.main, allRecalculated, student, isClassNineOrTen]);
+  }, [displayResults.main, displayResults.optional, allRecalculated, student, isClassNineOrTen]);
 
   const cleanClassName = useMemo(() => {
     let name = (student?.classroom?.name || '');
@@ -583,12 +626,12 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
   }, [student, forceLanguage]);
 
   const displaySection = useMemo(() => {
-    let sec = student?.section?.name || '';
+    let sec = String(student?.section?.name || '').trim();
     if (forceLanguage === 'en') {
         return SEC_MAP[sec] || sec;
     } else {
         const REVERSE_SEC_MAP = Object.fromEntries(Object.entries(SEC_MAP).map(([k, v]) => [v.toLowerCase(), k]));
-        return REVERSE_SEC_MAP[String(sec).toLowerCase()] || sec;
+        return REVERSE_SEC_MAP[sec.toLowerCase()] || sec;
     }
   }, [student, forceLanguage]);
 
@@ -600,7 +643,21 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     if (sVal.includes('+')) return n(sVal);
     return n(val);
   };
-  const studentGroupEn = useMemo(() => { const g = String(student?.student_group || student?.group || '').toLowerCase(); if (g === 'science') return 'Science'; if (g === 'arts' || g === 'humanities') return 'Humanities'; if (g === 'commerce' || g === 'business') return 'Business Studies'; return ''; }, [student]);
+  const displayGroup = useMemo(() => {
+    const g = String(student?.student_group || student?.group || '').toLowerCase();
+    if (forceLanguage === 'en') {
+        if (g.includes('science') || g.includes('বিজ্ঞান')) return 'Science';
+        if (g.includes('arts') || g.includes('humanities') || g.includes('মানবিক')) return 'Humanities';
+        if (g.includes('commerce') || g.includes('business') || g.includes('ব্যবসায়') || g.includes('ব্যবসা') || g.includes('ব্যবসায়')) return 'Business Studies';
+        return displaySection;
+    } else {
+        if (g.includes('science') || g.includes('বিজ্ঞান')) return 'বিজ্ঞান';
+        if (g.includes('arts') || g.includes('humanities') || g.includes('মানবিক')) return 'মানবিক';
+        if (g.includes('commerce') || g.includes('business') || g.includes('ব্যবসায়') || g.includes('ব্যবসা') || g.includes('ব্যবসায়')) return 'ব্যবসায় শিক্ষা';
+        return displaySection;
+    }
+  }, [student, forceLanguage, displaySection]);
+
   const studentPhotoUrl = getMediaUrl(user?.photo || user?.photo_url);
   const logoUrl = getMediaUrl(resolvedSchool?.logo || fallbackLogo);
 
@@ -640,17 +697,75 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
 
   const translateSubject = (name) => {
     if (!name) return "";
+    const nameStr = String(name);
+
     if (forceLanguage === 'en') {
-      const norm = String(name).trim();
-      let sName = SUB_MAP[norm] || name;
-      if (typeof sName === 'string') {
-        sName = sName.replace(BN_TO_EN_PAPER_REGEX_1, '1st Paper').replace(BN_TO_EN_PAPER_REGEX_2, '2nd Paper');
-        // Use negative lookahead to avoid replacing "বাংলাদেশ" with "Banglaদেশ"
-        sName = sName.replace(/বাংলা(?!দেশ)/g, 'Bangla').replace(/বাংলাদেশ/g, 'Bangladesh').replace(/ইংরেজি/g, 'English').replace(/ইংরেজী/g, 'English');
+      // 1. Normalize and Deep Clean
+      const clean = nameStr
+        .replace(/[\u200b-\u200d\ufeff\u00a0]/g, '') // Remove invisible characters
+        .replace(/\s*\(.*?\)\s*/g, ' ')             // Remove parentheses and content
+        .replace(/\s+/g, ' ')                        // Normalize spaces
+        .trim();
+
+      // 2. Exact Map Check (High Priority)
+      if (SUB_MAP[clean]) return SUB_MAP[clean];
+
+      // 3. Special Compound Subject Protection (Accounting, Home Science, etc.)
+      const low = clean.toLowerCase();
+      // Accounting check: if it has "হিসাব" AND ("বিজ্ঞান" OR "science" OR "studies")
+      if ((low.includes('হিসাব') || low.includes('account')) &&
+          (low.includes('বিজ্ঞান') || low.includes('science') || low.includes('studies'))) {
+        return 'Accounting';
       }
+
+      // Home Science / Agriculture check
+      if ((low.includes('গার্হস্থ্য') || low.includes('home') || low.includes('কৃষি') || low.includes('agri')) &&
+          (low.includes('বিজ্ঞান') || low.includes('science') || low.includes('education') || low.includes('study') || low.includes('শিক্ষা'))) {
+        return 'Agriculture / Home Science';
+      }
+
+      if (low.includes('agriculture') || low.includes('home science')) return 'Agriculture / Home Science';
+
+      // Business Entrepreneurship/Studies
+      if ((low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('business')) &&
+          (low.includes('উদ্যোগ') || low.includes('entrepreneurship'))) {
+        return 'Business Entrepreneurship';
+      }
+      if ((low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('business')) &&
+          (low.includes('শিক্ষা') || low.includes('studies'))) {
+        return 'Business Studies';
+      }
+
+      if (low.includes('ফিন্যান্স') || low.includes('finance')) return 'Finance & Banking';
+      if (low.includes('পৌরনীতি') || low.includes('civics')) return 'Civics & Citizenship';
+      if (low.includes('ভূগোল') || low.includes('geography')) return 'Geography & Environment';
+
+      let sName = clean;
+
+      // 4. Paper/Part Translation
+      sName = sName.replace(BN_TO_EN_PAPER_REGEX_1, '1st Paper').replace(BN_TO_EN_PAPER_REGEX_2, '2nd Paper');
+
+      // 5. Basic Word Translation
+      sName = sName.replace(/বাংলা(?!দেশ)/g, 'Bangla')
+                   .replace(/বাংলাদেশ/g, 'Bangladesh')
+                   .replace(/ইংরেজি/g, 'English')
+                   .replace(/ইংরেজী/g, 'English');
+
+      // Standalone "বিজ্ঞান" replacement (safely)
+      if (sName === 'বিজ্ঞান' || sName === 'সাধারণ বিজ্ঞান') return 'Science';
+
+      // Fallback: If it still contains "বিজ্ঞান" but wasn't caught by compound rules
+      if (sName.includes('বিজ্ঞান')) sName = sName.replace(/বিজ্ঞান/g, 'Science');
+
       return sName;
-    } else if (forceLanguage === 'bn') {
+    }
+    else if (forceLanguage === 'bn') {
       let sName = name;
+      const lowName = String(sName).toLowerCase();
+      if (lowName.includes('agriculture') || lowName.includes('home science') || lowName.includes('কৃষি') || lowName.includes('গার্হস্থ্য')) {
+        return 'কৃষি / গার্হস্থ্য বিজ্ঞান';
+      }
+
       const entries = Object.entries(SUB_MAP);
       for (const [bn, en] of entries) {
         if (String(sName).toLowerCase() === String(en).toLowerCase() || String(sName).toLowerCase() === String(bn).toLowerCase()) {
@@ -779,7 +894,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                   </Grid>
                   <Grid size={4}>
                       <Box sx={{ display: 'flex', mb: 0.8, alignItems: 'center', justifyContent: 'flex-start' }}><Typography sx={{ fontSize: '15px', minWidth: '80px', fontWeight: 'bold' }}>{l.class}</Typography><Typography sx={{ fontSize: '15px', fontWeight: 'bold', fontStyle: 'italic' }}>: {cleanClassName}</Typography></Box>
-                      <Box sx={{ display: 'flex', mb: 0.8, alignItems: 'center', justifyContent: 'flex-start' }}><Typography sx={{ fontSize: '15px', minWidth: '80px', fontWeight: 'bold' }}>{isClassNineOrTen ? l.group : l.section}</Typography><Typography sx={{ fontSize: '15px', fontWeight: 'bold', fontStyle: 'italic' }}>: {isClassNineOrTen ? (studentGroupEn || (forceLanguage === 'bn' ? 'সাধারণ' : 'General')) : displaySection}</Typography></Box>
+                      <Box sx={{ display: 'flex', mb: 0.8, alignItems: 'center', justifyContent: 'flex-start' }}><Typography sx={{ fontSize: '15px', minWidth: '80px', fontWeight: 'bold' }}>{isClassNineOrTen ? l.group : l.section}</Typography><Typography sx={{ fontSize: '15px', fontWeight: 'bold', fontStyle: 'italic' }}>: {isClassNineOrTen ? displayGroup : displaySection}</Typography></Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}><Typography sx={{ fontSize: '15px', minWidth: '80px', fontWeight: 'bold' }}>{l.rollNo}</Typography><Typography sx={{ fontSize: '15px', fontWeight: 'bold', fontStyle: 'italic' }}>: {n(parseInt(student.roll_number, 10) || student.roll_number)}</Typography></Box>
                   </Grid>
               </Grid>
@@ -809,7 +924,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                       <TableCell align="center">{r.spec?.cq > 0 ? formatMark(r.written_marks) : '--'}</TableCell>
                       <TableCell align="center">{r.spec?.mcq > 0 ? formatMark(r.mcq_marks) : '--'}</TableCell>
                       <TableCell align="center">{r.spec?.pr > 0 ? formatMark(r.practical_marks) : '--'}</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>{formatMark(r.display_total || Math.round(r.total_obtained))}</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>{r.isActuallyAbsent ? formatMark(null) : formatMark(r.display_total ?? Math.round(r.total_obtained))}</TableCell>
                       <TableCell align="center" sx={{ color: r.grade === 'F' ? 'red' : 'inherit', fontWeight: 'bold' }}>{r.grade}</TableCell>
                       <TableCell align="center" sx={{ fontWeight: 'bold' }}>{n(r.gpa)}</TableCell>
                       {idx === 0 && (
@@ -817,7 +932,11 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <Typography sx={{ fontWeight: 900, fontSize: '1.2rem', color: 'inherit' }}>{n(finalSummary.cgpa)}</Typography>
                             <Typography sx={{ fontWeight: 900, fontSize: '1.2rem', color: 'inherit' }}>{finalSummary.grade}</Typography>
-                            <Typography sx={{ fontWeight: 900, fontSize: '1.0rem', color: 'inherit' }}>{l.merit}: {n(overallResult?.rank_in_section ?? overallResult?.rank ?? '--')}</Typography>
+                            <Typography sx={{ fontWeight: 900, fontSize: '1.0rem', color: 'inherit' }}>
+                              {finalSummary.isPassed
+                                ? `${l.merit}: ${n(overallResult?.rank_in_section ?? overallResult?.rank ?? '--')}`
+                                : (forceLanguage === 'bn' ? 'ফলাফল: অনুত্তীর্ণ' : 'Result: Failed')}
+                            </Typography>
                           </Box>
                         </TableCell>
                       )}
@@ -858,13 +977,14 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                         <TableRow key={r.id || idx}>
                           <TableCell align="center" sx={{ width: '40px' }}>{n(displayResults.main.length + idx + 1)}</TableCell>
                           <TableCell sx={{ fontWeight: 'bold' }}>{optName}</TableCell>
-                          <TableCell align="center" sx={{ width: '100px', fontWeight: 'bold' }}>{r.grade}</TableCell>
-                          <TableCell align="center" sx={{ width: '100px', fontWeight: 'bold' }}>{n(r.gpa)}</TableCell>
+                          <TableCell align="center" sx={{ width: '80px', fontWeight: 'bold' }}>{n(Math.round(r.total_obtained))}</TableCell>
+                          <TableCell align="center" sx={{ width: '80px', fontWeight: 'bold' }}>{r.grade}</TableCell>
+                          <TableCell align="center" sx={{ width: '80px', fontWeight: 'bold' }}>{n(r.gpa)}</TableCell>
                           <TableCell align="center" sx={{ width: '110px', fontWeight: 'bold', fontSize: '10px' }}>{parseFloat(r.gpa) > 2.0 ? `GP Above 2: ${n((parseFloat(r.gpa) - 2).toFixed(2))}` : '--'}</TableCell>
                         </TableRow>
                       );
                     }) : (
-                      <TableRow><TableCell colSpan={5} align="center">{l.noOptionalSubject}</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} align="center">{l.noOptionalSubject}</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -883,8 +1003,9 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                     <TableRow key={r.id || idx}>
                       <TableCell align="center" sx={{ width: '40px' }}>{n(displayResults.main.length + displayResults.optional.length + idx + 1)}</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>{coName}</TableCell>
-                      <TableCell align="center" sx={{ width: '100px', fontWeight: 'bold' }}>{r.grade}</TableCell>
-                      <TableCell align="center" sx={{ width: '100px', fontWeight: 'bold' }}>{n(r.gpa)}</TableCell>
+                      <TableCell align="center" sx={{ width: '80px', fontWeight: 'bold' }}>{n(Math.round(r.total_obtained))}</TableCell>
+                      <TableCell align="center" sx={{ width: '80px', fontWeight: 'bold' }}>{r.grade}</TableCell>
+                      <TableCell align="center" sx={{ width: '80px', fontWeight: 'bold' }}>{n(r.gpa)}</TableCell>
                       <TableCell align="center" sx={{ width: '110px', fontWeight: 'bold' }}>{r.is_passed ? l.passed : l.failed}</TableCell>
                     </TableRow>
                   );})}</TableBody>

@@ -28,21 +28,15 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  School as SchoolIcon,
-  FilterList as FilterIcon,
-  Autorenew as RecalcIcon,
-  Schedule as ScheduleIcon,
-  Event as EventIcon
+  School as SchoolIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import api from '../utils/api';
-import EmptyState from '../components/EmptyState';
 import { TableSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import ProtectedButton from '../components/ProtectedButton';
 import { isAuthenticated } from '../utils/auth';
 import { useAuth } from '../context/AuthContext';
 
@@ -58,10 +52,9 @@ export default function ExaminationsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').toLowerCase();
+
   const [examinations, setExaminations] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
-  const [sections, setSections] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [selectedClassroom, setSelectedClassroom] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -69,18 +62,9 @@ export default function ExaminationsPage() {
   const [editingExam, setEditingExam] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, exam: null });
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
-  const [editingSlot, setEditingSlot] = useState(null);
   const [selectedExamForSlots, setSelectedExamForSlots] = useState(null);
   const [examSlots, setExamSlots] = useState([]);
-  const [slotFormData, setSlotFormData] = useState({
-    subject: null,
-    classroom: null,
-    section: null,
-    exam_date: null,
-    start_time: '',
-    end_time: '',
-    room: ''
-  });
+
   const toast = useToast();
 
   const [formData, setFormData] = useState({
@@ -102,18 +86,13 @@ export default function ExaminationsPage() {
     subjects: [],
     exam_type: 'half_yearly',
     exam_date: null,
-    start_time: '',
-    end_time: '',
     total_marks: 100,
     pass_marks: 33,
     classrooms: [],
-    sections: [],
     written_max: 0,
     mcq_max: 0,
     practical_max: 0
   });
-  const [bulkSections, setBulkSections] = useState([]);
-  const [bulkSubjects, setBulkSubjects] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -137,6 +116,78 @@ export default function ExaminationsPage() {
   useEffect(() => {
     if (id) loadData();
   }, [id, loadData]);
+
+  const handleBulkDialogClose = useCallback(() => {
+    setBulkDialogOpen(false);
+    setBulkForm({
+      subjects: [],
+      exam_type: 'half_yearly',
+      exam_date: null,
+      total_marks: 100,
+      pass_marks: 33,
+      classrooms: [],
+      written_max: 0,
+      mcq_max: 0,
+      practical_max: 0
+    });
+  }, []);
+
+  const handleBulkSubmit = useCallback(async () => {
+    if (!isAuthenticated()) { navigate('/login'); return; }
+    if (bulkForm.subjects.length === 0 || bulkForm.classrooms.length === 0) {
+      toast.error('Please select subjects and classrooms');
+      return;
+    }
+
+    setBulkLoading(true);
+    const formatDate = (date) => {
+      if (!date) return null;
+      const d = new Date(date);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const dateStr = formatDate(bulkForm.exam_date);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    const promises = [];
+    for (const classroomId of bulkForm.classrooms) {
+      for (const subjectId of bulkForm.subjects) {
+        const subObj = subjects.find(s => s.id === subjectId);
+        const subName = subObj?.name || '';
+
+        const examData = {
+          name: subName,
+          exam_type: bulkForm.exam_type,
+          classroom: classroomId,
+          exam_date: dateStr,
+          total_marks: bulkForm.total_marks,
+          pass_marks: bulkForm.pass_marks,
+          written_max: bulkForm.written_max,
+          mcq_max: bulkForm.mcq_max,
+          practical_max: bulkForm.practical_max,
+          school: parseInt(id)
+        };
+        promises.push(
+          api.post('/api/results/examinations/', examData)
+            .then(() => { successCount++; })
+            .catch(() => { failCount++; })
+        );
+      }
+    }
+
+    await Promise.all(promises);
+    setBulkLoading(false);
+
+    if (successCount > 0) {
+      toast.success(`Successfully created ${successCount} examinations`);
+      handleBulkDialogClose();
+      loadData();
+    }
+    if (failCount > 0) {
+      toast.error(`Failed to create ${failCount} examinations`);
+    }
+  }, [id, bulkForm, classrooms, subjects, handleBulkDialogClose, loadData, navigate, toast]);
 
   const handleDialogOpen = useCallback((exam = null) => {
     if (!isAuthenticated()) { navigate('/login'); return; }
@@ -170,7 +221,11 @@ export default function ExaminationsPage() {
     if (!isAuthenticated()) { navigate('/login'); return; }
     if (!formData.name || !formData.classroom) { toast.error('Name and Classroom are required'); return; }
 
-    const formatDate = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : null;
+    const formatDate = (date) => {
+        if (!date) return null;
+        const d = new Date(date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
     const examData = { ...formData, school: parseInt(id), exam_date: formatDate(formData.exam_date), section: formData.section ? Number(formData.section) : null };
 
     try {
@@ -202,20 +257,6 @@ export default function ExaminationsPage() {
       setExamSlots(Array.isArray(res.data) ? res.data : (res.data?.results || []));
     } catch (error) { toast.error('Failed to load routine'); }
   }, [id, toast]);
-
-  const handleSlotSubmit = useCallback(async () => {
-    if (!isAuthenticated()) { navigate('/login'); return; }
-    if (!slotFormData.subject) { toast.error('Subject is required'); return; }
-    const formatDate = (date) => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : null;
-    const slotData = { school: id, examination: selectedExamForSlots?.id, subject: slotFormData.subject.id, exam_date: formatDate(slotFormData.exam_date), start_time: slotFormData.start_time, end_time: slotFormData.end_time, room: slotFormData.room };
-    try {
-      if (editingSlot) await api.put(`/api/results/exam-slots/${editingSlot.id}/`, slotData);
-      else await api.post('/api/results/exam-slots/', slotData);
-      toast.success('Slot saved');
-      setSlotDialogOpen(false);
-      loadExamSlots(selectedExamForSlots);
-    } catch (error) { toast.error('Failed to save slot'); }
-  }, [id, slotFormData, editingSlot, selectedExamForSlots, loadExamSlots, navigate, toast]);
 
   const getExamTypeLabel = (type) => EXAM_TYPES.find(t => t.value === type)?.label || type;
 
@@ -260,7 +301,6 @@ export default function ExaminationsPage() {
                     <TableCell><Chip label={getExamTypeLabel(exam.exam_type)} size="small" /></TableCell>
                     <TableCell>{exam.exam_date || '-'}</TableCell>
                     <TableCell align="center"><Stack direction="row" spacing={1}>
-                      <Button size="small" onClick={() => loadExamSlots(exam)}>রুটিন</Button>
                       <IconButton size="small" onClick={() => handleDialogOpen(exam)} color="primary"><EditIcon /></IconButton>
                       <IconButton size="small" onClick={() => setDeleteDialog({ open: true, exam })} color="error"><DeleteIcon /></IconButton>
                     </Stack></TableCell>
@@ -270,6 +310,62 @@ export default function ExaminationsPage() {
             </Table>
           </TableContainer>
         )}
+
+        <Dialog open={bulkDialogOpen} onClose={handleBulkDialogClose} fullWidth maxWidth="md">
+          <DialogTitle>বাল্ক পরীক্ষা সেট করুন (Bulk Exam Setup)</DialogTitle>
+          <DialogContent dividers>
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} md={6}>
+                <Autocomplete
+                  multiple
+                  options={classrooms}
+                  getOptionLabel={(option) => option.name || ''}
+                  value={classrooms.filter(c => bulkForm.classrooms.includes(c.id))}
+                  onChange={(e, val) => setBulkForm({ ...bulkForm, classrooms: val.map(v => v.id) })}
+                  renderInput={(params) => <TextField {...params} label="শ্রেণি নির্বাচন করুন (Classrooms)" />}
+                  sx={{ mb: 2 }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Autocomplete
+                  multiple
+                  options={subjects}
+                  getOptionLabel={(option) => option.name || ''}
+                  value={subjects.filter(s => bulkForm.subjects.includes(s.id))}
+                  onChange={(e, val) => setBulkForm({ ...bulkForm, subjects: val.map(v => v.id) })}
+                  renderInput={(params) => <TextField {...params} label="বিষয় নির্বাচন করুন (Subjects)" />}
+                  sx={{ mb: 2 }}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField select label="পরীক্ষার ধরন" value={bulkForm.exam_type} onChange={e => setBulkForm({ ...bulkForm, exam_type: e.target.value })} fullWidth>
+                  {EXAM_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <DatePicker label="তারিখ" value={bulkForm.exam_date} onChange={d => setBulkForm({ ...bulkForm, exam_date: d })} slotProps={{ textField: { fullWidth: true } }} />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField type="number" label="পাশ নম্বর" value={bulkForm.pass_marks} onChange={e => setBulkForm({ ...bulkForm, pass_marks: parseInt(e.target.value) || 0 })} fullWidth />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField type="number" label="লিখিত সর্বোচ্চ" value={bulkForm.written_max} onChange={e => setBulkForm({ ...bulkForm, written_max: parseInt(e.target.value) || 0 })} fullWidth />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField type="number" label="এমসিকিউ সর্বোচ্চ" value={bulkForm.mcq_max} onChange={e => setBulkForm({ ...bulkForm, mcq_max: parseInt(e.target.value) || 0 })} fullWidth />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField type="number" label="প্র্যাকটিক্যাল সর্বোচ্চ" value={bulkForm.practical_max} onChange={e => setBulkForm({ ...bulkForm, practical_max: parseInt(e.target.value) || 0 })} fullWidth />
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleBulkDialogClose}>বাতিল</Button>
+            <Button variant="contained" onClick={handleBulkSubmit} disabled={bulkLoading}>
+              {bulkLoading ? 'তৈরি হচ্ছে...' : 'সবগুলো তৈরি করুন'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         <Dialog open={dialogOpen} onClose={handleDialogClose} fullWidth maxWidth="sm">
           <DialogTitle>{editingExam ? 'সম্পাদনা' : 'নতুন পরীক্ষা'}</DialogTitle>

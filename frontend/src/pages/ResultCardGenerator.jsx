@@ -143,15 +143,12 @@ export default function ResultCardGenerator() {
     if (!id) return;
     refreshClassrooms(id)
       .then(data => {
-        if (data && data.length > 0) {
-          // toast.success(`Loaded ${data.length} classes`);
-        } else {
-          // toast.info('No classes found for this school');
-        }
+        // success
       })
-      .catch(() => toast.error('Failed to load classes'));
+      .catch(() => {});
     loadSchool();
-  }, [id, refreshClassrooms]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // Apply deep-link query params and auto-generate if requested
   useEffect(() => {
@@ -167,6 +164,10 @@ export default function ResultCardGenerator() {
     let timeout;
     (async () => {
       try {
+        if (isMounted.current === false) return;
+
+        console.log('🔗 Deep link processing:', location.search);
+
         if (qYear) {
           const numYear = parseInt(qYear, 10);
           if (!Number.isNaN(numYear)) setSelectedYear(numYear);
@@ -536,7 +537,20 @@ export default function ResultCardGenerator() {
     const hit = keys.find(k => normalizeLower(k) === s);
     if (hit) return SUBJECT_MAXIMA.six_to_eight[hit];
 
-    // 2. Try substring match for Agriculture/Home Economics
+    // 2. Try substring match
+    if (s.includes('english') || s.includes('ইংরেজি') || s.includes('ইংরেজী') || s.includes('eng')) {
+        if (s.includes('২য়') || s.includes('২য়') || s.includes('2nd') || s.includes('second') || s.includes('ii')) {
+            return SUBJECT_MAXIMA.six_to_eight['english second paper'] || { written: 50, mcq: 0, practical: 0 };
+        }
+        return SUBJECT_MAXIMA.six_to_eight['english first paper'] || { written: 100, mcq: 0, practical: 0 };
+    }
+    if (s.includes('bangla') || s.includes('বাংলা')) {
+        if (s.includes('২য়') || s.includes('২য়') || s.includes('2nd') || s.includes('second') || s.includes('ii')) {
+            return SUBJECT_MAXIMA.six_to_eight['bangla second paper'] || { written: 35, mcq: 15, practical: 0 };
+        }
+        return SUBJECT_MAXIMA.six_to_eight['bangla first paper'] || { written: 70, mcq: 30, practical: 0 };
+    }
+
     if (s.includes('কৃষি') || s.includes('agri')) return SUBJECT_MAXIMA.six_to_eight['কৃষি'];
     if (s.includes('গার্হস্থ্য') || s.includes('home')) return SUBJECT_MAXIMA.six_to_eight['গার্হস্থ্য'];
 
@@ -756,6 +770,8 @@ export default function ResultCardGenerator() {
   };
 
   const handleSearch = async (examIdOverride = null, targetLang = null, yearOverride = null) => {
+    if (loading) return; // Prevent double-triggering
+
     if (!selectedStudent || (!selectedExamType && !examIdOverride)) {
       toast.warning('Please select class, student, and exam type');
       return;
@@ -1737,7 +1753,7 @@ export default function ResultCardGenerator() {
       </Backdrop>
 
       {/* Result Card Display */}
-      <Box className="result-display-area">
+      <Box className="result-display-area" sx={{ minHeight: '600px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {studentData && (
           <Box className="single-card-view">
             {layout === 'ssc' ? (

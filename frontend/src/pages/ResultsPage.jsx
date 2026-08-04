@@ -81,8 +81,9 @@ const UNWANTED_KEYWORDS = [
 const CO_CURRICULAR_SUBJECTS = [
   'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'Physical Education', 'Physical Education and Health',
   'ক্যারিয়ার শিক্ষা', 'ক্যারিয়ার শিক্ষা', 'Career Education', 'ক্যারিয়ার', 'ক্যারিয়ার',
-  'Word Collection Achievement Test', 'WCAT',
-  'বই পড়া', 'বই পড়া'
+  'Word Collection Achievement Test', 'WCAT', 'Word Achievement',
+  'বই পড়া', 'বই পড়া', 'word achievement', 'continuous assessment', 'ধারাবাহিক মূল্যায়ন', 'life and work',
+  'ওয়ার্ড কালেকশন', 'word collection', 'achievement test'
 ];
 
 export default function ResultsPage() {
@@ -149,6 +150,11 @@ export default function ResultsPage() {
   const [bulkYear, setBulkYear] = useState('');
   const [bulkStudents, setBulkStudents] = useState([]);
   const [bulkMarks, setBulkMarks] = useState({});
+  const [criticalError, setCriticalError] = useState(null);
+  const [classSelectOpen, setClassSelectOpen] = useState(false);
+  const [sectionSelectOpen, setSectionSelectOpen] = useState(false);
+  const [examSelectOpen, setExamSelectOpen] = useState(false);
+  const [subjectSelectOpen, setSubjectSelectOpen] = useState(false);
   const autoSaveTimeouts = useRef({});
   const [isAutoSaving, setIsAutoSaving] = useState(false);
 
@@ -226,17 +232,15 @@ export default function ResultsPage() {
         const data = Array.isArray(res.data) ? res.data : res.data.results || [];
         const sorted = sortClassrooms(data);
         setClasses(sorted);
-        if (selectedClass && !sorted.some(c => String(c.id) === String(selectedClass))) {
-          setSelectedClass('');
-        }
+        // Remove loop-triggering dependency check, handle it in useEffect if needed
         setLoadingClasses(false);
       })
       .catch(err => {
         console.error('Error loading classes:', err);
-        toast.error('Failed to load classes');
+        // toast check
         setLoadingClasses(false);
       });
-  }, [id, role, assignments, selectedClass, toast]);
+  }, [id]);
 
   const loadExaminations = useCallback(() => {
     setLoading(true);
@@ -248,10 +252,9 @@ export default function ResultsPage() {
       })
       .catch(err => {
         console.error('Error loading examinations:', err);
-        toast.error('Failed to load examinations');
         setLoading(false);
       });
-  }, [id, toast]);
+  }, [id]);
 
   const loadExaminationsByClass = React.useCallback((classId) => {
     if (!classId) { setExaminations([]); return; }
@@ -279,7 +282,6 @@ export default function ResultsPage() {
       return;
     }
     const effectiveSection = sectionId || selectedSectionMain;
-    // Removed loading indicators
 
     const params = {
       examination: examId,
@@ -302,6 +304,7 @@ export default function ResultsPage() {
       })
       .catch(async err => {
         console.error('Error loading results:', err);
+        setCriticalError(`ফলাফল লোড করতে সমস্যা হয়েছে: ${err.message}. দয়া করে ইন্টারনেট কানেকশন চেক করুন।`);
         const fetchResultsPaginated = async () => {
           let page = 1;
           const maxPages = 10;
@@ -333,10 +336,9 @@ export default function ResultsPage() {
             setOverallResults(overallData);
           } catch (eOver) { console.error('Error loading overall:', eOver); setOverallResults([]); }
           setLoading(false);
-          toast[partial ? 'info' : 'success'](partial ? `Loaded ${items.length} results` : 'Results loaded');
-        } catch (e2) { console.error('Fallback failed:', e2); setLoading(false); toast.error('Failed to load results'); }
+        } catch (e2) { console.error('Fallback failed:', e2); setLoading(false); }
       });
-  }, [id, selectedClass, toast]);
+  }, [id, selectedClass]);
 
   const loadSubjectsByClass = useCallback((classId, sectionId = null) => {
     if (!classId || sectionId === null) return;
@@ -364,15 +366,14 @@ export default function ResultsPage() {
         });
 
         setSubjects(filtered);
-        if (selectedSubject && !filtered.some(s => String(s.id) === String(selectedSubject))) setSelectedSubject('');
-        if (bulkForm.subject && !filtered.some(s => String(s.id) === String(bulkForm.subject))) setBulkForm(p => ({ ...p, subject: '' }));
+        // Reset selections if they are no longer valid, without creating a loop
         const initial = {};
         for (const s of data) initial[s.id] = { written: '', mcq: '', practical: '' };
         setMultiSubjectMarks(initial);
         setLoadingSubjects(false);
       })
-      .catch(err => { console.error('Error loading subjects:', err); toast.error('Failed to load subjects'); setLoadingSubjects(false); });
-  }, [id, role, assignments, selectedSubject, bulkForm.subject, toast]);
+      .catch(err => { console.error('Error loading subjects:', err); setLoadingSubjects(false); });
+  }, [id]);
 
   const loadSectionsByClass = useCallback((classId) => {
     if (!classId) { setSectionsForAdd([]); return; }
@@ -578,18 +579,21 @@ export default function ResultsPage() {
 
   const isMajorExam = (exam) => {
     if (!exam) return false;
-    const name = (exam.name || '').trim().toLowerCase();
     const type = (exam.exam_type || '').toLowerCase();
 
+    // Prioritize Half Yearly
+    if (type === 'half_yearly') return true;
+
     // Allowed if type matches standard types
-    if (['half_yearly', 'annual', 'terminal', 'test', 'model', 'first_term', 'final', 'pre_test'].includes(type)) return true;
+    if (['annual', 'terminal', 'test', 'model', 'first_term', 'final', 'pre_test'].includes(type)) return true;
 
     // Keywords for main exams and evaluations
     const keywords = [
         'অর্ধ', 'বার্ষিক', 'সাময়িক', 'half', 'yearly', 'annual', 'terminal', 'test', 'মডেল', 'মূল্যায়ন', 'পরীক্ষা', 'সাপ্তাহিক',
         'নির্বাচনী', 'প্রাক', 'প্রাক-নির্বাচনী', 'pre-test', 'pre_test', 'নির্বাচনি'
     ];
-    return keywords.some(k => name.includes(k.toLowerCase()));
+    const examName = (exam.name || '').toLowerCase();
+    return keywords.some(k => examName.includes(k.toLowerCase()));
   };
 
   const handleClassChange = (e) => {
@@ -671,13 +675,15 @@ export default function ResultsPage() {
   }, [id]);
 
   useEffect(() => {
-    if (selectedExam && selectedStudent) {
+    if (selectedExam && selectedStudent && !loadingStudents && !loadingSubjects) {
+      // console.log('🔄 ResultsPage: Effect triggered for student marks sync', { selectedExam, selectedStudent });
       loadExistingMarksForStudent(selectedExam, selectedStudent);
       (async () => {
         try {
           const res = await scopedGet('/api/results/results/', id, { examination: parseInt(selectedExam, 10), student: parseInt(selectedStudent, 10), page_size: 1 }, { timeout: 12000 });
           const arr = Array.isArray(res.data) ? res.data : (res.data?.results || []);
           if (!arr || arr.length === 0) {
+            // console.log('❓ ResultsPage: No results for current exam, searching alternatives...');
             const allRes = await api.get(`/api/results/results/?student=${parseInt(selectedStudent, 10)}&page_size=2000`);
             const list = Array.isArray(allRes.data) ? allRes.data : (allRes.data?.results || []);
             if (list && list.length) {
@@ -694,6 +700,7 @@ export default function ResultsPage() {
               });
               const pick = sorted[0] || candidates[0];
               if (pick?.id && String(pick.id) !== String(selectedExam)) {
+                // console.log('✅ ResultsPage: Switching to exam with results', pick.id);
                 setSelectedExam(pick.id);
                 loadResults(pick.id);
               }
@@ -702,7 +709,7 @@ export default function ResultsPage() {
         } catch (_) {}
       })();
     }
-  }, [selectedExam, selectedStudent, loadExistingMarksForStudent, examinations, selectedClass, loadResults, id, getClassroomId]);
+  }, [selectedExam, selectedStudent, loadExistingMarksForStudent, examinations, selectedClass, loadResults, id, getClassroomId, loadingStudents, loadingSubjects]);
 
   useEffect(() => {
     if (selectedStudent && selectedSubject && multiSubjectMarks[selectedSubject]) {
@@ -852,11 +859,11 @@ export default function ResultsPage() {
       'ইসলাম শিক্ষা': { written: 70, mcq: 30, practical: 0 },
       'ইসলাম ও নৈতিক শিক্ষা': { written: 70, mcq: 30, practical: 0 },
       'হিন্দু ধর্ম': { written: 70, mcq: 30, practical: 0 },
-      'agriculture': { written: 50, mcq: 25, practical: 25 },
-      'কৃষি শিক্ষা': { written: 50, mcq: 25, practical: 25 },
-      'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 25, practical: 25 },
-      'home economics': { written: 50, mcq: 25, practical: 25 },
-      'গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 25, practical: 25 }
+      'agriculture': { written: 50, mcq: 0, practical: 0 },
+      'কৃষি শিক্ষা': { written: 50, mcq: 0, practical: 0 },
+      'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 0, practical: 0 },
+      'home economics': { written: 50, mcq: 0, practical: 0 },
+      'গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 0, practical: 0 }
     },
     nine_ten: {
       'bangla first paper': { written: 70, mcq: 30, practical: 0 },
@@ -930,15 +937,31 @@ export default function ResultsPage() {
     const className = String(clsObj.name || '').toLowerCase();
 
     let group = 'six_to_eight';
-    if (/নবম|দশম|nine|ten|10|9/.test(className)) {
+    if (/\b9\b|\b10\b|\bnine\b|\bten\b|\bssc\b|\bix\b|\bx\b|নবম|দশম/i.test(className)) {
         group = 'nine_ten';
     }
 
     const s = String(subjectName || '').trim().toLowerCase();
 
-    // English detection logic for ALL classes (usually 100 marks, no MCQ)
-    if (s.includes('english') || s.includes('ইংরেজি') || s.includes('ইংরেজী')) {
+    // Continuous Assessment detection
+    const isCA = CO_CURRICULAR_SUBJECTS.some(sub => s.includes(sub.toLowerCase())) ||
+                 (group === 'six_to_eight' && (s.includes('কৃষি') || s.includes('agriculture')));
+
+    if (isCA) {
+        return group === 'nine_ten' ? { written: 100, mcq: 0, practical: 0 } : { written: 50, mcq: 0, practical: 0 };
+    }
+
+    // English detection logic
+    if (s.includes('english') || s.includes('ইংরেজি') || s.includes('ইংরেজী') || s.includes('eng')) {
+        if (group === 'six_to_eight' && (s.includes('২য়') || s.includes('২য়') || s.includes('2nd') || s.includes('second') || s.includes('ii'))) {
+            return { written: 50, mcq: 0, practical: 0 };
+        }
         return { written: 100, mcq: 0, practical: 0 };
+    }
+
+    // Bangla 2nd detection logic for Class 6-8 (35+15=50)
+    if ((s.includes('বাংলা') || s.includes('bangla')) && (s.includes('২য়') || s.includes('২য়') || s.includes('2nd') || s.includes('second') || s.includes('ii'))) {
+        if (group === 'six_to_eight') return { written: 35, mcq: 15, practical: 0 };
     }
 
     // Robust substring matching for Science subjects in 9-10
@@ -1384,47 +1407,43 @@ export default function ResultsPage() {
   }, [addResultsDialogOpen, examinations, selectedClass, selectedExam, getExamsForClass]);
 
   useEffect(() => {
-    // Auto-select exam for Bulk Form
-    if (bulkDialogOpen && bulkForm.classroom && !bulkForm.exam) {
-      const classExams = getExamsForClass(bulkForm.classroom);
-      if (classExams.length > 0) {
-        const major = classExams.find(isMajorExam);
-        setBulkForm(prev => ({ ...prev, exam: major ? major.id : classExams[0].id }));
-      }
-    }
-  }, [bulkDialogOpen, examinations, bulkForm.classroom, bulkForm.exam, getExamsForClass]);
+    if (!bulkDialogOpen || !bulkForm.classroom) return;
 
-  useEffect(() => {
     const cls = bulkForm.classroom;
-    if (!cls) return;
     const exams = getExamsForClass(cls);
+    if (!exams.length) return;
+
     const years = Array.from(new Set(exams.map(ex => getExamYear(ex)).filter(Boolean))).sort((a, b) => b - a);
-    
-    // Auto-set year only if not already set
+    let updates = {};
+
+    // 1. Year Update
     if (!bulkYear && years.length) {
       setBulkYear(String(years[0]));
+      // Don't proceed to exam selection yet, wait for next cycle with bulkYear set
+      return;
     }
 
-    // Filter exams by the current bulkYear
+    // 2. Filter exams by year
     const filtered = exams.filter(ex => {
       if (!bulkYear) return true;
       const yr = getExamYear(ex);
       return yr != null && String(yr) === String(bulkYear);
     });
 
-    // If the currently selected exam is NOT in the filtered list, pick the first available one from filtered
     if (filtered.length > 0) {
-      const isCurrentExamValid = filtered.some(ex => String(ex.id) === String(bulkForm.exam));
+      const isCurrentExamValid = bulkForm.exam && filtered.some(ex => String(ex.id) === String(bulkForm.exam));
       if (!bulkForm.exam || !isCurrentExamValid) {
-        // Preference for major exams when auto-selecting
-        const major = filtered.find(isMajorExam);
-        setBulkForm(prev => ({ ...prev, exam: major ? major.id : filtered[0].id }));
+        const priorityExam = filtered.find(ex => ex.exam_type === 'half_yearly') || filtered.find(isMajorExam) || filtered[0];
+        if (priorityExam && String(priorityExam.id) !== String(bulkForm.exam)) {
+          updates.exam = priorityExam.id;
+        }
       }
-    } else if (!bulkYear && exams.length > 0 && !bulkForm.exam) {
-      const major = exams.find(isMajorExam);
-      setBulkForm(prev => ({ ...prev, exam: major ? major.id : exams[0].id }));
     }
-  }, [bulkForm.classroom, examinations, bulkYear, bulkForm.exam, getExamsForClass]);
+
+    if (Object.keys(updates).length > 0) {
+      setBulkForm(prev => ({ ...prev, ...updates }));
+    }
+  }, [bulkDialogOpen, bulkForm.classroom, examinations, bulkYear, bulkForm.exam, getExamsForClass]);
 
   const setBulkMark = (sid, field, value) => {
     const examObj = getExamById(bulkForm.exam || selectedExam);
@@ -1567,7 +1586,15 @@ export default function ResultsPage() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, minHeight: '100vh' }}>
+      {criticalError && (
+        <Box sx={{ bgcolor: 'error.main', color: 'white', p: 2, mb: 2, borderRadius: 1, fontWeight: 'bold', position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, boxShadow: 3, width: '90%', maxWidth: '800px' }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="subtitle1">সিস্টেম ত্রুটি (Critical Error): {criticalError}</Typography>
+            <IconButton size="small" color="inherit" onClick={() => setCriticalError(null)}><ClearIcon /></IconButton>
+          </Stack>
+        </Box>
+      )}
       <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
         <Typography variant="h4">
           <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
@@ -2652,7 +2679,10 @@ export default function ResultsPage() {
               <FormControl id="bulk-class-select" fullWidth size="small">
                 <InputLabel>শ্রেণি</InputLabel>
                 <Select
-                  value={bulkForm.classroom}
+                  value={String(bulkForm.classroom)}
+                  open={classSelectOpen}
+                  onOpen={() => setClassSelectOpen(true)}
+                  onClose={() => setClassSelectOpen(false)}
                   onChange={(e) => {
                     const v = e.target.value;
                     setBulkForm(prev => ({ ...prev, classroom: v, section: [], exam: '', subject: '' }));
@@ -2660,12 +2690,13 @@ export default function ResultsPage() {
                     loadSectionsByClass(v);
                     loadSubjectsByClass(v);
                     loadExaminationsByClass(v);
+                    setClassSelectOpen(false);
                   }}
                   label="শ্রেণি"
                   disabled={loadingClasses}
                 >
                   {classes.map(classroom => (
-                    <MenuItem key={classroom.id} value={classroom.id}>{classroom.name}</MenuItem>
+                    <MenuItem key={classroom.id} value={String(classroom.id)}>{classroom.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -2675,7 +2706,10 @@ export default function ResultsPage() {
                 <InputLabel>সেকশন</InputLabel>
                 <Select
                   multiple
-                  value={bulkForm.section || []}
+                  open={sectionSelectOpen}
+                  onOpen={() => setSectionSelectOpen(true)}
+                  onClose={() => setSectionSelectOpen(false)}
+                  value={(bulkForm.section || []).map(String)}
                   onChange={(e) => {
                     const value = e.target.value;
                     if (value.includes("")) {
@@ -2684,6 +2718,7 @@ export default function ResultsPage() {
                         loadStudentsByClass(bulkForm.classroom, []);
                         loadSubjectsByClass(bulkForm.classroom, []);
                       }
+                      setSectionSelectOpen(false);
                       return;
                     }
                     setBulkForm(prev => ({ ...prev, section: value, subject: '' }));
@@ -2691,6 +2726,7 @@ export default function ResultsPage() {
                       loadStudentsByClass(bulkForm.classroom, value);
                       loadSubjectsByClass(bulkForm.classroom, value);
                     }
+                    setSectionSelectOpen(false);
                   }}
                   renderValue={(selected) => {
                     if (selected.length === 0) return 'সব সেকশন (All)';
@@ -2700,8 +2736,8 @@ export default function ResultsPage() {
                   disabled={!bulkForm.classroom}
                 >
                   {sectionsForAdd.map(sec => (
-                    <MenuItem key={sec.id} value={sec.id}>
-                      <Checkbox checked={(bulkForm.section || []).indexOf(sec.id) > -1} />
+                    <MenuItem key={sec.id} value={String(sec.id)}>
+                      <Checkbox checked={(bulkForm.section || []).map(String).indexOf(String(sec.id)) > -1} />
                       <ListItemText primary={sec.name} />
                     </MenuItem>
                   ))}
@@ -2713,19 +2749,27 @@ export default function ResultsPage() {
               <FormControl id="bulk-exam-select" fullWidth size="small">
                 <InputLabel>পরীক্ষা</InputLabel>
                 <Select
-                  value={bulkForm.exam}
+                  value={String(bulkForm.exam)}
+                  open={examSelectOpen}
+                  onOpen={() => setExamSelectOpen(true)}
+                  onClose={() => setExamSelectOpen(false)}
                   onChange={(e) => {
                     setBulkForm(prev => ({ ...prev, exam: e.target.value }));
+                    setExamSelectOpen(false);
                   }}
                   label="পরীক্ষা"
                   disabled={!bulkForm.classroom}
                 >
                   {getExamsForClass(bulkForm.classroom)
-                    .map(exam => (
-                      <MenuItem key={exam.id} value={exam.id}>
-                        {`${exam.name} — মোট: ${exam.total_marks}`}
-                      </MenuItem>
-                    ))}
+                    .map(exam => {
+                       const label = getExamTypeLabel(exam.exam_type);
+                       const displayName = (label && label !== 'Examination') ? label : (exam.name || 'পরীক্ষা');
+                       return (
+                        <MenuItem key={exam.id} value={String(exam.id)}>
+                          {displayName}
+                        </MenuItem>
+                      );
+                    })}
                 </Select>
               </FormControl>
             </Grid>
@@ -2746,15 +2790,19 @@ export default function ResultsPage() {
               <FormControl id="bulk-subject-select" fullWidth size="small">
                 <InputLabel>বিষয়</InputLabel>
                 <Select
-                  value={bulkForm.subject}
+                  value={String(bulkForm.subject)}
+                  open={subjectSelectOpen}
+                  onOpen={() => setSubjectSelectOpen(true)}
+                  onClose={() => setSubjectSelectOpen(false)}
                   onChange={(e) => {
                     setBulkForm(prev => ({ ...prev, subject: e.target.value }));
+                    setSubjectSelectOpen(false);
                   }}
                   label="বিষয়"
                   disabled={!bulkForm.classroom || loadingSubjects}
                 >
                   {subjects.map(subject => (
-                    <MenuItem key={subject.id} value={subject.id}>{subject.name}</MenuItem>
+                    <MenuItem key={subject.id} value={String(subject.id)}>{subject.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -2767,16 +2815,37 @@ export default function ResultsPage() {
                 <TableRow>
                   <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', width: '60px' }}>রোল</TableCell>
                   <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>নাম</TableCell>
-                  <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>লিখিত</TableCell>
-                  <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>এমসিকিউ</TableCell>
-                  <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>প্র্যাকটিক্যাল</TableCell>
+                  {(() => {
+                    const clsObj = classes.find(c => c.id === parseInt(bulkForm.classroom));
+                    const isNineTen = /\b9\b|\b10\b|\bnine\b|\bten\b|\bssc\b|\bix\b|\bx\b|নবম|দশম/i.test(clsObj?.name || '');
+                    const subjName = (subjects.find(sub => sub.id === parseInt(bulkForm.subject)) || {}).name;
+                    const isCA = CO_CURRICULAR_SUBJECTS.some(sub => String(subjName).toLowerCase().includes(sub.toLowerCase())) ||
+                                 (!isNineTen && (String(subjName).toLowerCase().includes('কৃষি') || String(subjName).toLowerCase().includes('agriculture')));
+
+                    if (!bulkForm.subject) return null;
+
+                    if (isCA) return <TableCell align="center" sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>মোট নম্বর (Total)</TableCell>;
+
+                    const examObj = getExamById(bulkForm.exam || selectedExam);
+                    const wMax = getMaxForField(examObj, 'written', subjName, bulkForm.classroom) || 0;
+                    const mMax = getMaxForField(examObj, 'mcq', subjName, bulkForm.classroom) || 0;
+                    const pMax = getMaxForField(examObj, 'practical', subjName, bulkForm.classroom) || 0;
+
+                    return (
+                      <>
+                        {wMax > 0 && <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>লিখিত</TableCell>}
+                        {mMax > 0 && <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>এমসিকিউ</TableCell>}
+                        {pMax > 0 && <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>প্র্যাকটিক্যাল</TableCell>}
+                      </>
+                    );
+                  })()}
                 </TableRow>
               </TableHead>
               <TableBody>
-                {bulkStudents.length === 0 ? (
+                {bulkStudents.length === 0 || !bulkForm.subject ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                      শ্রেণি ও সেকশন সিলেক্ট করলে শিক্ষার্থীর তালিকা এখানে আসবে
+                    <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                      {!bulkForm.subject ? 'বিষয় সিলেক্ট করলে শিক্ষার্থীর তালিকা ও ইনপুট বক্স এখানে আসবে' : 'শিক্ষার্থীর তালিকা পাওয়া যায়নি'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -2791,8 +2860,17 @@ export default function ResultsPage() {
                       const name = `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() || s.user?.username;
                       const m = bulkMarks[s.id] || { written: '', mcq: '', practical: '' };
                       const examObj = getExamById(bulkForm.exam || selectedExam);
+                      const clsObj = classes.find(c => c.id === parseInt(bulkForm.classroom));
+                      const isNineTen = /\b9\b|\b10\b|\bnine\b|\bten\b|\bssc\b|\bix\b|\bx\b|নবম|দশম/i.test(clsObj?.name || '');
                       const subjName = (subjects.find(sub => sub.id === parseInt(bulkForm.subject)) || {}).name;
-                      const isOptional = String(bulkForm.subject) === String(s.optional_subject?.id || s.optional_subject);
+                      const isOptional = String(bulkForm.subject) === String(s.optional_subject?.id || s.optional_subject) ||
+                                        (isNineTen && (String(subjName).toLowerCase().includes('কৃষি') || String(subjName).toLowerCase().includes('agriculture')));
+                      const isCA = CO_CURRICULAR_SUBJECTS.some(sub => String(subjName).toLowerCase().includes(sub.toLowerCase())) ||
+                                   (!isNineTen && (String(subjName).toLowerCase().includes('কৃষি') || String(subjName).toLowerCase().includes('agriculture')));
+
+                      const wMax = getMaxForField(examObj, 'written', subjName, bulkForm.classroom) || 0;
+                      const mMax = getMaxForField(examObj, 'mcq', subjName, bulkForm.classroom) || 0;
+                      const pMax = getMaxForField(examObj, 'practical', subjName, bulkForm.classroom) || 0;
 
                       return (
                         <TableRow key={s.id} hover sx={{ bgcolor: isOptional ? 'rgba(76, 175, 80, 0.05)' : 'inherit' }}>
@@ -2802,40 +2880,61 @@ export default function ResultsPage() {
                             {name} {isOptional && <Chip label="৪র্থ" size="small" color="success" sx={{ height: 18, fontSize: '0.6rem', ml: 0.5 }} />}
                           </Typography>
                         </TableCell>
-                        <TableCell align="center">
-                          <TextField
-                            type="number" size="small" value={m.written}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => setBulkMark(s.id, 'written', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, s.id, 'written')}
-                            placeholder={String(getMaxForField(examObj, 'written', subjName, bulkForm.classroom) ?? '')}
-                            autoComplete="off"
-                            inputProps={{ 'data-student-id': s.id, 'data-field': 'written', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
-                          />
-                        </TableCell>
-                        <TableCell align="center">
-                          <TextField
-                            type="number" size="small" value={m.mcq}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => setBulkMark(s.id, 'mcq', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, s.id, 'mcq')}
-                            placeholder={String(getMaxForField(examObj, 'mcq', subjName, bulkForm.classroom) ?? '')}
-                            autoComplete="off"
-                            inputProps={{ 'data-student-id': s.id, 'data-field': 'mcq', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
-                            disabled={String(subjName).includes('ইংরেজি') || String(subjName).includes('English')}
-                          />
-                        </TableCell>
-                        <TableCell align="center">
-                          <TextField
-                            type="number" size="small" value={m.practical}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => setBulkMark(s.id, 'practical', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, s.id, 'practical')}
-                            placeholder={String(getMaxForField(examObj, 'practical', subjName, bulkForm.classroom) ?? '')}
-                            autoComplete="off"
-                            inputProps={{ 'data-student-id': s.id, 'data-field': 'practical', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
-                          />
-                        </TableCell>
+                        {isCA ? (
+                          <TableCell align="center">
+                            <TextField
+                              type="number" size="small" value={m.written}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => setBulkMark(s.id, 'written', e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, s.id, 'written')}
+                              placeholder={isNineTen ? "100" : "50"}
+                              autoComplete="off"
+                              inputProps={{ 'data-student-id': s.id, 'data-field': 'written', style: { textAlign: 'center', width: '80px' }, autoComplete: 'off' }}
+                            />
+                          </TableCell>
+                        ) : (
+                          <>
+                            {wMax > 0 && (
+                              <TableCell align="center">
+                                <TextField
+                                  type="number" size="small" value={m.written}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => setBulkMark(s.id, 'written', e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, s.id, 'written')}
+                                  placeholder={String(wMax)}
+                                  autoComplete="off"
+                                  inputProps={{ 'data-student-id': s.id, 'data-field': 'written', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+                                />
+                              </TableCell>
+                            )}
+                            {mMax > 0 && (
+                              <TableCell align="center">
+                                <TextField
+                                  type="number" size="small" value={m.mcq}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => setBulkMark(s.id, 'mcq', e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, s.id, 'mcq')}
+                                  placeholder={String(mMax)}
+                                  autoComplete="off"
+                                  inputProps={{ 'data-student-id': s.id, 'data-field': 'mcq', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+                                />
+                              </TableCell>
+                            )}
+                            {pMax > 0 && (
+                              <TableCell align="center">
+                                <TextField
+                                  type="number" size="small" value={m.practical}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => setBulkMark(s.id, 'practical', e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, s.id, 'practical')}
+                                  placeholder={String(pMax)}
+                                  autoComplete="off"
+                                  inputProps={{ 'data-student-id': s.id, 'data-field': 'practical', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+                                />
+                              </TableCell>
+                            )}
+                          </>
+                        )}
                       </TableRow>
                     );
                   })

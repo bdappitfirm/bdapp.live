@@ -138,12 +138,18 @@ api.interceptors.response.use(
         console.warn('Cache write failed:', e);
       }
     } else if (['post', 'put', 'patch', 'delete'].includes(method)) {
-      // Clear cache on mutations to avoid stale data
-      try {
-        await db.genericCache.clear();
-        console.log('🧹 Generic cache cleared due to mutation:', response.config.url);
-      } catch (e) {
-        console.warn('Cache clear failed:', e);
+      // Clear cache on mutations to avoid stale data,
+      // EXCEPT for known "Read-only" POST requests like translation
+      const url = response.config.url || '';
+      const isSafePost = url.includes('/translate_card/') || url.includes('/export_csv/') || url.includes('/search/');
+
+      if (!isSafePost) {
+        try {
+          await db.genericCache.clear();
+          console.log('🧹 Generic cache cleared due to mutation:', url);
+        } catch (e) {
+          console.warn('Cache clear failed:', e);
+        }
       }
     }
     return response;

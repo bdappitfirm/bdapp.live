@@ -176,6 +176,7 @@ const SchoolDashboard = () => {
 
   const loadInitialData = useCallback(async () => {
     if (!id || authLoading) return;
+    console.log('🏫 SchoolDashboard: Loading initial data for school', id);
 
     // Check for cached data first to show it immediately
     const isSimple = localStorage.getItem(`dashboardSimpleDue:${id}`) === 'on';

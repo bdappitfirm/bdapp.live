@@ -28,8 +28,16 @@ export const ToastProvider = ({ children }) => {
     setToast({ ...toast, open: false });
   };
 
+  const value = React.useMemo(() => ({
+    showToast,
+    success,
+    error,
+    warning,
+    info
+  }), [showToast, success, error, warning, info]);
+
   return (
-    <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
       <Snackbar
         open={toast.open}

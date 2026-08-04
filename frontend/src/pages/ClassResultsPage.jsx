@@ -367,8 +367,8 @@ export default function ClassResultsPage() {
 
             // Filtering other group subjects
             const commerceSubjs = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়'];
-            const artsSubjs = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি', 'পৌরনীতি ও নাগরিকতা', 'বাংলাদেশের ইতিহাস ও বিশ্ব সভ্যতা', 'ভূগোল ও পরিবেশ'];
-            const scienceSubjs = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর'];
+            const artsSubjs = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'পৌরণীতি', 'অর্থনীতি', 'পৌরনীতি ও নাগরিকতা', 'পৌরণীতি ও নাগরিকতা', 'বাংলাদেশের ইতিহাস ও বিশ্ব সভ্যতা', 'ভূগোল ও পরিবেশ'];
+            const scienceSubjs = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর', 'bgs', 'বাংলাদেশ ও বিশ্ব', 'bangladesh and global', 'bangladesh & global'];
 
             if (isScienceGroup && (commerceSubjs.some(s => lowerNm.includes(s)) || artsSubjs.some(s => lowerNm.includes(s)))) continue;
             if (isCommerceGroup && (scienceSubjs.some(s => lowerNm.includes(s)) || artsSubjs.some(s => lowerNm.includes(s)))) continue;
