@@ -850,17 +850,19 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             pb: '0mm'
           }
         }}>
-          <Box sx={{ textAlign: 'center', mb: 0.5, mt: 1, height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
+          <Box sx={{ textAlign: 'center', mb: 0.5, mt: 1, height: '120px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'visible' }}>
             <Typography className="school-name-header" sx={{
               fontSize: schoolFontSize,
               letterSpacing: schoolName.length > 30 ? '-1.0px' : 'normal',
-              lineHeight: 1.1,
+              lineHeight: 1.3,
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
+              overflow: 'visible',
+              padding: '10px 0',
               '@media print': {
                 fontSize: schoolFontSize,
+                lineHeight: 1.3,
               }
             }}>{schoolName.toUpperCase()}</Typography>
             {resolvedSchool?.ein && (<Typography sx={{ fontSize: '12px', color: '#000 !important', fontWeight: 'bold', mb: 0.2 }}>EIIN: {resolvedSchool.ein}</Typography>)}

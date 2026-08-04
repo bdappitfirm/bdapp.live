@@ -24,6 +24,7 @@ export default function BillingPage() {
   const [studentCount, setStudentCount] = useState(0);
   const [schoolLink, setSchoolLink] = useState('');
   const [ratePerStudent, setRatePerStudent] = useState(100);
+  const [commission, setCommission] = useState(0);
   const [previouslyPaid, setPreviouslyPaid] = useState(0);
   const [billDate, setBillDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [billNo, setBillDateNo] = useState(`INV-${dayjs().format('YYYY')}-SR-${Math.floor(Math.random() * 900) + 100}`);
@@ -88,7 +89,9 @@ export default function BillingPage() {
   const toBn = (n) => String(n).replace(/\d/g, d => "০১২৩৪৫৬৭৮৯"[d]);
 
   const totalAmount = studentCount * ratePerStudent;
-  const netPayable = totalAmount - previouslyPaid;
+  const commissionAmount = (totalAmount * commission) / 100;
+  const afterCommission = totalAmount - commissionAmount;
+  const netPayable = afterCommission - previouslyPaid;
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
@@ -137,6 +140,16 @@ export default function BillingPage() {
               fullWidth
               value={ratePerStudent}
               onChange={(e) => setRatePerStudent(e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              label="কমিশন (%)"
+              type="number"
+              fullWidth
+              value={commission}
+              onChange={(e) => setCommission(e.target.value)}
+              helperText="শতকরা হার (যেমন: ১০)"
             />
           </Grid>
           <Grid item xs={12} md={2}>
@@ -191,12 +204,11 @@ export default function BillingPage() {
         </Grid>
       </Paper>
 
-      {/* Actual Bill Template */}
       <Paper
         ref={printRef}
         elevation={0}
         sx={{
-          p: 6,
+          p: 4,
           width: '210mm',
           minHeight: '297mm',
           mx: 'auto',
@@ -207,110 +219,130 @@ export default function BillingPage() {
         }}
       >
         {/* Header */}
-        <Box sx={{ textAlign: 'center', mb: 4 }}>
-          <Typography variant="h3" sx={{ fontWeight: '900', color: '#1a237e', mb: 0.5 }}>
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
+          <Typography variant="h4" sx={{ fontWeight: '900', color: '#1a237e', mb: 0.5 }}>
             বিডিএপ আইটি ফার্ম
           </Typography>
-          <Typography variant="subtitle1" sx={{ fontStyle: 'italic', mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontStyle: 'italic', mb: 1 }}>
             স্মার্ট এডুকেশন সলিউশন পার্টনার
           </Typography>
           <Divider sx={{ borderBottomWidth: 3, borderColor: '#1a237e', width: '80%', mx: 'auto' }} />
         </Box>
 
-        <Stack direction="row" justifyContent="space-between" sx={{ mb: 4 }}>
+        <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
           <Box>
-            <Typography variant="body1"><strong>তারিখ:</strong> {dayjs(billDate).format('DD MMMM, YYYY')}</Typography>
-            <Typography variant="body1"><strong>বিল নং:</strong> {billNo}</Typography>
+            <Typography variant="body2"><strong>তারিখ:</strong> {dayjs(billDate).format('DD MMMM, YYYY')}</Typography>
+            <Typography variant="body2"><strong>বিল নং:</strong> {billNo}</Typography>
           </Box>
         </Stack>
 
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="body1"><strong>প্রতি,</strong></Typography>
-          <Typography variant="body1">প্রধান শিক্ষক,</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 'bold', my: 0.5 }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2"><strong>প্রতি,</strong></Typography>
+          <Typography variant="body2">প্রধান শিক্ষক,</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', my: 0.5 }}>
             {selectedSchool?.name || 'স্কুলের নাম'}
           </Typography>
-          <Typography variant="body1">{selectedSchool?.address || 'স্কুলের ঠিকানা'}</Typography>
+          <Typography variant="body2">{selectedSchool?.address || 'স্কুলের ঠিকানা'}</Typography>
         </Box>
 
-        <Typography variant="body1" sx={{ mb: 3 }}>
+        <Typography variant="body2" sx={{ mb: 2 }}>
           <strong>বিষয়: ডিজিটাল স্কুল ম্যানেজমেন্ট সফটওয়্যার এবং ডাটাবেস সেটআপ বাবদ বিল।</strong>
         </Typography>
 
-        <Typography variant="body1" sx={{ mb: 3 }}>
+        <Typography variant="body2" sx={{ mb: 2 }}>
           সম্মানিত মহোদয়,<br />
           আপনার প্রতিষ্ঠানের ডিজিটাল রূপান্তরের লক্ষ্যে প্রয়োজনীয় ডাটাবেস তৈরি, সফটওয়্যার কাস্টমাইজেশন এবং ইনস্টলেশন সম্পন্ন করা হয়েছে। উক্ত কাজের বিস্তারিত বিল বিবরণী নিচে পেশ করা হলো:
         </Typography>
 
-        <Table sx={{ border: '1px solid black', mb: 4 }}>
+        <Table size="small" sx={{ border: '1px solid black', mb: 2 }}>
           <TableHead>
             <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }} align="center">ক্রমিক</TableCell>
-              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>কাজের বিবরণ</TableCell>
-              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }} align="center">হার (এককালীন)</TableCell>
-              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }} align="center">শিক্ষার্থীর সংখ্যা</TableCell>
-              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }} align="center">মোট টাকা</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }} align="center">ক্রমিক</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }}>কাজের বিবরণ</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }} align="center">হার (এককালীন)</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }} align="center">শিক্ষার্থীর সংখ্যা</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }} align="center">মোট টাকা</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             <TableRow>
-              <TableCell sx={{ border: '1px solid black' }} align="center">০১</TableCell>
-              <TableCell sx={{ border: '1px solid black' }}>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">০১</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }}>
                 <strong>পূর্ণাঙ্গ ডাটাবেস ক্রিয়েশন:</strong> প্রতিটি শিক্ষার্থীর বিস্তারিত তথ্য (নাম, রোল, ছবি, অভিভাবক) এন্ট্রি এবং ক্লাউড সার্ভার কনফিগারেশন।
               </TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">{ratePerStudent}/-</TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">{studentCount} জন</TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center"><strong>{totalAmount.toLocaleString()}/-</strong></TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">{ratePerStudent}/-</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">{studentCount} জন</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center"><strong>{totalAmount.toLocaleString()}/-</strong></TableCell>
             </TableRow>
             <TableRow>
-              <TableCell sx={{ border: '1px solid black' }} align="center">০২</TableCell>
-              <TableCell sx={{ border: '1px solid black' }}>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">০২</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }}>
                 <strong>সফটওয়্যার কাস্টমাইজেশন:</strong> হাজিরা (QR ও ম্যানুয়াল), রেজাল্ট প্রসেসিং, ডিজিটাল আইডি কার্ড এবং অটো-অ্যাডমিশন কার্ড জেনারেটর মডিউল তৈরি।
               </TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">অন্তর্ভুক্ত</TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">-</TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">-</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">অন্তর্ভুক্ত</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">-</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">-</TableCell>
             </TableRow>
             <TableRow>
-              <TableCell sx={{ border: '1px solid black' }} align="center">০৩</TableCell>
-              <TableCell sx={{ border: '1px solid black' }}>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">০৩</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }}>
                 <strong>ইনস্টলেশন ও ট্রেনিং:</strong> প্রতিষ্ঠানের পিসি এবং শিক্ষকদের মোবাইলে PWA (App) ইনস্টল, কিউআর স্ক্যানার সেটআপ এবং ব্যবহারের পূর্ণ প্রশিক্ষণ।
               </TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">অন্তর্ভুক্ত</TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">-</TableCell>
-              <TableCell sx={{ border: '1px solid black' }} align="center">-</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">অন্তর্ভুক্ত</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">-</TableCell>
+              <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">-</TableCell>
             </TableRow>
             <TableRow>
-              <TableCell colSpan={4} sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'right', p: 1.5 }}>
-                উপ-মোট (Sub-total) =
+              <TableCell colSpan={4} sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'right', py: 0.5, px: 1.5, fontSize: '0.85rem' }}>
+                মোট (Total) =
               </TableCell>
-              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }} align="center">
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }} align="center">
                 {totalAmount.toLocaleString()}/-
               </TableCell>
             </TableRow>
+            {commission > 0 && (
+              <TableRow>
+                <TableCell colSpan={4} sx={{ border: '1px solid black', textAlign: 'right', py: 0.5, px: 1.5, fontSize: '0.8rem' }}>
+                  (-) কমিশন ({commission}%) =
+                </TableCell>
+                <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">
+                  {commissionAmount.toLocaleString()}/-
+                </TableCell>
+              </TableRow>
+            )}
+            {commission > 0 && (
+               <TableRow>
+                 <TableCell colSpan={4} sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'right', py: 0.5, px: 1.5, fontSize: '0.85rem' }}>
+                   কমিশন পরবর্তী মোট =
+                 </TableCell>
+                 <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }} align="center">
+                   {afterCommission.toLocaleString()}/-
+                 </TableCell>
+               </TableRow>
+            )}
             {previouslyPaid > 0 && (
               <TableRow>
-                <TableCell colSpan={4} sx={{ border: '1px solid black', textAlign: 'right', p: 1.5 }}>
+                <TableCell colSpan={4} sx={{ border: '1px solid black', textAlign: 'right', py: 0.5, px: 1.5, fontSize: '0.8rem' }}>
                   (-) পূর্বের পরিশোধিত টাকা =
                 </TableCell>
-                <TableCell sx={{ border: '1px solid black' }} align="center">
+                <TableCell sx={{ border: '1px solid black', fontSize: '0.8rem', py: 0.5 }} align="center">
                   {previouslyPaid.toLocaleString()}/-
                 </TableCell>
               </TableRow>
             )}
             <TableRow sx={{ bgcolor: '#e3f2fd' }}>
-              <TableCell colSpan={4} sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'right', p: 1.5 }}>
-                নিট প্রদেয় (Net Payable) =
+              <TableCell colSpan={4} sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'right', py: 0.5, px: 1.5, fontSize: '0.9rem' }}>
+                নিট বকেয়া (Net Payable) =
               </TableCell>
-              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '1.2rem' }} align="center">
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '1rem' }} align="center">
                 {netPayable.toLocaleString()}/-
               </TableCell>
             </TableRow>
           </TableBody>
         </Table>
 
-        <Box sx={{ mb: 6 }}>
-          <Typography variant="body1">
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="body2">
             <strong>বিশেষ দ্রষ্টব্য:</strong><br />
             ১. বর্তমান বিলটি {studentCount} জন শিক্ষার্থীর তথ্যের ভিত্তিতে তৈরি করা হয়েছে।<br />
             ২. উভয় পক্ষের ছাত্র সংখ্যা যাচাই ও চূড়ান্ত কনফার্মেশনের পর পরবর্তী বিলে শিক্ষার্থীর সংখ্যা সমন্বয় (Update) করা হবে।<br />
@@ -318,14 +350,14 @@ export default function BillingPage() {
           </Typography>
         </Box>
 
-        <Stack direction="row" justifyContent="space-between" sx={{ mt: 10 }}>
+        <Stack direction="row" justifyContent="space-between" sx={{ mt: 5 }}>
           <Box sx={{ textAlign: 'center' }}>
-            <Divider sx={{ width: 150, mb: 1, borderColor: 'black' }} />
-            <Typography variant="body1">গ্রহীতার স্বাক্ষর</Typography>
+            <Divider sx={{ width: 120, mb: 1, borderColor: 'black' }} />
+            <Typography variant="body2">গ্রহীতার স্বাক্ষর</Typography>
           </Box>
           <Box sx={{ textAlign: 'center' }}>
-            <Divider sx={{ width: 150, mb: 1, borderColor: 'black' }} />
-            <Typography variant="body1">কর্তৃপক্ষের স্বাক্ষর<br />বিডিএপ আইটি ফার্ম</Typography>
+            <Divider sx={{ width: 120, mb: 1, borderColor: 'black' }} />
+            <Typography variant="body2">কর্তৃপক্ষের স্বাক্ষর<br />বিডিএপ আইটি ফার্ম</Typography>
           </Box>
         </Stack>
       </Paper>
