@@ -136,7 +136,16 @@ export default function ClassResultsPage() {
       'রসায়ন': 'Chemistry',
       'জীববিজ্ঞান': 'Biology',
       'জীব বিজ্ঞান': 'Biology',
-      'উচ্চতর গণিত': 'Higher Math'
+      'উচ্চতর গণিত': 'Higher Math',
+      'বাংলাদেশ ও বিশ্বপরিচয়': 'BGS',
+      'বাংলাদেশ ও বিশ্বপরিচয়': 'BGS',
+      'বাংলাদেশ ও বিশ্ব পরিচয়': 'BGS',
+      'বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা': 'History',
+      'বাংলাদেশের ইতিহাস ও বিশ্ব সভ্যতা': 'History',
+      'পৌরনীতি ও নাগরিকতা': 'Civics',
+      'ভূগোল ও পরিবেশ': 'Geography',
+      'কৃষি শিক্ষা': 'Agriculture',
+      'গার্হস্থ্য বিজ্ঞান': 'Home Science'
     };
 
     let translated = String(name);
@@ -279,12 +288,36 @@ export default function ClassResultsPage() {
                        (pr !== null && pr !== undefined && pr !== '');
 
       const parts = [];
-      if (w !== '' && w !== null) parts.push(w);
-      if (mcq !== '' && mcq !== null) parts.push(mcq);
-      if (pr !== '' && pr !== null) parts.push(pr);
-      const components = parts.length > 0 ? `(${parts.join('+')})` : '';
+      if (r.written_marks !== '' && r.written_marks !== null && r.written_marks !== undefined) {
+          parts.push(Math.round(w));
+      }
 
-      const finalVal = hasMarks ? `${Math.round(total)}=${parts.join('+')}` : 'Absent';
+      // MCQ: Only if > 0 OR if it's a known MCQ subject (Not English)
+      const isMcqSub = !/(english|ইংরেজি|ইংরেজী)/i.test(nm);
+      if (r.mcq_marks !== '' && r.mcq_marks !== null && r.mcq_marks !== undefined) {
+          if (mcq > 0 || isMcqSub) {
+              parts.push(Math.round(mcq));
+          }
+      }
+
+      // Only show practical if marks > 0 OR if it's a known practical subject
+      const isPrSub = /(ict|আইসিটি|তথ্য|physics|পদার্থ|chemistry|রসায়ন|রসায়ন|biology|জীব|higher|উচ্চতর|agri|কৃষি|home|গার্হস্থ্য)/i.test(nm);
+      if (r.practical_marks !== '' && r.practical_marks !== null && r.practical_marks !== undefined) {
+          if (pr > 0 || isPrSub) {
+              parts.push(Math.round(pr));
+          }
+      }
+
+      let finalVal = 'Absent';
+      if (hasMarks) {
+          const totalRound = Math.round(total);
+          // If only one component exists, just show the total
+          if (parts.length > 1) {
+              finalVal = `${totalRound}=${parts.join('+')}`;
+          } else {
+              finalVal = String(totalRound);
+          }
+      }
       m.set(key, { total, display: finalVal, grade: r.grade, is_passed: r.is_passed });
     }
 
@@ -292,16 +325,26 @@ export default function ClassResultsPage() {
     if (isClassNineOrTen) {
         if (papers.bangla.length > 0) {
             const sum = papers.bangla.reduce((s, r) => s + ((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)), 0);
-            const compStr = papers.bangla.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0))).join('+');
+            const compParts = papers.bangla.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)));
             const hasAnyMarks = papers.bangla.some(r => (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
-            const displayVal = hasAnyMarks ? `${Math.round(sum)}=${compStr}` : 'Absent';
+
+            let displayVal = 'Absent';
+            if (hasAnyMarks) {
+                const totalRound = Math.round(sum);
+                displayVal = compParts.length > 1 ? `${totalRound}=${compParts.join('+')}` : String(totalRound);
+            }
             m.set('merged-bangla', { total: sum, display: displayVal });
         }
         if (papers.english.length > 0) {
             const sum = papers.english.reduce((s, r) => s + ((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)), 0);
-            const compStr = papers.english.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0))).join('+');
+            const compParts = papers.english.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)));
             const hasAnyMarks = papers.english.some(r => (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
-            const displayVal = hasAnyMarks ? `${Math.round(sum)}=${compStr}` : 'Absent';
+
+            let displayVal = 'Absent';
+            if (hasAnyMarks) {
+                const totalRound = Math.round(sum);
+                displayVal = compParts.length > 1 ? `${totalRound}=${compParts.join('+')}` : String(totalRound);
+            }
             m.set('merged-english', { total: sum, display: displayVal });
         }
     }
@@ -312,72 +355,85 @@ export default function ClassResultsPage() {
   useEffect(() => {
     if (!selectedClass) { setExaminations([]); setResultsByStudent(new Map()); return; }
     setLoading(true);
-    scopedGet('/api/results/examinations/', id, { classroom: selectedClass, year: selectedYear, page_size: 1000 }).then(async res => {
+    scopedGet('/api/results/examinations/', id, { classroom: selectedClass, page_size: 1000 }).then(async res => {
         let all = Array.isArray(res.data) ? res.data : (res.data?.results || []);
         const filterType = selectedExamType || 'all';
         let exams = filterType === 'all' ? all : all.filter(e => normalizeExamType(e.exam_type, e.name) === filterType);
+
+        // Flexible year matching on frontend
+        if (selectedYear) {
+            const yearStr = String(selectedYear);
+            exams = exams.filter(e => {
+                const exYear = String(e.year || e.academic_year || '');
+                return !exYear || exYear === yearStr || e.name?.includes(yearStr);
+            });
+        }
+
         if (selectedExamId) exams = exams.filter(e => String(e.id) === String(selectedExamId));
         setExaminations(exams);
 
         const byStudent = new Map();
         try {
-            // Optimized multi-page fetch: send year + section + exam filters to backend to minimize payload
             const fetchAllPages = async () => {
                 let allItems = [];
                 let page = 1;
                 let hasNext = true;
-                const maxPages = 5; // Year+section filtering reduces payload drastically
+                const maxPages = 15; // Increased pages, decreased size for stability
 
                 while (hasNext && page <= maxPages) {
                     const rParams = {
                         classroom: selectedClass,
                         page: page,
-                        page_size: 1000
+                        page_size: 200 // Reduced to prevent 503
                     };
                     if (selectedYear) rParams.year = selectedYear;
                     if (selectedSection) rParams.section = selectedSection;
                     if (selectedExamId) rParams.examination = selectedExamId;
 
-                    const rRes = await scopedGet(`/api/results/results/`, id, rParams, { timeout: 60000 });
-                    const data = rRes.data;
-                    const items = Array.isArray(data) ? data : (data.results || []);
-                    allItems = allItems.concat(items);
+                    try {
+                        const rRes = await scopedGet(`/api/results/results/`, id, rParams, { timeout: 60000 });
+                        const data = rRes.data;
+                        const items = Array.isArray(data) ? data : (data.results || []);
 
-                    if (data.next && items.length > 0 && items.length >= (rParams.page_size || 1000)) {
-                        page++;
-                    } else {
+                        // Fallback: If no results with year filter, try without year filter for the first page
+                        if (items.length === 0 && page === 1 && selectedYear) {
+                            const fallbackParams = { ...rParams };
+                            delete fallbackParams.year;
+                            const fRes = await scopedGet(`/api/results/results/`, id, fallbackParams, { timeout: 60000 });
+                            const fData = fRes.data;
+                            const fItems = Array.isArray(fData) ? fData : (fData.results || []);
+                            if (fItems.length > 0) {
+                                allItems = allItems.concat(fItems);
+                                if (!fData.next) hasNext = false;
+                                page++;
+                                continue;
+                            }
+                        }
+
+                        allItems = allItems.concat(items);
+                        if (data.next && items.length >= 200) {
+                            page++;
+                        } else {
+                            hasNext = false;
+                        }
+                    } catch (err) {
+                        console.error("Result page fetch error:", err);
                         hasNext = false;
                     }
-                }
-
-                // Fallback: if strict year+section returned 0 and we had filters, retry ONE PAGE WITHOUT year+section
-                if (allItems.length === 0 && (selectedYear || selectedSection || selectedExamId)) {
-                    try {
-                        const fbParams = { classroom: selectedClass, page: 1, page_size: 1000 };
-                        if (selectedExamId) fbParams.examination = selectedExamId;
-                        const fbRes = await scopedGet('/api/results/results/', id, fbParams, { timeout: 45000 });
-                        const fbData = fbRes.data;
-                        allItems = Array.isArray(fbData) ? fbData : (fbData.results || []);
-                    } catch (_) { /* ignore fallback error */ }
                 }
                 return allItems;
             };
 
             let arr = await fetchAllPages();
 
-            // Filter by year on frontend to remain responsive to year changes
-            if (selectedYear) {
+            // Minimal frontend filtering
+            if (selectedYear && arr.length > 0) {
                 const yearStr = String(selectedYear);
                 arr = arr.filter(r => {
                     const ex = r.examination || {};
                     const exYear = String(ex.year || ex.academic_year || '');
-                    const dateYear = ex.exam_date ? String(new Date(ex.exam_date).getFullYear()) : '';
-
-                    // If no year info, keep it (to be safe)
-                    if (!exYear && !dateYear) return true;
-
-                    return exYear === yearStr || dateYear === yearStr ||
-                           (ex.name && ex.name.includes(yearStr));
+                    if (!exYear) return true; // Keep if no year info to avoid missing data
+                    return exYear === yearStr || String(ex.name || '').includes(yearStr);
                 });
             }
 
@@ -468,7 +524,14 @@ export default function ClassResultsPage() {
         const nm = String(r.subject?.name || r.subject_name || '').trim();
         const lowerNm = nm.toLowerCase();
 
-        // Filtering logic
+        // 19/class-results filtering fix:
+        // If a subject has input/marks, ALWAYS show it.
+        // Only filter out "empty" subjects belonging to other groups.
+        const w = parseFloat(r.written_marks);
+        const m = parseFloat(r.mcq_marks);
+        const p = parseFloat(r.practical_marks);
+        const hasMarks = !isNaN(w) || !isNaN(m) || !isNaN(p);
+
         if (isClassNineOrTen) {
             if ((lowerNm.includes('বাংলা') || lowerNm.includes('bangla')) && !lowerNm.includes('বাংলাদেশ')) {
                 hasBangla = true;
@@ -479,17 +542,19 @@ export default function ClassResultsPage() {
                 continue;
             }
 
-            // Science group shouldn't have general science
-            if (isScienceGroup && (lowerNm === 'science' || lowerNm === 'বিজ্ঞান')) continue;
+            if (!hasMarks) {
+                // Science group shouldn't have general science
+                if (isScienceGroup && (lowerNm === 'science' || lowerNm === 'বিজ্ঞান')) continue;
 
-            // Filtering other group subjects
-            const commerceSubjs = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়'];
-            const artsSubjs = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'পৌরণীতি', 'অর্থনীতি', 'পৌরনীতি ও নাগরিকতা', 'পৌরণীতি ও নাগরিকতা', 'বাংলাদেশের ইতিহাস ও বিশ্ব সভ্যতা', 'ভূগোল ও পরিবেশ'];
-            const scienceSubjs = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর', 'bgs', 'বাংলাদেশ ও বিশ্ব', 'bangladesh and global', 'bangladesh & global'];
+                // Filtering other group subjects only if they have NO marks
+                const commerceSubjs = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়'];
+                const artsSubjs = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'পৌরণীতি', 'অর্থনীতি', 'পৌরনীতি ও নাগরিকতা', 'পৌরণীতি ও নাগরিকতা', 'বাংলাদেশের ইতিহাস ও বিশ্ব সভ্যতা', 'ভূগোল ও পরিবেশ'];
+                const scienceSubjs = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর'];
 
-            if (isScienceGroup && (commerceSubjs.some(s => lowerNm.includes(s)) || artsSubjs.some(s => lowerNm.includes(s)))) continue;
-            if (isCommerceGroup && (scienceSubjs.some(s => lowerNm.includes(s)) || artsSubjs.some(s => lowerNm.includes(s)))) continue;
-            if (isHumanitiesGroup && (scienceSubjs.some(s => lowerNm.includes(s)) || commerceSubjs.some(s => lowerNm.includes(s)))) continue;
+                if (isScienceGroup && (commerceSubjs.some(s => lowerNm.includes(s)) || artsSubjs.some(s => lowerNm.includes(s)))) continue;
+                if (isCommerceGroup && (scienceSubjs.some(s => lowerNm.includes(s)) || artsSubjs.some(s => lowerNm.includes(s)))) continue;
+                if (isHumanitiesGroup && (scienceSubjs.some(s => lowerNm.includes(s)) || commerceSubjs.some(s => lowerNm.includes(s)))) continue;
+            }
         }
 
         if (nm && !UNWANTED_SUBJECTS.includes(nm)) {
@@ -584,7 +649,8 @@ export default function ClassResultsPage() {
         const fullName = `${fn} ${ln}`.trim();
 
         const isTC = fullName === 'TC' || fn === 'TC' || ln === 'TC' || username === 'TC';
-        const hasNoInfo = !fn && !ln && !username;
+        // Be very careful about hiding students - only hide if NO identifying info at all
+        const hasNoInfo = !fn && !ln && !username && !s.roll_number;
 
         return !isTC && !hasNoInfo;
     });
