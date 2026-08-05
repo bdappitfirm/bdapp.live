@@ -165,6 +165,7 @@ const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
 const ResultsPage = React.lazy(() => import('./pages/ResultsPage'));
 const ExaminationsPage = React.lazy(() => import('./pages/ExaminationsPage'));
 const ResultCardGenerator = React.lazy(() => import('./pages/ResultCardGenerator'));
+const MeritListPage = React.lazy(() => import('./pages/MeritListPage'));
 const RankListPage = React.lazy(() => import('./pages/RankListPage'));
 const ToTListPage = React.lazy(() => import('./pages/ToTListPage'));
 const VoterListPage = React.lazy(() => import('./pages/VoterListPage'));
@@ -356,6 +357,7 @@ function App() {
           <Route path="result-card" element={<ResultCardGenerator />} />
           <Route path="class-results" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ClassResultsPage /></ProtectedRoute>} />
           <Route path="rank-list" element={<RankListPage />} />
+          <Route path="merit-list" element={<MeritListPage />} />
           <Route path="tot-list" element={<ToTListPage />} />
           <Route path="voter-list" element={<VoterListPage />} />
           <Route path="student-list" element={<StudentListPage />} />

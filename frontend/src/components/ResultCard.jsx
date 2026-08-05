@@ -197,7 +197,7 @@ const OPT_SUB_MAP = {
   'ভূগোল ও পরিবেশ': 'Geography & Environment'
 };
 
-const BN_TO_EN_CLASS_MAP = { 'প্রথম': 'One', 'দ্বিতীয়': 'Two', 'তৃতীয়': 'Three', 'চতুর্থ': 'Four', 'পঞ্চম': 'Five', 'ষষ্ঠ': 'Six', 'সপ্তম': 'Seven', 'অষ্টম': 'Eight', 'নবম': 'Nine', 'দশম': 'Ten', 'শ্রেণী': '', 'শ্রেণি': '', 'Class': '' };
+const BN_TO_EN_CLASS_MAP = { 'প্রথম': 'One', 'দ্বিতীয়': 'Two', 'তৃতীয়': 'Three', 'তৃতীয়': 'Three', 'চতুর্থ': 'Four', 'পঞ্চম': 'Five', 'ষষ্ঠ': 'Six', 'সপ্তম': 'Seven', 'অষ্টম': 'Eight', 'নবম': 'Nine', 'দশম': 'Ten', 'শ্রেণী': '', 'শ্রেণি': '', 'শেণি': '', 'Class': '' };
 const ORD_MAP = { 'Sixth': 'Six', 'Seventh': 'Seven', 'Eighth': 'Eight', 'Ninth': 'Nine', 'Tenth': 'Ten' };
 
 const SEC_MAP = { 'মানবিক': 'Humanities', 'বিজ্ঞান': 'Science', 'ব্যবসায় শিক্ষা': 'Commerce', 'ব্যবসা': 'Commerce', 'ব্যবসায়': 'Commerce', 'ব্যবসায়': 'Commerce', 'ক': 'A', 'খ': 'B', 'গ': 'C', 'ঘ': 'D', 'এ': 'A', 'বি': 'B', 'সি': 'C', 'ডি': 'D' };
@@ -411,14 +411,14 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     // Always translate to English for Result Card
     const bnToEn = {
       'শ্রীরামপুর': 'SRIRAMPUR', 'ভাটরা': 'BHATRA',
-      'উচ্চ বিদ্যালয়': 'HIGH SCHOOL', 'উচ্চ বিদ্যালয়': 'HIGH SCHOOL',
+      'উচ্চ বিদ্যালয়': 'HIGH SCHOOL', 'উচ্চ বিদ্যালয়': 'HIGH SCHOOL', 'উচ্চ বিদ্যা লয়': 'HIGH SCHOOL', 'উচ্চ বিদ্যা লয়': 'HIGH SCHOOL',
       'মাধ্যমিক বিদ্যালয়': 'SECONDARY SCHOOL', 'মাধ্যমিক বিদ্যালয়': 'SECONDARY SCHOOL',
       'সরকারি': 'GOVT.', 'সরকারী': 'GOVT.',
       'বালিকা': 'GIRLS', 'বালক': 'BOYS',
       'মাদ্রাসা': 'MADRASAH', 'প্রাথমিক': 'PRIMARY',
       'হামানকর্দ্দি': 'HAMANKARDI', 'হামান কর্দ্দি': 'HAMANKARDI', 'হামা নকর্দ্দি': 'HAMANKARDI', 'পল্লী মঙ্গল': 'POLLI MONGOL',
       'দ্বারকানাথ': 'DWARKANATH', 'হাই স্কুল': 'HIGH SCHOOL', 'হাইস্কুল': 'HIGH SCHOOL', 'ডি.এন.': 'D.N.',
-      'বহরিয়া': 'BAHORIA'
+      'বহরিয়া': 'BAHORIA', 'বহরিয়া': 'BAHORIA'
     };
     Object.entries(bnToEn).forEach(([bn, en]) => {
       // Escape dots for regex
@@ -508,6 +508,11 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     const filteredResults = cleanResults.filter(r => {
         if (isCoCurricular(r.subject?.name || r.subject_name, isClassNineOrTen)) return true;
         if (!isClassNineOrTen) return true;
+
+        // Surgical fix: If a subject has input/marks, always show it regardless of group filtering.
+        // This handles mixed sections (e.g., School 19) where students of different groups are in one section.
+        if (!r.isActuallyAbsent) return true;
+
         const group = String(studentGroup).toLowerCase();
         const name = (r.subject?.name || r.subject_name || '').toLowerCase();
 
@@ -761,7 +766,13 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       sName = sName.replace(/বাংলা(?!দেশ)/g, 'Bangla')
                    .replace(/বাংলাদেশ/g, 'Bangladesh')
                    .replace(/ইংরেজি/g, 'English')
-                   .replace(/ইংরেজী/g, 'English');
+                   .replace(/ইংরেজী/g, 'English')
+                   .replace(/পদার্থ/g, 'Physics')
+                   .replace(/রসায়ন|রসায়ন/g, 'Chemistry')
+                   .replace(/জীববিজ্ঞান|জীব বিজ্ঞান/g, 'Biology')
+                   .replace(/গণিত/g, 'Mathematics')
+                   .replace(/ধর্ম/g, 'Religion')
+                   .replace(/বিজ্ঞান/g, 'Science');
 
       // Standalone "বিজ্ঞান" replacement (safely)
       if (sName === 'বিজ্ঞান' || sName === 'সাধারণ বিজ্ঞান') return 'Science';

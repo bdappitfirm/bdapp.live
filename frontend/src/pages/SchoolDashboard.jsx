@@ -98,6 +98,7 @@ const SchoolDashboard = () => {
     { label: 'রেজাল্ট কার্ড', icon: <CardMembershipIcon />, key: 'result-card' },
     { label: 'ক্লাস রেজাল্টস', icon: <AssessmentIcon />, key: 'class-results' },
     { label: 'Rank List', icon: <CardMembershipIcon />, key: 'rank-list' },
+    { label: 'মেরিট লিস্ট', icon: <CardMembershipIcon />, key: 'merit-list' },
     { label: 'স্টুডেন্ট তালিকা', icon: <GroupIcon />, key: 'student-list' },
     { label: 'আইডি কার্ড', icon: <CardMembershipIcon />, key: 'id-card' },
     { label: 'প্রবেশপত্র', icon: <CardMembershipIcon />, key: 'admission-cards' },

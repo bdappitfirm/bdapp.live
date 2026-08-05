@@ -11,8 +11,12 @@ import api from '../utils/api';
 import { scopedGet } from '../utils/schoolApi';
 import { useAcademics } from '../context/AcademicsContext';
 import { useSchool } from '../context/SchoolContext';
+import { getMediaUrl } from '../utils/media';
 
 const UNWANTED_SUBJECTS = [];
+
+const BN_TO_EN_CLASS_MAP = { 'প্রথম': 'One', 'দ্বিতীয়': 'Two', 'তৃতীয়': 'Three', 'তৃতীয়': 'Three', 'চতুর্থ': 'Four', 'পঞ্চম': 'Five', 'ষষ্ঠ': 'Six', 'সপ্তম': 'Seven', 'অষ্টম': 'Eight', 'নবম': 'Nine', 'দশম': 'Ten', 'শ্রেণী': '', 'শ্রেণি': '', 'শেণি': '', 'Class': '' };
+const SEC_MAP = { 'মানবিক': 'Humanities', 'বিজ্ঞান': 'Science', 'ব্যবসায় শিক্ষা': 'Commerce', 'ব্যবসা': 'Commerce', 'ব্যবসায়': 'Commerce', 'ব্যবসায়': 'Commerce', 'ক': 'A', 'খ': 'B', 'গ': 'C', 'ঘ': 'D', 'এ': 'A', 'বি': 'B', 'সি': 'C', 'ডি': 'D' };
 
 const CO_CURRICULAR_SUBJECTS = [
   'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'Physical Education', 'Physical Education and Health',
@@ -41,6 +45,119 @@ export default function ClassResultsPage() {
   const [overallTotals, setOverallTotals] = useState(new Map());
   const [noYearMessage, setNoYearMessage] = useState('');
   const [downloading, setDownloadInProgress] = useState(false);
+  const [forceLanguage, setForceLanguage] = useState('bn');
+
+  const labels = useMemo(() => ({
+    bn: {
+      roll: "রোল",
+      name: "শিক্ষার্থীর নাম",
+      total: "মোট",
+      merit: "মেরিট",
+      absent: "অনুপস্থিত",
+      class: "শ্রেণি",
+      section: "শাখা",
+      resultsTitle: "শ্রেণি ভিত্তিক ফলাফল",
+      all: "সব",
+      back: "ব্যাক",
+      print: "প্রিন্ট",
+      download: "পিডিএফ ডাউনলোড",
+      loading: "লোড হচ্ছে...",
+      noData: "কোনো তথ্য পাওয়া যায়নি"
+    },
+    en: {
+      roll: "Roll",
+      name: "Student Name",
+      total: "Total",
+      merit: "Merit",
+      absent: "Absent",
+      class: "Class",
+      section: "Section",
+      resultsTitle: "Class-wise Results",
+      all: "All",
+      back: "Back",
+      print: "Print",
+      download: "Download PDF",
+      loading: "Loading...",
+      noData: "No data found"
+    }
+  }), []);
+
+  const translateSubject = useCallback((name) => {
+    if (forceLanguage === 'bn' || !name) return name;
+
+    const subMap = {
+      'বাংলাদেশ ও বিশ্বপরিচয়': 'BGS',
+      'বাংলাদেশ ও বিশ্বপরিচয়': 'BGS',
+      'বাংলাদেশ ও বিশ্ব পরিচয়': 'BGS',
+      'তথ্য ও যোগাযোগ প্রযুক্তি': 'ICT',
+      'উচ্চতর গণিত': 'Higher Math',
+      'উচ্চতর গনিত': 'Higher Math',
+      'ইসলাম ও নৈতিক শিক্ষা': 'Religion (Islam)',
+      'ইসলাম শিক্ষা': 'Religion (Islam)',
+      'হিন্দুধর্ম ও নৈতিক শিক্ষা': 'Religion (Hindu)',
+      'হিন্দু ধর্ম শিক্ষা': 'Religion (Hindu)',
+      'হিন্দু ধর্ম': 'Religion (Hindu)',
+      'পৌরনীতি ও নাগরিকতা': 'Civics',
+      'ইতিহাস ও বিশ্বসভ্যতা': 'History',
+      'ভূগোল ও পরিবেশ': 'Geography',
+      'হিসাববিজ্ঞান': 'Accounting',
+      'হিসাব বিজ্ঞান': 'Accounting',
+      'ব্যবসায় উদ্যোগ': 'Business Ent.',
+      'ব্যবসায় শিক্ষা': 'Business Studies',
+      'গার্হস্থ্য বিজ্ঞান': 'Home Science',
+      'কৃষি শিক্ষা': 'Agriculture',
+      'শারীরিক শিক্ষা ও স্বাস্থ্য': 'Physical Education',
+      'শারীরিক শিক্ষা': 'Physical Ed.',
+      'চারু ও কারুকলা': 'Arts & Crafts',
+      'কর্ম ও জীবনমুখী শিক্ষা': 'Work & Life',
+      'ক্যারিয়ার শিক্ষা': 'Career Ed.',
+      'বই পড়া': 'Book Reading',
+      'বাংলা ১ম পত্র': 'Bangla 1st Paper',
+      'বাংলা ২য় পত্র': 'Bangla 2nd Paper',
+      'বাংলা ২য় পত্র': 'Bangla 2nd Paper',
+      'ইংরেজি ১ম পত্র': 'English 1st Paper',
+      'ইংরেজি ২য় পত্র': 'English 2nd Paper',
+      'ইংরেজি ২য় পত্র': 'English 2nd Paper',
+      'বাংলা': 'Bangla',
+      'ইংরেজি': 'English',
+      'ইংরেজী': 'English',
+      'গণিত': 'Mathematics',
+      'বিজ্ঞান': 'Science',
+      'ধর্ম': 'Religion',
+      '১ম পত্র': '1st Paper',
+      '২য় পত্র': '2nd Paper',
+      '২য় পত্র': '2nd Paper',
+      '১ম': '1st',
+      '২য়': '2nd',
+      '২য়': '2nd',
+      'পদার্থ বিজ্ঞান': 'Physics',
+      'পদার্থবিজ্ঞান': 'Physics',
+      'রসায়ন': 'Chemistry',
+      'রসায়ন': 'Chemistry',
+      'জীববিজ্ঞান': 'Biology',
+      'জীব বিজ্ঞান': 'Biology',
+      'উচ্চতর গণিত': 'Higher Math'
+    };
+
+    let translated = String(name);
+    // Sort keys by length descending to ensure longest phrases are replaced first
+    const sortedKeys = Object.keys(subMap).sort((a, b) => b.length - a.length);
+
+    sortedKeys.forEach(bn => {
+      if (translated.includes(bn)) {
+        translated = translated.replace(new RegExp(bn, 'g'), subMap[bn]);
+      }
+    });
+
+    return translated.trim();
+  }, [forceLanguage]);
+
+  const n = useCallback((v) => {
+    if (forceLanguage === 'en') return v;
+    return String(v ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
+  }, [forceLanguage]);
+
+  const l = labels[forceLanguage] || labels.bn;
 
   const updateUrl = useCallback((cls, sec, type, exam, year) => {
     const params = new URLSearchParams();
@@ -167,7 +284,7 @@ export default function ClassResultsPage() {
       if (pr !== '' && pr !== null) parts.push(pr);
       const components = parts.length > 0 ? `(${parts.join('+')})` : '';
 
-      const finalVal = hasMarks ? `${Math.round(total)}${components}` : 'Absent';
+      const finalVal = hasMarks ? `${Math.round(total)}=${parts.join('+')}` : 'Absent';
       m.set(key, { total, display: finalVal, grade: r.grade, is_passed: r.is_passed });
     }
 
@@ -177,14 +294,14 @@ export default function ClassResultsPage() {
             const sum = papers.bangla.reduce((s, r) => s + ((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)), 0);
             const compStr = papers.bangla.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0))).join('+');
             const hasAnyMarks = papers.bangla.some(r => (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
-            const displayVal = hasAnyMarks ? `${Math.round(sum)}(${compStr})` : 'Absent';
+            const displayVal = hasAnyMarks ? `${Math.round(sum)}=${compStr}` : 'Absent';
             m.set('merged-bangla', { total: sum, display: displayVal });
         }
         if (papers.english.length > 0) {
             const sum = papers.english.reduce((s, r) => s + ((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0)), 0);
             const compStr = papers.english.map(r => Math.round((parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0))).join('+');
             const hasAnyMarks = papers.english.some(r => (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
-            const displayVal = hasAnyMarks ? `${Math.round(sum)}(${compStr})` : 'Absent';
+            const displayVal = hasAnyMarks ? `${Math.round(sum)}=${compStr}` : 'Absent';
             m.set('merged-english', { total: sum, display: displayVal });
         }
     }
@@ -291,7 +408,7 @@ export default function ClassResultsPage() {
         }
 
         setResultsByStudent(cleanedByStudent);
-        if (cleanedByStudent.size === 0) setNoYearMessage('কোনো তথ্য পাওয়া যায়নি');
+        if (cleanedByStudent.size === 0) setNoYearMessage(l.noData);
         else setNoYearMessage('');
 
         const mt = new Map();
@@ -422,14 +539,14 @@ export default function ClassResultsPage() {
     };
 
     const subjects = Array.from(set).map(s => ({
-        label: s,
+        label: translateSubject(s),
         key: s.toLowerCase(),
         isCoCurricular: CO_CURRICULAR_SUBJECTS.some(sub => s.toLowerCase().includes(sub.toLowerCase()))
     }));
 
     if (isClassNineOrTen) {
-        if (hasEnglish) subjects.push({ label: 'ইংরেজি (১ম+২য়)', key: 'merged-english', isCoCurricular: false });
-        if (hasBangla) subjects.push({ label: 'বাংলা (১ম+২য়)', key: 'merged-bangla', isCoCurricular: false });
+        if (hasEnglish) subjects.push({ label: forceLanguage === 'en' ? 'English (1st+2nd)' : 'ইংরেজি (১ম+২য়)', key: 'merged-english', isCoCurricular: false });
+        if (hasBangla) subjects.push({ label: forceLanguage === 'en' ? 'Bangla (1st+2nd)' : 'বাংলা (১ম+২য়)', key: 'merged-bangla', isCoCurricular: false });
     }
 
     subjects.sort((a, b) => {
@@ -536,9 +653,9 @@ export default function ClassResultsPage() {
   return (
     <Box className="cr-print-container" sx={{ p: { xs: 1, sm: 3 }, "@media print": { p: 0, m: 0 } }}>
       <Stack className="no-print" direction={{ xs: 'column', sm: 'row' }} alignItems="center" justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
-        <Typography variant="h4"><AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />ক্লাস রেজাল্টস</Typography>
+        <Typography variant="h4"><AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />{l.resultsTitle}</Typography>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>ব্যাক</Button>
+          <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>{l.back}</Button>
           <Button
             variant="contained"
             startIcon={<DownloadIcon />}
@@ -546,165 +663,230 @@ export default function ClassResultsPage() {
             disabled={downloading || !sortedStudents.length}
             color="secondary"
           >
-            {downloading ? 'ডাউনলোড হচ্ছে...' : 'পিডিএফ ডাউনলোড'}
+            {downloading ? l.loading : l.download}
           </Button>
-          <Button variant="contained" startIcon={<PrintIcon />} onClick={() => window.print()}>প্রিন্ট</Button>
+          <Button variant="contained" startIcon={<PrintIcon />} onClick={() => window.print()}>{l.print}</Button>
         </Stack>
       </Stack>
 
       <Paper className="no-print" sx={{ p: 2, mb: 3 }}>
         <Stack spacing={2} direction={{ xs: 'column', md: 'row' }}>
-          <TextField select label="শ্রেণি" value={selectedClass} onChange={(e) => updateUrl(e.target.value, '', selectedExamType, '', selectedYear)} sx={{ minWidth: 200 }}>
-            {classrooms.map(cls => <MenuItem key={cls.id} value={cls.id}>{cls.name}</MenuItem>)}
+          <TextField
+            select
+            label={l.class}
+            value={(classrooms && classrooms.length > 0 && classrooms.some(c => String(c.id) === String(selectedClass))) ? String(selectedClass) : ''}
+            onChange={(e) => updateUrl(e.target.value, '', selectedExamType, '', selectedYear)}
+            sx={{ minWidth: 200 }}
+          >
+            <MenuItem value=""><em>{forceLanguage === 'bn' ? 'শ্রেণি নির্বাচন করুন' : 'Select Class'}</em></MenuItem>
+            {classrooms.map(cls => <MenuItem key={cls.id} value={String(cls.id)}>{cls.name}</MenuItem>)}
           </TextField>
-          <TextField select label="সেকশন" value={selectedSection} onChange={(e) => updateUrl(selectedClass, e.target.value, selectedExamType, selectedExamId, selectedYear)} sx={{ minWidth: 150 }} disabled={!selectedClass}>
-            <MenuItem value="">সব</MenuItem>
-            {sections.map(sec => <MenuItem key={sec.id} value={sec.id}>{sec.name}</MenuItem>)}
+          <TextField
+            select
+            label={l.section}
+            value={(sections && sections.length > 0 && sections.some(s => String(s.id) === String(selectedSection))) ? String(selectedSection) : ''}
+            onChange={(e) => updateUrl(selectedClass, e.target.value, selectedExamType, selectedExamId, selectedYear)}
+            sx={{ minWidth: 150 }}
+            disabled={!selectedClass}
+          >
+            <MenuItem value="">{l.all}</MenuItem>
+            {sections.map(sec => <MenuItem key={sec.id} value={String(sec.id)}>{sec.name}</MenuItem>)}
           </TextField>
-          <TextField type="number" label="সাল" value={selectedYear} onChange={(e) => updateUrl(selectedClass, selectedSection, selectedExamType, selectedExamId, e.target.value)} sx={{ width: 100 }} />
-          <Button variant="contained" onClick={() => updateUrl(selectedClass, '', 'all', '', new Date().getFullYear())}>সব দেখাও</Button>
+          <TextField type="number" label={forceLanguage === 'bn' ? 'সাল' : 'Year'} value={selectedYear} onChange={(e) => updateUrl(selectedClass, selectedSection, selectedExamType, selectedExamId, e.target.value)} sx={{ width: 100 }} />
+          <TextField
+            select
+            label={forceLanguage === 'bn' ? 'ভাষা' : 'Language'}
+            value={forceLanguage}
+            onChange={(e) => setForceLanguage(e.target.value)}
+            sx={{ minWidth: 100 }}
+            size="small"
+          >
+            <MenuItem value="bn">বাংলা</MenuItem>
+            <MenuItem value="en">English</MenuItem>
+          </TextField>
+          <Button variant="contained" onClick={() => updateUrl(selectedClass, '', 'all', '', new Date().getFullYear())}>{l.all}</Button>
         </Stack>
       </Paper>
 
       {sortedStudents.length > 0 && (
-          <Box className="cr-table-wrap" sx={{ width: '100%', overflow: { xs: 'hidden', print: 'visible' }, display: { print: 'block' } }}>
-            <TableContainer component={Paper} sx={{
-              boxShadow: 'none',
-              overflowX: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              background: 'white',
-              "@media print": { overflow: 'visible', display: 'block', position: 'static' }
-            }}>
-              <Table size="small" sx={{
-                minWidth: { xs: 800, print: '100%' },
-                tableLayout: 'fixed'
+          <Box className="cr-table-wrap" sx={{ width: '100%', display: 'block' }}>
+              {/* Print-only School Header - Moved outside Table to improve thead repetition */}
+              <Box className="print-only" sx={{
+                display: 'none',
+                "@media print": {
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  mb: 2,
+                  borderBottom: '3px solid #000',
+                  pb: 2,
+                  pt: 1
+                }
               }}>
-                <colgroup><col style={{ width: '5%' }} /><col style={{ width: '13%' }} /><col style={{ width: '6%' }} /><col style={{ width: '6%' }} />{displaySubjects.map((_, i) => (<col key={i} style={{ width: `${70 / displaySubjects.length}%` }} />))}</colgroup>
-                <TableHead sx={{ display: 'table-header-group', "@media print": { display: 'table-header-group !important' } }}>
-                  {/* Print-only School Header Row within TableHead to repeat on every page */}
-                  <TableRow className="print-only" sx={{ display: 'none', "@media print": { display: 'table-row !important' } }}>
-                    <TableCell colSpan={displaySubjects.length + 4} sx={{ border: 'none !important', p: 0, pb: 1 }}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', mb: 1 }}>
-                            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ width: '100%', px: 1 }}>
-                                {schoolInfo?.logo ? (
-                                    <Box component="img" src={schoolInfo.logo} sx={{ height: '18mm', objectFit: 'contain' }} />
-                                ) : <Box sx={{ width: '18mm' }} />}
+                  <Box sx={{ width: '100px', textAlign: 'left' }}>
+                      {schoolInfo?.logo && (
+                          <Box component="img" src={getMediaUrl(schoolInfo.logo)} sx={{ height: '70px', objectFit: 'contain' }} />
+                      )}
+                  </Box>
 
-                                <Box sx={{ textAlign: 'center', flex: 1, px: 1 }}>
-                                    <Typography sx={{ fontWeight: 900, color: '#000', fontSize: '20px !important', lineHeight: 1.2 }}>
-                                        {schoolInfo?.bn_name || schoolInfo?.name || 'স্কুলের নাম'}
-                                    </Typography>
-                                        <Typography sx={{ fontWeight: 'bold', color: '#000', fontSize: '16px !important', mt: 0.1 }}>
-                                        শ্রেণি ভিত্তিক ফলাফল ({
-                                          selectedExamId ? (examinations.find(e => String(e.id) === String(selectedExamId))?.name || (isClassTen ? 'প্রাক-নির্বাচনী' : 'অর্ধ বার্ষিক')) :
-                                          (selectedExamType === 'all' ? (isClassTen ? `প্রাক-নির্বাচনী-${selectedYear}` : `অর্ধ বার্ষিক-${selectedYear}`) :
-                                           (selectedExamType === 'half_yearly' ? (isClassTen ? `প্রাক-নির্বাচনী-${selectedYear}` : `অর্ধবার্ষিক পরীক্ষা-${selectedYear}`) :
-                                            (selectedExamType === 'annual' ? `বার্ষিক পরীক্ষা-${selectedYear}` :
-                                             (selectedExamType === 'test' ? `টেস্ট পরীক্ষা-${selectedYear}` :
-                                              (selectedExamType === 'terminal' ? `টার্মিনাল পরীক্ষা-${selectedYear}` : (isClassTen ? `প্রাক-নির্বাচনী-${selectedYear}` : `অর্ধ বার্ষিক-${selectedYear}`))))))
-                                        })
-                                    </Typography>
-                                    <Typography sx={{ fontWeight: 'bold', fontSize: '12px !important', mt: 0.3, borderBottom: '1.5px solid #000', pb: 0.5, display: 'inline-block' }}>
-                                        শ্রেণি : {classrooms.find(c => String(c.id) === String(selectedClass))?.name || '---'} |
-                                        শাখা : {sections.find(s => String(s.id) === String(selectedSection))?.name || 'সব'}
-                                    </Typography>
-                                </Box>
+                  <Box sx={{ textAlign: 'center', flex: 1, px: 2 }}>
+                                  <Typography sx={{ fontWeight: 600, color: '#000', fontSize: '32px !important', lineHeight: 1.2, fontFamily: "'Hind Siliguri', sans-serif", textTransform: 'uppercase' }}>
+                                      {(() => {
+                                          if (forceLanguage === 'bn') return (schoolInfo?.bn_name || schoolInfo?.name);
+                                          let name = schoolInfo?.name_en || schoolInfo?.name || "";
+                                          const map = {
+                                              'বহরিয়া': 'BAHORIA', 'উচ্চ বিদ্যালয়': 'HIGH SCHOOL', 'উচ্চ বিদ্যালয়': 'HIGH SCHOOL',
+                                              'উচ্চ বিদ্যা লয়': 'HIGH SCHOOL', 'উচ্চ বিদ্যা লয়': 'HIGH SCHOOL',
+                                              'সরকারি': 'GOVT.', 'সরকারী': 'GOVT.', 'বালিকা': 'GIRLS', 'বালক': 'BOYS',
+                                              'হামানকর্দ্দি': 'HAMANKARDI', 'পল্লী মঙ্গল': 'POLLI MONGOL'
+                                          };
+                                          Object.entries(map).forEach(([bn, en]) => {
+                                              name = name.replace(new RegExp(bn, 'g'), en);
+                                          });
+                                          return name.toUpperCase();
+                                      })()}
+                                  </Typography>
+                                  <Typography sx={{ fontWeight: 600, color: '#000', fontSize: '22px !important', mt: 0.2 }}>
+                                      {l.resultsTitle}
+                                  </Typography>
+                                  <Typography sx={{ fontWeight: 600, fontSize: '18px !important', color: '#000' }}>
+                                      {selectedExamId ? (examinations.find(e => String(e.id) === String(selectedExamId))?.name) :
+                                        (selectedExamType === 'all' ? (isClassTen ? (forceLanguage === 'en' ? `Pre-Test-${selectedYear}` : `প্রাক-নির্বাচনী-${selectedYear}`) : (forceLanguage === 'en' ? `Half Yearly-${selectedYear}` : `অর্ধ বার্ষিক-${selectedYear}`)) :
+                                         (selectedExamType === 'half_yearly' ? (isClassTen ? (forceLanguage === 'en' ? `Pre-Test-${selectedYear}` : `প্রাক-নির্বাচনী-${selectedYear}`) : (forceLanguage === 'en' ? `Half Yearly Exam-${selectedYear}` : `অর্ধবার্ষিক পরীক্ষা-${selectedYear}`)) :
+                                          (selectedExamType === 'annual' ? (forceLanguage === 'en' ? `Annual Exam-${selectedYear}` : `বার্ষিক পরীক্ষা-${selectedYear}`) :
+                                            (selectedExamType === 'test' ? (forceLanguage === 'en' ? `Test Exam-${selectedYear}` : `টেস্ট পরীক্ষা-${selectedYear}`) :
+                                              (selectedExamType === 'terminal' ? (forceLanguage === 'en' ? `Terminal Exam-${selectedYear}` : `টার্মিনাল পরীক্ষা-${selectedYear}`) : `${forceLanguage === 'en' ? 'Result' : 'ফলাফল'}-${selectedYear}`)))))}
+                                  </Typography>
+                                  <Typography sx={{ fontWeight: 600, fontSize: '16px !important', mt: 1 }}>
+                                      {l.class} : {(() => {
+                                          let name = classrooms.find(c => String(c.id) === String(selectedClass))?.name || '---';
+                                          if (forceLanguage === 'en') {
+                                              Object.keys(BN_TO_EN_CLASS_MAP).forEach(k => { name = name.replace(new RegExp(k, 'gi'), BN_TO_EN_CLASS_MAP[k]); });
+                                          }
+                                          return name.trim();
+                                      })()} |
+                                      {l.section} : {(() => {
+                                          let sec = sections.find(s => String(s.id) === String(selectedSection))?.name || l.all;
+                                          if (forceLanguage === 'en' && SEC_MAP[sec]) return SEC_MAP[sec];
+                                          return sec;
+                                      })()}
+                                  </Typography>
+                  </Box>
 
-                                {schoolInfo?.logo ? (
-                                    <Box component="img" src={schoolInfo.logo} sx={{ height: '18mm', objectFit: 'contain' }} />
-                                ) : <Box sx={{ width: '18mm' }} />}
-                            </Stack>
-                        </Box>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow sx={{ bgcolor: '#f0f0f0', backgroundImage: 'none', "@media print": { bgcolor: '#f0f0f0 !important' } }}>
-                    <TableCell sx={{ color: 'black', textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }}>রোল</TableCell>
-                    <TableCell sx={{ color: 'black', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }}>নাম</TableCell>
-                    <TableCell sx={{ color: 'black', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }} align="center">মোট</TableCell>
-                    <TableCell sx={{ color: 'black', fontWeight: 'bold', fontSize: '0.85rem', boxShadow: 'none' }} align="center">মেধাস্থান</TableCell>
-                    {displaySubjects.map(s => (
-                      <TableCell
-                        key={s.key}
-                        sx={{
-                          color: 'black',
-                          textAlign: 'center',
-                          fontWeight: 'bold',
-                          fontSize: '0.75rem',
-                          lineHeight: 1.1,
-                          padding: '4px 2px',
-                          whiteSpace: 'normal',
-                          wordBreak: 'break-word',
-                          boxShadow: 'none'
-                        }}
-                        align="center"
-                      >
-                        {s.label}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {sortedStudents.map(stu => {
-                    const resMap = getStudentResultsMap(stu.id);
-                    return (
-                      <TableRow key={stu.id}>
-                        <TableCell align="center">{stu.roll_number}</TableCell>
-                        <TableCell>{stu.user?.first_name} {stu.user?.last_name}</TableCell>
-                        <TableCell align="center">{overallTotals.get(String(stu.id)) || 0}</TableCell>
-                        <TableCell align="center">{meritRanks.get(String(stu.id)) || '--'}</TableCell>
-                        {displaySubjects.map(sub => {
-                          const r = resMap.get(sub.key);
-                          if (!r) {
-                            // Logic for religion and optional subjects:
-                            // Hide 'Absent' if student has marks in an alternative subject
-                            const keys = Array.from(resMap.keys());
-                            const lowSub = sub.key.toLowerCase();
+                  <Box sx={{ width: '100px', textAlign: 'right' }}>
+                      {schoolInfo?.logo && (
+                          <Box component="img" src={getMediaUrl(schoolInfo.logo)} sx={{ height: '70px', objectFit: 'contain' }} />
+                      )}
+                  </Box>
+              </Box>
 
-                            const isReligion = lowSub.includes('ইসলাম') || lowSub.includes('islam') ||
-                                             lowSub.includes('হিন্দু') || lowSub.includes('hindu') ||
-                                             lowSub.includes('ধর্ম') || lowSub.includes('religion');
+              <TableContainer
+                component={Paper}
+                sx={{
+                  boxShadow: 'none',
+                  background: 'white',
+                  overflow: 'visible',
+                  "@media print": {
+                    display: 'table',
+                    width: '100%'
+                  }
+                }}
+              >
+                <Table size="small" sx={{
+                  minWidth: { xs: 800, print: '100%' },
+                  tableLayout: 'auto',
+                  borderCollapse: 'collapse',
+                  "@media print": {
+                    width: '100% !important',
+                    display: 'table !important',
+                    borderSpacing: 0
+                  }
+                }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#dddddd', backgroundImage: 'none', "@media print": { bgcolor: '#dddddd !important', display: 'table-row !important' } }}>
+                      <TableCell sx={{ color: 'black', textAlign: 'center', fontWeight: 700, fontSize: { xs: '1.2rem', print: '9pt' }, border: '1.5px solid #000 !important', py: '4px !important', whiteSpace: 'nowrap' }}>{l.roll}</TableCell>
+                      <TableCell sx={{ color: 'black', fontWeight: 700, fontSize: { xs: '1.2rem', print: '9pt' }, border: '1.5px solid #000 !important', py: '4px !important', whiteSpace: 'nowrap' }}>{l.name}</TableCell>
+                      {displaySubjects.map(s => {
+                        const isHindu = s.label.includes('হিন্দু');
+                        const isEnglish = s.label.toLowerCase().includes('english') || s.label.includes('ইংরেজি');
+                        return (
+                          <TableCell
+                            key={s.key}
+                            sx={{
+                              color: 'black',
+                              textAlign: 'center',
+                              fontWeight: 700,
+                              fontSize: { xs: '1.1rem', print: '8pt' },
+                              lineHeight: 1,
+                              padding: '2px 1px',
+                              border: '1.5px solid #000 !important',
+                              whiteSpace: 'nowrap',
+                              width: isHindu ? '45px' : (isEnglish ? '65px' : '60px'),
+                              minWidth: isHindu ? '45px' : (isEnglish ? '65px' : '60px'),
+                              bgcolor: '#dddddd !important',
+                              WebkitPrintColorAdjust: 'exact'
+                            }}
+                            align="center"
+                          >
+                            {s.label}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell sx={{ color: 'black', fontWeight: 700, fontSize: { xs: '1.2rem', print: '11pt' }, border: '1.5px solid #000 !important', py: '4px !important' }} align="center">{l.total}</TableCell>
+                      <TableCell sx={{ color: 'black', fontWeight: 700, fontSize: { xs: '1.2rem', print: '11pt' }, border: '1.5px solid #000 !important', py: '4px !important' }} align="center">{l.merit}</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sortedStudents.map(stu => {
+                      const resMap = getStudentResultsMap(stu.id);
+                      return (
+                        <TableRow key={stu.id} sx={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                          <TableCell align="center" sx={{ border: '1.2px solid #000 !important', py: '6px !important', fontWeight: 700, fontSize: { xs: '11pt', print: '9pt' }, whiteSpace: 'nowrap' }}>{n(stu.roll_number)}</TableCell>
+                          <TableCell sx={{ border: '1.2px solid #000 !important', fontWeight: 700, whiteSpace: 'normal', wordBreak: 'break-word', py: '6px !important', fontSize: { xs: '11pt', print: '9pt' }, minWidth: '120px' }}>
+                              {forceLanguage === 'en' ? (stu.user?.first_name_en || stu.user?.first_name) : stu.user?.first_name} {forceLanguage === 'en' ? (stu.user?.last_name_en || stu.user?.last_name) : stu.user?.last_name}
+                          </TableCell>
+                          {displaySubjects.map(sub => {
+                            const isHindu = sub.label.includes('Religion (Hindu)') || sub.label.includes('হিন্দু');
+                            const r = resMap.get(sub.key);
+                            if (!r) {
+                              const keys = Array.from(resMap.keys());
+                              const lowSub = sub.key.toLowerCase();
+                              const isReligion = lowSub.includes('ইসলাম') || lowSub.includes('islam') || lowSub.includes('হিন্দু') || lowSub.includes('hindu') || lowSub.includes('ধর্ম') || lowSub.includes('religion');
+                              const isOptional = lowSub.includes('কৃষি') || lowSub.includes('agriculture') || lowSub.includes('উচ্চতর') || lowSub.includes('higher') || lowSub.includes('গার্হস্থ্য') || lowSub.includes('home science');
 
-                            const isOptional = lowSub.includes('কৃষি') || lowSub.includes('agriculture') ||
-                                             lowSub.includes('উচ্চতর') || lowSub.includes('higher') ||
-                                             lowSub.includes('গার্হস্থ্য') || lowSub.includes('home science');
-
-                            if (isReligion) {
-                                const hasOtherReligion = keys.some(k =>
-                                    (k.includes('ইসলাম') || k.includes('islam') || k.includes('হিন্দু') || k.includes('hindu') || k.includes('ধর্ম') || k.includes('religion')) &&
-                                    k !== lowSub
-                                );
-                                if (hasOtherReligion) return <TableCell key={sub.key} align="center">--</TableCell>;
+                              if (isReligion) {
+                                  const hasOtherReligion = keys.some(k => (k.includes('ইসলাম') || k.includes('islam') || k.includes('হিন্দু') || k.includes('hindu') || k.includes('ধর্ম') || k.includes('religion')) && k !== lowSub);
+                                  if (hasOtherReligion) return <TableCell key={sub.key} align="center" sx={{ border: '1px solid #000 !important', width: isHindu ? '45px' : '55px', minWidth: isHindu ? '45px' : '55px', py: '6px !important', fontSize: '8pt' }}>--</TableCell>;
+                              }
+                              if (isOptional) {
+                                  const hasOtherOptional = keys.some(k => (k.includes('কৃষি') || k.includes('agriculture') || k.includes('উচ্চতর') || k.includes('higher') || k.includes('গার্হস্থ্য') || k.includes('home science')) && k !== lowSub);
+                                  if (hasOtherOptional) return <TableCell key={sub.key} align="center" sx={{ border: '1px solid #000 !important', width: isHindu ? '45px' : '55px', minWidth: isHindu ? '45px' : '55px', py: '6px !important', fontSize: '8pt' }}>--</TableCell>;
+                              }
+                              return <TableCell key={sub.key} align="center" sx={{ color: 'red', border: '1px solid #000 !important', width: isHindu ? '45px' : '55px', minWidth: isHindu ? '45px' : '55px', py: '6px !important', fontSize: '8pt' }}>{l.absent}</TableCell>;
                             }
-
-                            if (isOptional) {
-                                const hasOtherOptional = keys.some(k =>
-                                    (k.includes('কৃষি') || k.includes('agriculture') || k.includes('উচ্চতর') || k.includes('higher') || k.includes('গার্হস্থ্য') || k.includes('home science')) &&
-                                    k !== lowSub
-                                );
-                                if (hasOtherOptional) return <TableCell key={sub.key} align="center">--</TableCell>;
-                            }
-
-                            return <TableCell key={sub.key} align="center" sx={{ color: 'red' }}>Absent</TableCell>;
-                          }
-                          const isAbs = String(r.display || '').includes('Absent');
-                          return (
-                            <TableCell key={sub.key} align="center" sx={{ color: isAbs ? 'red' : 'inherit' }}>
-                              {r.display || r.total || 'Absent'}
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                            const isAbs = String(r.display || '').includes('Absent') || String(r.display || '').includes('অনুপস্থিত');
+                            const isFail = r.grade === 'F' || r.is_passed === false;
+                            return (
+                              <TableCell key={sub.key} align="center" sx={{ color: (isAbs || isFail) ? 'red' : 'inherit', border: '1px solid #000 !important', fontWeight: 700, whiteSpace: 'normal', wordBreak: 'break-word', width: isHindu ? '45px' : '55px', minWidth: isHindu ? '45px' : '55px', py: '6px !important', fontSize: '8pt' }}>
+                                {isAbs ? l.absent : n(r.display || r.total)}
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell align="center" sx={{ border: '1.2px solid #000 !important', fontWeight: 700, py: '6px !important', fontSize: { xs: '11pt', print: '9pt' } }}>{n(overallTotals.get(String(stu.id)) || 0)}</TableCell>
+                          <TableCell align="center" sx={{ border: '1.2px solid #000 !important', fontWeight: 700, py: '6px !important', fontSize: { xs: '11pt', print: '9pt' } }}>{n(meritRanks.get(String(stu.id)) || '--')}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
           </Box>
         )}
 
       {!sortedStudents.length && (
           <Paper sx={{ p: 3, textAlign: 'center' }}>
-            <Typography color="textSecondary">{noYearMessage || 'কোনো তথ্য পাওয়া যায়নি'}</Typography>
+            <Typography color="textSecondary">{noYearMessage || l.noData}</Typography>
           </Paper>
       )}
 
@@ -761,69 +943,96 @@ export default function ClassResultsPage() {
             .cr-print-container table {
               width: 100% !important;
               border-collapse: collapse !important;
-              table-layout: fixed !important;
+              table-layout: auto !important;
               margin: 0 !important;
               padding: 0 !important;
               box-shadow: none !important;
               border: 0.5pt solid #000 !important;
+              display: table !important;
             }
 
             .cr-print-container thead {
               display: table-header-group !important;
             }
+            .cr-print-container thead tr {
+              display: table-row !important;
+            }
             .cr-print-container tbody {
               display: table-row-group !important;
             }
-            .cr-print-container tfoot {
-              display: table-footer-group !important;
-            }
             .cr-print-container tr {
               page-break-inside: avoid !important;
-              page-break-after: auto !important;
               break-inside: avoid !important;
             }
 
             .cr-print-container th,
             .cr-print-container td {
-              border: 0.5pt solid #000 !important;
-              padding: 4px 2px !important;
-              font-size: 8pt !important;
+              border: 1pt solid #000 !important;
+              padding: 6px 1px !important;
+              font-size: 9pt !important;
               overflow: visible !important;
               white-space: normal !important;
               word-break: break-word !important;
               text-align: center !important;
               line-height: 1.1 !important;
-              page-break-inside: auto !important;
-              break-inside: auto !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
+              font-weight: 400 !important;
             }
 
             /* Name Column Specific */
             .cr-print-container th:nth-of-type(2),
             .cr-print-container td:nth-of-type(2) {
               text-align: left !important;
-              padding-left: 5px !important;
-              width: 180px !important;
-              min-width: 180px !important;
+              padding-left: 4px !important;
+              width: 140px !important;
+              min-width: 140px !important;
+              font-size: 11pt !important;
+              font-weight: 400 !important;
             }
             /* Roll Column */
             .cr-print-container th:nth-of-type(1),
             .cr-print-container td:nth-of-type(1) {
               width: 40px !important;
+              font-weight: 400 !important;
             }
 
-            .cr-print-container th {
+            /* Last columns (Total, Merit) */
+            .cr-print-container th:nth-last-of-type(1),
+            .cr-print-container td:nth-last-of-type(1),
+            .cr-print-container th:nth-last-of-type(2),
+            .cr-print-container td:nth-last-of-type(2) {
+               width: 55px !important;
+               min-width: 55px !important;
+               font-weight: 400 !important;
+            }
+
+            .cr-print-container thead th {
               background-color: #f0f0f0 !important;
-              color: black !important;
+              height: auto !important;
+              vertical-align: middle !important;
               font-weight: bold !important;
+              display: table-cell !important;
+            }
+
+            .cr-print-container table {
+               display: table !important;
+               width: 100% !important;
+               border-collapse: collapse !important;
+               table-layout: auto !important;
+            }
+
+            .cr-print-container thead {
+               display: table-header-group !important;
             }
 
             .MuiTableContainer-root {
               box-shadow: none !important;
               overflow: visible !important;
               width: 100% !important;
-              display: block !important;
+              display: table !important;
               margin: 0 !important;
               padding: 0 !important;
             }
