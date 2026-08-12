@@ -280,9 +280,16 @@ const isOptionalSubject = (r, student, isClassNineOrTen, group = '') => {
 const getSubjectMaxima = (name, isClassNineOrTen) => {
   const lower = String(name || '').toLowerCase();
 
+  if (lower.includes('বাংলা') || lower.includes('bangla')) {
+    if (isClassNineOrTen && (lower.includes('১ম+২য়') || lower.includes('1st+2nd'))) return { cq: 140, mcq: 60, pr: 0 };
+    if (!isClassNineOrTen && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii'))) return { cq: 35, mcq: 15, pr: 0 };
+    return { cq: 70, mcq: 30, pr: 0 };
+  }
+
   if (lower.includes('english') || lower.includes('ইংরেজি') || lower.includes('ইংরেজী') || lower.includes('eng')) {
+    if (isClassNineOrTen && (lower.includes('১ম+২য়') || lower.includes('1st+2nd'))) return { cq: 200, mcq: 0, pr: 0 };
     if (isClassNineOrTen) return { cq: 100, mcq: 0, pr: 0 };
-    if (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii')) return { cq: 50, mcq: 0, pr: 0 };
+    if (!isClassNineOrTen && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii'))) return { cq: 50, mcq: 0, pr: 0 };
     return { cq: 100, mcq: 0, pr: 0 };
   }
 
@@ -295,13 +302,12 @@ const getSubjectMaxima = (name, isClassNineOrTen) => {
 
   if (isClassNineOrTen) {
     if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
-    if (lower.includes('বাংলা') || lower.includes('bangla')) return { cq: 70, mcq: 30, pr: 0 };
   } else {
     if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
     if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
-    if ((lower.includes('বাংলা') || lower.includes('bangla')) && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii'))) return { cq: 35, mcq: 15, pr: 0 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('islam') || lower.includes('hindu') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
+
   return { cq: 70, mcq: 30, pr: 0 };
 };
 
@@ -374,10 +380,49 @@ function isVowel(char) {
   return 'অআইঈউঊঋএঐওঔািীুূৃেৈোৌ'.includes(char);
 }
 
+const isRelSubj = (n) => /religion|islam|hindu|buddhist|christian|ধর্ম|ইসলাম|হিন্দু|বৌদ্ধ|খ্রিস্ট/i.test(String(n));
+
 const ResultCard = memo(({ studentData, results: rawResults, overallResult, examination, school, forceLanguage, translatedData }) => {
   const student = useMemo(() => studentData?.student || {}, [studentData]);
   const user = useMemo(() => student?.user || {}, [student]);
   const resolvedSchool = useMemo(() => school || {}, [school]);
+
+  const sumStr = (s) => String(s || '').split('+').reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
+
+  const filteredRawResults = useMemo(() => {
+    if (!Array.isArray(rawResults)) return [];
+
+    // 1. Sort by ID to ensure consistent picking if everything else is equal
+    const sorted = [...rawResults].sort((a, b) => (parseInt(a.id) || 0) - (parseInt(b.id) || 0));
+
+    // 2. Religion suppression
+    const relResults = sorted.filter(r => isRelSubj(r.subject?.name || r.subject_name));
+    let suppressedIds = new Set();
+    if (relResults.length > 1) {
+      const withMarks = relResults.map(r => ({
+        sid: String(r.subject?.id || r.subject || r.subject_name),
+        total: (parseFloat(r.total_obtained) || (sumStr(r.written_marks)||0) + (sumStr(r.mcq_marks)||0) + (sumStr(r.practical_marks)||0))
+      })).filter(x => x.total > 0).sort((a, b) => b.total - a.total);
+
+      if (withMarks.length > 0) {
+        const bestRelSubId = withMarks[0].sid;
+        relResults.forEach(r => {
+          const rid = String(r.subject?.id || r.subject || r.subject_name);
+          if (rid !== bestRelSubId) suppressedIds.add(rid);
+        });
+      } else {
+        const islam = relResults.find(r => /islam|ইসলাম/i.test(r.subject?.name || r.subject_name));
+        const primaryRel = islam || relResults[0];
+        const pid = String(primaryRel.subject?.id || primaryRel.subject || primaryRel.subject_name);
+        relResults.forEach(r => {
+          const rid = String(r.subject?.id || r.subject || r.subject_name);
+          if (rid !== pid) suppressedIds.add(rid);
+        });
+      }
+    }
+
+    return sorted.filter(r => !suppressedIds.has(String(r.subject?.id || r.subject || r.subject_name)));
+  }, [rawResults]);
 
   const shouldSkip = useMemo(() => {
     const fn = (user?.first_name || '').trim();
@@ -587,7 +632,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
   }, [rawResults, studentData, isClassNineOrTen, student]);
 
   const allRecalculated = useMemo(() => {
-    const actualResults = Array.isArray(rawResults) ? rawResults :
+    const actualResults = filteredRawResults.length > 0 ? filteredRawResults :
                           (Array.isArray(studentData?.results) ? studentData.results :
                           (Array.isArray(student?.results) ? student.results :
                           (Array.isArray(overallResult?.results) ? overallResult.results : [])));
@@ -599,16 +644,17 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       const hasM = r.mcq_marks !== null && r.mcq_marks !== undefined && r.mcq_marks !== '';
       const hasP = r.practical_marks !== null && r.practical_marks !== undefined && r.practical_marks !== '';
 
-      const w = hasW ? (parseFloat(r.written_marks) || 0) : 0;
-      const m = hasM ? (parseFloat(r.mcq_marks) || 0) : 0;
-      const p = hasP ? (parseFloat(r.practical_marks) || 0) : 0;
+      const w = sumStr(r.written_marks);
+      const m = sumStr(r.mcq_marks);
+      const p = sumStr(r.practical_marks);
 
       const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen);
       const totalPossible = spec.cq + spec.mcq + spec.pr || 100;
-      const obtained = w + m + p;
+      const obtained = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
       const isActuallyAbsent = (r.written_marks === null || r.written_marks === undefined || String(r.written_marks).trim() === '') &&
                                (r.mcq_marks === null || r.mcq_marks === undefined || String(r.mcq_marks).trim() === '') &&
-                               (r.practical_marks === null || r.practical_marks === undefined || String(r.practical_marks).trim() === '');
+                               (r.practical_marks === null || r.practical_marks === undefined || String(r.practical_marks).trim() === '') &&
+                               !(parseFloat(r.total_obtained) > 0);
 
       const percentage = (obtained / totalPossible) * 100;
 
@@ -661,6 +707,14 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         const normKey = getNormKey(name);
         if (!normKey) return;
 
+        // Skip redundant combined records if specific papers exist (Matches Merit List logic)
+        const isCombined = !name.match(/(1st|2nd|১ম|২য়|২য়)/);
+        const hasSpecificPapers = allRecalculated.some(x => {
+            const xName = (x.subject?.name || x.subject_name || '').toLowerCase();
+            return getNormKey(xName).startsWith(normKey.split('_')[0]) && xName.match(/(1st|2nd|১ম|২য়|২য়)/);
+        });
+        if (isClassNineOrTen && isCombined && hasSpecificPapers) return;
+
         if (!resultsMap.has(normKey)) {
             let baseRecord = { ...r };
             // Ensure merged religion is always named "Religion"
@@ -681,39 +735,35 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             const m2 = parseFloat(r.mcq_marks) || 0;
             const p2 = parseFloat(r.practical_marks) || 0;
 
-            existing.sumW += w2;
-            existing.sumM += m2;
-            existing.sumP += p2;
-            existing.anyMarks = existing.anyMarks || !r.isActuallyAbsent;
+            // CRITICAL: Prefer record with marks instead of summing for same-subject duplicates
+            // Except for Religion which we already suppressed above, and Bangla/English which handle themselves in isClassNineOrTen block later.
+            // But if we are here, it means getNormKey returned the same key.
 
-            // Simple robust sum for display parts - Preserve breakdown for merged papers
-            const sumParts = (v1, v2) => {
-                const n1 = parseFloat(v1) || 0;
-                const n2 = parseFloat(v2) || 0;
-                // If it's a merged string or we want to keep them separate, we'd handle it differently.
-                // But for the initial map, we sum same-subject parts.
-                return (n1 + n2) > 0 ? (n1 + n2) : ((v1 === '0' || v2 === '0') ? 0 : null);
-            };
+            const hasInputCurrent = !r.isActuallyAbsent;
+            const hasInputExisting = existing.anyMarks;
 
-            existing.written_marks = sumParts(existing.written_marks, r.written_marks);
-            existing.mcq_marks = sumParts(existing.mcq_marks, r.mcq_marks);
-            existing.practical_marks = sumParts(existing.practical_marks, r.practical_marks);
+            if (hasInputCurrent && !hasInputExisting) {
+                // Replace with current as it has marks
+                resultsMap.set(normKey, { ...r,
+                    sumW: w2, sumM: m2, sumP: p2,
+                    anyMarks: true,
+                    total_obtained: parseFloat(r.total_obtained) || 0
+                });
+            } else if (!hasInputCurrent && hasInputExisting) {
+                // Keep existing
+            } else {
+                // Both have marks or both are absent, pick the one with more marks or just keep existing (since it was sorted by ID)
+                const currentTotal = parseFloat(r.total_obtained) || (w2 + m2 + p2);
+                const existingTotal = parseFloat(existing.total_obtained) || (existing.sumW + existing.sumM + existing.sumP);
 
-            existing.total_obtained = (parseFloat(existing.total_obtained) || 0) + (parseFloat(r.total_obtained) || 0);
-
-            // Recalculate Grade/GPA for merged entry
-            const pct = (existing.total_obtained / existing.total_possible) * 100;
-            const eSpec = existing.spec;
-            const eCQPass = eSpec.cq === 0 || existing.sumW >= Math.round(eSpec.cq * 0.33 - 0.5);
-            const eMCQPass = eSpec.mcq === 0 || existing.sumM >= Math.round(eSpec.mcq * 0.33 - 0.5);
-            const ePRPass = eSpec.pr === 0 || existing.sumP >= Math.round(eSpec.pr * 0.33 - 0.5);
-            const eTotPass = existing.total_obtained >= Math.round(existing.total_possible * 0.33 - 0.5);
-
-            existing.is_passed = (isClassNineOrTen ? (eCQPass && eMCQPass && ePRPass && eTotPass) : eTotPass);
-            existing.grade = existing.is_passed ? computeGrade(pct) : 'F';
-            existing.gpa = existing.is_passed ? computeGpa(pct).toFixed(2) : '0.00';
-            existing.isActuallyAbsent = !existing.anyMarks;
-            existing.display_total = Math.round(existing.total_obtained);
+                if (currentTotal > existingTotal) {
+                     resultsMap.set(normKey, { ...r,
+                        sumW: w2, sumM: m2, sumP: p2,
+                        anyMarks: true,
+                        total_obtained: currentTotal
+                    });
+                }
+            }
         }
     });
     const cleanResults = Array.from(resultsMap.values());
@@ -796,6 +846,12 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                 const n = String(r.subject?.name || r.subject_name || '').toLowerCase();
                 return (n.includes('বাংলা') || n.includes('bangla')) && !n.includes('বাংলাদেশ') && !n.includes('দেশ') && !n.includes('bgs');
             });
+            list.forEach(r => {
+                const sid = r.subject?.id || r.subject;
+                if (sid) handledSubjectIds.add(String(sid));
+                const sname = (r.subject?.name || r.subject_name || '').toLowerCase().trim();
+                if (sname) handledSubjectIds.add(sname);
+            });
             const paperMap = new Map();
             list.forEach(r => {
                 const pNum = getPaperNum(r.subject?.name || r.subject_name);
@@ -810,6 +866,12 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             const list = mainResults.filter(r => {
                 const n = String(r.subject?.name || r.subject_name || '').toLowerCase();
                 return n.includes('english') || n.includes('ইংরেজি') || n.includes('ইংরেজী');
+            });
+            list.forEach(r => {
+                const sid = r.subject?.id || r.subject;
+                if (sid) handledSubjectIds.add(String(sid));
+                const sname = (r.subject?.name || r.subject_name || '').toLowerCase().trim();
+                if (sname) handledSubjectIds.add(sname);
             });
             const paperMap = new Map();
             list.forEach(r => {
@@ -828,18 +890,28 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         if (!anyMarks) return false;
 
         const sumObtained = paperList.reduce((s, r) => s + (parseFloat(r.total_obtained) || 0), 0);
-        const sumCQ = paperList.reduce((s, r) => s + (parseFloat(r.written_marks) || 0), 0);
-        const sumMCQ = paperList.reduce((s, r) => s + (parseFloat(r.mcq_marks) || 0), 0);
-        const sumPR = paperList.reduce((s, r) => s + (parseFloat(r.practical_marks) || 0), 0);
-
+        // Special case: if one record already has double possible marks (combined), use its spec
         const totalCQMax = paperList.reduce((s, r) => s + (r.spec?.cq || 0), 0);
         const totalMCQMax = paperList.reduce((s, r) => s + (r.spec?.mcq || 0), 0);
         const totalPRMax = paperList.reduce((s, r) => s + (r.spec?.pr || 0), 0);
 
+        const sumW = paperList.reduce((s, r) => {
+            const val = String(r.written_marks || '').split('+').reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
+            return s + val;
+        }, 0);
+        const sumM = paperList.reduce((s, r) => {
+            const val = String(r.mcq_marks || '').split('+').reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
+            return s + val;
+        }, 0);
+        const sumP = paperList.reduce((s, r) => {
+            const val = String(r.practical_marks || '').split('+').reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
+            return s + val;
+        }, 0);
+
         // Board rules: 33% pass marks.
-        const cqPass = totalCQMax === 0 || sumCQ >= Math.round(totalCQMax * 0.33 - 0.5);
-        const mcqPass = totalMCQMax === 0 || sumMCQ >= Math.round(totalMCQMax * 0.33 - 0.5);
-        const prPass = totalPRMax === 0 || sumPR >= Math.round(totalPRMax * 0.33 - 0.5);
+        const cqPass = totalCQMax === 0 || sumW >= Math.round(totalCQMax * 0.33 - 0.5);
+        const mcqPass = totalMCQMax === 0 || sumM >= Math.round(totalMCQMax * 0.33 - 0.5);
+        const prPass = totalPRMax === 0 || sumP >= Math.round(totalPRMax * 0.33 - 0.5);
         const totPass = sumObtained >= Math.round(totPossible * 0.33 - 0.5);
 
         return cqPass && mcqPass && prPass && totPass;
@@ -847,29 +919,17 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
 
       if (papers.bangla.length > 0) {
         const sumObtained = papers.bangla.reduce((s, r) => s + r.total_obtained, 0);
-        const totalPossible = papers.bangla.reduce((s, r) => s + r.total_possible, 0);
+        const totalPossible = Math.max(200, papers.bangla.reduce((s, r) => s + r.total_possible, 0));
         const anyMarks = papers.bangla.some(r => !r.isActuallyAbsent);
         const allPassed = getMergedPassStatus(papers.bangla, totalPossible);
         merged.push({ id: 'merged-bangla', subject: { name: 'Bangla (1st+2nd)' }, written_marks: anyMarks ? papers.bangla.map(r => (r.written_marks !== null && r.written_marks !== '') ? r.written_marks : '0').join('+') : null, mcq_marks: anyMarks ? papers.bangla.map(r => (r.mcq_marks !== null && r.mcq_marks !== '') ? r.mcq_marks : '0').join('+') : null, practical_marks: '--', total_obtained: sumObtained, display_total: anyMarks ? Math.round(sumObtained) : null, total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 1, pr: 0 }, isActuallyAbsent: !anyMarks });
-        papers.bangla.forEach(r => {
-            const sid = r.subject?.id || r.subject;
-            if (sid) handledSubjectIds.add(String(sid));
-            const sname = (r.subject?.name || r.subject_name || '').toLowerCase().trim();
-            if (sname) handledSubjectIds.add(sname);
-        });
       }
       if (papers.english.length > 0) {
         const sumObtained = papers.english.reduce((s, r) => s + r.total_obtained, 0);
-        const totalPossible = papers.english.reduce((s, r) => s + r.total_possible, 0);
+        const totalPossible = Math.max(200, papers.english.reduce((s, r) => s + r.total_possible, 0));
         const anyMarks = papers.english.some(r => !r.isActuallyAbsent);
         const allPassed = getMergedPassStatus(papers.english, totalPossible);
         merged.push({ id: 'merged-english', subject: { name: 'English (1st+2nd)' }, written_marks: anyMarks ? papers.english.map(r => (r.written_marks !== null && r.written_marks !== '') ? r.written_marks : '0').join('+') : null, mcq_marks: anyMarks ? papers.english.map(r => (r.mcq_marks !== null && r.mcq_marks !== '') ? r.mcq_marks : '0').join('+') : null, practical_marks: '--', total_obtained: sumObtained, display_total: anyMarks ? Math.round(sumObtained) : null, total_possible: totalPossible, grade: allPassed ? computeGrade((sumObtained/totalPossible)*100) : 'F', gpa: allPassed ? computeGpa((sumObtained/totalPossible)*100).toFixed(2) : '0.00', is_passed: allPassed, spec: { cq: 1, mcq: 0, pr: 0 }, isActuallyAbsent: !anyMarks });
-        papers.english.forEach(r => {
-            const sid = r.subject?.id || r.subject;
-            if (sid) handledSubjectIds.add(String(sid));
-            const sname = (r.subject?.name || r.subject_name || '').toLowerCase().trim();
-            if (sname) handledSubjectIds.add(sname);
-        });
       }
       mainResults.forEach(r => {
           const sid = r.subject?.id || r.subject;
@@ -930,14 +990,18 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
 
   const formatMark = (val) => {
     if (val === null || val === undefined || val === '' || val === '--') {
-      return <span style={{ color: 'red' }}>{l.absent}</span>;
+      return <span style={{ color: 'red', fontWeight: 'normal' }}>{l.absent}</span>;
     }
+    const clean = (v) => {
+      const nV = parseFloat(v);
+      if (isNaN(nV)) return v;
+      return nV % 1 === 0 ? String(Math.round(nV)) : nV.toFixed(2);
+    };
     const sVal = String(val);
-    if (sVal === '0' || sVal === '0+0' || sVal === '0+0+0') {
-        return n(sVal);
+    if (sVal.includes('+')) {
+      return n(sVal.split('+').map(clean).join('+'));
     }
-    if (sVal.includes('+')) return n(sVal);
-    return n(val);
+    return n(clean(sVal));
   };
   const displayGroup = useMemo(() => {
     const g = String(inferredGroup).toLowerCase();
@@ -1236,14 +1300,14 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             }}>
               <TableHead><TableRow sx={{ bgcolor: '#fff4e5' }}>
                 <TableCell align="center" sx={{ fontWeight: 'bold', width: '30px' }}>Sl</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: 'auto' }}>{l.subjectName}</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '65px' }}>CQ</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '55px' }}>MCQ</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '40px' }}>PR</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '60px' }}>Total</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '45px' }}>Grade</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '45px' }}>GP</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 'bold', width: '80px' }}>GPA</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', width: '135px' }}>{l.subjectName}</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '95px' }}>CQ</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '80px' }}>MCQ</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '35px' }}>PR</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '55px' }}>Total</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '40px' }}>Grade</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '40px' }}>GP</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 'bold', width: '90px' }}>GPA</TableCell>
               </TableRow></TableHead>
               <TableBody>
                 {displayResults.main.map((r, idx) => {
@@ -1261,10 +1325,10 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                       <TableCell align="center" sx={{ fontWeight: 'bold', color: isFail ? 'red' : 'inherit' }}>{n(r.gpa)}</TableCell>
                       {idx === 0 && (
                         <TableCell align="center" rowSpan={Math.max(1, displayResults.main.length + 1)} sx={{ fontWeight: 900, borderLeft: '1.5px solid #000 !important', verticalAlign: 'middle', color: '#000' }}>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            <Typography sx={{ fontWeight: 900, fontSize: '1.2rem', color: 'inherit' }}>{n(finalSummary.cgpa)}</Typography>
-                            <Typography sx={{ fontWeight: 900, fontSize: '1.2rem', color: 'inherit' }}>{finalSummary.grade}</Typography>
-                            <Typography sx={{ fontWeight: 900, fontSize: '1.0rem', color: 'inherit' }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: 'inherit' }}>{n(finalSummary.cgpa)}</Typography>
+                            <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: 'inherit' }}>{finalSummary.grade}</Typography>
+                            <Typography sx={{ fontWeight: 900, fontSize: '0.85rem', color: 'inherit', lineHeight: 1.1 }}>
                               {finalSummary.isPassed
                                 ? `${l.merit}: ${n(overallResult?.rank_in_section ?? overallResult?.rank ?? '--')}`
                                 : (forceLanguage === 'bn' ? 'ফলাফল: অনুত্তীর্ণ' : 'Result: Failed')}
