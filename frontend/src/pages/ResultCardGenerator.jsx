@@ -132,7 +132,7 @@ const normalizeSubjKeyLocal = (n) => {
     if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
     if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
     if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
-    if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+    if (low.includes('ict') || low.includes('তথ্য') || low.includes('information') || low.includes('communication') || low.includes('technology')) return 'ict';
     if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
     if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
     if (low.includes('biology') || low.includes('জীব')) return 'biology';
@@ -283,7 +283,7 @@ export default function ResultCardGenerator() {
             if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
             if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
             if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
-            if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+            if (low.includes('ict') || low.includes('তথ্য') || low.includes('information') || low.includes('communication') || low.includes('technology')) return 'ict';
             if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
             if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
             if (low.includes('biology') || low.includes('জীব')) return 'biology';
@@ -1117,11 +1117,12 @@ export default function ResultCardGenerator() {
       // Use the robust local normalizer for grouping
       let nm = normalizeSubjKeyLocal(subjName);
 
-      // Distinguish papers for Bangla and English to prevent overwriting
+      // Distinguish papers for Bangla and English with robust detection
       if (nm === 'bangla' || nm === 'english') {
-          const is2 = subjName.includes('2nd') || subjName.includes('২য়') || subjName.includes('২য়') || subjName.includes('second') || subjName.includes('Paper 2') || subjName.includes('২য় পত্র');
-          const has1 = subjName.includes('1st') || subjName.includes('১ম') || subjName.includes('first') || subjName.includes('Paper 1') || subjName.includes('১ম পত্র');
-          if (is2 || has1) { nm = nm + (is2 ? '_p2' : '_p1'); }
+          const is2 = /(২য়|২য়|2nd|second|Paper 2| ii | ii$| 2)/i.test(subjName);
+          const has1 = /(১ম|1st|first|Paper 1| i | i$| 1)/i.test(subjName);
+          if (is2) nm = nm + '_p2';
+          else if (has1) nm = nm + '_p1';
       }
 
       const isUnwanted = (name) => {
@@ -1146,26 +1147,32 @@ export default function ResultCardGenerator() {
       let cleanName = r.subject?.name || r.subject_name || subjName;
       cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
 
-      map.set(nm, {
-        ...r,
-        written_marks: r.written_marks,
-        mcq_marks: r.mcq_marks,
-        practical_marks: r.practical_marks,
-        total_obtained: obtained,
-        total_marks: totalMax,
-        grade,
-        gpa,
-        is_passed: passed,
-        subject: { ...(r.subject || {}), name: cleanName },
-        subject_name: cleanName,
-        isActuallyAbsent: (r.written_marks === null || r.written_marks === '') && (r.mcq_marks === null || r.mcq_marks === '') && (r.practical_marks === null || r.practical_marks === '')
-      });
+      const isActuallyAbsent = (r.written_marks === null || r.written_marks === '') && (r.mcq_marks === null || r.mcq_marks === '') && (r.practical_marks === null || r.practical_marks === '') && !(parseFloat(r.total_obtained) > 0);
+
+      // Prefer the record that actually has marks (Deduplication refinement)
+      const existing = map.get(nm);
+      if (!existing || !isActuallyAbsent || existing.isActuallyAbsent) {
+          map.set(nm, {
+            ...r,
+            written_marks: r.written_marks,
+            mcq_marks: r.mcq_marks,
+            practical_marks: r.practical_marks,
+            total_obtained: obtained,
+            total_marks: totalMax,
+            grade,
+            gpa,
+            is_passed: passed,
+            subject: { ...(r.subject || {}), name: cleanName },
+            subject_name: cleanName,
+            isActuallyAbsent: isActuallyAbsent
+          });
+      }
     }
 
     // 2. Fill missing expected subjects as "Absent"
     if (expectedKeys) {
         expectedKeys.forEach(key => {
-            // key is already normalized (e.g., 'physics')
+            // Check directly against the normalized key in the map
             if (!map.has(key)) {
                 const friendlyName = translateSubLocal(key);
                 map.set(key, {
@@ -1889,7 +1896,7 @@ export default function ResultCardGenerator() {
     if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
     if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
     if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
-    if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+    if (low.includes('ict') || low.includes('তথ্য') || low.includes('information') || low.includes('communication') || low.includes('technology')) return 'ict';
     if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
     if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
     if (low.includes('biology') || low.includes('জীব')) return 'biology';

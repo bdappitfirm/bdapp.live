@@ -51,7 +51,7 @@ const normalizeSubjKey = (n) => {
     if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
     if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
     if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
-    if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+    if (low.includes('ict') || low.includes('তথ্য') || low.includes('information') || low.includes('communication') || low.includes('technology')) return 'ict';
     if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
     if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
     if (low.includes('biology') || low.includes('জীব')) return 'biology';
@@ -284,13 +284,19 @@ const MeritListPage = () => {
                     const rTotal = (parseFloat(r.total_obtained) || (parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0));
 
                     if (normKey === 'bangla' || normKey === 'english') {
-                        const is2 = rawName.includes('2nd') || rawName.includes('২য়') || rawName.includes('২য়') || rawName.includes('second');
-                        const has1 = rawName.includes('1st') || rawName.includes('১ম') || rawName.includes('first') || rawName.includes('পত্র') || rawName.includes('paper');
-                        if (is2 || has1) { key = normKey + (is2 ? '_p2' : '_p1'); }
+                        const is2 = /(২য়|২য়|2nd|second| ii | ii$| 2)/i.test(rawName);
+                        const has1 = /(১ম|1st|first| i | i$| 1)/i.test(rawName);
+                        if (is2) key = normKey + '_p2';
+                        else if (has1) key = normKey + '_p1';
                     }
 
-                    // Always overwrite with the latest entry for this subject/key (Deduplication)
-                    subjectMap.set(key, { ...r, sumW: parseFloat(r.written_marks) || 0, sumM: parseFloat(r.mcq_marks) || 0, sumP: parseFloat(r.practical_marks) || 0, hasMarks: (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null), total_obtained: rTotal });
+                    const hasInput = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null) || (parseFloat(r.total_obtained) > 0);
+
+                    // Prefer the record that actually has marks (Deduplication refinement)
+                    const existing = subjectMap.get(key);
+                    if (!existing || hasInput || !existing.hasMarks) {
+                        subjectMap.set(key, { ...r, sumW: parseFloat(r.written_marks) || 0, sumM: parseFloat(r.mcq_marks) || 0, sumP: parseFloat(r.practical_marks) || 0, hasMarks: hasInput, total_obtained: rTotal });
+                    }
                 });
 
                 const virtualMap = new Map();

@@ -51,7 +51,7 @@ const normalizeSubjKey = (n) => {
     if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
     if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
     if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
-    if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+    if (low.includes('ict') || low.includes('তথ্য') || low.includes('information') || low.includes('communication') || low.includes('technology')) return 'ict';
     if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
     if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
     if (low.includes('biology') || low.includes('জীব')) return 'biology';
@@ -287,9 +287,13 @@ export default function ClassResultsPage() {
 
                 const w = parseFloat(r.written_marks) || 0, m = parseFloat(r.mcq_marks) || 0, p = parseFloat(r.practical_marks) || 0;
                 const rTotal = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
+                const hasInput = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null) || (parseFloat(r.total_obtained) > 0);
 
-                // Always overwrite with the latest entry for this subject/key (Deduplication)
-                subjectMap.set(key, { ...r, sumW: w, sumM: m, sumP: p, hasMarks: (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null), total_obtained: rTotal });
+                // Prefer the record that actually has marks (Deduplication refinement)
+                const existing = subjectMap.get(key);
+                if (!existing || hasInput || !existing.hasMarks) {
+                    subjectMap.set(key, { ...r, sumW: w, sumM: m, sumP: p, hasMarks: hasInput, total_obtained: rTotal });
+                }
             });
             cleanedMap.set(String(s.id), Array.from(subjectMap.values()));
         }
