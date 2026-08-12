@@ -5,6 +5,9 @@ from users.models import User, Profile
 from academics.models import StudentProfile
 from schools.models import School
 
+def is_vowel(char):
+    return char in 'অআইঈউঊঋএঐওঔািীুূৃেৈোৌ'
+
 def transliterate_bangla(text):
     """
     Improved rule-based transliterator for Bangla to English phonetic spelling.
@@ -23,7 +26,7 @@ def transliterate_bangla(text):
         'চ': 'ch', 'ছ': 'sh', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
         'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
         'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
-        'প': 'p', 'ফ': 'p', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
+        'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
         'য': 'z', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
         'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y', 'ৎ': 't', 'ং': 'ng', 'ঃ': 'h', 'ঁ': 'n',
         'অ': 'o', 'আ': 'a', 'ই': 'i', 'ঈ': 'i', 'উ': 'u', 'ঊ': 'u', 'ঋ': 'ri',
@@ -34,36 +37,43 @@ def transliterate_bangla(text):
         '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
     }
 
-    # Common titles and honorifics
+    # Special cases for common names to ensure accurate spelling
+    special_names = {
+        'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
+        'আক্তার': 'Aktar', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam',
+        'রহমান': 'Rahman', 'মো:': 'Md.', 'মোঃ': 'Md.', 'মোসাম্মৎ': 'Mst.', 'মোসা:': 'Mst.', 'মোসাঃ': 'Mst.'
+    }
+
+    # Handle common titles first
     text = text.replace('মো: ', 'Md. ').replace('মোঃ ', 'Md. ')
     text = text.replace('মোসাম্মৎ', 'Mst.').replace('মোসা:', 'Mst.').replace('মোসাঃ', 'Mst.')
 
-    # Special handling for common name suffixes and patterns
-    text = text.replace('উদ্দীন', 'uddin').replace('ইসলাম', 'islam').replace('রহমান', 'rahman')
-    text = text.replace('আহমেদ', 'ahmed').replace('খান', 'khan').replace('চৌধুরী', 'chowdhury')
-    text = text.replace('বেগম', 'begum').replace('মন্ডল', 'mondal').replace('বিশ্বাস', 'biswas').replace('সরকার', 'sarkar')
+    words = text.split()
+    translated_words = []
 
-    result = ""
-    i = 0
-    while i < len(text):
-        char = text[i]
-        if char in mapping:
-            result += mapping[char]
-        else:
-            result += char
-        i += 1
-
-    # Cleanup and Casing
-    words = re.sub(r'\s+', ' ', result).strip().split(' ')
-    processed_words = []
     for word in words:
-        if not word: continue
-        lower_word = word.lower()
-        if lower_word == 'md': processed_words.append('Md.')
-        elif lower_word == 'mst': processed_words.append('Mst.')
-        else: processed_words.append(word.capitalize())
+        if word in special_names:
+            translated_words.append(special_names[word])
+            continue
 
-    return ' '.join(processed_words)
+        result = ""
+        for j in range(len(word)):
+            char = word[j]
+            translated = mapping.get(char, char)
+            result += translated
+
+            # Implicit vowel logic: if current char is consonant and next char is consonant
+            if char in mapping and not is_vowel(char) and j + 1 < len(word):
+                next_char = word[j+1]
+                if next_char in mapping and not is_vowel(next_char) and char != '্':
+                    # Add 'a' or 'o' based on common patterns
+                    if len(word) > 3 and j == 0: result += "a"
+                    elif word == 'ওমর' or char == 'ম': result += "o"
+                    else: result += "a"
+
+        translated_words.append(result.capitalize())
+
+    return ' '.join(translated_words)
 
 class Command(BaseCommand):
     help = 'Transliterates profile data from Bangla to English phonetic spelling'

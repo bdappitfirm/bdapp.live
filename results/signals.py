@@ -16,8 +16,15 @@ def calculate_overall_result_on_save(sender, instance, created, **kwargs):
 def calculate_overall_result_on_delete(sender, instance, **kwargs):
     """
     Recalculate overall result when a Result is deleted.
+    Skip if the student itself is being deleted (cascading delete).
     """
-    calculate_student_overall_result(instance.examination, instance.student)
+    from academics.models import StudentProfile
+    try:
+        # Check if student still exists to avoid crash during cascading delete
+        if StudentProfile.objects.filter(pk=instance.student_id).exists():
+            calculate_student_overall_result(instance.examination, instance.student)
+    except (StudentProfile.DoesNotExist, AttributeError):
+        pass
 
 
 def calculate_student_overall_result(examination, student):
@@ -221,26 +228,40 @@ def calculate_student_overall_result(examination, student):
         grade = 'F'
 
     # Calculate failed subjects count for ranking
+    # Improved logic: count both actual F and missing mandatory subjects
     failed_subjects_count = sum(1 for r in results_to_calculate if not r.is_passed)
 
+    # Check for missing mandatory subjects (like BGS or Religion)
+    mandatory_names = ['bangla', 'english', 'math', 'religion', 'ict', 'science', 'bgs']
+    present_names = [r.subject.name.lower() for r in results_to_calculate]
+    for m in mandatory_names:
+        if not any(m in p for p in present_names):
+            # Special check for religion
+            if m == 'religion' and any(x in str(present_names) for x in ['islam', 'hindu', 'ধর্ম']): continue
+            failed_subjects_count += 1
+
     # Create or update overall result
-    overall_result, created = StudentOverallResult.objects.update_or_create(
-        examination=examination,
-        student=student,
-        defaults={
-            'academic_year': examination.year,
-            'total_marks_obtained': total_obtained,
-            'total_marks_possible': total_possible,
-            'percentage': percentage,
-            'cgpa': cgpa,
-            'grade': grade,
-            'is_passed': is_passed,
-            'failed_subjects_count': failed_subjects_count
-        }
-    )
-    
-    # Calculate ranks for all students in this examination
-    calculate_ranks(examination)
+    try:
+        overall_result, created = StudentOverallResult.objects.update_or_create(
+            examination=examination,
+            student=student,
+            defaults={
+                'academic_year': examination.year,
+                'total_marks_obtained': total_obtained,
+                'total_marks_possible': total_possible,
+                'percentage': percentage,
+                'cgpa': cgpa,
+                'grade': grade,
+                'is_passed': is_passed,
+                'failed_subjects_count': failed_subjects_count
+            }
+        )
+
+        # Calculate ranks for all students in this examination
+        calculate_ranks(examination)
+    except Exception as e:
+        # Avoid crashing during complex DB operations like cascading deletes
+        print(f"Error updating overall result/ranks: {e}")
 
 
 def calculate_ranks(examination):
@@ -256,11 +277,11 @@ def calculate_ranks(examination):
     if sections.exists():
         for section in sections:
             # Get all overall results for this examination and this section
-            # Order by CGPA (desc), failed count (asc), percentage (desc), total marks (desc)
+            # Priority: 1. Fails (asc), 2. Total Marks (desc), 3. CGPA (desc), 4. Percentage (desc)
             overall_results = StudentOverallResult.objects.filter(
                 examination=examination,
                 student__section=section
-            ).order_by('-cgpa', 'failed_subjects_count', '-percentage', '-total_marks_obtained')
+            ).order_by('failed_subjects_count', '-total_marks_obtained', '-cgpa', '-percentage')
             
             # Assign ranks within the section with tie-breaking logic
             last_rank = 0
@@ -268,10 +289,10 @@ def calculate_ranks(examination):
             for i, result in enumerate(overall_results, start=1):
                 # Criteria for tie-breaking
                 current_values = (
-                    result.cgpa,
                     result.failed_subjects_count,
-                    result.percentage,
-                    result.total_marks_obtained
+                    result.total_marks_obtained,
+                    result.cgpa,
+                    result.percentage
                 )
 
                 if current_values != last_values:
@@ -285,16 +306,16 @@ def calculate_ranks(examination):
         # Fallback to class-wide ranking if no sections are defined
         overall_results = StudentOverallResult.objects.filter(
             examination=examination
-        ).order_by('-cgpa', 'failed_subjects_count', '-percentage', '-total_marks_obtained')
+        ).order_by('failed_subjects_count', '-total_marks_obtained', '-cgpa', '-percentage')
         
         last_rank = 0
         last_values = None
         for i, result in enumerate(overall_results, start=1):
             current_values = (
-                result.cgpa,
                 result.failed_subjects_count,
-                result.percentage,
-                result.total_marks_obtained
+                result.total_marks_obtained,
+                result.cgpa,
+                result.percentage
             )
 
             if current_values != last_values:

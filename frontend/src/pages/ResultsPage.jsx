@@ -157,43 +157,60 @@ export default function ResultsPage() {
   const [sectionSelectOpen, setSectionSelectOpen] = useState(false);
   const [examSelectOpen, setExamSelectOpen] = useState(false);
   const [subjectSelectOpen, setSubjectSelectOpen] = useState(false);
-  const autoSaveTimeouts = useRef({});
+  const autoSaveTimer = useRef(null);
+  const dirtyMarksBuffer = useRef({});
+  const inFlightAutoSaves = useRef(0);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
 
-  const performAutoSave = useCallback((examId, studentId, subjectId, updatedMarks) => {
-    if (!examId || !studentId || !subjectId) return;
+  const flushAutoSave = useCallback(() => {
+    const bufferEntries = Object.values(dirtyMarksBuffer.current);
+    if (bufferEntries.length === 0) return;
+
+    // Group by examination ID just in case (though usually it's one)
+    const examId = bufferEntries[0].examId;
+    if (!examId) return;
+
     setIsAutoSaving(true);
+    inFlightAutoSaves.current += 1;
 
-    const writtenMarks = updatedMarks.written !== '' ? parseFloat(updatedMarks.written) : 0;
-    const mcqMarks = updatedMarks.mcq !== '' ? parseFloat(updatedMarks.mcq) : 0;
-    const practicalMarks = updatedMarks.practical !== '' ? parseFloat(updatedMarks.practical) : 0;
+    const resultsToSave = bufferEntries.map(entry => ({
+      examination: parseInt(entry.examId),
+      student_id: parseInt(entry.studentId),
+      subject_id: parseInt(entry.subjectId),
+      written_marks: entry.marks.written === '' ? null : parseFloat(entry.marks.written),
+      mcq_marks: entry.marks.mcq === '' ? null : parseFloat(entry.marks.mcq),
+      practical_marks: entry.marks.practical === '' ? null : parseFloat(entry.marks.practical)
+    }));
 
-    const resultData = {
+    dirtyMarksBuffer.current = {}; // Clear buffer
+
+    api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, {
       examination: parseInt(examId),
       school_id: id,
-      results: [
-        {
-          examination: parseInt(examId),
-          student_id: parseInt(studentId),
-          subject_id: parseInt(subjectId),
-          written_marks: writtenMarks,
-          mcq_marks: mcqMarks,
-          practical_marks: practicalMarks
-        }
-      ]
-    };
-
-    api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, resultData)
-      .then(res => {
-        // Silently succeed
-      })
-      .catch(err => {
-        console.error('Auto-save failed:', err);
-      })
-      .finally(() => {
+      results: resultsToSave
+    })
+    .catch(err => {
+      console.error('Consolidated auto-save failed:', err);
+    })
+    .finally(() => {
+      inFlightAutoSaves.current -= 1;
+      if (inFlightAutoSaves.current <= 0) {
+        inFlightAutoSaves.current = 0;
         setIsAutoSaving(false);
-      });
+      }
+    });
   }, [id]);
+
+  const queueAutoSave = useCallback((examId, studentId, subjectId, marks) => {
+    if (!examId || !studentId || !subjectId) return;
+    const key = `${studentId}-${subjectId}`;
+    dirtyMarksBuffer.current[key] = { examId, studentId, subjectId, marks };
+
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      flushAutoSave();
+    }, 1500); // 1.5s debounce to give user time to type multiple fields
+  }, [flushAutoSave]);
 
   const handleEditMarksChange = (field, value) => {
     const newEditMarks = { ...editMarks, [field]: value };
@@ -203,12 +220,7 @@ export default function ResultsPage() {
       const examId = editingResult.examination?.id || editingResult.examination;
       const studentId = editingResult.student?.id || editingResult.student;
       const subjectId = editingResult.subject?.id || editingResult.subject;
-      const saveKey = `${studentId}-${subjectId}`;
-      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
-      autoSaveTimeouts.current[saveKey] = setTimeout(() => {
-        performAutoSave(examId, studentId, subjectId, newEditMarks);
-        delete autoSaveTimeouts.current[saveKey];
-      }, 500);
+      queueAutoSave(examId, studentId, subjectId, newEditMarks);
     }
   };
 
@@ -459,12 +471,11 @@ export default function ResultsPage() {
       const studentId = editingResult.student?.id || editingResult.student;
       const subjectId = editingResult.subject?.id || editingResult.subject;
       const saveKey = `${studentId}-${subjectId}`;
-      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
-      delete autoSaveTimeouts.current[saveKey];
+      if (dirtyMarksBuffer.current[saveKey]) delete dirtyMarksBuffer.current[saveKey];
 
-      const w = parseFloat(editMarks.written) || 0;
-      const m = parseFloat(editMarks.mcq) || 0;
-      const p = parseFloat(editMarks.practical) || 0;
+      const w = editMarks.written !== '' ? parseFloat(editMarks.written) : null;
+      const m = editMarks.mcq !== '' ? parseFloat(editMarks.mcq) : null;
+      const p = editMarks.practical !== '' ? parseFloat(editMarks.practical) : null;
 
       if (editingResult.id) {
         await api.patch(`/api/results/results/${editingResult.id}/`, {
@@ -554,9 +565,9 @@ export default function ResultsPage() {
     } catch (_) { return null; }
   };
   const normalizeName = (s) => String(s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-  const findSubjectExam = (subjectName) => {
+  const findSubjectExam = (subjectName, overrideClassId = null) => {
     try {
-      const classId = selectedClass;
+      const classId = overrideClassId || selectedClass;
       if (!classId || !subjectName) return null;
       const targetType = (getExamById(selectedExam)?.exam_type) || null;
       const targetSection = selectedSectionAdd ? parseInt(String(selectedSectionAdd), 10) : null;
@@ -640,12 +651,7 @@ export default function ResultsPage() {
       const newMarksForSubject = { ...(prev[sid] || { written: '', mcq: '', practical: '' }), [field]: v };
       const next = { ...prev, [sid]: newMarksForSubject };
 
-      const saveKey = `${selectedStudent}-${sid}`;
-      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
-      autoSaveTimeouts.current[saveKey] = setTimeout(() => {
-        performAutoSave(selectedExam, selectedStudent, sid, newMarksForSubject);
-        delete autoSaveTimeouts.current[saveKey];
-      }, 500);
+      queueAutoSave(selectedExam, selectedStudent, sid, newMarksForSubject);
 
       return next;
     });
@@ -676,16 +682,16 @@ export default function ResultsPage() {
     } catch (_) {}
   }, [id]);
 
+  /*
+  // Dangerous Auto-Exam Switcher - Removed because it causes data loss and confusion during input
   useEffect(() => {
     if (selectedExam && selectedStudent && !loadingStudents && !loadingSubjects) {
-      // console.log('🔄 ResultsPage: Effect triggered for student marks sync', { selectedExam, selectedStudent });
       loadExistingMarksForStudent(selectedExam, selectedStudent);
       (async () => {
         try {
           const res = await scopedGet('/api/results/results/', id, { examination: parseInt(selectedExam, 10), student: parseInt(selectedStudent, 10), page_size: 1 }, { timeout: 12000 });
           const arr = Array.isArray(res.data) ? res.data : (res.data?.results || []);
           if (!arr || arr.length === 0) {
-            // console.log('❓ ResultsPage: No results for current exam, searching alternatives...');
             const allRes = await api.get(`/api/results/results/?student=${parseInt(selectedStudent, 10)}&page_size=2000`);
             const list = Array.isArray(allRes.data) ? allRes.data : (allRes.data?.results || []);
             if (list && list.length) {
@@ -702,7 +708,6 @@ export default function ResultsPage() {
               });
               const pick = sorted[0] || candidates[0];
               if (pick?.id && String(pick.id) !== String(selectedExam)) {
-                // console.log('✅ ResultsPage: Switching to exam with results', pick.id);
                 setSelectedExam(pick.id);
                 loadResults(pick.id);
               }
@@ -712,6 +717,8 @@ export default function ResultsPage() {
       })();
     }
   }, [selectedExam, selectedStudent, loadExistingMarksForStudent, examinations, selectedClass, loadResults, id, getClassroomId, loadingStudents, loadingSubjects]);
+  */
+
 
   useEffect(() => {
     if (selectedStudent && selectedSubject && multiSubjectMarks[selectedSubject]) {
@@ -727,37 +734,82 @@ export default function ResultsPage() {
   const loadExistingBulkMarks = useCallback(async (examId, subjectId) => {
     if (!examId || !subjectId) return;
     try {
+      const selectedSubj = subjects.find(s => s.id === parseInt(subjectId));
+      const subjName = selectedSubj?.name;
+
+      // Fetch by ID first
       const res = await scopedGet('/api/results/results/', id, {
         examination: parseInt(examId, 10),
         subject: parseInt(subjectId, 10),
         page_size: 1000
       }, { timeout: 20000 });
+
       const arr = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-      const newBulkMarks = {};
-      for (const r of arr) {
-        const sid = r.student?.id || r.student;
-        if (sid) {
-          const w = r.written_marks;
-          const m = r.mcq_marks;
-          const p = r.practical_marks;
-          newBulkMarks[sid] = {
-            written: (w !== null && w !== undefined && w !== '') ? parseFloat(w) : '',
-            mcq: (m !== null && m !== undefined && m !== '') ? parseFloat(m) : '',
-            practical: (p !== null && p !== undefined && p !== '') ? parseFloat(p) : ''
-          };
-        }
+      const incomingMarks = {};
+
+      const processResults = (list) => {
+          for (const r of list) {
+            const sid = r.student?.id || r.student;
+            if (sid) {
+              const w = r.written_marks;
+              const m = r.mcq_marks;
+              const p = r.practical_marks;
+              incomingMarks[sid] = {
+                written: (w !== null && w !== undefined && w !== '') ? parseFloat(w) : '',
+                mcq: (m !== null && m !== undefined && m !== '') ? parseFloat(m) : '',
+                practical: (p !== null && p !== undefined && p !== '') ? parseFloat(p) : ''
+              };
+            }
+          }
+      };
+
+      processResults(arr);
+
+      // Fallback: If some students have marks under a different subject ID but same name (Duplicate check)
+      if (subjName) {
+          const resAlt = await scopedGet('/api/results/results/', id, {
+              examination: parseInt(examId, 10),
+              page_size: 2000
+          });
+          const allRes = Array.isArray(resAlt.data) ? resAlt.data : (resAlt.data?.results || []);
+          const matches = allRes.filter(r => (r.subject?.name === subjName || r.subject_name === subjName) && String(r.subject?.id || r.subject) !== String(subjectId));
+          processResults(matches);
       }
-      setBulkMarks(newBulkMarks);
+
+      // SAFE MERGE: Start with current local UI state and only fill in gaps from server,
+      // UNLESS the local state is completely empty (initial load).
+      setBulkMarks(prev => {
+          const hasLocalData = Object.keys(prev).length > 0;
+          if (!hasLocalData) return incomingMarks;
+
+          const merged = { ...prev };
+          Object.keys(incomingMarks).forEach(sid => {
+              // Only overwrite if we don't have a value OR if we aren't currently editing this student
+              const isDirty = !!dirtyMarksBuffer.current[`${sid}-${subjectId}`];
+              if (!merged[sid] && !isDirty) {
+                  merged[sid] = incomingMarks[sid];
+              }
+          });
+          return merged;
+      });
     } catch (e) {
       console.error('Error loading bulk marks:', e);
     }
-  }, [id]);
+  }, [id, subjects]);
 
+  const lastLoadedBulkRef = useRef({ examId: null, subjectId: null });
   useEffect(() => {
     const examId = bulkForm.exam || selectedExam;
     const subjectId = bulkForm.subject;
     if (bulkDialogOpen && examId && subjectId) {
-      loadExistingBulkMarks(examId, subjectId);
+      if (lastLoadedBulkRef.current.examId !== String(examId) || lastLoadedBulkRef.current.subjectId !== String(subjectId)) {
+        lastLoadedBulkRef.current = { examId: String(examId), subjectId: String(subjectId) };
+        // We no longer call setBulkMarks({}) here to prevent flickering to zero.
+        // loadExistingBulkMarks will overwrite the state when data arrives.
+        loadExistingBulkMarks(examId, subjectId);
+      }
+    } else if (!bulkDialogOpen) {
+      lastLoadedBulkRef.current = { examId: null, subjectId: null };
     }
   }, [bulkDialogOpen, bulkForm.exam, selectedExam, bulkForm.subject, loadExistingBulkMarks]);
 
@@ -1011,7 +1063,7 @@ export default function ResultsPage() {
     return Math.min(5.00, finalGpa).toFixed(2);
   };
   const getMaxForField = (examObj, field, subjectName, overrideClassId = null) => {
-    const subjExam = findSubjectExam(subjectName);
+    const subjExam = findSubjectExam(subjectName, overrideClassId);
     const e = subjExam || ((examObj && normalizeName(examObj.name) === normalizeName(subjectName)) ? examObj : null);
     if (e) {
       const val = field === 'written' ? parseFloat(e.written_max) : field === 'mcq' ? parseFloat(e.mcq_max) : field === 'practical' ? parseFloat(e.practical_max) : undefined;
@@ -1058,12 +1110,7 @@ export default function ResultsPage() {
     }
 
     // Auto-save logic
-    const saveKey = `${selectedStudent}-${selectedSubject}`;
-    if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
-    autoSaveTimeouts.current[saveKey] = setTimeout(() => {
-      performAutoSave(selectedExam, selectedStudent, selectedSubject, newMarks);
-      delete autoSaveTimeouts.current[saveKey];
-    }, 500);
+    queueAutoSave(selectedExam, selectedStudent, selectedSubject, newMarks);
   };
   
   const verifyPersistedResult = async (examId, studentId, subjectId) => {
@@ -1091,9 +1138,9 @@ export default function ResultsPage() {
     setSavingResult(true);
     
     // Convert string values to numbers for marks
-    const writtenMarks = marks.written !== '' ? parseFloat(marks.written) : 0;
-    const mcqMarks = marks.mcq !== '' ? parseFloat(marks.mcq) : 0;
-    const practicalMarks = marks.practical !== '' ? parseFloat(marks.practical) : 0;
+    const writtenMarks = marks.written !== '' ? parseFloat(marks.written) : null;
+    const mcqMarks = marks.mcq !== '' ? parseFloat(marks.mcq) : null;
+    const practicalMarks = marks.practical !== '' ? parseFloat(marks.practical) : null;
     
     // Use the bulk_results endpoint instead of trying to create a result directly
     const examId = parseInt(selectedExam);
@@ -1355,16 +1402,17 @@ export default function ResultsPage() {
   };
 
   useEffect(() => {
-    if (selectedExam && examinations.length && !examinations.some(ex => String(ex.id) === String(selectedExam))) {
-      setSelectedExam('');
+    // Only clear selectedExam if we HAVE examinations and the ID is truly missing from the valid list.
+    // If examinations is empty, it might be loading or a temporary network failure, so we preserve the selection.
+    if (selectedExam && examinations.length > 0) {
+      const stillExists = examinations.some(ex => String(ex.id) === String(selectedExam));
+      if (!stillExists) {
+        setSelectedExam('');
+      }
     }
   }, [examinations, selectedExam]);
 
-  useEffect(() => {
-    if (examinations.length === 0 && selectedExam) {
-      setSelectedExam('');
-    }
-  }, [examinations]);
+  // Removed redundant examinations length check that caused flickering selection
 
   useEffect(() => {
     if (role === 'teacher' && currentUserId && id) {
@@ -1461,12 +1509,7 @@ export default function ResultsPage() {
       const newMarksForStudent = { ...(prev[sid] || {}), [field]: v };
       const next = { ...prev, [sid]: newMarksForStudent };
 
-      const saveKey = `${sid}-${bulkForm.subject}`;
-      if (autoSaveTimeouts.current[saveKey]) clearTimeout(autoSaveTimeouts.current[saveKey]);
-      autoSaveTimeouts.current[saveKey] = setTimeout(() => {
-        performAutoSave(bulkForm.exam || selectedExam, sid, bulkForm.subject, newMarksForStudent);
-        delete autoSaveTimeouts.current[saveKey];
-      }, 500);
+      queueAutoSave(bulkForm.exam || selectedExam, sid, bulkForm.subject, newMarksForStudent);
 
       return next;
     });
@@ -1510,9 +1553,9 @@ export default function ResultsPage() {
         examination: examId,
         student_id: parseInt(r.sid),
         subject_id: subjectId,
-        written_marks: r.m.written || 0,
-        mcq_marks: r.m.mcq || 0,
-        practical_marks: r.m.practical || 0
+        written_marks: (r.m.written !== '' && r.m.written !== undefined) ? r.m.written : null,
+        mcq_marks: (r.m.mcq !== '' && r.m.mcq !== undefined) ? r.m.mcq : null,
+        practical_marks: (r.m.practical !== '' && r.m.practical !== undefined) ? r.m.practical : null
       }))
     };
     try {
@@ -1551,11 +1594,13 @@ export default function ResultsPage() {
   const isBanglaFirst = (name) => {
     const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim();
     const lower = n.toLowerCase();
+    if (lower.includes('বাংলাদেশ') || lower.includes('bangladesh')) return false;
     return !!(lower.includes('বাংলা প্রথম') || lower.includes('bangla first') || lower.includes('বাংলা-১') || lower.includes('1st'));
   };
   const isBanglaSecond = (name) => {
     const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim();
     const lower = n.toLowerCase();
+    if (lower.includes('বাংলাদেশ') || lower.includes('bangladesh')) return false;
     return !!(lower.includes('বাংলা দ্বিত') || lower.includes('bangla second') || lower.includes('বাংলা-২') || lower.includes('2nd'));
   };
   const isBanglaPaper = (name) => isBanglaFirst(name) || isBanglaSecond(name);
@@ -2081,25 +2126,66 @@ export default function ResultsPage() {
                         }
                         present += 1;
 
-                        let anyFail = list.some(it => (it?.grade === 'F') || (it?.is_passed === false));
+                        const clsName = String(classroom.name || '').toLowerCase();
+                        const is910 = /নবম|দশম|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10|৯ম|১০ম/i.test(clsName);
+
+                        let anyFail = list.some(it => {
+                          const w = parseFloat(it.written_marks) || 0;
+                          const m = parseFloat(it.mcq_marks) || 0;
+                          const p = parseFloat(it.practical_marks) || 0;
+                          const obtained = w + m + p;
+                          const sname = it.subject?.name || it.subject_name || '';
+
+                          // If it's a co-curricular subject, don't count as fail for summary usually,
+                          // but let's stick to server grade if available, or just check 'F'
+                          if (it.grade === 'F') return true;
+
+                          if (is910) {
+                              const spec = getSubjectMaximaForClass(sname, classroom.id);
+                              const totPossible = spec.written + spec.mcq + spec.practical || 100;
+                              const cqPass = spec.written === 0 || w >= Math.round(spec.written * 0.33 - 0.5);
+                              const mcqPass = spec.mcq === 0 || m >= Math.round(spec.mcq * 0.33 - 0.5);
+                              const prPass = spec.practical === 0 || p >= Math.round(spec.practical * 0.33 - 0.5);
+                              const totPass = obtained >= Math.round(totPossible * 0.33 - 0.5);
+                              return !(cqPass && mcqPass && prPass && totPass);
+                          } else {
+                              const spec = getSubjectMaximaForClass(sname, classroom.id);
+                              const totPossible = spec.written + spec.mcq + spec.practical || 100;
+                              return obtained < Math.round(totPossible * 0.33 - 0.5);
+                          }
+                        });
 
                         // Combined pass logic for Bangla
                         try {
-                          const clsName = String(classroom.name || '').toLowerCase();
-                          const is910 = /নবম|দশম|\b9\b|\b10\b/.test(clsName);
                           if (is910) {
                             const banglaResults = list.filter(r => isBanglaPaper(r.subject?.name || r.subject_name));
                             if (banglaResults.length > 0) {
                               const passMarks = parseFloat(exam.pass_marks) || 33;
                               const banglaTotal = banglaResults.reduce((s, r) => s + (parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0), 0);
+
+                              // Simplified combined pass: total 66 out of 200 (or equivalent)
                               const combinedPass = banglaTotal >= (passMarks * (banglaResults.length === 1 ? 1 : 2));
 
                               if (combinedPass) {
-                                // If combined pass is true, we ignore Bangla failures when checking anyFail
+                                // Re-evaluate anyFail ignoring Bangla if combined pass is achieved
                                 anyFail = list.some(it => {
                                   const nm = it.subject?.name || it.subject_name || '';
                                   if (isBanglaPaper(nm)) return false;
-                                  return (it?.grade === 'F') || (it?.is_passed === false);
+
+                                  const w = parseFloat(it.written_marks) || 0;
+                                  const m = parseFloat(it.mcq_marks) || 0;
+                                  const p = parseFloat(it.practical_marks) || 0;
+                                  const obtained = w + m + p;
+
+                                  const spec = getSubjectMaximaForClass(nm, classroom.id);
+                                  const totPossible = spec.written + spec.mcq + spec.practical || 100;
+
+                                  const cqPass = spec.written === 0 || w >= Math.round(spec.written * 0.33 - 0.5);
+                                  const mcqPass = spec.mcq === 0 || m >= Math.round(spec.mcq * 0.33 - 0.5);
+                                  const prPass = spec.practical === 0 || p >= Math.round(spec.practical * 0.33 - 0.5);
+                                  const totPass = obtained >= Math.round(totPossible * 0.33 - 0.5);
+
+                                  return !(cqPass && mcqPass && prPass && totPass);
                                 });
                               }
                             }
@@ -2211,9 +2297,9 @@ export default function ResultsPage() {
                         examination: examId,
                         student_id: parseInt(selectedStudent),
                         subject_id: s.id,
-                        written_marks: m.written !== '' ? parseFloat(m.written) : 0,
-                        mcq_marks: m.mcq !== '' ? parseFloat(m.mcq) : 0,
-                        practical_marks: m.practical !== '' ? parseFloat(m.practical) : 0
+                        written_marks: m.written !== '' ? parseFloat(m.written) : null,
+                        mcq_marks: m.mcq !== '' ? parseFloat(m.mcq) : null,
+                        practical_marks: m.practical !== '' ? parseFloat(m.practical) : null
                       };
                     }).filter(r => {
                       const m = multiSubjectMarks[r.subject_id];
@@ -2411,7 +2497,7 @@ export default function ResultsPage() {
                     const isOptional = String(subject.id) === String(students.find(s => s.id === selectedStudent)?.optional_subject?.id || students.find(s => s.id === selectedStudent)?.optional_subject);
                     return (
                       <MenuItem key={subject.id} value={subject.id}>
-                        {subject.name} {isOptional ? '(৪র্থ বিষয়)' : ''}
+                        {subject.name} (ID: {subject.id}) {isOptional ? '(৪র্থ বিষয়)' : ''}
                       </MenuItem>
                     );
                   })}
@@ -2567,9 +2653,9 @@ export default function ResultsPage() {
                     examination: examId,
                     student_id: parseInt(selectedStudent),
                     subject_id: s.id,
-                    written_marks: m.written !== '' ? parseFloat(m.written) : 0,
-                    mcq_marks: m.mcq !== '' ? parseFloat(m.mcq) : 0,
-                    practical_marks: m.practical !== '' ? parseFloat(m.practical) : 0
+                    written_marks: m.written !== '' ? parseFloat(m.written) : null,
+                    mcq_marks: m.mcq !== '' ? parseFloat(m.mcq) : null,
+                    practical_marks: m.practical !== '' ? parseFloat(m.practical) : null
                   };
                 }).filter(r => {
                     const m = multiSubjectMarks[r.subject_id];

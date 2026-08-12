@@ -89,53 +89,19 @@ const GlobalInstallPrompt = () => {
 const APP_VERSION = '2.1.2';
 const CACHE_VERSION_KEY = 'bdapp_cache_version';
 
+// Cleaned up CacheClearer - no more redirect loops
 const CacheClearer = () => {
-  const location = useLocation();
   useEffect(() => {
     try {
       const storedVersion = localStorage.getItem(CACHE_VERSION_KEY);
-      const migrationDone = sessionStorage.getItem('cache_migration_done');
-      const isClearedUrl = location.search.includes('cleared=true');
-
-      if (storedVersion && storedVersion !== APP_VERSION && !migrationDone && !isClearedUrl) {
-        console.log(`Version mismatch: ${storedVersion} -> ${APP_VERSION}. Clearing cache...`);
-
-        const timer = setTimeout(() => {
-          if ('caches' in window) {
-            caches.keys().then((names) => {
-              for (let name of names) caches.delete(name);
-            });
-          }
-
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then((registrations) => {
-              for (let r of registrations) r.unregister();
-            });
-          }
-
-          // Save critical info
-          const schoolId = localStorage.getItem('currentSchoolId');
-          const accessToken = localStorage.getItem('accessToken');
-          const refreshToken = localStorage.getItem('refreshToken');
-
-          localStorage.clear();
-
-          if (schoolId) localStorage.setItem('currentSchoolId', schoolId);
-          if (accessToken) localStorage.setItem('accessToken', accessToken);
-          if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-
-          localStorage.setItem(CACHE_VERSION_KEY, APP_VERSION);
-          sessionStorage.setItem('cache_migration_done', 'true');
-
-          window.location.href = window.location.pathname + '?cleared=true';
-        }, 1000);
-
-        return () => clearTimeout(timer);
+      if (storedVersion && storedVersion !== APP_VERSION) {
+        console.log(`Version mismatch: ${storedVersion} -> ${APP_VERSION}. Updating local storage...`);
+        localStorage.setItem(CACHE_VERSION_KEY, APP_VERSION);
       } else if (!storedVersion) {
         localStorage.setItem(CACHE_VERSION_KEY, APP_VERSION);
       }
     } catch (e) {}
-  }, [location.pathname, location.search]);
+  }, []);
   return null;
 };
 
@@ -237,9 +203,7 @@ const ScrollToTop = () => {
   const { pathname } = useLocation();
   useEffect(() => {
     try {
-      window.scrollTo(0, 0);
-      if (document.documentElement) document.documentElement.scrollTop = 0;
-      if (document.body) document.body.scrollTop = 0;
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     } catch (e) {}
   }, [pathname]);
   return null;

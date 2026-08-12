@@ -54,16 +54,14 @@ root.render(
   </ThemeProvider>
 );
 
-// Register service worker for PWA support (Offline Capability)
+// Unregister any existing service worker to prevent reload loops and "shaking" issues
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then((registration) => {
-        console.log('SW: Registered successfully');
-      })
-      .catch((error) => {
-        console.error('SW: Registration failed:', error);
-      });
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (let registration of registrations) {
+      registration.unregister();
+    }
+  }).catch((err) => {
+    console.error('SW: Unregistration failed:', err);
   });
 }
 

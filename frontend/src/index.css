@@ -27,10 +27,8 @@ body {
 }
 
 /* Disable transitions during initial mount/load to prevent shaking */
-.MuiPaper-root, .MuiCard-root, * {
-  /* removed transitions that caused jittering */
+.MuiPaper-root, .MuiCard-root {
   transition: none !important;
-  animation: none !important;
 }
 
 /* Custom Scrollbar */

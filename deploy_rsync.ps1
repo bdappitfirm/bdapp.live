@@ -23,7 +23,7 @@ $timestamp = Get-Date -Format "yyyyMMddHHmmss"
 $zipName = "deploy_$timestamp.tar.gz"
 
 Write-Host "Packing all project files into $zipName..." -ForegroundColor Yellow
-tar -czf $zipName --exclude="media" --exclude="staticfiles" --exclude=".venv" --exclude="venv" --exclude="node_modules" --exclude="__pycache__" --exclude="*.pyc" --exclude="*.tar" --exclude="*.tar.gz" --exclude="*.zip" backend users schools academics attendance fees results manage.py requirements.txt scripts fix_all.sh fix_database_marks.py fix_db_schema.py cleanup_orphaned_students.py school_19_students.json frontend/build
+tar -czf $zipName --exclude="media" --exclude="staticfiles" --exclude=".venv" --exclude="venv" --exclude="node_modules" --exclude="__pycache__" --exclude="*.pyc" --exclude="*.tar" --exclude="*.tar.gz" --exclude="*.zip" backend users schools academics attendance fees results manage.py requirements.txt scripts fix_all.sh fix_database_marks.py auto_translate.py fix_db_schema.py cleanup_orphaned_students.py school_19_students.json frontend/build
 
 # 3. Upload using pscp.exe
 Write-Host "Uploading update bundle to server..." -ForegroundColor Yellow

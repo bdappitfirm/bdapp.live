@@ -26,6 +26,7 @@ export default function StudentListPage() {
   const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState('');
   const [students, setStudents] = useState([]);
+  const [allSubjects, setAllSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle', 'saving', 'saved', 'error'
   const [downloadAnchor, setDownloadAnchor] = useState(null);
@@ -57,7 +58,9 @@ export default function StudentListPage() {
         ...s, father_name: fName, mother_name: mName,
         first_name: s.user?.first_name || '', last_name: s.user?.last_name || '',
         address: s.address || '', phone_number: s.user?.phone_number || '',
-        manual_admission_date: manualAdmissionDate, manual_birth_date: manualBirthDate
+        manual_admission_date: manualAdmissionDate, manual_birth_date: manualBirthDate,
+        optional_subject_id: s.optional_subject?.id || s.optional_subject,
+        student_group: s.student_group || s.group || ''
       };
     });
   }, []);
@@ -100,7 +103,9 @@ export default function StudentListPage() {
               phone_number: s.phone_number,
               birth_date: bDate,
               admission_date: aDate,
-              roll_number: s.roll_number
+              roll_number: s.roll_number,
+              student_group: s.student_group,
+              optional_subject_id: s.optional_subject_id || s.optional_subject?.id || s.optional_subject
           };
       });
       await scopedPost(`/api/academics/students/bulk_update_students/`, id, { updates });
@@ -114,10 +119,18 @@ export default function StudentListPage() {
   }, [id, toast]);
 
   const handleFieldChange = useCallback((studentId, field, value) => {
-    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, [field]: value } : s));
+    setStudents(prev => prev.map(s => {
+        if (s.id !== studentId) return s;
+        let updated = { ...s, [field]: value };
+        if (field === 'optional_subject_id') {
+            const sub = allSubjects.find(sub => String(sub.id) === String(value));
+            updated.optional_subject = sub || null;
+        }
+        return updated;
+    }));
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => { performAutoSaveEffect(); }, 2000);
-  }, [performAutoSaveEffect]);
+  }, [performAutoSaveEffect, allSubjects]);
 
   const loadData = useCallback(async (clsId, secId) => {
     const targetCls = clsId || selectedClassroom;
@@ -153,6 +166,7 @@ export default function StudentListPage() {
   useEffect(() => {
     if (id) {
       scopedGet('/api/academics/classrooms/', id).then(res => setClassrooms(Array.isArray(res.data) ? res.data : (res.data?.results || [])));
+      scopedGet('/api/academics/subjects/', id, { page_size: 500 }).then(res => setAllSubjects(Array.isArray(res.data) ? res.data : (res.data?.results || [])));
     }
   }, [id]);
 
@@ -170,9 +184,10 @@ export default function StudentListPage() {
   const handleDownloadCSV = useCallback(() => {
     if (students.length === 0) return;
     const headers = ['ক্র.', 'নাম', 'পদবী', 'পিতা', 'মাতা', 'জন্ম তারিখ', 'রোল', 'শাখা', 'গ্রুপ', '৪র্থ বিষয়'];
+    const groupMap = { 'science': 'বিজ্ঞান', 'arts': 'মানবিক', 'commerce': 'ব্যবসায় শিক্ষা' };
     const rows = students.map((s, idx) => [
       idx + 1, s.first_name, s.last_name, s.father_name, s.mother_name, s.manual_birth_date,
-      s.roll_number, s.section?.name, s.student_group, s.optional_subject?.name
+      s.roll_number, s.section?.name, groupMap[s.student_group] || s.student_group || '', s.optional_subject?.name || ''
     ]);
     let csv = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\r\n" + rows.map(r => r.join(",")).join("\r\n");
     const link = document.createElement("a"); link.setAttribute("href", encodeURI(csv)); link.setAttribute("download", "Students.csv");
@@ -310,8 +325,25 @@ export default function StudentListPage() {
                         <TableCell align="center" sx={{ p: 0, m: 0 }}>{s.section?.name || ''}</TableCell>
                         {isNineTen && (
                           <>
-                            <TableCell align="center" sx={{ p: 0, m: 0 }}>{s.student_group === 'science' ? 'বিজ্ঞান' : s.student_group === 'arts' ? 'মানবিক' : s.student_group === 'commerce' ? 'ব্যবসায় শিক্ষা' : ''}</TableCell>
-                            <TableCell align="center" sx={{ p: 0, m: 0 }}>{s.optional_subject?.name || ''}</TableCell>
+                            <TableCell sx={{ p: 0, m: 0 }}>
+                              <select className="sl-cell-select" value={s.student_group || ''} onChange={(e) => handleFieldChange(s.id, 'student_group', e.target.value)}>
+                                <option value="">নির্বাচন করুন</option>
+                                <option value="science">বিজ্ঞান</option>
+                                <option value="arts">মানবিক</option>
+                                <option value="commerce">ব্যবসায় শিক্ষা</option>
+                              </select>
+                            </TableCell>
+                            <TableCell sx={{ p: 0, m: 0 }}>
+                              <select className="sl-cell-select" value={s.optional_subject_id || s.optional_subject?.id || s.optional_subject || ''} onChange={(e) => handleFieldChange(s.id, 'optional_subject_id', e.target.value)}>
+                                <option value="">নির্বাচন করুন</option>
+                                {allSubjects.filter(sub => {
+                                  const n = String(sub.name || '').toLowerCase();
+                                  return n.includes('উচ্চতর') || n.includes('higher') || n.includes('কৃষি') || n.includes('agri');
+                                }).map(sub => (
+                                  <option key={sub.id} value={sub.id}>{sub.name}</option>
+                                ))}
+                              </select>
+                            </TableCell>
                           </>
                         )}
                         <TableCell sx={{ p: 0, m: 0 }}>
@@ -332,6 +364,8 @@ export default function StudentListPage() {
       <style>{`
         .sl-cell-input { width: 100%; border: none; border-bottom: 1px solid transparent; padding: 4px; font-family: inherit; font-size: 0.85rem; background: transparent; outline: none; }
         .sl-cell-input:focus { border-bottom: 1px solid #1976d2; background: rgba(0,0,0,0.02); }
+        .sl-cell-select { width: 100%; border: none; background: transparent; font-family: inherit; font-size: 0.85rem; outline: none; cursor: pointer; }
+        .sl-cell-select:focus { background: rgba(0,0,0,0.02); }
         .print-only { display: none; }
         @media print {
           .no-print { display: none !important; }

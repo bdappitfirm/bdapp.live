@@ -103,9 +103,9 @@ class Result(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='results')
     
     # Marks breakdown
-    written_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    mcq_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    practical_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    written_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, default=None)
+    mcq_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, default=None)
+    practical_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, default=None)
     total_obtained = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     
     # Auto-calculated
@@ -125,22 +125,35 @@ class Result(models.Model):
         ]
     
     def save(self, *args, **kwargs):
-        self.total_obtained = self.written_marks + self.mcq_marks + self.practical_marks
+        # Handle None marks as 0 for calculations
+        wm = self.written_marks if self.written_marks is not None else Decimal('0')
+        mm = self.mcq_marks if self.mcq_marks is not None else Decimal('0')
+        pm = self.practical_marks if self.practical_marks is not None else Decimal('0')
+
+        self.total_obtained = wm + mm + pm
         
         group = _class_group(getattr(self.examination.classroom, "name", None))
         maxima = get_subject_maxima(group, getattr(self.subject, "name", None)) or {}
         
         if maxima:
-            wm = int(maxima.get("written", 0))
-            mm = int(maxima.get("mcq", 0))
-            pm = int(maxima.get("practical", 0))
+            wm_max = int(maxima.get("written", 0))
+            mm_max = int(maxima.get("mcq", 0))
+            pm_max = int(maxima.get("practical", 0))
         else:
-            wm = 0
-            mm = 0
-            pm = 0
-        denom = Decimal(wm + mm + pm) if (wm or mm or pm) else Decimal(self.examination.total_marks)
+            wm_max = 0
+            mm_max = 0
+            pm_max = 0
+
+        denom = Decimal(wm_max + mm_max + pm_max) if (wm_max or mm_max or pm_max) else Decimal(self.examination.total_marks)
         percentage = (self.total_obtained / denom) * 100 if denom > 0 else 0
-        
+
+        # Pass/Fail logic: if all marks are None, it's NOT a fail, it's just no record/absent.
+        # But if we have a record, we usually want it to be a fail if it doesn't meet pass marks.
+        # UNLESS the user explicitly wants "Empty".
+
+        # Check if actually absent (all fields None)
+        is_empty = self.written_marks is None and self.mcq_marks is None and self.practical_marks is None
+
         # First, always calculate grade and GPA based on percentage
         if percentage >= 80:
             self.grade = 'A+'
@@ -165,26 +178,19 @@ class Result(models.Model):
             self.gpa = 0.00
             
         # Pass/Fail calculation
-        group = _class_group(getattr(self.examination.classroom, "name", None))
         is_nine_ten = group == 'nine_ten'
 
         # Accurate Board Pass Rule: total_obtained >= round(denom * 0.33)
-        # This ensures 100->33, 70->23, 25->8 pass correctly.
         pass_threshold = Decimal(str(round(float(denom) * 0.33)))
         self.is_passed = self.total_obtained >= pass_threshold
         
         # STRICT RULE for Class 9-10: Separate pass for each component
         if is_nine_ten and self.is_passed:
-            # Get component maxima to check individual pass
-            wm_max = float(maxima.get("written", 0))
-            mm_max = float(maxima.get("mcq", 0))
-            pm_max = float(maxima.get("practical", 0))
-
-            if wm_max > 0 and float(self.written_marks) < round(wm_max * 0.33):
+            if wm_max > 0 and float(wm) < round(wm_max * 0.33):
                 self.is_passed = False
-            if mm_max > 0 and float(self.mcq_marks) < round(mm_max * 0.33):
+            if mm_max > 0 and float(mm) < round(mm_max * 0.33):
                 self.is_passed = False
-            if pm_max > 0 and float(self.practical_marks) < round(pm_max * 0.33):
+            if pm_max > 0 and float(pm) < round(pm_max * 0.33):
                 self.is_passed = False
 
         # Override grade and GPA if failed
@@ -197,6 +203,10 @@ class Result(models.Model):
                 if percentage >= 40: self.grade = 'C'
                 elif percentage >= 33: self.grade = 'D'
         
+        # If all marks are None, we shouldn't really have a grade/GPA,
+        # but the model fields are not nullable for grade/gpa currently.
+        # We'll let it stay as F/0.00 but the ResultCard will show it as Absent.
+
         super().save(*args, **kwargs)
     
     def __str__(self):

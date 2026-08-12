@@ -97,8 +97,8 @@ const SchoolDashboard = () => {
     { label: 'রেজাল্ট', icon: <AssessmentIcon />, key: 'results' },
     { label: 'রেজাল্ট কার্ড', icon: <CardMembershipIcon />, key: 'result-card' },
     { label: 'ক্লাস রেজাল্টস', icon: <AssessmentIcon />, key: 'class-results' },
-    { label: 'Rank List', icon: <CardMembershipIcon />, key: 'rank-list' },
-    { label: 'মেরিট লিস্ট', icon: <CardMembershipIcon />, key: 'merit-list' },
+    { label: 'Rank List (মেধাক্রম)', icon: <CardMembershipIcon />, key: 'rank-list' },
+    { label: 'Merit List(মেধাতালিকা)', icon: <CardMembershipIcon />, key: 'merit-list' },
     { label: 'স্টুডেন্ট তালিকা', icon: <GroupIcon />, key: 'student-list' },
     { label: 'আইডি কার্ড', icon: <CardMembershipIcon />, key: 'id-card' },
     { label: 'প্রবেশপত্র', icon: <CardMembershipIcon />, key: 'admission-cards' },
@@ -146,15 +146,9 @@ const SchoolDashboard = () => {
 
   // UI State & effects
   useEffect(() => {
-    try {
-      window.scrollTo(0, 0);
-      if (document.documentElement) document.documentElement.scrollTop = 0;
-      if (document.body) document.body.scrollTop = 0;
-    } catch (e) {}
-
     // Always close drawer when location changes
     setMobileOpen(false);
-    setActiveCategory(null); // পেজ চেঞ্জ হলে মেইন মেনুতে ফিরবে
+    setActiveCategory(null);
   }, [location.pathname]);
 
   const [anchorEl, setAnchorEl] = useState(null);
@@ -736,11 +730,6 @@ const SchoolDashboard = () => {
           mt: { xs: 8, sm: 9 },
           minHeight: '100vh',
           bgcolor: '#f8f9fa',
-          transition: theme.transitions.create(['margin', 'width'], {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.leavingScreen,
-          }),
-          // Force zero margin-left so content sits right next to drawer
           ml: 0,
           width: '100%',
           minWidth: 0,

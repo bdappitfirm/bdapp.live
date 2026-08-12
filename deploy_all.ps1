@@ -92,6 +92,7 @@ if (-not $NoBackend) {
         "fix_all.sh",
         "fix_database_marks.py",
         "fix_optional_subjects.py",
+        "auto_translate.py",
         "fix_db_schema.py",
         "cleanup_students.py",
         "cleanup_orphaned_students.py",

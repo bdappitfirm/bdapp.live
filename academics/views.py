@@ -271,6 +271,19 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                 cls._birth_date_db_exists = False
         return cls._birth_date_db_exists
 
+    def perform_destroy(self, instance):
+        """
+        Custom delete to ensure the associated User object is also removed.
+        This provides a complete cleanup of the student account.
+        """
+        user = instance.user
+        # Deleting the user will cascade and delete the StudentProfile
+        # and all its related records (Results, Attendance, etc.)
+        if user:
+            user.delete()
+        else:
+            instance.delete()
+
     def get_serializer_class(self):
         return StudentProfileSerializer
 
@@ -409,7 +422,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                                 instance.user.save()
 
                         # 2. Update StudentProfile
-                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks']
+                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks', 'optional_subject_id']
                         safe_data = {}
                         profile_changed = False
 

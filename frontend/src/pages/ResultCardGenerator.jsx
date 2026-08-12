@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
@@ -88,6 +88,123 @@ const CO_CURRICULAR_SUBJECTS = [
   'কর্ম ও জীবনমুখী', 'Life and Work', 'Continuous Assessment', 'ধারাবাহিক মূল্যায়ন'
 ];
 
+const getSubjectMaxima = (name, isClassNineOrTen) => {
+  const lower = String(name || '').toLowerCase();
+
+  if (lower.includes('english') || lower.includes('ইংরেজি') || lower.includes('ইংরেজী') || lower.includes('eng')) {
+    if (isClassNineOrTen) return { cq: 100, mcq: 0, pr: 0 };
+    if (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii')) return { cq: 50, mcq: 0, pr: 0 };
+    return { cq: 100, mcq: 0, pr: 0 };
+  }
+
+  if (lower.includes('ict') || lower.includes('তথ্য') || lower.includes('information') || lower.includes('যোগাযোগ')) {
+    return isClassNineOrTen ? { cq: 0, mcq: 25, pr: 25 } : { cq: 10, mcq: 15, pr: 25 };
+  }
+
+  const isPracticalScience = lower.includes('পদার্থ') || lower.includes('physics') || lower.includes('রসায়ন') || lower.includes('রসায়ন') || lower.includes('chemistry') || lower.includes('জীব') || lower.includes('biology') || lower.includes('উচ্চতর') || lower.includes('higher');
+  const isAgriHome = lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics');
+
+  if (isClassNineOrTen) {
+    if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
+    if (lower.includes('বাংলা') || lower.includes('bangla')) return { cq: 70, mcq: 30, pr: 0 };
+  } else {
+    if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
+    if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
+    if ((lower.includes('বাংলা') || lower.includes('bangla')) && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii'))) return { cq: 35, mcq: 15, pr: 0 };
+    if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
+  }
+  return { cq: 70, mcq: 30, pr: 0 };
+};
+
+const computeGpa = (pct) => {
+  if (pct >= 80) return 5.0; if (pct >= 70) return 4.0; if (pct >= 60) return 3.5;
+  if (pct >= 50) return 3.0; if (pct >= 40) return 2.0; if (pct >= 33) return 1.0;
+  return 0.0;
+};
+
+// Helpers moved to top for broader access
+const normalizeSubjKeyLocal = (n) => {
+    const low = String(n).toLowerCase().trim();
+    if (low.includes('higher') || low.includes('উচ্চতর')) return 'higher';
+    if (low.includes('math') || low.includes('গণিত')) return 'math';
+    if (low.includes('history') || low.includes('ইতিহাস') || low.includes('সভ্যতা')) return 'history';
+    if (low.includes('bgs') || (low.includes('বাংলাদেশ') && (low.includes('পরিচয়') || low.includes('পরিচয়'))) || low.includes('global studies')) return 'bgs';
+    if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
+    if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
+    if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
+    if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+    if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
+    if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
+    if (low.includes('biology') || low.includes('জীব')) return 'biology';
+    if (low.includes('agriculture') || low.includes('কৃষি') || low.includes('home') || low.includes('গার্হস্থ্য')) return 'agriculture';
+    if (low.includes('accounting') || low.includes('হিসাব')) return 'accounting';
+    if (low.includes('finance') || low.includes('ফিন্যান্স')) return 'finance';
+    if (low.includes('business') || low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('entrepreneurship') || low.includes('উদ্যোগ')) return 'business';
+    if (low.includes('geography') || low.includes('ভূগোল')) return 'geography';
+    if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
+    if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
+    if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
+    return low;
+};
+
+const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs = []) => {
+    const subjects = new Set(['math', 'religion', 'ict']);
+    const g = String(studentGroup || '').toLowerCase();
+    const subjsArr = Array.from(classSubjs || []);
+
+    // Helper to check if a base subject exists in class results
+    const checkPaper = (base) => {
+        // For Bangla and English, we almost always expect papers in 6-10
+        if (base === 'bangla' || base === 'english') {
+            return [base + '_p1', base + '_p2'];
+        }
+
+        if (isNT) return [base];
+
+        // Default to papers for Class 6-8 if classSubjs is not available
+        if (subjsArr.length === 0) return [base + '_p1', base + '_p2'];
+
+        const hasP1 = subjsArr.some(s => normalizeSubjKeyLocal(s) === base && !s.includes('2nd') && !s.includes('২য়') && !s.includes('২য়') && !s.includes('second'));
+        const hasP2 = subjsArr.some(s => normalizeSubjKeyLocal(s) === base && (s.includes('2nd') || s.includes('২য়') || s.includes('২য়') || s.includes('second')));
+        if (hasP1 || hasP2) {
+            const res = [];
+            if (hasP1) res.push(base + '_p1');
+            if (hasP2) res.push(base + '_p2');
+            return res;
+        }
+        return [base];
+    };
+
+    checkPaper('bangla').forEach(s => subjects.add(s));
+    checkPaper('english').forEach(s => subjects.add(s));
+
+    if (isNT) {
+        if (g.includes('science') || g.includes('বিজ্ঞান')) {
+            ['physics', 'chemistry', 'biology', 'bgs'].forEach(s => subjects.add(s));
+        } else if (g.includes('commerce') || g.includes('business') || g.includes('ব্যবসায়') || g.includes('ব্যবসায়')) {
+            ['accounting', 'finance', 'business', 'science'].forEach(s => subjects.add(s));
+        } else if (g.includes('arts') || g.includes('humanities') || g.includes('মানবিক')) {
+            ['history', 'geography', 'civics', 'economics', 'science'].forEach(s => subjects.add(s));
+        }
+    } else {
+        ['science', 'bgs'].forEach(s => subjects.add(s));
+    }
+    return subjects;
+};
+
+const translateSubLocal = (key) => {
+    const map = {
+        'bangla': 'Bangla', 'bangla_p1': 'Bangla 1st Paper', 'bangla_p2': 'Bangla 2nd Paper',
+        'english': 'English', 'english_p1': 'English 1st Paper', 'english_p2': 'English 2nd Paper',
+        'math': 'Mathematics', 'religion': 'Religion', 'ict': 'ICT', 'science': 'Science', 'bgs': 'BGS',
+        'physics': 'Physics', 'chemistry': 'Chemistry', 'biology': 'Biology', 'higher': 'Higher Mathematics',
+        'accounting': 'Accounting', 'finance': 'Finance & Banking', 'business': 'Business Entrepreneurship',
+        'history': 'History', 'geography': 'Geography', 'civics': 'Civics & Citizenship', 'economics': 'Economics',
+        'agriculture': 'Agriculture'
+    };
+    return map[key] || key;
+};
+
 export default function ResultCardGenerator() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -132,6 +249,388 @@ export default function ResultCardGenerator() {
 
 
   const isMounted = React.useRef(true);
+
+  const isClassNineOrTen = useMemo(() => {
+    const cls = classrooms.find(c => String(c.id) === String(selectedClass));
+    if (!cls) return false;
+    const text = String(cls.name || '').toLowerCase();
+    return /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10|৯ম|১০ম/i.test(text);
+  }, [selectedClass, classrooms]);
+
+  const calculateStudentRank = useCallback(async (studentId, listResults = null) => {
+    try {
+        let allResults = listResults;
+        if (!allResults) {
+            const res = await scopedGet('/api/results/results/', id, {
+                classroom: selectedClass,
+                section: selectedSection,
+                year: selectedYear,
+                page_size: 10000
+            });
+            allResults = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        }
+
+        if (allResults.length === 0) return null;
+
+        const isNT = isClassNineOrTen;
+
+        const normalizeSubjKeyLocal = (n) => {
+            const low = String(n).toLowerCase().trim();
+            if (low.includes('higher') || low.includes('উচ্চতর')) return 'higher';
+            if (low.includes('math') || low.includes('গণিত')) return 'math';
+            if (low.includes('history') || low.includes('ইতিহাস') || low.includes('সভ্যতা')) return 'history';
+            if (low.includes('bgs') || (low.includes('বাংলাদেশ') && (low.includes('পরিচয়') || low.includes('পরিচয়'))) || low.includes('global studies')) return 'bgs';
+            if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
+            if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
+            if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
+            if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+            if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
+            if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
+            if (low.includes('biology') || low.includes('জীব')) return 'biology';
+            if (low.includes('agriculture') || low.includes('কৃষি') || low.includes('home') || low.includes('গার্হস্থ্য')) return 'agriculture';
+            if (low.includes('accounting') || low.includes('হিসাব')) return 'accounting';
+            if (low.includes('finance') || low.includes('ফিন্যান্স')) return 'finance';
+            if (low.includes('business') || low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('entrepreneurship') || low.includes('উদ্যোগ')) return 'business';
+            if (low.includes('geography') || low.includes('ভূগোল')) return 'geography';
+            if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
+            if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
+            if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
+            return low;
+        };
+
+        const isScienceGroupLocal = (g) => { const l = String(g || '').toLowerCase(); return l.includes('science') || l.includes('বিজ্ঞান'); };
+        const isCommerceGroupLocal = (g) => { const l = String(g || '').toLowerCase(); return l.includes('commerce') || l.includes('business') || l.includes('ব্যবসায়') || l.includes('ব্যবসায়'); };
+        const isHumanitiesGroupLocal = (g) => { const l = String(g || '').toLowerCase(); return l.includes('arts') || l.includes('humanities') || l.includes('মানবিক'); };
+
+        const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
+            const subjects = new Set(['math', 'religion', 'ict']);
+            const g = studentGroup;
+            const checkPaper = (base) => {
+                if (isNT) return [base];
+                const hasP1 = Array.from(classSubjs).some(s => normalizeSubjKeyLocal(s) === base && !s.includes('2nd') && !s.includes('২য়') && !s.includes('২য়') && !s.includes('second'));
+                const hasP2 = Array.from(classSubjs).some(s => normalizeSubjKeyLocal(s) === base && (s.includes('2nd') || s.includes('২য়') || s.includes('২য়') || s.includes('second')));
+                if (hasP1 || hasP2) {
+                    const res = [];
+                    if (hasP1) res.push(base + '_p1');
+                    if (hasP2) res.push(base + '_p2');
+                    return res;
+                }
+                return [base];
+            };
+            checkPaper('bangla').forEach(s => subjects.add(s));
+            checkPaper('english').forEach(s => subjects.add(s));
+
+            if (isNT) {
+                if (isScienceGroupLocal(g)) {
+                    ['physics', 'chemistry', 'biology', 'bgs'].forEach(s => subjects.add(s));
+                } else if (isCommerceGroupLocal(g)) {
+                    ['accounting', 'finance', 'business', 'science'].forEach(s => subjects.add(s));
+                } else if (isHumanitiesGroupLocal(g)) {
+                    ['history', 'geography', 'civics', 'economics', 'science'].forEach(s => subjects.add(s));
+                }
+            } else {
+                ['science', 'bgs'].forEach(s => subjects.add(s));
+            }
+            return subjects;
+        };
+        const inferGroupLocal = (resList, isNT) => {
+            if (!isNT || !resList || resList.length === 0) return '';
+            const count = (regex) => resList.filter(r => {
+                const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0);
+                return hasMarks && regex.test(String(r.subject?.name || r.subject_name || '').toLowerCase());
+            }).length;
+            const sciCount = count(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
+            const comCount = count(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
+            const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
+            if (sciCount > 0 && sciCount >= comCount && sciCount >= humCount) return 'science';
+            if (comCount > 0 && comCount >= humCount) return 'commerce';
+            if (humCount > 0) return 'humanities';
+            return '';
+        };
+
+        const classSubjects = new Set();
+        allResults.forEach(r => {
+            const sn = String(r.subject?.name || r.subject_name || '').toLowerCase();
+            if (!/শারীরিক|বই\s*পড়া|achievement|continuous|wcat|শারিরীক/i.test(sn)) classSubjects.add(sn);
+        });
+
+        const isRelSubjLocal = (n) => /religion|islam|hindu|buddhist|christian|ধর্ম|ইসলাম|হিন্দু|বৌদ্ধ|খ্রিস্ট/i.test(String(n));
+
+        // Group by student
+        const studentIds = Array.from(new Set(allResults.map(r => String(r.student?.id ?? r.student_id ?? r.student ?? '')).filter(Boolean)));
+        const resultsPool = [];
+
+        for (const sid of studentIds) {
+            const stuResults = allResults.filter(r => String(r.student?.id || r.student) === sid);
+            if (stuResults.length === 0) continue;
+
+            const student = stuResults[0].student;
+
+            // Religion suppression (matches Merit List logic)
+            const relResults = stuResults.filter(r => isRelSubjLocal(r.subject?.name || r.subject_name));
+            let suppressedIds = new Set();
+            if (relResults.length > 1) {
+                const withMarks = relResults.filter(r => (parseFloat(r.total_obtained) > 0));
+                if (withMarks.length > 0) {
+                    const bestRelId = withMarks[0].subject?.id || withMarks[0].subject;
+                    relResults.forEach(r => {
+                        const rid = r.subject?.id || r.subject;
+                        if (String(rid) !== String(bestRelId)) suppressedIds.add(String(rid));
+                    });
+                } else {
+                    const islam = relResults.find(r => /islam|ইসলাম/i.test(r.subject?.name || r.subject_name));
+                    const primaryRel = islam || relResults[0];
+                    const pid = primaryRel.subject?.id || primaryRel.subject;
+                    relResults.forEach(r => {
+                        const rid = r.subject?.id || r.subject;
+                        if (String(rid) !== String(pid)) suppressedIds.add(String(rid));
+                    });
+                }
+            }
+
+            const subjectMap = new Map();
+            stuResults.forEach(r => {
+                if (suppressedIds.has(String(r.subject?.id || r.subject))) return;
+
+                const rawName = String(r.subject?.name || r.subject_name).toLowerCase().trim();
+                let normKey = normalizeSubjKeyLocal(rawName);
+                let key = normKey;
+                if (normKey === 'bangla' || normKey === 'english') {
+                    const is2 = rawName.includes('2nd') || rawName.includes('২য়') || rawName.includes('২য়') || rawName.includes('second');
+                    const has1 = rawName.includes('1st') || rawName.includes('১ম') || rawName.includes('first') || rawName.includes('পত্র') || rawName.includes('paper');
+                    if (is2 || has1) { key = normKey + (is2 ? '_p2' : '_p1'); }
+                }
+
+                if (!subjectMap.has(key)) {
+                    subjectMap.set(key, { ...r, sumW: parseFloat(r.written_marks) || 0, sumM: parseFloat(r.mcq_marks) || 0, sumP: parseFloat(r.practical_marks) || 0, hasMarks: (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null), total_obtained: parseFloat(r.total_obtained) || 0 });
+                } else {
+                    const existing = subjectMap.get(key);
+                    const isRel = isRelSubjLocal(rawName);
+                    if (isRel) {
+                        if ((parseFloat(r.total_obtained) || 0) > (parseFloat(existing.total_obtained) || 0)) {
+                            subjectMap.set(key, { ...r, sumW: parseFloat(r.written_marks) || 0, sumM: parseFloat(r.mcq_marks) || 0, sumP: parseFloat(r.practical_marks) || 0, hasMarks: true, total_obtained: parseFloat(r.total_obtained) || 0 });
+                        }
+                        return;
+                    }
+                    existing.sumW += (parseFloat(r.written_marks) || 0);
+                    existing.sumM += (parseFloat(r.mcq_marks) || 0);
+                    existing.sumP += (parseFloat(r.practical_marks) || 0);
+                    existing.hasMarks = existing.hasMarks || ((r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
+                    existing.total_obtained += (parseFloat(r.total_obtained) || 0);
+                }
+            });
+
+            const virtualMap = new Map();
+            Array.from(subjectMap.values()).forEach(r => {
+                const nm = String(r.subject?.name || r.subject_name || '').toLowerCase();
+                let key = normalizeSubjKeyLocal(nm);
+                if (isNT && (key === 'bangla' || key === 'english')) { } else if (key === 'bangla' || key === 'english') {
+                    const is2 = nm.includes('2nd') || nm.includes('২য়') || nm.includes('২য়') || nm.includes('second');
+                    const has1 = nm.includes('1st') || nm.includes('১ম') || nm.includes('first') || nm.includes('পত্র') || nm.includes('paper');
+                    if (is2 || has1) { key = key + (is2 ? '_p2' : '_p1'); }
+                }
+                if (!virtualMap.has(key)) virtualMap.set(key, []);
+                virtualMap.get(key).push(r);
+            });
+
+            // Detect class-level group as fallback
+            let classLevelGroup = '';
+            const groupCounts = { science: 0, commerce: 0, humanities: 0 };
+            students.forEach(s => {
+                const g = (s?.student_group || s?.group || '').toLowerCase();
+                if (g.includes('science')) groupCounts.science++;
+                else if (g.includes('commerce') || g.includes('business')) groupCounts.commerce++;
+                else if (g.includes('arts') || g.includes('humanities')) groupCounts.humanities++;
+            });
+            if (groupCounts.science >= groupCounts.commerce && groupCounts.science >= groupCounts.humanities && groupCounts.science > 0) classLevelGroup = 'science';
+            else if (groupCounts.commerce >= groupCounts.humanities && groupCounts.commerce > 0) classLevelGroup = 'commerce';
+            else if (groupCounts.humanities > 0) classLevelGroup = 'humanities';
+
+            const group = (student?.student_group || student?.group || inferGroupLocal(Array.from(subjectMap.values()), isNT) || classLevelGroup).toLowerCase();
+            const expectedKeys = getExpectedSubjects(group, isNT, classSubjects);
+            const takenRelId = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0))?.subject?.id;
+
+            let score = 0, fails = 0, hasAnyMarks = false, totalPoints = 0, subjectCount = 0;
+
+            const hmList = Array.from(subjectMap.values()).filter(r => /higher|উচ্চতর/.test(String(r.subject?.name || r.subject_name).toLowerCase()));
+            const agriList = Array.from(subjectMap.values()).filter(r => /agriculture|home|কৃষি|গার্হস্থ্য/.test(String(r.subject?.name || r.subject_name).toLowerCase()));
+
+            const assignedOpt = student?.optional_subject;
+            const assignedOptId = String(assignedOpt?.id || assignedOpt || '');
+            const assignedOptName = String(assignedOpt?.name || '').toLowerCase();
+
+            let showHM = false, showAgri = false;
+            const hasHM = hmList.some(r => (parseFloat(r.total_obtained) || 0) > 0);
+            const hasAgri = agriList.some(r => (parseFloat(r.total_obtained) || 0) > 0);
+
+            if (assignedOptId || assignedOptName) {
+                const isHMAssigned = (assignedOptId && hmList.some(r => String(r.subject?.id || r.subject) === assignedOptId)) || (assignedOptName && assignedOptName.includes('higher'));
+                const isAgriAssigned = (assignedOptId && agriList.some(r => String(r.subject?.id || r.subject) === assignedOptId)) || (assignedOptName && (assignedOptName.includes('agri') || assignedOptName.includes('কৃষি')));
+
+                if (isHMAssigned && hasHM) showHM = true;
+                else if (isAgriAssigned && hasAgri) showAgri = true;
+                else {
+                    const hmTotal = hmList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+                    const agriTotal = agriList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+                    showHM = isNT && (hmTotal >= agriTotal && hmTotal > 0);
+                    showAgri = isNT && (agriTotal > hmTotal && agriTotal > 0);
+                }
+            } else {
+                const hmTotal = hmList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+                const agriTotal = agriList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+                showHM = isNT && (hmTotal >= agriTotal && hmTotal > 0);
+                showAgri = isNT && (agriTotal > hmTotal && agriTotal > 0);
+            }
+
+            const allKeys = new Set([...expectedKeys, 'higher', 'agriculture', 'civics', 'economics', 'accounting', 'finance', 'business']);
+
+            // Track if we've counted an elective for the group
+            let electiveCounted = false;
+
+            allKeys.forEach(key => {
+                const papers = virtualMap.get(key) || [];
+                const isRel = isRelSubjLocal(key);
+                let isMandatory = expectedKeys.has(key);
+
+                // Group Pools for automatic inclusion
+                const sciPool = ['physics', 'chemistry', 'biology'];
+                const comPool = ['accounting', 'finance', 'business'];
+                const humPool = ['history', 'geography', 'civics', 'economics'];
+                const belongsToGroup = (isScienceGroupLocal(group) && sciPool.includes(key)) ||
+                                       (isCommerceGroupLocal(group) && comPool.includes(key)) ||
+                                       (isHumanitiesGroupLocal(group) && humPool.includes(key));
+
+                // Elective logic for Humanities (Civics/Economics)
+                if (isNT && isHumanitiesGroupLocal(group)) {
+                    if (key === 'civics' || key === 'economics') {
+                        if (papers.length > 0 && !electiveCounted) { isMandatory = true; electiveCounted = true; }
+                        else if (key === 'civics' && !electiveCounted && !virtualMap.has('economics')) { isMandatory = true; electiveCounted = true; }
+                    }
+                }
+
+                if (isMandatory || belongsToGroup) {
+                    if (!isRel || (isRel && !takenRelId) || (isRel && papers.length > 0)) {
+                         subjectCount++;
+                    }
+                }
+
+                if (papers.length === 0) {
+                    if (isMandatory) {
+                        if (isRel && takenRelId) return;
+                        if (isNT) {
+                            if (isScienceGroupLocal(group)) {
+                                if (key === 'science') return;
+                            } else {
+                                if (key === 'bgs' || key === 'physics' || key === 'chemistry' || key === 'biology') return;
+                            }
+                            if (['civics', 'economics', 'accounting', 'finance', 'business'].includes(key)) return;
+                        }
+                        if (!isNT && (key === 'bangla' || key === 'english')) { if (virtualMap.has(key + '_p1') || virtualMap.has(key + '_p2')) return; }
+                        if (stuResults.length > 0) fails++;
+                    }
+                    return;
+                }
+
+                let totalW = 0, totalM = 0, totalP = 0, totalMarks = 0, totalPossible = 0, cqM = 0, mcqM = 0, prM = 0;
+                let isAnyPaperPresent = false;
+                papers.forEach(r => {
+                    if (r.hasMarks) { hasAnyMarks = true; isAnyPaperPresent = true; }
+                    const w = parseFloat(r.written_marks) || 0, m = parseFloat(r.mcq_marks) || 0, pr = parseFloat(r.practical_marks) || 0;
+                    const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT);
+                    totalW += w; totalM += m; totalP += pr; totalMarks += (w + m + pr);
+                    totalPossible += (spec.cq + spec.mcq + spec.pr || 100);
+                    cqM += spec.cq; mcqM += spec.mcq; prM += spec.pr;
+                });
+
+                if (isNT && (key === 'bangla' || key === 'english')) totalPossible = Math.max(totalPossible, 200);
+
+                const cqPass = cqM === 0 || totalW >= Math.round(cqM * 0.33 - 0.5);
+                const mcqPass = mcqM === 0 || totalM >= Math.round(mcqM * 0.33 - 0.5);
+                const prPass = prM === 0 || totalP >= Math.round(prM * 0.33 - 0.5);
+                const totPass = totalMarks >= Math.round(totalPossible * 0.33 - 0.5);
+
+                let isSubjectPassed = isAnyPaperPresent && (isNT ? (cqPass && mcqPass && prPass && totPass) : totPass);
+
+                // Combined pass logic for Bangla/English in Class 6-8
+                if (!isNT && (key === 'bangla' || key === 'english')) {
+                    const paper1 = virtualMap.get(key + '_p1')?.[0];
+                    const paper2 = virtualMap.get(key + '_p2')?.[0];
+                    if (paper1 && paper2) {
+                        const combObt = (parseFloat(paper1.total_obtained) || 0) + (parseFloat(paper2.total_obtained) || 0);
+                        const spec1 = getSubjectMaxima(paper1.subject?.name || paper1.subject_name, false);
+                        const spec2 = getSubjectMaxima(paper2.subject?.name || paper2.subject_name, false);
+                        const combPoss = (spec1.cq + spec1.mcq + spec1.pr) + (spec2.cq + spec2.mcq + spec2.pr);
+                        isSubjectPassed = combObt >= Math.round(combPoss * 0.33 - 0.5);
+                    }
+                }
+
+                const gp = isSubjectPassed ? computeGpa((totalMarks / totalPossible) * 100) : 0;
+                const isAgriculture = (key === 'higher' || key === 'agriculture');
+
+                if ((key === 'higher' && showHM) || (key === 'agriculture' && showAgri)) {
+                    if (totalMarks > (totalPossible * 0.4)) { score += (totalMarks - (totalPossible * 0.4)); }
+                    totalPoints += Math.max(0, gp - 2.0);
+                } else if (isMandatory || belongsToGroup || (!isNT && isAgriculture)) {
+                    if (!isNT && isAgriculture) return;
+                    if (isNT && (key === 'bgs' || key === 'science') && !isScienceGroupLocal(group)) { if (!isAnyPaperPresent) return; }
+                    if (isRel && takenRelId && !papers.some(r => String(r.subject?.id) === String(takenRelId))) return;
+                    score += totalMarks; totalPoints += gp;
+                    if (isMandatory && (!isAnyPaperPresent || !isSubjectPassed)) { if (!(isNT === false && (key.includes('শারীরিক') || key.includes('physical')))) { fails++; } }
+                } else { if (!isNT) score += totalMarks; }
+            });
+
+            if (!hasAnyMarks) fails = 999;
+            const finalCgpa = (subjectCount > 0 && fails === 0) ? Math.min(5.0, totalPoints / subjectCount) : 0;
+
+            resultsPool.push({
+                sid,
+                total: Math.round(score),
+                rawScore: score,
+                points: finalCgpa,
+                fails,
+                isAbsent: !hasAnyMarks,
+                roll: student?.roll_number ? parseInt(String(student.roll_number).replace(/\D/g, ''), 10) : 999999,
+                section_id: String(student?.section?.id || student?.section || 'other')
+            });
+        }
+
+        // Section-wise Sorting
+        const bySection = new Map();
+        resultsPool.forEach(item => {
+            const secId = selectedSection ? 'single' : (item.section_id || 'other');
+            if (!bySection.has(secId)) bySection.set(secId, []);
+            bySection.get(secId).push(item);
+        });
+
+        const finalRankMap = {};
+        for (const sectionItems of bySection.values()) {
+            sectionItems.sort((a, b) => {
+                if (a.isAbsent !== b.isAbsent) return a.isAbsent ? 1 : -1;
+                // Match Merit List sort: Fails -> GPA -> Total Marks -> Roll
+                return a.fails - b.fails || b.points - a.points || b.rawScore - a.rawScore || a.roll - b.roll;
+            });
+            let lastRank = 0, lastValues = null;
+            sectionItems.forEach((c, idx) => {
+                if (c.isAbsent) {
+                    finalRankMap[c.sid] = null;
+                } else {
+                    const currentValues = `${c.fails}-${c.points.toFixed(2)}-${c.rawScore.toFixed(2)}`;
+                    if (currentValues !== lastValues) {
+                        lastRank = idx + 1;
+                        lastValues = currentValues;
+                    }
+                    finalRankMap[c.sid] = lastRank;
+                }
+            });
+        }
+
+        return finalRankMap[String(studentId)] || null;
+
+    } catch (e) {
+        console.error('Rank calculation error:', e);
+        return null;
+    }
+  }, [id, selectedClass, selectedSection, selectedYear, isClassNineOrTen, classrooms]);
 
   useEffect(() => {
     return () => {
@@ -422,11 +921,11 @@ export default function ResultCardGenerator() {
     const nm = String(clsObj?.name || '').toLowerCase();
     const isNineTen = /নবম|nine|\b9\b|দশম|ten|\b10\b/.test(nm);
 
-    const paperNo = (/(১ম|1st|first)/i.test(normalized) ? 1 : (/(২য়|২য়|2nd|second)/i.test(normalized) ? 2 : null));
+    const paperNo = (/(১ম|1st|first|প্রথম| i | i$| 1)/i.test(normalized) ? 1 : (/(২য়|২য়|2nd|second|দ্বিতীয়| ii | ii$| 2)/i.test(normalized) ? 2 : null));
 
     if (!isNineTen) {
       if (/(ict|আইসিটি|তথ্য\s*ও\s*(যোগাযোগ|যোগযোগ)\s*প্রযুক্তি)/i.test(normalized)) return 'ict';
-      if (/(বাংলাদেশ\s*ও\s*বিশ্বপরিচ[য়য়]|bangladesh\s*and\s*global\s*studies|bgs)/i.test(normalized)) return 'bgs';
+      if (/(বাংলাদেশ|bangladesh|bgs|বিশ্বপরিচ)/i.test(normalized)) return 'bgs';
       if (/(বাংলা|bangla)/i.test(normalized)) return paperNo ? `bangla__paper${paperNo}` : 'bangla';
       if (/(english|ইংরেজি|ইংরেজী)/i.test(normalized)) return paperNo ? `english__paper${paperNo}` : 'english';
       if (/(গণিত|গনিত|math)/i.test(normalized)) return paperNo ? `math__paper${paperNo}` : 'math';
@@ -436,6 +935,7 @@ export default function ResultCardGenerator() {
     // Distinguish Higher Math from General Math
     if (normalized.includes('উচ্চতর') || normalized.includes('higher')) return 'higher_math';
 
+    if (/(বাংলাদেশ|bangladesh|bgs|বিশ্বপরিচ)/i.test(normalized)) return 'bgs';
     if (/(বাংলা|bangla|bengali)/i.test(normalized)) return paperNo ? `bangla__paper${paperNo}` : 'bangla';
     if (/(english|ইংরেজি|ইংরেজী)/i.test(normalized)) return paperNo ? `english__paper${paperNo}` : 'english';
     if (/(গণিত|গনিত|math)/i.test(normalized)) return paperNo ? `math__paper${paperNo}` : 'math';
@@ -600,21 +1100,30 @@ export default function ResultCardGenerator() {
     return finalMax;
   };
 
-  const dedupeAndFillResults = (arr, exams) => {
-    const map = new Map();
-    
-    // Process existing results
-    for (const r of (Array.isArray(arr) ? arr : [])) {
+  const dedupeAndFillResults = (arr, exams, expectedKeys = null) => {
+    const map = new Map(); // key -> result object
+    const sortedArr = (Array.isArray(arr) ? [...arr] : []).sort((a, b) => (parseInt(a.id) || 0) - (parseInt(b.id) || 0));
+
+    // 1. Process existing results with robust normalization
+    for (const r of sortedArr) {
       let subjName = r.subject?.name || r.subject_name;
       if (!subjName && r.examination?.name) {
-         // Fallback to exam name only if it doesn't look like a generic exam type
          const exName = String(r.examination.name).toLowerCase();
          if (!/(অর্ধ|বার্ষিক|test|model|terminal|half|annual)/.test(exName)) {
              subjName = r.examination.name;
          }
       }
 
-      const nm = normalizeSubjectName(subjName);
+      // Use the robust local normalizer for grouping
+      let nm = normalizeSubjKeyLocal(subjName);
+
+      // Distinguish papers for Bangla and English to prevent overwriting
+      if (nm === 'bangla' || nm === 'english') {
+          const is2 = subjName.includes('2nd') || subjName.includes('২য়') || subjName.includes('২য়') || subjName.includes('second') || subjName.includes('Paper 2') || subjName.includes('২য় পত্র');
+          const has1 = subjName.includes('1st') || subjName.includes('১ম') || subjName.includes('first') || subjName.includes('Paper 1') || subjName.includes('১ম পত্র');
+          if (is2 || has1) { nm = nm + (is2 ? '_p2' : '_p1'); }
+      }
+
       const isUnwanted = (name) => {
         const n = String(name || '').trim().toLowerCase();
         if (UNWANTED_SUBJECTS.some(u => n === u.toLowerCase())) return true;
@@ -625,107 +1134,58 @@ export default function ResultCardGenerator() {
 
       if (!nm || isUnwanted(subjName)) continue;
 
-      const prev = map.get(nm);
-      if (prev) {
-        const prevExId = typeof prev.examination === 'object' ? prev.examination?.id : prev.examination;
-        const currExId = typeof r.examination === 'object' ? r.examination?.id : r.examination;
-        if (prevExId === currExId) {
-          const pw = parseFloat(prev.written_marks) || 0;
-          const pmq = parseFloat(prev.mcq_marks) || 0;
-          const pp = parseFloat(prev.practical_marks) || 0;
-          const po = ((pw + pmq + pp) > 0) ? (pw + pmq + pp) : (parseFloat(prev.total_obtained) || 0);
-          const pt = getTotalMaxForResult(prev);
-          let { grade: pGrade, gpa: pGpa } = (prev.grade && prev.gpa) ? { grade: prev.grade, gpa: prev.gpa } : calculateGradeAndGPA(po, pt);
-          let pPassed = (prev.is_passed !== undefined && prev.is_passed !== null) ? prev.is_passed : computeSubjectPass(prev.subject?.name || prev.subject_name || nm, pw, pmq, pp, exams, prev.examination);
-          const rw = parseFloat(r.written_marks) || 0;
-          const rmq = parseFloat(r.mcq_marks) || 0;
-          const rp = parseFloat(r.practical_marks) || 0;
-          const ro = ((rw + rmq + rp) > 0) ? (rw + rmq + rp) : (parseFloat(r.total_obtained) || 0);
-          const rt = getTotalMaxForResult(r);
-          let { grade: rGrade, gpa: rGpa } = (r.grade && r.gpa) ? { grade: r.grade, gpa: r.gpa } : calculateGradeAndGPA(ro, rt);
-          let rPassed = (r.is_passed !== undefined && r.is_passed !== null) ? r.is_passed : computeSubjectPass(r.subject?.name || r.subject_name || nm, rw, rmq, rp, exams, r.examination);
+      const w = parseFloat(r.written_marks) || 0;
+      const m = parseFloat(r.mcq_marks) || 0;
+      const p = parseFloat(r.practical_marks) || 0;
+      const obtained = ((w + m + p) > 0) ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
+      const totalMax = getTotalMaxForResult(r);
 
-          // Priority logic: Always prefer the result with the LATEST date, not necessarily the highest mark
-          const prevDate = new Date(prev.created_at || prev.updated_at || 0).getTime();
-          const currDate = new Date(r.created_at || r.updated_at || 0).getTime();
+      let { grade, gpa } = (r.grade && r.gpa) ? { grade: r.grade, gpa: r.gpa } : calculateGradeAndGPA(obtained, totalMax);
+      let passed = (r.is_passed !== undefined && r.is_passed !== null) ? r.is_passed : computeSubjectPass(r.subject?.name || r.subject_name || nm, w, m, p, exams, r.examination);
 
-          const useCurr = currDate >= prevDate;
-          const chosen = useCurr ? { base: r, w: rw, m: rmq, p: rp, o: ro, t: rt, grade: rGrade, gpa: rGpa, pass: rPassed } : { base: prev, w: parseFloat(prev.written_marks)||0, m: parseFloat(prev.mcq_marks)||0, p: parseFloat(prev.practical_marks)||0, o: parseFloat(prev.total_obtained)||0, t: getTotalMaxForResult(prev), grade: prev.grade, gpa: prev.gpa, pass: prev.is_passed };
-          // Keep original name so ResultCard merging logic can detect 1st/2nd paper
-          let cleanName = chosen.base.subject?.name || chosen.base.subject_name || nm;
-          cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
+      let cleanName = r.subject?.name || r.subject_name || subjName;
+      cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
 
-          map.set(nm, {
-            ...chosen.base,
-            written_marks: chosen.w,
-            mcq_marks: chosen.m,
-            practical_marks: chosen.p,
-            total_obtained: chosen.o,
-            total_marks: chosen.t,
-            grade: chosen.grade,
-            gpa: chosen.gpa,
-            is_passed: chosen.pass,
-            subject: { ...(chosen.base.subject || {}), name: cleanName },
-            subject_name: cleanName
-          });
-        } else {
-          const prevDate = new Date((typeof prev.examination === 'object' ? prev.examination?.exam_date : null) || 0).getTime();
-          const currDate = new Date((typeof r.examination === 'object' ? r.examination?.exam_date : null) || 0).getTime();
-          const useCurr = currDate && (!prevDate || currDate >= prevDate);
-          const base = useCurr ? r : prev;
-          const w = parseFloat(base.written_marks) || 0;
-          const m = parseFloat(base.mcq_marks) || 0;
-          const p = parseFloat(base.practical_marks) || 0;
-          const o = ((w + m + p) > 0) ? (w + m + p) : (parseFloat(base.total_obtained) || 0);
-          const t = getTotalMaxForResult(base);
-          let { grade, gpa } = (base.grade && base.gpa) ? { grade: base.grade, gpa: base.gpa } : calculateGradeAndGPA(o, t);
-          let passed = (base.is_passed !== undefined && base.is_passed !== null) ? base.is_passed : computeSubjectPass(base.subject?.name || base.subject_name || nm, w, m, p, exams, base.examination);
-          // Keep original name so ResultCard merging logic can detect 1st/2nd paper
-          let cleanName = base.subject?.name || base.subject_name || nm;
-          cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
+      map.set(nm, {
+        ...r,
+        written_marks: r.written_marks,
+        mcq_marks: r.mcq_marks,
+        practical_marks: r.practical_marks,
+        total_obtained: obtained,
+        total_marks: totalMax,
+        grade,
+        gpa,
+        is_passed: passed,
+        subject: { ...(r.subject || {}), name: cleanName },
+        subject_name: cleanName,
+        isActuallyAbsent: (r.written_marks === null || r.written_marks === '') && (r.mcq_marks === null || r.mcq_marks === '') && (r.practical_marks === null || r.practical_marks === '')
+      });
+    }
 
-          map.set(nm, {
-            ...base,
-            written_marks: w,
-            mcq_marks: m,
-            practical_marks: p,
-            total_obtained: o,
-            total_marks: t,
-            grade,
-            gpa,
-            is_passed: passed,
-            subject: { ...(base.subject || {}), name: cleanName },
-            subject_name: cleanName
-          });
-        }
-      } else {
-        const w = parseFloat(r.written_marks) || 0;
-        const m = parseFloat(r.mcq_marks) || 0;
-        const p = parseFloat(r.practical_marks) || 0;
-        const obtained = ((w + m + p) > 0) ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
-        const totalMax = getTotalMaxForResult(r);
-        let { grade, gpa } = (r.grade && r.gpa) ? { grade: r.grade, gpa: r.gpa } : calculateGradeAndGPA(obtained, totalMax);
-        let passed = (r.is_passed !== undefined && r.is_passed !== null) ? r.is_passed : computeSubjectPass(r.subject?.name || r.subject_name || nm, w, m, p, exams, r.examination);
-        let cleanName = r.subject?.name || r.subject_name || nm;
-        cleanName = cleanName.replace(/\s*\(.*?\)\s*/g, '').trim();
-
-        map.set(nm, {
-          ...r,
-          written_marks: w,
-          mcq_marks: m,
-          practical_marks: p,
-          total_obtained: obtained,
-          total_marks: totalMax,
-          grade,
-          gpa,
-          is_passed: passed,
-          subject: { ...(r.subject || {}), name: cleanName },
-          subject_name: cleanName
+    // 2. Fill missing expected subjects as "Absent"
+    if (expectedKeys) {
+        expectedKeys.forEach(key => {
+            // key is already normalized (e.g., 'physics')
+            if (!map.has(key)) {
+                const friendlyName = translateSubLocal(key);
+                map.set(key, {
+                    id: `missing-${key}`,
+                    subject: { name: friendlyName },
+                    subject_name: friendlyName,
+                    written_marks: null,
+                    mcq_marks: null,
+                    practical_marks: null,
+                    total_obtained: 0,
+                    grade: 'F',
+                    gpa: '0.00',
+                    is_passed: false,
+                    isActuallyAbsent: true,
+                    total_marks: 100
+                });
+            }
         });
-      }
     }
     
-    // Do not auto-fill missing exams with zero rows; only display what the student actually has results for
     const unsorted = Array.from(map.values());
     const getSubjW = (r) => {
       if (!r) return 9999;
@@ -886,7 +1346,8 @@ export default function ResultCardGenerator() {
         const broadParams = { 
           student: student.id, 
           classroom: selectedClass, 
-          page_size: 1000 
+          year: effectiveYear,
+          page_size: 1000
         };
         const broadRes = await scopedGet('/api/results/results/', id, broadParams, { timeout: 20000 });
         const broadArr = Array.isArray(broadRes.data) ? broadRes.data : (broadRes.data?.results || []);
@@ -927,7 +1388,33 @@ export default function ResultCardGenerator() {
       }
       
       if (fetchedResults.length > 0) {
-        const merged = dedupeAndFillResults(fetchedResults, matchingExams);
+        // Minimum 3 subjects with positive data check
+        const subjectsWithPositiveData = new Set();
+        fetchedResults.forEach(r => {
+          const total = (parseFloat(r.total_obtained) || (parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0));
+          const hasInput = (r.written_marks !== null && r.written_marks !== '') ||
+                           (r.mcq_marks !== null && r.mcq_marks !== '') ||
+                           (r.practical_marks !== null && r.practical_marks !== '');
+          if (hasInput && total > 0) {
+            subjectsWithPositiveData.add(r.subject?.id || r.subject_id || r.subject_name);
+          }
+        });
+
+        if (subjectsWithPositiveData.size < 3) {
+          toast.warning('নূন্যতম ৩টি বিষয়ে প্রকৃত নম্বর (০ এর বেশি) না থাকায় রেজাল্ট কার্ড জেনারেট করা সম্ভব নয়।');
+          setStudentData(null);
+          setResults([]);
+          setOverallResult(null);
+          setLoading(false);
+          return;
+        }
+
+        // Determine expected subjects based on group
+        const classSubjs = new Set(fetchedResults.map(r => r.subject?.name || r.subject_name));
+        const group = (student?.student_group || student?.group || '').toLowerCase();
+        const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, classSubjs);
+
+        const merged = dedupeAndFillResults(fetchedResults, matchingExams, expectedKeys);
         setResults(merged);
         const usedExamIds = Array.from(new Set(merged.map(r => {
           const exObj = r.examination;
@@ -939,8 +1426,12 @@ export default function ResultCardGenerator() {
           if (validUsed[0]) setExamination(validUsed[0]);
         } catch (_) {}
       } else {
-        const merged = dedupeAndFillResults([], matchingExams);
-        setResults(merged);
+        toast.warning('এই শিক্ষার্থীর কোনো রেজাল্ট পাওয়া যায়নি।');
+        setStudentData(null);
+        setResults([]);
+        setOverallResult(null);
+        setLoading(false);
+        return;
       }
 
       // Get overall result with rank - try multiple methods
@@ -1095,8 +1586,7 @@ export default function ResultCardGenerator() {
         const isPassed = fetchedResults.every(r => r.is_passed);
         
         const finalGPA = subCount > 0 ? Math.min(5, sumGP / subCount) : 0;
-        const grade = calculateGradeAndGPA(totalObtained, totalPossible).grade; // Fallback to percentage-based grade if GP average is tricky
-        
+
         overall = {
           total_marks_obtained: totalObtained.toFixed(2),
           total_marks_possible: totalPossible.toFixed(2),
@@ -1107,6 +1597,16 @@ export default function ResultCardGenerator() {
           rank: null
         };
       }
+
+      // Final Step: Always try to recalculate rank in frontend to match Merit List logic
+      if (overall) {
+          const newRank = await calculateStudentRank(student.id, null); // passing null to force fetch for accuracy
+          if (newRank) {
+              overall.rank = newRank;
+              overall.rank_in_section = newRank;
+          }
+      }
+
       setOverallResult(overall);
 
       // Handle Translation if requested
@@ -1274,7 +1774,7 @@ export default function ResultCardGenerator() {
     }
   };
 
-  const buildCardForStudent = async (stuId, preFetchedStudent = null, preFetchedResults = null, preFetchedOverall = null) => {
+  const buildCardForStudent = async (stuId, preFetchedStudent = null, preFetchedResults = null, preFetchedOverall = null, sectionSubjs = null) => {
     try {
       const student = preFetchedStudent || (await api.get(`/api/academics/students/${stuId}/`).then(r => r.data));
       const selType = normalizeExamType(selectedExamType);
@@ -1296,7 +1796,11 @@ export default function ResultCardGenerator() {
         }
       }
 
-      const merged = dedupeAndFillResults(fetchedResults, matchingExams);
+      // Fill missing subjects for bulk cards
+      const group = (student?.student_group || student?.group || '').toLowerCase();
+      const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, sectionSubjs);
+
+      const merged = dedupeAndFillResults(fetchedResults, matchingExams, expectedKeys);
       let overall = preFetchedOverall;
       if (!overall && matchingExams[0]?.id) {
          try {
@@ -1316,7 +1820,7 @@ export default function ResultCardGenerator() {
     } catch (_) { return null; }
   };
 
-  const handleGenerateBulkCards = async () => {
+  const handleGenerateBulkCards = async (targetLang = 'en') => {
     if (!selectedClass || !selectedSection || !selectedExamType) {
       toast.error('শ্রেণি, সেকশন ও পরীক্ষার ধরন নির্বাচন করুন');
       return;
@@ -1327,7 +1831,7 @@ export default function ResultCardGenerator() {
     }
     setBulkLoading(true);
     setBulkCards([]);
-    setForceLanguage('en');
+    setForceLanguage(targetLang);
 
     try {
       const sectionList = students.filter(s => {
@@ -1352,6 +1856,9 @@ export default function ResultCardGenerator() {
       const rList = Array.isArray(rRes.data) ? rRes.data : (rRes.data?.results || []);
       const oList = Array.isArray(oRes.data) ? oRes.data : (oRes.data?.results || []);
 
+      // Collect all unique subjects in this section to pass to builder
+      const sectionSubjs = new Set(rList.map(r => r.subject?.name || r.subject_name));
+
       const resultsByStudent = {};
       rList.forEach(r => {
         const sid = r.student?.id ?? r.student_id ?? r.student;
@@ -1360,10 +1867,304 @@ export default function ResultCardGenerator() {
       });
 
       const overallByStudent = {};
+
+      // RE-CALCULATE ALL RANKS IN FRONTEND (Match Merit List Logic)
+      const studentIds = Array.from(new Set(rList.map(r => String(r.student?.id ?? r.student_id ?? r.student ?? '')).filter(Boolean)));
+      const resultsPool = [];
+      const isNT = isClassNineOrTen;
+      const classSubjects = new Set();
+      rList.forEach(r => {
+          const sn = String(r.subject?.name || r.subject_name || '').toLowerCase();
+          if (!/শারীরিক|বই\s*পড়া|achievement|continuous|wcat|শারিরীক/i.test(sn)) classSubjects.add(sn);
+      });
+
+      const isRelSubjLocal = (n) => /religion|islam|hindu|buddhist|christian|ধর্ম|ইসলাম|হিন্দু|বৌদ্ধ|খ্রিস্ট/i.test(String(n));
+
+      const normalizeSubjKeyLocal = (n) => {
+    const low = String(n).toLowerCase().trim();
+    if (low.includes('higher') || low.includes('উচ্চতর')) return 'higher';
+    if (low.includes('math') || low.includes('গণিত')) return 'math';
+    if (low.includes('history') || low.includes('ইতিহাস') || low.includes('সভ্যতা')) return 'history';
+    if (low.includes('bgs') || (low.includes('বাংলাদেশ') && (low.includes('পরিচয়') || low.includes('পরিচয়'))) || low.includes('global studies')) return 'bgs';
+    if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
+    if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
+    if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
+    if (low.includes('ict') || low.includes('তথ্য')) return 'ict';
+    if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
+    if (low.includes('chemistry') || low.includes('রসায়ন') || low.includes('রসায়ন')) return 'chemistry';
+    if (low.includes('biology') || low.includes('জীব')) return 'biology';
+    if (low.includes('agriculture') || low.includes('কৃষি') || low.includes('home') || low.includes('গার্হস্থ্য')) return 'agriculture';
+    if (low.includes('accounting') || low.includes('হিসাব')) return 'accounting';
+    if (low.includes('finance') || low.includes('ফিন্যান্স')) return 'finance';
+    if (low.includes('business') || low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('entrepreneurship') || low.includes('উদ্যোগ')) return 'business';
+    if (low.includes('geography') || low.includes('ভূগোল')) return 'geography';
+    if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
+    if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
+    if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
+    return low;
+};
+
+const isScienceGroupLocal = (g) => { const l = String(g || '').toLowerCase(); return l.includes('science') || l.includes('বিজ্ঞান'); };
+const isCommerceGroupLocal = (g) => { const l = String(g || '').toLowerCase(); return l.includes('commerce') || l.includes('business') || l.includes('ব্যবসায়') || l.includes('ব্যবসায়'); };
+const isHumanitiesGroupLocal = (g) => { const l = String(g || '').toLowerCase(); return l.includes('arts') || l.includes('humanities') || l.includes('মানবিক'); };
+
+      const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs) => {
+        const subjects = new Set(['math', 'religion', 'ict']);
+        const g = studentGroup;
+        const checkPaper = (base) => {
+            if (isNT) return [base];
+            const hasP1 = Array.from(classSubjs).some(s => normalizeSubjKeyLocal(s) === base && !s.includes('2nd') && !s.includes('২য়') && !s.includes('২য়') && !s.includes('second'));
+            const hasP2 = Array.from(classSubjs).some(s => normalizeSubjKeyLocal(s) === base && (s.includes('2nd') || s.includes('২য়') || s.includes('২য়') || s.includes('second')));
+            if (hasP1 || hasP2) {
+                const res = [];
+                if (hasP1) res.push(base + '_p1');
+                if (hasP2) res.push(base + '_p2');
+                return res;
+            }
+            return [base];
+        };
+        checkPaper('bangla').forEach(s => subjects.add(s));
+        checkPaper('english').forEach(s => subjects.add(s));
+
+        if (isNT) {
+            if (isScienceGroupLocal(g)) {
+                ['physics', 'chemistry', 'biology', 'bgs'].forEach(s => subjects.add(s));
+            } else if (isCommerceGroupLocal(g)) {
+                ['accounting', 'finance', 'business', 'science'].forEach(s => subjects.add(s));
+            } else if (isHumanitiesGroupLocal(g)) {
+                ['history', 'geography', 'civics', 'economics', 'science'].forEach(s => subjects.add(s));
+            }
+        } else {
+            ['science', 'bgs'].forEach(s => subjects.add(s));
+        }
+        return subjects;
+    };
+
+      const inferGroupLocal = (resList, isNT) => {
+          if (!isNT || !resList || resList.length === 0) return '';
+          const count = (regex) => resList.filter(r => {
+              const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0);
+              return hasMarks && regex.test(String(r.subject?.name || r.subject_name || '').toLowerCase());
+          }).length;
+          const sciCount = count(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
+          const comCount = count(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
+          const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
+          if (sciCount > 0 && sciCount >= comCount && sciCount >= humCount) return 'science';
+          if (comCount > 0 && comCount >= humCount) return 'commerce';
+          if (humCount > 0) return 'humanities';
+          return '';
+      };
+
+      for (const sid of studentIds) {
+          const stuResults = rList.filter(r => String(r.student?.id || r.student) === sid);
+          if (stuResults.length === 0) continue;
+          const student = stuResults[0].student;
+
+          const relResults = stuResults.filter(r => isRelSubjLocal(r.subject?.name || r.subject_name));
+          let suppressedIds = new Set();
+          if (relResults.length > 1) {
+              const withMarks = relResults.filter(r => (parseFloat(r.total_obtained) > 0));
+              if (withMarks.length > 0) {
+                  const bestRelId = withMarks[0].subject?.id || withMarks[0].subject;
+                  relResults.forEach(r => { if (String(r.subject?.id || r.subject) !== String(bestRelId)) suppressedIds.add(String(r.subject?.id || r.subject)); });
+              } else {
+                  const islam = relResults.find(r => /islam|ইসলাম/i.test(r.subject?.name || r.subject_name));
+                  const primaryRel = islam || relResults[0];
+                  const pid = primaryRel.subject?.id || primaryRel.subject;
+                  relResults.forEach(r => { if (String(r.subject?.id || r.subject) !== String(pid)) suppressedIds.add(String(r.subject?.id || r.subject)); });
+              }
+          }
+
+          const subjectMap = new Map();
+          stuResults.forEach(r => {
+              if (suppressedIds.has(String(r.subject?.id || r.subject))) return;
+              const rawName = String(r.subject?.name || r.subject_name).toLowerCase().trim();
+              let normKey = normalizeSubjKeyLocal(rawName);
+              let key = normKey;
+              if (normKey === 'bangla' || normKey === 'english') {
+                  const is2 = rawName.includes('2nd') || rawName.includes('২য়') || rawName.includes('২য়') || rawName.includes('second');
+                  const has1 = rawName.includes('1st') || rawName.includes('১ম') || rawName.includes('first') || rawName.includes('পত্র') || rawName.includes('paper');
+                  if (is2 || has1) { key = normKey + (is2 ? '_p2' : '_p1'); }
+              }
+              if (!subjectMap.has(key)) {
+                  subjectMap.set(key, { ...r, sumW: parseFloat(r.written_marks) || 0, sumM: parseFloat(r.mcq_marks) || 0, sumP: parseFloat(r.practical_marks) || 0, hasMarks: (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null), total_obtained: parseFloat(r.total_obtained) || 0 });
+              } else {
+                  const existing = subjectMap.get(key);
+                  if (isRelSubjLocal(rawName)) {
+                      if ((parseFloat(r.total_obtained) || 0) > (parseFloat(existing.total_obtained) || 0)) {
+                          subjectMap.set(key, { ...r, sumW: parseFloat(r.written_marks) || 0, sumM: parseFloat(r.mcq_marks) || 0, sumP: parseFloat(r.practical_marks) || 0, hasMarks: true, total_obtained: parseFloat(r.total_obtained) || 0 });
+                      }
+                      return;
+                  }
+                  existing.sumW += (parseFloat(r.written_marks) || 0);
+                  existing.sumM += (parseFloat(r.mcq_marks) || 0);
+                  existing.sumP += (parseFloat(r.practical_marks) || 0);
+                  existing.hasMarks = existing.hasMarks || ((r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null));
+                  existing.total_obtained += (parseFloat(r.total_obtained) || 0);
+              }
+          });
+
+          const virtualMap = new Map();
+          Array.from(subjectMap.values()).forEach(r => {
+              const nm = String(r.subject?.name || r.subject_name || '').toLowerCase();
+              let key = normalizeSubjKeyLocal(nm);
+              if (isNT && (key === 'bangla' || key === 'english')) { } else if (key === 'bangla' || key === 'english') {
+                  const is2 = nm.includes('2nd') || nm.includes('২য়') || nm.includes('২য়') || nm.includes('second');
+                  const has1 = nm.includes('1st') || nm.includes('১ম') || nm.includes('first') || nm.includes('পত্র') || nm.includes('paper');
+                  if (is2 || has1) { key = key + (is2 ? '_p2' : '_p1'); }
+              }
+              if (!virtualMap.has(key)) virtualMap.set(key, []);
+              virtualMap.get(key).push(r);
+          });
+
+          const group = (student?.student_group || student?.group || inferGroupLocal(Array.from(subjectMap.values()), isNT)).toLowerCase();
+          const expectedKeys = getExpectedSubjectsLocal(group, isNT, classSubjects);
+          const takenRelId = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0))?.subject?.id;
+
+          let score = 0, fails = 0, hasAnyMarks = false, totalPoints = 0, subjectCount = 0;
+          const hmList = Array.from(subjectMap.values()).filter(r => /higher|উচ্চতর/.test(String(r.subject?.name || r.subject_name).toLowerCase()));
+          const agriList = Array.from(subjectMap.values()).filter(r => /agriculture|home|কৃষি|গার্হস্থ্য/.test(String(r.subject?.name || r.subject_name).toLowerCase()));
+
+          const assignedOpt = student?.optional_subject;
+          const assignedOptId = String(assignedOpt?.id || assignedOpt || '');
+          const assignedOptName = String(assignedOpt?.name || '').toLowerCase();
+
+          let showHM = false, showAgri = false;
+          const hasHM = hmList.some(r => (parseFloat(r.total_obtained) || 0) > 0);
+          const hasAgri = agriList.some(r => (parseFloat(r.total_obtained) || 0) > 0);
+
+          if (assignedOptId || assignedOptName) {
+              const isHMAssigned = (assignedOptId && hmList.some(r => String(r.subject?.id || r.subject) === assignedOptId)) || (assignedOptName && assignedOptName.includes('higher'));
+              const isAgriAssigned = (assignedOptId && agriList.some(r => String(r.subject?.id || r.subject) === assignedOptId)) || (assignedOptName && (assignedOptName.includes('agri') || assignedOptName.includes('কৃষি')));
+
+              if (isHMAssigned && hasHM) showHM = true;
+              else if (isAgriAssigned && hasAgri) showAgri = true;
+              else {
+                  const hmTotal = hmList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+                  const agriTotal = agriList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+                  showHM = isNT && (hmTotal >= agriTotal && hmTotal > 0);
+                  showAgri = isNT && (agriTotal > hmTotal && agriTotal > 0);
+              }
+          } else {
+              const hmTotal = hmList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+              const agriTotal = agriList.reduce((s, r) => s + (parseFloat(r.total_obtained)||0), 0);
+              showHM = isNT && (hmTotal >= agriTotal && hmTotal > 0);
+              showAgri = isNT && (agriTotal > hmTotal && agriTotal > 0);
+          }
+
+          const allKeys = new Set([...expectedKeys, 'higher', 'agriculture', 'civics', 'economics', 'accounting', 'finance', 'business']);
+
+          // Track if we've counted an elective for the group
+          let electiveCounted = false;
+
+          allKeys.forEach(key => {
+              const papers = virtualMap.get(key) || [];
+              const isRel = isRelSubjLocal(key);
+              let isMandatory = expectedKeys.has(key);
+
+              // Group Pools for automatic inclusion
+              const sciPool = ['physics', 'chemistry', 'biology'];
+              const comPool = ['accounting', 'finance', 'business'];
+              const humPool = ['history', 'geography', 'civics', 'economics'];
+              const belongsToGroup = (isScienceGroupLocal(group) && sciPool.includes(key)) ||
+                                     (isCommerceGroupLocal(group) && comPool.includes(key)) ||
+                                     (isHumanitiesGroupLocal(group) && humPool.includes(key));
+
+              // Elective logic for Humanities (Civics/Economics)
+              if (isNT && isHumanitiesGroupLocal(group)) {
+                  if (key === 'civics' || key === 'economics') {
+                      if (papers.length > 0 && !electiveCounted) { isMandatory = true; electiveCounted = true; }
+                      else if (key === 'civics' && !electiveCounted && !virtualMap.has('economics')) { isMandatory = true; electiveCounted = true; }
+                  }
+              }
+
+              if (isMandatory || belongsToGroup) {
+                  if (!isRel || (isRel && !takenRelId) || (isRel && papers.length > 0)) {
+                       subjectCount++;
+                  }
+              }
+
+              if (papers.length === 0) {
+                  if (isMandatory) {
+                      if (isRel && takenRelId) return;
+                      if (isNT) {
+                          if (isScienceGroupLocal(group)) {
+                              if (key === 'science') return;
+                          } else {
+                              if (key === 'bgs' || key === 'physics' || key === 'chemistry' || key === 'biology') return;
+                          }
+                          if (['civics', 'economics', 'accounting', 'finance', 'business'].includes(key)) return;
+                      }
+                      if (!isNT && (key === 'bangla' || key === 'english')) { if (virtualMap.has(key + '_p1') || virtualMap.has(key + '_p2')) return; }
+                      if (stuResults.length > 0) fails++;
+                  }
+                  return;
+              }
+              let totalW = 0, totalM = 0, totalP = 0, totalMarks = 0, totalPossible = 0, cqM = 0, mcqM = 0, prM = 0;
+              let isAnyPaperPresent = false;
+              papers.forEach(r => {
+                  if (r.hasMarks) { hasAnyMarks = true; isAnyPaperPresent = true; }
+                  const w = parseFloat(r.written_marks) || 0, m = parseFloat(r.mcq_marks) || 0, pr = parseFloat(r.practical_marks) || 0;
+                  const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT);
+                  totalW += w; totalM += m; totalP += pr; totalMarks += (w + m + pr);
+                  totalPossible += (spec.cq + spec.mcq + spec.pr || 100);
+                  cqM += spec.cq; mcqM += spec.mcq; prM += spec.pr;
+              });
+              if (isNT && (key === 'bangla' || key === 'english')) totalPossible = Math.max(totalPossible, 200);
+              const cqPass = cqM === 0 || totalW >= Math.round(cqM * 0.33 - 0.5),
+                    mcqPass = mcqM === 0 || totalM >= Math.round(mcqM * 0.33 - 0.5),
+                    prPass = prM === 0 || totalP >= Math.round(prM * 0.33 - 0.5),
+                    totPass = totalMarks >= Math.round(totalPossible * 0.33 - 0.5);
+              let isSubjectPassed = isAnyPaperPresent && (isNT ? (cqPass && mcqPass && prPass && totPass) : totPass);
+              if (!isNT && (key === 'bangla' || key === 'english')) {
+                  const p1 = virtualMap.get(key + '_p1')?.[0], p2 = virtualMap.get(key + '_p2')?.[0];
+                  if (p1 && p2) {
+                      const cObt = (parseFloat(p1.total_obtained)||0) + (parseFloat(p2.total_obtained)||0);
+                      const s1 = getSubjectMaxima(p1.subject?.name || p1.subject_name, false), s2 = getSubjectMaxima(p2.subject?.name || p2.subject_name, false);
+                      isSubjectPassed = cObt >= Math.round((s1.cq+s1.mcq+s1.pr+s2.cq+s2.mcq+s2.pr)*0.33-0.5);
+                  }
+              }
+              const gp = isSubjectPassed ? computeGpa((totalMarks / totalPossible) * 100) : 0;
+              if ((key === 'higher' && showHM) || (key === 'agriculture' && showAgri)) {
+                  if (totalMarks > (totalPossible * 0.4)) { score += (totalMarks - (totalPossible * 0.4)); }
+                  totalPoints += Math.max(0, gp - 2.0);
+              } else if (isMandatory || belongsToGroup || (!isNT && (key==='higher'||key==='agriculture'))) {
+                  if (!isNT && (key==='higher'||key==='agriculture')) return;
+                  if (isNT && (key === 'bgs' || key === 'science') && !isScienceGroupLocal(group)) { if (!isAnyPaperPresent) return; }
+                  if (isRel && takenRelId && !papers.some(r => String(r.subject?.id) === String(takenRelId))) return;
+                  score += totalMarks; totalPoints += gp;
+                  if (isMandatory && (!isAnyPaperPresent || !isSubjectPassed)) fails++;
+              } else { if (!isNT) score += totalMarks; }
+          });
+          if (!hasAnyMarks) fails = 999;
+          const finalCgpa = (subjectCount > 0 && fails === 0) ? Math.min(5.0, totalPoints / subjectCount) : 0;
+          resultsPool.push({ sid, total: Math.round(score), rawScore: score, points: finalCgpa, fails, isAbsent: !hasAnyMarks, roll: student?.roll_number ? parseInt(String(student.roll_number).replace(/\D/g, ''), 10) : 999999, section_id: String(student?.section?.id || student?.section || 'other') });
+      }
+
+      const finalRankMap = {};
+      const bySec = new Map();
+      resultsPool.forEach(item => { const sId = selectedSection ? 'single' : (item.section_id || 'other'); if (!bySec.has(sId)) bySec.set(sId, []); bySec.get(sId).push(item); });
+      for (const sectionItems of bySec.values()) {
+          sectionItems.sort((a, b) => {
+              if (a.isAbsent !== b.isAbsent) return a.isAbsent ? 1 : -1;
+              return a.fails - b.fails || b.points - a.points || b.rawScore - a.rawScore || a.roll - b.roll;
+          });
+          let lastR = 0, lastV = null;
+          sectionItems.forEach((c, idx) => {
+              if (c.isAbsent) { finalRankMap[c.sid] = null; } else {
+                  const curV = `${c.fails}-${c.points.toFixed(2)}-${c.rawScore.toFixed(2)}`;
+                  if (curV !== lastV) { lastR = idx + 1; lastV = curV; }
+                  finalRankMap[c.sid] = lastR;
+              }
+          });
+      }
+
+      // Apply to overall results
       oList.forEach(o => {
         const sid = o.student?.id ?? o.student_id ?? o.student;
+        const newRank = finalRankMap[sid] || Number(o.rank || 0);
         overallByStudent[sid] = {
-          percentage: o.percentage, rank: Number(o.rank || 0), is_passed: o.is_passed,
+          percentage: o.percentage, rank: newRank, rank_in_section: newRank, is_passed: o.is_passed,
           total_marks_obtained: o.total_marks_obtained, total_marks_possible: o.total_marks_possible,
           cgpa: o.cgpa, grade: o.grade
         };
@@ -1380,7 +2181,22 @@ export default function ResultCardGenerator() {
       // 3. Fast generation
       for (let i = 0; i < sectionList.length; i++) {
         const s = sectionList[i];
-        const card = await buildCardForStudent(s.id, s, resultsByStudent[s.id], overallByStudent[s.id]);
+        const stuResults = resultsByStudent[s.id] || [];
+
+        // Skip if fewer than 3 subjects with positive marks (>0)
+        const subjectsWithPositiveData = new Set();
+        stuResults.forEach(r => {
+          const total = (parseFloat(r.total_obtained) || (parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0));
+          const hasInput = (r.written_marks !== null && r.written_marks !== '') ||
+                           (r.mcq_marks !== null && r.mcq_marks !== '') ||
+                           (r.practical_marks !== null && r.practical_marks !== '');
+          if (hasInput && total > 0) {
+            subjectsWithPositiveData.add(r.subject?.id || r.subject_id || r.subject_name);
+          }
+        });
+        if (subjectsWithPositiveData.size < 3) continue;
+
+        const card = await buildCardForStudent(s.id, s, resultsByStudent[s.id], overallByStudent[s.id], sectionSubjs);
         if (card) {
           allGeneratedCards.push(card);
           // Batch update every student to keep it sequential but responsive
@@ -1685,8 +2501,11 @@ export default function ResultCardGenerator() {
           <Button
             variant="contained"
             startIcon={<AssessmentIcon />}
-            onClick={() => handleSearch(null, 'bn')}
-            disabled={loading || !selectedStudent || !selectedExamType}
+            onClick={() => {
+              if (selectedStudent) handleSearch(null, 'bn');
+              else handleGenerateBulkCards('bn');
+            }}
+            disabled={loading || bulkLoading || (!selectedStudent && !selectedSection) || !selectedExamType}
             color="primary"
           >
             {loading && !forceLanguage ? 'তৈরি হচ্ছে...' : 'বাংলায় মার্কশীট তৈরি করুন'}
@@ -1695,8 +2514,11 @@ export default function ResultCardGenerator() {
           <Button
             variant="contained"
             startIcon={<AssessmentIcon />}
-            onClick={() => handleSearch(null, 'en')}
-            disabled={loading || !selectedStudent || !selectedExamType}
+            onClick={() => {
+              if (selectedStudent) handleSearch(null, 'en');
+              else handleGenerateBulkCards('en');
+            }}
+            disabled={loading || bulkLoading || (!selectedStudent && !selectedSection) || !selectedExamType}
             sx={{ bgcolor: '#1a237e', '&:hover': { bgcolor: '#0d1642' } }}
           >
             {isTranslating ? 'AI অনুবাদ হচ্ছে...' : 'ইংরেজিতে মার্কশীট তৈরি করুন'}
@@ -1705,7 +2527,7 @@ export default function ResultCardGenerator() {
           <Button
             variant="outlined"
             startIcon={<PrintIcon />}
-            onClick={handleGenerateBulkCards}
+            onClick={() => handleGenerateBulkCards('en')}
             color="secondary"
             disabled={!selectedSection || bulkLoading || !selectedExamType}
           >

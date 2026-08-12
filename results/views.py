@@ -93,14 +93,22 @@ class ExaminationViewSet(viewsets.ModelViewSet):
                         errors.append({"error": "Missing student or subject ID", "data": r_data})
                         continue
 
+                    def clean_mark(val):
+                        if val is None or val == '' or str(val).strip() == '':
+                            return None
+                        try:
+                            return Decimal(str(val))
+                        except:
+                            return None
+
                     obj, created_now = Result.objects.update_or_create(
                         examination=examination,
                         student_id=int(student_id),
                         subject_id=int(subject_id),
                         defaults={
-                            'written_marks': Decimal(str(r_data.get('written_marks') or 0)),
-                            'mcq_marks': Decimal(str(r_data.get('mcq_marks') or 0)),
-                            'practical_marks': Decimal(str(r_data.get('practical_marks') or 0)),
+                            'written_marks': clean_mark(r_data.get('written_marks')),
+                            'mcq_marks': clean_mark(r_data.get('mcq_marks')),
+                            'practical_marks': clean_mark(r_data.get('practical_marks')),
                             'remarks': r_data.get('remarks', '')
                         }
                     )
