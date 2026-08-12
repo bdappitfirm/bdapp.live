@@ -606,8 +606,8 @@ export default function ResultCardGenerator() {
         for (const sectionItems of bySection.values()) {
             sectionItems.sort((a, b) => {
                 if (a.isAbsent !== b.isAbsent) return a.isAbsent ? 1 : -1;
-                // Match Merit List sort: Fails -> GPA -> Total Marks -> Roll
-                return a.fails - b.fails || b.points - a.points || b.rawScore - a.rawScore || a.roll - b.roll;
+                // Match Merit List exactly: 1. Fewer Fails, 2. Higher GPA (points), 3. Higher Total Marks (rawScore)
+                return (a.fails - b.fails) || (b.points - a.points) || (b.rawScore - a.rawScore) || (a.roll - b.roll);
             });
             let lastRank = 0, lastValues = null;
             sectionItems.forEach((c, idx) => {
@@ -2154,7 +2154,8 @@ const isHumanitiesGroupLocal = (g) => { const l = String(g || '').toLowerCase();
       for (const sectionItems of bySec.values()) {
           sectionItems.sort((a, b) => {
               if (a.isAbsent !== b.isAbsent) return a.isAbsent ? 1 : -1;
-              return a.fails - b.fails || b.points - a.points || b.rawScore - a.rawScore || a.roll - b.roll;
+              // Strict Priority: 1. Fewer Fails, 2. Higher GPA (points), 3. Higher Total Marks (rawScore)
+              return (a.fails - b.fails) || (b.points - a.points) || (b.rawScore - a.rawScore) || (a.roll - b.roll);
           });
           let lastR = 0, lastV = null;
           sectionItems.forEach((c, idx) => {
