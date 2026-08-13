@@ -30,12 +30,15 @@ const getSubjectMaxima = (name, isNT) => {
 
   const isPracticalScience = lower.includes('পদার্থ') || lower.includes('physics') || lower.includes('রসায়ন') || lower.includes('রসায়ন') || lower.includes('chemistry') || lower.includes('জীব') || lower.includes('biology') || lower.includes('উচ্চতর') || lower.includes('higher');
   const isAgriHome = lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics');
+  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার');
 
   if (isNT) {
     if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
   } else {
     if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
     if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('islam') || lower.includes('hindu') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
 
@@ -65,7 +68,7 @@ const normalizeSubjKey = (n) => {
     if (low.includes('accounting') || low.includes('হিসাব')) return 'accounting';
     if (low.includes('finance') || low.includes('ফিন্যান্স')) return 'finance';
     if (low.includes('business') || low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('entrepreneurship') || low.includes('উদ্যোগ')) return 'business';
-    if (low.includes('geography') || low.includes('ভূগোল')) return 'geography';
+    if (low.includes('geography') || low.includes('ভূগোল') || low.includes('ভুগোল')) return 'geography';
     if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
     if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
     if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
@@ -100,7 +103,10 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
         } else if (isCommerceGroup(g)) {
             ['accounting', 'finance', 'business', 'science'].forEach(s => subjects.add(s));
         } else if (isHumanitiesGroup(g)) {
-            ['history', 'geography', 'civics', 'economics', 'science'].forEach(s => subjects.add(s));
+            ['history', 'civics', 'science'].forEach(s => subjects.add(s));
+            if (classSubjs.has('economics')) subjects.add('economics');
+            else if (classSubjs.has('geography')) subjects.add('geography');
+            else subjects.add('geography');
         }
     } else {
         ['science', 'bgs'].forEach(s => subjects.add(s));
@@ -115,6 +121,9 @@ const CO_CURRICULAR = [
 ];
 const isRelSubj = (n) => /religion|islam|hindu|buddhist|christian|ধর্ম|ইসলাম|হিন্দু|বৌদ্ধ|খ্রিস্ট/i.test(String(n));
 
+const BN_1ST_REGEX = /[১1]ম|প্রথম|1st|first/i;
+const BN_2ND_REGEX = /[২2][য়য়]|দ্বিতীয়|2nd|second/i;
+
 const inferGroup = (resList, isNT) => {
     if (!isNT || !resList || resList.length === 0) return '';
     const count = (regex) => resList.filter(r => {
@@ -124,6 +133,18 @@ const inferGroup = (resList, isNT) => {
     const sciCount = count(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
     const comCount = count(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
     const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
+
+    const takesGeneralScience = resList.some(r => {
+        const name = (r.subject?.name || r.subject_name || '').toLowerCase();
+        const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0);
+        return hasMarks && (name === 'science' || name === 'বিজ্ঞান' || name === 'general science' || name === 'সাধারণ বিজ্ঞান');
+    });
+
+    if (takesGeneralScience && sciCount < 2) {
+        if (comCount > humCount) return 'commerce';
+        return 'humanities';
+    }
+
     if (sciCount > 0 && sciCount >= comCount && sciCount >= humCount) return 'science';
     if (comCount > 0 && comCount >= humCount) return 'commerce';
     if (humCount > 0) return 'humanities';
@@ -437,9 +458,16 @@ export default function ClassResultsPage() {
                         if (isRel && takenRelId) return;
                         if (isClassNineOrTen) {
                             if (group.includes('science')) { if (key === 'science') return; }
-                            else { if (['physics', 'chemistry', 'biology', 'bgs'].includes(key)) return; }
+                            else {
+                                if (['physics', 'chemistry', 'biology'].includes(key)) return;
+                                // For BGS/Science in non-science groups, check if taken at all
+                                if (/bgs|বাংলাদেশ|science|বিজ্ঞান/i.test(key)) {
+                                    const hasAnyRecord = resList.some(r => normalizeSubjKey(r.subject?.name || r.subject_name) === normalizeSubjKey(key));
+                                    if (!hasAnyRecord) return;
+                                }
+                            }
                         }
-                        if (resList.length > 0) fails++;
+                        fails++; // Mark as fail if mandatory subject is missing/absent
                     }
                     return;
                 }
@@ -463,7 +491,9 @@ export default function ClassResultsPage() {
                 const mcqPass = mcqM === 0 || totalM >= Math.round(mcqM * 0.33 - 0.5);
                 const prPass = prM === 0 || totalP >= Math.round(prM * 0.33 - 0.5);
                 const totPass = totalObtained >= Math.round(totalPossible * 0.33 - 0.5);
-                let isSubjectPassed = isAnyPaperPresentForSub && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
+
+                const isCoCurric = CO_CURRICULAR.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
+                let isSubjectPassed = isAnyPaperPresentForSub && (isClassNineOrTen ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
 
                 const gp = isSubjectPassed ? computeGpa((totalObtained / totalPossible) * 100) : 0;
                 const isAgricultureSub = (key === 'higher' || key === 'agriculture');
@@ -507,12 +537,15 @@ export default function ClassResultsPage() {
             const normKey = normalizeSubjKey(rawName);
             let key = normKey;
 
-            // পত্র (Paper 1/2) অনুযায়ী আলাদা কি (key) তৈরি করি
-            const is2 = rawName.includes('2nd') || rawName.includes('২য়') || rawName.includes('২য়') || rawName.includes('second');
-            const has1 = rawName.includes('1st') || rawName.includes('১ম') || rawName.includes('first') || rawName.includes('পত্র') || rawName.includes('paper');
-            if (is2 || has1) { key = normKey + (is2 ? '_p2' : '_p1'); }
+            // পত্র (Paper 1/2) অনুযায়ী আলাদা কি (key) তৈরি করি (শুধুমাত্র ৬ষ্ঠ-অষ্টম শ্রেণির জন্য)
+            if (!isClassNineOrTen && (normKey === 'bangla' || normKey === 'english')) {
+                const is2 = BN_2ND_REGEX.test(rawName) || rawName.includes('2nd') || rawName.includes('second');
+                const has1 = BN_1ST_REGEX.test(rawName) || rawName.includes('1st') || rawName.includes('first') || rawName.includes('পত্র') || rawName.includes('paper');
+                if (is2) key = normKey + '_p2';
+                else if (has1) key = normKey + '_p1';
+            }
 
-            // যদি এই কি (key) আগে না থাকে, তবে যোগ করি (যাতে Math/গণিত মার্জ হয় কিন্তু Bangla 1/2 না হয়)
+            // যদি এই কি (key) আগে না থাকে, তবে যোগ করি
             if (!subjectsWithMarks.has(key)) {
                 subjectsWithMarks.set(key, rawName);
             }
@@ -533,27 +566,22 @@ export default function ClassResultsPage() {
             const isGenScience = /^(science|বিজ্ঞান|general science|সাধারণ বিজ্ঞান)$/i.test(lLow.trim());
 
             if (g === 'science') {
-                // সায়েন্স গ্রুপে কমার্স, আর্টস বা জেনারেল সায়েন্স আসবে না
                 if (isCommerceSub || isHumanitiesSub || isGenScience) return;
             } else if (g === 'commerce') {
-                // কমার্স গ্রুপে সায়েন্স, আর্টস বা বিজিএস (যদি থাকে) আসবে না
                 if (isScienceSub || isHumanitiesSub || isBGS) return;
             } else if (g === 'humanities') {
-                // মানবিক গ্রুপে সায়েন্স, কমার্স বা বিজিএস (যদি থাকে) আসবে না
                 if (isScienceSub || isCommerceSub || isBGS) return;
             }
         }
 
-        set.add(label);
+        set.add({ label, key }); // Store both label and standardized key
     });
 
     const getWeight = (name) => {
         const n = name.toLowerCase();
-        // ১. BGS এর ফিক্সড ওজন ৬০ (যাতে সব সময় আইসিটি-র পরে এবং বিজ্ঞানের আগে থাকে)
         if (n.includes('bgs') || n.includes('বাংলাদেশ') || n.includes('global') || n.includes('world') || n.includes('বিশ্ব') || n.includes('social')) {
             if (!n.includes('bangla') && !n.includes('pure science')) return 60;
         }
-
         if ((n.includes('bangla') || n.includes('বাংলা')) && !n.includes('বাংলাদেশ') && !n.includes('bangladesh')) return (n.includes('২য়') || n.includes('২য়') || n.includes('2nd') || n.includes('second') || n.includes('ii')) ? 12 : 11;
         if (n.includes('english') || n.includes('ইংরেজি')) return (n.includes('২য়') || n.includes('২য়') || n.includes('2nd') || n.includes('second') || n.includes('ii')) ? 22 : 21;
         if (n.includes('math') || n.includes('গণিত')) return (n.includes('উচ্চতর') || n.includes('higher')) ? 1000 : 30;
@@ -568,9 +596,7 @@ export default function ClassResultsPage() {
     const subjects = [];
     if (isClassNineOrTen) { subjects.push({ label: 'বাংলা (১ম+২য়)', key: 'merged-bangla' }, { label: 'ইংরেজি (১ম+২য়)', key: 'merged-english' }); }
     Array.from(set).forEach(s => {
-        const low = s.toLowerCase();
-        if (isClassNineOrTen && (low.includes('bangla') || low.includes('english'))) return;
-        subjects.push({ label: s, key: low });
+        subjects.push(s);
     });
     return subjects.sort((a, b) => getWeight(a.label) - getWeight(b.label));
   }, [resultsByStudent, isClassNineOrTen, detectedGroup]);
@@ -629,10 +655,22 @@ export default function ClassResultsPage() {
     list.forEach(r => {
         const nm = String(r.subject?.name || r.subject_name || ''), low = nm.toLowerCase();
         if (suppressedKeys.has(low)) return;
+
+        const normKey = normalizeSubjKey(nm);
+        let key = normKey;
+
         if (isClassNineOrTen) {
             if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('বিশ্ব')) { b.push(r); return; }
             if (low.includes('english') || low.includes('ইংরেজি')) { e.push(r); return; }
+        } else {
+            // For Class 6-8, use standardized keys for lookup to handle spelling variations
+            const is2 = BN_2ND_REGEX.test(nm) || low.includes('2nd') || low.includes('second');
+            const has1 = BN_1ST_REGEX.test(nm) || low.includes('1st') || low.includes('first') || low.includes('পত্র') || low.includes('paper');
+            if (normKey === 'bangla' || normKey === 'english') {
+                if (is2) key = normKey + '_p2'; else if (has1) key = normKey + '_p1';
+            }
         }
+
         const w = parseFloat(r.written_marks)||0, mcq = parseFloat(r.mcq_marks)||0, pr = parseFloat(r.practical_marks)||0, tot = w + mcq + pr, has = r.hasMarks;
         const spec = getSubjectMaxima(nm, isClassNineOrTen);
         const p = []; if (spec.cq > 0) p.push(r.written_marks !== '' ? Math.round(w) : '0'); if (spec.mcq > 0) p.push(r.mcq_marks !== '' ? Math.round(mcq) : '0'); if (spec.pr > 0) p.push(r.practical_marks !== '' ? Math.round(pr) : '0');
@@ -641,7 +679,7 @@ export default function ClassResultsPage() {
               prPass = spec.pr === 0 || pr >= Math.round(spec.pr * 0.33 - 0.5),
               totPass = tot >= Math.round((spec.cq + spec.mcq + spec.pr) * 0.33 - 0.5);
         const isPassed = has && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
-        m.set(low, { total: tot, display: (has && tot > 0) ? (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot))) : (has && tot === 0 ? '0' : 'Absent'), is_passed: isPassed, hasMarks: has });
+        m.set(key, { total: tot, display: (has && tot > 0) ? (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot))) : (has && tot === 0 ? '0' : 'Absent'), is_passed: isPassed, hasMarks: has });
     });
     const merge = (arr, key) => {
         if (arr.length === 0) return null;

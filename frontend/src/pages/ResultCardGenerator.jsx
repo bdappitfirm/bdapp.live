@@ -103,13 +103,16 @@ const getSubjectMaxima = (name, isClassNineOrTen) => {
 
   const isPracticalScience = lower.includes('পদার্থ') || lower.includes('physics') || lower.includes('রসায়ন') || lower.includes('রসায়ন') || lower.includes('chemistry') || lower.includes('জীব') || lower.includes('biology') || lower.includes('উচ্চতর') || lower.includes('higher');
   const isAgriHome = lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics');
+  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার');
 
   if (isClassNineOrTen) {
     if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
     if (lower.includes('বাংলা') || lower.includes('bangla')) return { cq: 70, mcq: 30, pr: 0 };
   } else {
     if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
     if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
     if ((lower.includes('বাংলা') || lower.includes('bangla')) && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii'))) return { cq: 35, mcq: 15, pr: 0 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
@@ -142,7 +145,7 @@ const normalizeSubjKeyLocal = (n) => {
     if (low.includes('accounting') || low.includes('হিসাব')) return 'accounting';
     if (low.includes('finance') || low.includes('ফিন্যান্স')) return 'finance';
     if (low.includes('business') || low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('entrepreneurship') || low.includes('উদ্যোগ')) return 'business';
-    if (low.includes('geography') || low.includes('ভূগোল')) return 'geography';
+    if (low.includes('geography') || low.includes('ভূগোল') || low.includes('ভুগোল')) return 'geography';
     if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
     if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
     if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
@@ -158,6 +161,18 @@ const inferGroupLocal = (resList, isNT) => {
     const sciCount = count(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
     const comCount = count(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
     const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
+
+    const takesGeneralScience = resList.some(r => {
+        const name = (r.subject?.name || r.subject_name || '').toLowerCase();
+        const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || (parseFloat(r.total_obtained) > 0));
+        return hasMarks && (name === 'science' || name === 'বিজ্ঞান' || name === 'general science' || name === 'সাধারণ বিজ্ঞান');
+    });
+
+    if (takesGeneralScience && sciCount < 2) {
+        if (comCount > humCount) return 'commerce';
+        return 'humanities';
+    }
+
     if (sciCount > 0 && sciCount >= comCount && sciCount >= humCount) return 'science';
     if (comCount > 0 && comCount >= humCount) return 'commerce';
     if (humCount > 0) return 'humanities';
@@ -192,7 +207,10 @@ const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs) => {
         } else if (isCommerceGroupLocal(g)) {
             ['accounting', 'finance', 'business', 'science'].forEach(s => subjects.add(s));
         } else if (isHumanitiesGroupLocal(g)) {
-            ['history', 'geography', 'civics', 'economics', 'science'].forEach(s => subjects.add(s));
+            ['history', 'civics', 'science'].forEach(s => subjects.add(s));
+            if (classSubjs.has('economics')) subjects.add('economics');
+            else if (classSubjs.has('geography')) subjects.add('geography');
+            else subjects.add('geography');
         }
     } else {
         ['science', 'bgs'].forEach(s => subjects.add(s));
@@ -504,7 +522,8 @@ export default function ResultCardGenerator() {
                 const prPass = prM === 0 || totalP >= Math.round(prM * 0.33 - 0.5);
                 const totPass = totalMarks >= Math.round(totalPossible * 0.33 - 0.5);
 
-                let isSubjectPassed = isAnyPaperPresent && (isNT ? (cqPass && mcqPass && prPass && totPass) : totPass);
+                const isCoCurric = CO_CURRICULAR_SUBJECTS.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
+                let isSubjectPassed = isAnyPaperPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
 
                 const gp = isSubjectPassed ? computeGpa((totalMarks / totalPossible) * 100) : 0;
                 const isAgriculture = (key === 'higher' || key === 'agriculture');
@@ -1094,8 +1113,8 @@ export default function ResultCardGenerator() {
 
       // Distinguish papers for Bangla and English with robust detection
       if (nm === 'bangla' || nm === 'english') {
-          const is2 = /(২য়|২য়|2nd|second|Paper 2| ii | ii$| 2)/i.test(subjName);
-          const has1 = /(১ম|1st|first|Paper 1| i | i$| 1)/i.test(subjName);
+          const is2 = /(২য়|২য়|2nd|second|Paper 2| ii | ii$| 2|দ্বিতীয়)/i.test(subjName);
+          const has1 = /(১ম|1st|first|Paper 1| i | i$| 1|প্রথম)/i.test(subjName);
           if (is2 && has1) nm = nm + '_combined';
           else if (is2) nm = nm + '_p2';
           else if (has1) nm = nm + '_p1';
@@ -1159,8 +1178,9 @@ export default function ResultCardGenerator() {
         expectedKeys.forEach(key => {
             // Check directly against the normalized key in the map
             if (!map.has(key)) {
-                // If validSubjKeys provided, don't fill missing subjects that have no marks for ANYONE
-                if (validSubjKeys && !validSubjKeys.has(key)) return;
+                // Check against base key (handle _p1, _p2 suffixes for section filtering)
+                const baseKey = key.split('_')[0];
+                if (validSubjKeys && !validSubjKeys.has(baseKey)) return;
 
                 // Special check for papers: if we expect 'bangla' but have papers, it's not missing
                 if (key === 'bangla' || key === 'english') {
@@ -1190,8 +1210,9 @@ export default function ResultCardGenerator() {
         const optName = String(studentOptionalSubject?.name || '').toLowerCase();
         const optKey = normalizeSubjKeyLocal(optName);
         if (optKey && !map.has(optKey)) {
-            // Check section validity for optional as well
-            if (validSubjKeys && !validSubjKeys.has(optKey)) return;
+            // Check section validity for optional as well (using base key)
+            const baseKey = optKey.split('_')[0];
+            if (validSubjKeys && !validSubjKeys.has(baseKey)) return;
 
             const friendlyName = translateSubLocal(optKey);
             map.set(optKey, {

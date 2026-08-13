@@ -92,6 +92,9 @@ const SUB_MAP = {
   'পৌরণীতি ও নাগরিকতা': 'Civics & Citizenship',
   'পৌরনীতি': 'Civics',
   'পৌরণীতি': 'Civics',
+  'ভূগোল ও পরিবেশ': 'Geography & Environment',
+  'ভূগোল': 'Geography',
+  'ভুগোল': 'Geography',
   'কৃষি শিক্ষা': 'Agriculture / Home Science',
   'কৃষি': 'Agriculture / Home Science',
   'গার্হস্থ্য বিজ্ঞান': 'Agriculture / Home Science',
@@ -211,11 +214,13 @@ const SUB_MAP = {
   'অর্থনীতি': 'Economics',
   'Economics': 'Economics',
   'ইতিহাস': 'History',
-  'History': 'History'
+  'History': 'History',
+  'Bangla-২য় Paper': 'Bangla 2nd Paper',
+  'Bangla-১ম Paper': 'Bangla 1st Paper'
 };
 
-const BN_TO_EN_PAPER_REGEX_1 = /[১1]ম\s*(পত্র|paper)/gi;
-const BN_TO_EN_PAPER_REGEX_2 = /[২2][য়য়]\s*(পত্র|paper)/gi;
+const BN_TO_EN_PAPER_REGEX_1 = /[- ]?[১1]ম\s*(পত্র|paper|part)?/gi;
+const BN_TO_EN_PAPER_REGEX_2 = /[- ]?[২2][য়য]়?\s*(পত্র|paper|part)?/gi;
 
 const OPT_SUB_MAP = {
   'উচ্চতর গণিত': 'Higher Mathematics',
@@ -299,12 +304,15 @@ const getSubjectMaxima = (name, isClassNineOrTen) => {
 
   const isPracticalScience = lower.includes('পদার্থ') || lower.includes('physics') || lower.includes('রসায়ন') || lower.includes('রসায়ন') || lower.includes('chemistry') || lower.includes('জীব') || lower.includes('biology') || lower.includes('উচ্চতর') || lower.includes('higher');
   const isAgriHome = lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics');
+  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার');
 
   if (isClassNineOrTen) {
     if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
   } else {
     if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
     if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('islam') || lower.includes('hindu') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
 
@@ -613,13 +621,14 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     const humanitiesCount = countGroup(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
 
     // If student takes 'General Science', they are definitely NOT Science group
+    // UNLESS they have a high count of Science electives (data error fallback)
     const takesGeneralScience = results.some(r => {
         const name = (r.subject?.name || r.subject_name || '').toLowerCase();
         const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0);
         return hasMarks && (name === 'science' || name === 'বিজ্ঞান' || name === 'general science' || name === 'সাধারণ বিজ্ঞান');
     });
 
-    if (takesGeneralScience) {
+    if (takesGeneralScience && scienceCount < 2) {
         if (commerceCount > humanitiesCount) return 'Commerce';
         return 'Humanities';
     }
@@ -650,7 +659,11 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
 
       const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen);
       const totalPossible = spec.cq + spec.mcq + spec.pr || 100;
-      const obtained = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
+      let obtained = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
+
+      // Surgical Cap: Ensure obtained marks do not exceed total possible (Fixes Osman's 115 marks)
+      if (obtained > totalPossible) obtained = totalPossible;
+
       const isActuallyAbsent = (r.written_marks === null || r.written_marks === undefined || String(r.written_marks).trim() === '') &&
                                (r.mcq_marks === null || r.mcq_marks === undefined || String(r.mcq_marks).trim() === '') &&
                                (r.practical_marks === null || r.practical_marks === undefined || String(r.practical_marks).trim() === '') &&
@@ -664,7 +677,8 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       const prPass = spec.pr === 0 || p >= Math.round(spec.pr * 0.33 - 0.5);
       const totPass = obtained >= Math.round(totalPossible * 0.33 - 0.5);
 
-      let isPassed = !isActuallyAbsent && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
+      const isCoCurric = isCoCurricular(r.subject?.name || r.subject_name, isClassNineOrTen);
+      let isPassed = !isActuallyAbsent && (isClassNineOrTen ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
 
       return { ...r, total_obtained: obtained, isActuallyAbsent, total_possible: totalPossible, grade: isPassed ? computeGrade(percentage) : 'F', gpa: isPassed ? computeGpa(percentage).toFixed(2) : '0.00', is_passed: isPassed, is_optional_detected: isOptionalSubject(r, student, isClassNineOrTen, inferredGroup), spec };
     });
@@ -781,7 +795,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             const group = String(studentGroup).toLowerCase();
             const isScienceSub = /physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i.test(name);
             const isCommerceSub = /accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i.test(name);
-            const isHumanitiesSub = /history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i.test(name);
+            const isHumanitiesSub = /history|geography|civics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|economics|অর্থনীতি/i.test(name);
             const isBGS = /bgs|bangladesh|global studies|বাংলাদেশ ও বিশ্ব|বিশ্বপরিচয়/i.test(name);
             const isGeneralScience = /^(science|বিজ্ঞান|general science|সাধারণ বিজ্ঞান)$/i.test(name.trim()) || (name.includes('science') && !isScienceSub && !isCommerceSub && !isBGS);
 
@@ -1108,7 +1122,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       let sName = clean;
 
       // 4. Paper/Part Translation
-      sName = sName.replace(BN_TO_EN_PAPER_REGEX_1, '1st Paper').replace(BN_TO_EN_PAPER_REGEX_2, '2nd Paper');
+      sName = sName.replace(BN_TO_EN_PAPER_REGEX_1, ' 1st Paper').replace(BN_TO_EN_PAPER_REGEX_2, ' 2nd Paper');
 
       // 5. Basic Word Translation
       sName = sName.replace(/বাংলা(?!দেশ)/g, 'Bangla')
@@ -1122,11 +1136,11 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                    .replace(/ধর্ম/g, 'Religion')
                    .replace(/বিজ্ঞান/g, 'Science');
 
+      // 6. Post-translation cleanup (Remove double spaces and fix double "Paper")
+      sName = sName.replace(/\s+/g, ' ').replace(/Paper\s*Paper/gi, 'Paper').trim();
+
       // Standalone "বিজ্ঞান" replacement (safely)
       if (sName === 'বিজ্ঞান' || sName === 'সাধারণ বিজ্ঞান') return 'Science';
-
-      // Fallback: If it still contains "বিজ্ঞান" but wasn't caught by compound rules
-      if (sName.includes('বিজ্ঞান')) sName = sName.replace(/বিজ্ঞান/g, 'Science');
 
       return sName;
     }

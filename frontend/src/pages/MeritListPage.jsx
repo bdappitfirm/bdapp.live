@@ -30,12 +30,15 @@ const getSubjectMaxima = (name, isClassNineOrTen) => {
 
   const isPracticalScience = lower.includes('পদার্থ') || lower.includes('physics') || lower.includes('রসায়ন') || lower.includes('রসায়ন') || lower.includes('chemistry') || lower.includes('জীব') || lower.includes('biology') || lower.includes('উচ্চতর') || lower.includes('higher');
   const isAgriHome = lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics');
+  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার');
 
   if (isClassNineOrTen) {
     if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
   } else {
     if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
     if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('islam') || lower.includes('hindu') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
 
@@ -65,7 +68,7 @@ const normalizeSubjKey = (n) => {
     if (low.includes('accounting') || low.includes('হিসাব')) return 'accounting';
     if (low.includes('finance') || low.includes('ফিন্যান্স')) return 'finance';
     if (low.includes('business') || low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('entrepreneurship') || low.includes('উদ্যোগ')) return 'business';
-    if (low.includes('geography') || low.includes('ভূগোল')) return 'geography';
+    if (low.includes('geography') || low.includes('ভূগোল') || low.includes('ভুগোল')) return 'geography';
     if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
     if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
     if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
@@ -100,7 +103,11 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
         } else if (isCommerceGroup(g)) {
             ['accounting', 'finance', 'business', 'science'].forEach(s => subjects.add(s));
         } else if (isHumanitiesGroup(g)) {
-            ['history', 'geography', 'civics', 'economics', 'science'].forEach(s => subjects.add(s));
+            ['history', 'civics', 'science'].forEach(s => subjects.add(s));
+            // Add geography OR economics depending on which one has marks in classSubjs
+            if (classSubjs.has('economics')) subjects.add('economics');
+            else if (classSubjs.has('geography')) subjects.add('geography');
+            else subjects.add('geography'); // Default
         }
     } else {
         ['science', 'bgs'].forEach(s => subjects.add(s));
@@ -211,13 +218,15 @@ const MeritListPage = () => {
                 const comCount = count(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
                 const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
 
+                // If student has 'General Science', they are definitely NOT Science group
+                // UNLESS they have high count of Science electives (Fixes Osman Roll 5)
                 const takesGeneralScience = resList.some(r => {
                     const name = (r.subject?.name || r.subject_name || '').toLowerCase();
                     const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || (parseFloat(r.total_obtained) > 0));
                     return hasMarks && (name === 'science' || name === 'বিজ্ঞান' || name === 'general science' || name === 'সাধারণ বিজ্ঞান');
                 });
 
-                if (takesGeneralScience) {
+                if (takesGeneralScience && sciCount < 2) {
                     if (comCount > humCount) return 'commerce';
                     return 'humanities';
                 }
@@ -464,7 +473,9 @@ const MeritListPage = () => {
                     const mcqPass = mcqM === 0 || totalM >= Math.round(mcqM * 0.33 - 0.5);
                     const prPass = prM === 0 || totalP >= Math.round(prM * 0.33 - 0.5);
                     const totPass = totalObtained >= Math.round(totalPossible * 0.33 - 0.5);
-                    let isSubjectPassed = isAnyPaperPresentForSub && (isNineTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
+
+                    const isCoCurric = CO_CURRICULAR.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
+                    let isSubjectPassed = isAnyPaperPresentForSub && (isNineTen ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
 
                     const gp = isSubjectPassed ? computeGpa((totalObtained / totalPossible) * 100) : 0;
                     const isAgriculture = (key === 'higher' || key === 'agriculture');
