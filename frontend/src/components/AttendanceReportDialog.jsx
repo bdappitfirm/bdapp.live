@@ -41,11 +41,28 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
   const [saving, setSaving] = useState(false);
   const [students, setStudents] = useState([]);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [workingDays, setWorkingDays] = useState({});
+
+  useEffect(() => {
+    const initialDays = {};
+    MONTH_LIST.forEach(m => {
+      let count = 0;
+      const daysInMonth = new Date(year, m.id, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, m.id - 1, day);
+        if (date.getDay() !== 5 && date.getDay() !== 6) count++;
+      }
+      initialDays[m.id] = count;
+    });
+    setWorkingDays(initialDays);
+  }, [year]);
 
   const visibleMonths = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    if (parseInt(year) < currentYear) return MONTH_LIST;
     const currentMonth = new Date().getMonth() + 1;
     return MONTH_LIST.filter(m => m.id <= currentMonth);
-  }, []);
+  }, [year]);
 
   useEffect(() => {
     if (selectedClass && open) {
@@ -79,6 +96,34 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
     }
   };
 
+  const handleWorkingDaysChange = (monthId, val) => {
+    const days = parseInt(val, 10) || 0;
+    setWorkingDays(prev => ({ ...prev, [monthId]: days }));
+
+    setStudents(prev => prev.map(s => {
+      const currentMonthlyData = s.summary?.monthly_data || {};
+      const mData = currentMonthlyData[monthId];
+
+      // If student has presence data, update their absence based on new working days
+      if (mData && (mData.present !== undefined || mData.absent !== undefined)) {
+        const newAbsent = Math.max(0, days - (mData.present || 0));
+        const newMonthlyData = { ...currentMonthlyData, [monthId]: { ...mData, absent: newAbsent } };
+
+        let totalP = 0, totalA = 0;
+        Object.values(newMonthlyData).forEach(m => {
+          totalP += (m.present || 0);
+          totalA += (m.absent || 0);
+        });
+
+        return {
+          ...s,
+          summary: { ...s.summary, monthly_data: newMonthlyData, total_present: totalP, total_absent: totalA }
+        };
+      }
+      return s;
+    }));
+  };
+
   const handleInputChange = (studentId, monthId, field, value) => {
     const val = parseInt(value, 10) || 0;
     setStudents(prev => (prev || []).map(s => {
@@ -86,7 +131,14 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
         const currentSummary = s.summary || { monthly_data: {}, total_present: 0, total_absent: 0 };
         const newMonthlyData = { ...(currentSummary.monthly_data || {}) };
         if (!newMonthlyData[monthId]) newMonthlyData[monthId] = { present: 0, absent: 0 };
+
         newMonthlyData[monthId][field] = val;
+
+        // Auto-calculate absent if present is changed
+        if (field === 'present') {
+          const totalDays = workingDays[monthId] || 0;
+          newMonthlyData[monthId].absent = Math.max(0, totalDays - val);
+        }
 
         let totalP = 0, totalA = 0;
         Object.values(newMonthlyData).forEach(m => {
@@ -189,25 +241,43 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 800, border: '1px solid #ddd' }}>
             <TableHead>
-              <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold' }} rowSpan={2}>রোল</TableCell>
-                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold' }} rowSpan={2}>নাম</TableCell>
+              <TableRow sx={{ bgcolor: '#1976d2', color: 'white' }}>
+                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold', color: 'white' }} rowSpan={2}>রোল</TableCell>
+                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold', color: 'white' }} rowSpan={2}>নাম</TableCell>
                 {(visibleMonths || []).map(m => (
-                  <TableCell key={m.id} align="center" colSpan={2} sx={{ border: '1px solid #ddd', fontWeight: 'bold' }}>
+                  <TableCell key={m.id} align="center" colSpan={2} sx={{ border: '1px solid #ddd', fontWeight: 'bold', color: 'white' }}>
                     {m.name}
                   </TableCell>
                 ))}
-                <TableCell align="center" colSpan={2} sx={{ border: '1px solid #ddd', fontWeight: 'bold', bgcolor: '#e3f2fd' }}>মোট</TableCell>
+                <TableCell align="center" colSpan={2} sx={{ border: '1px solid #ddd', fontWeight: 'bold', bgcolor: '#0d47a1', color: 'white' }}>মোট</TableCell>
               </TableRow>
-              <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+              <TableRow sx={{ bgcolor: '#e3f2fd' }}>
                 {(visibleMonths || []).map(m => (
                   <Fragment key={m.id}>
-                    <TableCell align="center" sx={{ border: '1px solid #ddd', fontSize: '0.75rem', p: 0.5 }}>উ:</TableCell>
-                    <TableCell align="center" sx={{ border: '1px solid #ddd', fontSize: '0.75rem', p: 0.5 }}>অ:</TableCell>
+                    <TableCell align="center" sx={{ border: '1px solid #ddd', fontSize: '0.75rem', p: 0.5, fontWeight: 'bold' }}>উপস্থিত</TableCell>
+                    <TableCell align="center" sx={{ border: '1px solid #ddd', fontSize: '0.75rem', p: 0.5, fontWeight: 'bold' }}>অনুপস্থিত</TableCell>
                   </Fragment>
                 ))}
-                <TableCell align="center" sx={{ border: '1px solid #ddd', fontWeight: 'bold', bgcolor: '#e3f2fd' }}>উপস্থিত</TableCell>
-                <TableCell align="center" sx={{ border: '1px solid #ddd', fontWeight: 'bold', bgcolor: '#e3f2fd' }}>অনুপস্থিত</TableCell>
+                <TableCell align="center" sx={{ border: '1px solid #ddd', fontWeight: 'bold', bgcolor: '#bbdefb' }}>উপস্থিত</TableCell>
+                <TableCell align="center" sx={{ border: '1px solid #ddd', fontWeight: 'bold', bgcolor: '#bbdefb' }}>অনুপস্থিত</TableCell>
+              </TableRow>
+              {/* Working Days Row */}
+              <TableRow sx={{ bgcolor: '#fff9c4' }}>
+                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold', fontSize: '0.85rem' }} colSpan={2}>মোট কর্মদিবস (ঐ মাসে):</TableCell>
+                {(visibleMonths || []).map(m => (
+                  <TableCell key={m.id} align="center" colSpan={2} sx={{ border: '1px solid #ddd', p: 0 }}>
+                    <TextField
+                      type="number"
+                      size="small"
+                      value={workingDays[m.id] || ''}
+                      onChange={(e) => handleWorkingDaysChange(m.id, e.target.value)}
+                      inputProps={{ style: { textAlign: 'center', fontWeight: 'bold', color: '#d32f2f' } }}
+                      variant="standard"
+                      sx={{ width: '100%' }}
+                    />
+                  </TableCell>
+                ))}
+                <TableCell colSpan={2} sx={{ bgcolor: '#f5f5f5' }} />
               </TableRow>
             </TableHead>
             <TableBody>
