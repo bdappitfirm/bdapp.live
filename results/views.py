@@ -37,6 +37,17 @@ class ExamSlotViewSet(viewsets.ModelViewSet):
         qs = ExamSlot.objects.filter(school_id=sid).select_related('examination', 'subject', 'classroom', 'section')
         eid = self.request.query_params.get('examination')
         if eid: qs = qs.filter(examination_id=eid)
+
+        section_id = self.request.query_params.get('section')
+        if section_id and section_id != 'null':
+            if ',' in section_id:
+                ids = [s.strip() for s in section_id.split(',') if s.strip().isdigit()]
+                if ids: qs = qs.filter(student__section_id__in=ids)
+            elif section_id.isdigit():
+                qs = qs.filter(student__section_id=int(section_id))
+        elif section_id == 'null':
+            qs = qs.filter(student__section__isnull=True)
+
         return qs
 
 class ExaminationViewSet(viewsets.ModelViewSet):
@@ -209,6 +220,17 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
 
         eid = self.request.query_params.get('examination')
         if eid: qs = qs.filter(examination_id=eid)
+
+        section_id = self.request.query_params.get('section')
+        if section_id and section_id != 'null':
+            if ',' in section_id:
+                ids = [s.strip() for s in section_id.split(',') if s.strip().isdigit()]
+                if ids: qs = qs.filter(student__section_id__in=ids)
+            elif section_id.isdigit():
+                qs = qs.filter(student__section_id=int(section_id))
+        elif section_id == 'null':
+            qs = qs.filter(student__section__isnull=True)
+
         return qs
 
     @action(detail=False, methods=['get'])

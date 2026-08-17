@@ -63,20 +63,42 @@ def calculate_student_overall_result(examination, student):
     # Track unique subjects to handle duplicates (keep the one with higher marks)
     best_results = {} # normalized_name -> result_object
 
+    def is_religion(n):
+        if not n: return False
+        # Remove invisible characters and normalize
+        n_clean = "".join(c for c in str(n) if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+        n_low = n_clean.lower().strip()
+        # Check for any religion keyword
+        keywords = ['religion', 'islam', 'hindu', 'buddhist', 'christian', 'ধর্ম', 'ইসলাম', 'হিন্দু', 'বৌদ্ধ', 'খ্রিস্ট', 'খ্রিষ্ট', 'মরাল', 'moral']
+        return any(kw in n_low for kw in keywords)
+
     for r in all_results:
-        name = r.subject.name.lower()
+        name = r.subject.name
 
         if is_910 and student_group:
-            if student_group == 'science' and any(kw in name for kw in (COMMERCE_SUBJS + ARTS_SUBJS)): continue
-            if student_group == 'commerce' and any(kw in name for kw in (SCIENCE_SUBJS + ARTS_SUBJS)): continue
-            if student_group == 'arts' and any(kw in name for kw in (SCIENCE_SUBJS + COMMERCE_SUBJS)): continue
+            name_low = name.lower()
+            if student_group == 'science' and any(kw in name_low for kw in (COMMERCE_SUBJS + ARTS_SUBJS)): continue
+            if student_group == 'commerce' and any(kw in name_low for kw in (SCIENCE_SUBJS + ARTS_SUBJS)): continue
+            if student_group == 'arts' and any(kw in name_low for kw in (SCIENCE_SUBJS + COMMERCE_SUBJS)): continue
 
-        # Deduplication: normalized subject name as key
-        norm_key = re.sub(r'\s*\(.*?\)\s*', '', name).strip()
+        # Special logic for Religion: keep only ONE religion record (the one with marks)
+        if is_religion(name):
+            norm_key = 'religion_merged'
+        else:
+            # Deduplication: normalized subject name as key
+            norm_key = re.sub(r'\s*\(.*?\)\s*', '', name.lower()).strip()
+
         if norm_key not in best_results or float(r.total_obtained) > float(best_results[norm_key].total_obtained):
             best_results[norm_key] = r
 
     results_to_process = list(best_results.values())
+
+    # 2nd pass deduplication for Religion (ensure we don't have multiple religion names)
+    rel_results = [r for r in results_to_process if is_religion(r.subject.name)]
+    if len(rel_results) > 1:
+        rel_results.sort(key=lambda x: -float(x.total_obtained))
+        best_rel = rel_results[0]
+        results_to_process = [r for r in results_to_process if not is_religion(r.subject.name)] + [best_rel]
 
     # Filter out excluded subjects for GPA
     EXCLUDED_SUBJECTS = [
@@ -117,8 +139,11 @@ def calculate_student_overall_result(examination, student):
     results_to_calculate = main_results if main_results else results_to_process
     count = len(results_to_calculate)
 
-    # Calculate totals (Main subjects only)
-    total_obtained = sum(float(r.total_obtained) for r in results_to_calculate)
+    # Calculate literal total obtained marks for display (Main subjects only)
+    literal_total_obtained = sum(float(r.total_obtained) for r in results_to_calculate)
+
+    # Calculate internal total for GPA calculation (Main subjects only)
+    total_obtained_for_gpa = sum(float(r.total_obtained) for r in results_to_calculate)
 
     # Improved total_possible calculation (Main subjects only)
     group = _class_group(getattr(examination.classroom, "name", None))
@@ -131,15 +156,17 @@ def calculate_student_overall_result(examination, student):
             total_possible += float(examination.total_marks)
 
     # Optional Marks Bonus (Above 40%) - Following standard merit rules
+    bonus_marks = 0
     if optional_result:
         opt_obtained = float(optional_result.total_obtained)
         maxima = get_subject_maxima(group, getattr(optional_result.subject, "name", None))
         opt_possible = (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0))) if maxima else 100
         opt_threshold = opt_possible * 0.4
         if opt_obtained > opt_threshold:
-            total_obtained += (opt_obtained - opt_threshold)
+            bonus_marks = (opt_obtained - opt_threshold)
+            total_obtained_for_gpa += bonus_marks
 
-    percentage = (total_obtained / total_possible * 100) if total_possible > 0 else 0
+    percentage = (total_obtained_for_gpa / total_possible * 100) if total_possible > 0 else 0
     
     PAPER_1_PAT = re.compile(r'(১ম|1st|first|১ম\s*পত্র|1st\s*paper)', re.IGNORECASE)
     PAPER_2_PAT = re.compile(r'(২য়|২য়|2nd|second|২য়\s*পত্র|২য়\s*পত্র|2nd\s*paper)', re.IGNORECASE)
@@ -229,32 +256,84 @@ def calculate_student_overall_result(examination, student):
 
     # Calculate failed subjects count for ranking
     # Improved logic: count both actual F and missing mandatory subjects
-    failed_subjects_count = sum(1 for r in results_to_calculate if not r.is_passed)
+    failed_subjects_count = 0
+    failed_subjects_list = []
 
-    # Check for missing mandatory subjects (like BGS or Religion)
-    mandatory_names = ['bangla', 'english', 'math', 'religion', 'ict', 'science', 'bgs']
-    present_names = [r.subject.name.lower() for r in results_to_calculate]
-    for m in mandatory_names:
-        if not any(m in p for p in present_names):
-            # Special check for religion
-            if m == 'religion' and any(x in str(present_names) for x in ['islam', 'hindu', 'ধর্ম']): continue
+    # RELIGION SPECIAL CASE: A student passes 'Religion' if they pass ANY religion subject
+    religion_subjects = [r for r in results_to_calculate if is_religion(r.subject.name)]
+    has_any_religion_pass = any(r.is_passed for r in religion_subjects)
+
+    for r in results_to_calculate:
+        if is_religion(r.subject.name):
+            # Only count as fail if ALL religion subjects are failed
+            if not has_any_religion_pass:
+                # To avoid duplicate 'Religion' in failed list, only add for the first record
+                if r == religion_subjects[0]:
+                    failed_subjects_count += 1
+                    failed_subjects_list.append("ধর্ম")
+        elif not r.is_passed:
             failed_subjects_count += 1
+            failed_subjects_list.append(r.subject.name)
+
+    # Check for missing mandatory subjects (Bangla/English/Math/Religion/ICT/Science/BGS)
+    mandatory_keywords = {
+        'bangla': (['bangla', 'বাংলা'], 'বাংলা'),
+        'english': (['english', 'ইংরেজি', 'ইংরেজী'], 'ইংরেজি'),
+        'math': (['math', 'গণিত', 'গনিত'], 'গণিত'),
+        'religion': (['religion', 'ধর্ম', 'islam', 'hindu', 'ইসলাম', 'হিন্দু', 'buddhist', 'christian', 'বৌদ্ধ', 'খ্রিস্ট', 'খ্রিষ্ট'], 'ধর্ম'),
+        'ict': (['ict', 'আইসিটি', 'তথ্য'], 'আইসিটি'),
+        'science': (['science', 'বিজ্ঞান'], 'বিজ্ঞান'),
+        'bgs': (['bgs', 'bangladesh', 'global', 'বাংলাদেশ', 'বিশ্বপরিচয়', 'বিশ্বপরিচয়', 'সমাজ'], 'বাংলাদেশ ও বিশ্বপরিচয়')
+    }
+
+    present_names_str = " ".join([r.subject.name.lower() for r in results_to_calculate])
+    # Pre-clean string for robust matching
+    present_names_str = "".join(c for c in present_names_str if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+
+    for m, (keywords, label) in mandatory_keywords.items():
+        # Check if ANY keyword from this mandatory group is present in the student's results
+        if not any(kw in present_names_str for kw in keywords):
+            # Special case for 9-10 science: they take BGS, others take Science
+            if is_910:
+                if m == 'science' and student_group == 'science': continue
+                if m == 'bgs' and student_group != 'science' and student_group: continue
+
+            # Special case for Religion: if they have any religion pass, don't mark as missing
+            if m == 'religion' and has_any_religion_pass: continue
+
+            failed_subjects_count += 1
+            failed_subjects_list.append(label)
+
+    # Deduplicate failed subjects list
+    failed_subjects_list = list(set(failed_subjects_list))
+
+    # Determine if passed
+    is_passed_overall = (failed_subjects_count == 0) and all(r.is_passed for r in results_to_calculate if not is_religion(r.subject.name))
+    if is_passed_overall and religion_subjects and not has_any_religion_pass:
+        is_passed_overall = False
+
+    # RE-SYNC literal_total_obtained to include ALL subjects (Main + Optional + CA)
+    # This sum matches what users see in Result Card / Class Results
+    # Use results_to_process which contains ALL valid subjects before optional/excluded filtering
+    literal_total_obtained = sum(float(r.total_obtained) for r in results_to_process)
 
     # Create or update overall result
     try:
-        overall_result, created = StudentOverallResult.objects.update_or_create(
+        # Force delete existing to ensure clean recalculation without stale data
+        StudentOverallResult.objects.filter(examination=examination, student=student).delete()
+
+        overall_result = StudentOverallResult.objects.create(
             examination=examination,
             student=student,
-            defaults={
-                'academic_year': examination.year,
-                'total_marks_obtained': total_obtained,
-                'total_marks_possible': total_possible,
-                'percentage': percentage,
-                'cgpa': cgpa,
-                'grade': grade,
-                'is_passed': is_passed,
-                'failed_subjects_count': failed_subjects_count
-            }
+            academic_year=examination.year,
+            total_marks_obtained=literal_total_obtained,
+            total_marks_possible=total_possible,
+            percentage=percentage,
+            cgpa=cgpa,
+            grade=grade,
+            is_passed=is_passed_overall,
+            failed_subjects_count=failed_subjects_count,
+            failed_subjects_list=failed_subjects_list
         )
 
         # Calculate ranks for all students in this examination
@@ -266,33 +345,50 @@ def calculate_student_overall_result(examination, student):
 
 def calculate_ranks(examination):
     """
-    Calculate and assign ranks to all students in an examination.
-    Ranks are based on CGPA and total marks within each section.
+    Calculate and assign ranks to all students in an examination, grouped by section.
+    Ranks are based on:
+    1. Fewer Fails (Mandatory subjects)
+    2. Higher CGPA
+    3. Higher Total Marks Obtained
+    4. Lower Roll Number
     """
     from academics.models import Section
-    
+    import re
+
+    def get_roll_num(roll_str):
+        if not roll_str: return 999999
+        try:
+            return int(re.sub(r'\D', '', str(roll_str)))
+        except:
+            return 999999
+
     # Get all sections associated with this examination's class
-    sections = Section.objects.filter(classroom=examination.classroom)
+    sections = list(Section.objects.filter(classroom=examination.classroom))
     
-    if sections.exists():
+    if sections:
         for section in sections:
-            # Get all overall results for this examination and this section
-            # Priority: 1. Fails (asc), 2. Total Marks (desc), 3. CGPA (desc), 4. Percentage (desc)
-            overall_results = StudentOverallResult.objects.filter(
+            # Get all overall results for this section
+            overall_results = list(StudentOverallResult.objects.filter(
                 examination=examination,
                 student__section=section
-            ).order_by('failed_subjects_count', '-total_marks_obtained', '-cgpa', '-percentage')
-            
-            # Assign ranks within the section with tie-breaking logic
+            ))
+
+            # Sort in Python to handle complex logic and roll number parsing
+            overall_results.sort(key=lambda x: (
+                x.failed_subjects_count,
+                -float(x.cgpa),
+                -float(x.total_marks_obtained),
+                get_roll_num(x.student.roll_number)
+            ))
+
+            # Assign ranks within section with tie-breaking
             last_rank = 0
             last_values = None
             for i, result in enumerate(overall_results, start=1):
-                # Criteria for tie-breaking
                 current_values = (
                     result.failed_subjects_count,
-                    result.total_marks_obtained,
-                    result.cgpa,
-                    result.percentage
+                    float(result.cgpa),
+                    float(result.total_marks_obtained)
                 )
 
                 if current_values != last_values:
@@ -303,25 +399,23 @@ def calculate_ranks(examination):
                     result.rank = last_rank
                     result.save(update_fields=['rank'])
     else:
-        # Fallback to class-wide ranking if no sections are defined
-        overall_results = StudentOverallResult.objects.filter(
+        # Fallback to class-wide if no sections
+        overall_results = list(StudentOverallResult.objects.filter(
             examination=examination
-        ).order_by('failed_subjects_count', '-total_marks_obtained', '-cgpa', '-percentage')
-        
+        ))
+        overall_results.sort(key=lambda x: (
+            x.failed_subjects_count,
+            -float(x.cgpa),
+            -float(x.total_marks_obtained),
+            get_roll_num(x.student.roll_number)
+        ))
         last_rank = 0
         last_values = None
         for i, result in enumerate(overall_results, start=1):
-            current_values = (
-                result.failed_subjects_count,
-                result.total_marks_obtained,
-                result.cgpa,
-                result.percentage
-            )
-
+            current_values = (result.failed_subjects_count, float(result.cgpa), float(result.total_marks_obtained))
             if current_values != last_values:
                 last_rank = i
                 last_values = current_values
-
             if result.rank != last_rank:
                 result.rank = last_rank
                 result.save(update_fields=['rank'])

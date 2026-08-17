@@ -53,7 +53,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
   const qrData = `STU|${data?.id}|${name}|${school?.id}`;
 
   const toBnDigits = (v) => {
-    return String(v ?? '');
+    return String(v ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
   };
   const getExamTypeBn = () => {
     const raw = String(exam?.name || exam?.exam_type || '').toLowerCase();

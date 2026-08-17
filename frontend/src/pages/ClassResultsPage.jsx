@@ -30,7 +30,7 @@ const getSubjectMaxima = (name, isNT) => {
 
   const isPracticalScience = lower.includes('পদার্থ') || lower.includes('physics') || lower.includes('রসায়ন') || lower.includes('রসায়ন') || lower.includes('chemistry') || lower.includes('জীব') || lower.includes('biology') || lower.includes('উচ্চতর') || lower.includes('higher');
   const isAgriHome = lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics');
-  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার');
+  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার') || lower.includes('word') || lower.includes('book') || lower.includes('পড়া') || lower.includes('পড়া') || lower.includes('achievement');
 
   if (isNT) {
     if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
@@ -38,7 +38,7 @@ const getSubjectMaxima = (name, isNT) => {
   } else {
     if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
     if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
-    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 50 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('islam') || lower.includes('hindu') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
 
@@ -53,12 +53,28 @@ const computeGpa = (pct) => {
 
 const normalizeSubjKey = (n) => {
     const low = String(n).toLowerCase().trim();
+    // Use very strict detection for papers to avoid English word matching 'i'
+    const is2 = /([- ](২য়|২য়|2nd|second|ii|দ্বি[তত]ীয|দ্বিতীয়|দ্বিতীয়)(\s|$))|(\bii\b)/i.test(low);
+    const has1 = /([- ]([১1]ম|1st|first|i|প্রথম)(\s|$))|(\bi\b)/i.test(low);
+
     if (low.includes('higher') || low.includes('উচ্চতর')) return 'higher';
     if (low.includes('math') || low.includes('গণিত')) return 'math';
     if (low.includes('history') || low.includes('ইতিহাস') || low.includes('সভ্যতা')) return 'history';
-    if (low.includes('bgs') || (low.includes('বাংলাদেশ') && (low.includes('পরিচয়') || low.includes('পরিচয়'))) || low.includes('global studies')) return 'bgs';
-    if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) return 'bangla';
-    if (low.includes('english') || low.includes('ইংরেজি')) return 'english';
+    if (low.includes('bgs') || (low.includes('বাংলাদেশ') && (low.includes('পরিচয়') || low.includes('পরিচয়') || low.includes('বিজিএস'))) || (low.includes('বাঃ') && low.includes('পরিচয়')) || low.includes('global studies')) return 'bgs';
+
+    if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) {
+        if (is2 && !has1) return 'bangla_p2';
+        if (has1 && !is2) return 'bangla_p1';
+        if (is2 && has1) return 'bangla_combined';
+        return 'bangla';
+    }
+    if (low.includes('english') || low.includes('ইংরেজি') || low.includes('ইংরেজী')) {
+        if (is2 && !has1) return 'english_p2';
+        if (has1 && !is2) return 'english_p1';
+        if (is2 && has1) return 'english_combined';
+        return 'english';
+    }
+
     if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
     if (low.includes('ict') || low.includes('তথ্য') || low.includes('information') || low.includes('communication') || low.includes('technology')) return 'ict';
     if (low.includes('physics') || low.includes('পদার্থ')) return 'physics';
@@ -72,6 +88,10 @@ const normalizeSubjKey = (n) => {
     if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
     if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
     if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
+
+    if (is2 && !has1) return low.replace(/([২2][য়য়য]|2nd|second|ii|দ্বিতীয়|দ্বিতীয়)/gi, '').replace(/[- ]/g, '').trim() + '_p2';
+    if (has1 && !is2) return low.replace(/([১1][ম]|1st|first|i|প্রথম)/gi, '').replace(/[- ]/g, '').trim() + '_p1';
+
     return low;
 };
 
@@ -84,8 +104,9 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
     const g = String(studentGroup || '').toLowerCase();
     const checkPaper = (base) => {
         if (isNT) return [base];
-        const hasP1 = Array.from(classSubjs).some(s => normalizeSubjKey(s) === base && !s.includes('2nd') && !s.includes('২য়') && !s.includes('২য়') && !s.includes('second'));
-        const hasP2 = Array.from(classSubjs).some(s => normalizeSubjKey(s) === base && (s.includes('2nd') || s.includes('২য়') || s.includes('২য়') || s.includes('second')));
+        const normSubjs = Array.from(classSubjs).map(s => normalizeSubjKey(s));
+        const hasP1 = normSubjs.some(k => k === base + '_p1');
+        const hasP2 = normSubjs.some(k => k === base + '_p2');
         if (hasP1 || hasP2) {
             const res = [];
             if (hasP1) res.push(base + '_p1');
@@ -121,8 +142,8 @@ const CO_CURRICULAR = [
 ];
 const isRelSubj = (n) => /religion|islam|hindu|buddhist|christian|ধর্ম|ইসলাম|হিন্দু|বৌদ্ধ|খ্রিস্ট/i.test(String(n));
 
-const BN_1ST_REGEX = /[১1]ম|প্রথম|1st|first/i;
-const BN_2ND_REGEX = /[২2][য়য়]|দ্বিতীয়|2nd|second/i;
+const BN_1ST_REGEX = /(^|[\s-])([১1]ম|1st|first|প্রথম|\bi\b|1)(\s|$|পত্র|paper|part)/i;
+const BN_2ND_REGEX = /(^|[\s-])([২2][য়য]়?|2nd|second|দ্বিতীয়|দ্বিতীয়|\bii\b|2)(\s|$|পত্র|paper|part)/i;
 
 const inferGroup = (resList, isNT) => {
     if (!isNT || !resList || resList.length === 0) return '';
@@ -165,6 +186,7 @@ export default function ClassResultsPage() {
   const [students, setStudents] = useState([]);
   const [resultsByStudent, setResultsByStudent] = useState(new Map());
   const [overallTotals, setOverallTotals] = useState(new Map());
+  const [backendRanks, setBackendRanks] = useState(new Map());
   const [loading, setLoading] = useState(false);
 
   const isClassNineOrTen = useMemo(() => {
@@ -237,33 +259,64 @@ export default function ClassResultsPage() {
   }, [location.search]);
 
   useEffect(() => {
-    scopedGet('/api/academics/sections/', id, { classroom: selectedClass }).then(res => { if (isMounted.current) setSections(Array.isArray(res.data) ? res.data : (res.data?.results || [])); });
-    scopedGet('/api/academics/students/', id, { classroom: selectedClass, section: selectedSection, page_size: 500 }).then(res => { if (isMounted.current) setStudents(res.data.results || res.data || []); });
+    if (!id || !selectedClass) return;
+    const currentId = id;
+    const currentClass = selectedClass;
+    const currentSection = selectedSection;
+
+    scopedGet('/api/academics/sections/', currentId, { classroom: currentClass }).then(res => {
+        if (isMounted.current && currentId === id && currentClass === selectedClass)
+            setSections(Array.isArray(res.data) ? res.data : (res.data?.results || []));
+    });
+
+    scopedGet('/api/academics/students/', currentId, { classroom: currentClass, section: currentSection, page_size: 500 }).then(res => {
+        if (isMounted.current && currentId === id && currentClass === selectedClass && currentSection === selectedSection)
+            setStudents(res.data.results || res.data || []);
+    });
   }, [id, selectedClass, selectedSection]);
 
 
   const lastFetched = React.useRef("");
-  useEffect(() => {
-    const fetchKey = `${selectedClass}-${selectedSection}-${selectedYear}-${studentListFiltered.length}`;
-    if (fetchKey === lastFetched.current) return;
+  const fetchController = React.useRef(null);
 
-    if (!selectedClass || studentListFiltered.length === 0) {
-        if (studentListFiltered.length === 0 && !loading) {
-            setResultsByStudent(new Map()); setOverallTotals(new Map());
+  useEffect(() => {
+    const fetchKey = `${id}-${selectedClass}-${selectedSection}-${selectedYear}-${studentListFiltered.length}`;
+    if (fetchKey === lastFetched.current || !id || !selectedClass || studentListFiltered.length === 0) {
+        // Only clear results if explicitly no classroom is selected
+        if (!selectedClass && resultsByStudent.size > 0) {
+            setResultsByStudent(new Map());
+            setOverallTotals(new Map());
+            lastFetched.current = "";
         }
         return;
     }
+
     lastFetched.current = fetchKey;
+    if (fetchController.current) fetchController.current.abort();
+    fetchController.current = new AbortController();
+
     setLoading(true);
+    const currentSchoolId = id;
+
     (async () => {
-        let allResults = [], page = 1, hasNext = true;
-        while (hasNext && page <= 25) {
-            const res = await scopedGet('/api/results/results/', id, { classroom: selectedClass, section: selectedSection, year: selectedYear, page, page_size: 500 });
-            const data = res.data;
-            allResults = allResults.concat(Array.isArray(data) ? data : (data.results || []));
-            if (data.next) page++; else hasNext = false;
-        }
-        if (isMounted.current === false) return;
+        try {
+            let allResults = [], page = 1, hasNext = true;
+            while (hasNext && page <= 25) {
+                const res = await scopedGet('/api/results/results/', currentSchoolId, {
+                    classroom: selectedClass,
+                    section: selectedSection,
+                    year: selectedYear,
+                    page,
+                    page_size: 500
+                });
+                if (!isMounted.current || currentSchoolId !== id) return;
+
+                const data = res.data;
+                allResults = allResults.concat(Array.isArray(data) ? data : (data.results || []));
+                if (data.next) page++; else hasNext = false;
+            }
+
+            if (!isMounted.current) return;
 
         const classSubjects = new Set();
         allResults.forEach(r => {
@@ -283,10 +336,15 @@ export default function ClassResultsPage() {
             const relResults = stuRes.filter(r => isRelSubj(r.subject?.name || r.subject_name));
             let suppressedIds = new Set();
             if (relResults.length > 1) {
-                const withMarks = relResults.map(r => ({
-                    sid: String(r.subject?.id || r.subject || r.subject_name),
-                    total: (parseFloat(r.total_obtained) || (parseFloat(r.written_marks)||0) + (parseFloat(r.mcq_marks)||0) + (parseFloat(r.practical_marks)||0))
-                })).filter(x => x.total > 0).sort((a, b) => b.total - a.total);
+                const withMarks = relResults.map(r => {
+                    const w = sumStr(r.written_marks), m = sumStr(r.mcq_marks), p = sumStr(r.practical_marks);
+                    const hasActual = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null);
+                    const total = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
+                    return { sid: String(r.subject?.id || r.subject || r.subject_name), total, hasActual };
+                }).filter(x => x.total > 0).sort((a, b) => {
+                    if (a.hasActual !== b.hasActual) return a.hasActual ? -1 : 1;
+                    return b.total - a.total;
+                });
 
                 if (withMarks.length > 0) {
                     const bestRelSubId = withMarks[0].sid;
@@ -310,41 +368,62 @@ export default function ClassResultsPage() {
                 const sid = String(r.subject?.id || r.subject || r.subject_name);
                 if (suppressedIds.has(sid)) return;
 
-                const rawName = String(r.subject?.name || r.subject_name).toLowerCase().trim();
-                let normKey = normalizeSubjKey(rawName);
-                let key = normKey;
-
-                // ALWAYS distinguish papers during deduplication to prevent data loss
-                const is2 = /(২য়|২য়|2nd|second| ii | ii$| 2)/i.test(rawName);
-                const has1 = /(১ম|1st|first| i | i$| 1)/i.test(rawName);
-
-                if (normKey === 'bangla' || normKey === 'english') {
-                    if (is2 && !has1) key = normKey + '_p2';
-                    else if (has1 && !is2) key = normKey + '_p1';
-                    else key = normKey + '_combined';
-                }
+                const rawName = String(r.subject_name || r.subject?.name || '').toLowerCase().trim();
+                let key = normalizeSubjKey(rawName);
 
                 // Skip redundant combined records if specific papers exist (Matches Merit List logic)
                 const isCombined = !rawName.match(/(1st|2nd|১ম|২য়|২য়)/);
                 const hasSpecificPapers = stuRes.some(x => {
                     const xName = String(x.subject?.name || x.subject_name || '').toLowerCase();
-                    return normalizeSubjKey(xName) === normKey && xName.match(/(1st|2nd|১ম|২য়|২য়)/);
+                    const xKey = normalizeSubjKey(xName);
+                    // Match by prefix (e.g., english_p1 matches english) or exact match
+                    return (xKey.startsWith(key.split('_')[0]) && xName.match(/(1st|2nd|১ম|২য়|২য়)/)) || xKey === key + '_p1' || xKey === key + '_p2';
                 });
                 if (isClassNineOrTen && isCombined && hasSpecificPapers) return;
 
                 const w = sumStr(r.written_marks), m = sumStr(r.mcq_marks), p = sumStr(r.practical_marks);
                 const rTotal = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
-                const hasInput = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null) || (parseFloat(r.total_obtained) > 0);
+
+                // CRITICAL: hasMarks should only be true if actual part marks are entered.
+                // This prevents junk "total_obtained" records from overriding real data.
+                const hasActualMarks = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null);
+                const hasInput = hasActualMarks || (parseFloat(r.total_obtained) > 0);
 
                 // Prefer record with marks (Aggressive Deduplication)
                 const existing = subjectMap.get(key);
-                if (!existing || rTotal > (existing.total_obtained || 0) || (hasInput && !existing.hasMarks)) {
-                    subjectMap.set(key, { ...r, sumW: w, sumM: m, sumP: p, hasMarks: hasInput, total_obtained: rTotal });
+                // Priority: 1. Record with actual part marks, 2. Higher total
+                if (!existing || (hasActualMarks && !existing.hasActualMarks) || (hasActualMarks === !!existing.hasActualMarks && rTotal > (existing.total_obtained || 0))) {
+                    subjectMap.set(key, { ...r, sumW: w, sumM: m, sumP: p, hasMarks: hasInput, hasActualMarks, total_obtained: rTotal, standard_key: key });
                 }
             });
             cleanedMap.set(String(s.id), Array.from(subjectMap.values()));
         }
         setResultsByStudent(cleanedMap);
+
+        // Fetch overall results to get backend ranks
+        try {
+            const examRes = await scopedGet('/api/results/examinations/', currentSchoolId, {
+                classroom: selectedClass,
+                year: selectedYear,
+                page_size: 5
+            });
+            const exams = Array.isArray(examRes.data) ? examRes.data : (examRes.data?.results || []);
+            if (exams.length > 0) {
+                const latestExam = exams[0];
+                const overallRes = await scopedGet('/api/results/overall/', currentSchoolId, {
+                    examination: latestExam.id,
+                    page_size: 1000
+                });
+                const overallData = Array.isArray(overallRes.data) ? overallRes.data : (overallRes.data?.results || []);
+                const rankMap = new Map();
+                overallData.forEach(item => {
+                    rankMap.set(String(item.student?.id || item.student), item.rank);
+                });
+                if (isMounted.current) setBackendRanks(rankMap);
+            }
+        } catch (e) {
+            console.warn("Could not fetch backend ranks:", e);
+        }
 
         const totals = new Map();
         for (const stu of studentListFiltered) {
@@ -352,13 +431,7 @@ export default function ClassResultsPage() {
             const resList = cleanedMap.get(sid) || [];
             const virtualMap = new Map();
             resList.forEach(r => {
-                const nm = String(r.subject?.name || r.subject_name || '').toLowerCase();
-                let key = normalizeSubjKey(nm);
-                if (isClassNineOrTen && (key === 'bangla' || key === 'english')) { } else if (key === 'bangla' || key === 'english') {
-                    const is2 = nm.includes('2nd') || nm.includes('২য়') || nm.includes('২য়') || nm.includes('second');
-                    const has1 = nm.includes('1st') || nm.includes('১ম') || nm.includes('first') || nm.includes('পত্র') || nm.includes('paper');
-                    if (is2 || has1) { key = key + (is2 ? '_p2' : '_p1'); }
-                }
+                const key = r.standard_key || normalizeSubjKey(r.subject?.name || r.subject_name || '');
                 if (!virtualMap.has(key)) virtualMap.set(key, []);
                 virtualMap.get(key).push(r);
             });
@@ -426,7 +499,16 @@ export default function ClassResultsPage() {
             let electiveCounted = false;
 
             allKeys.forEach(key => {
-                const papers = virtualMap.get(key) || [];
+                let papers = virtualMap.get(key) || [];
+                // নবম-দশম শ্রেণির জন্য বাংলা ও ইংরেজির সকল পেপার একত্রিত করি (টোটাল ক্যালকুলেশনের জন্য)
+                if (isClassNineOrTen && (key === 'bangla' || key === 'english')) {
+                    papers = [
+                        ...(virtualMap.get(key + '_p1') || []),
+                        ...(virtualMap.get(key + '_p2') || []),
+                        ...(virtualMap.get(key + '_combined') || []),
+                        ...(virtualMap.get(key) || [])
+                    ];
+                }
                 const isRel = isRelSubj(key);
                 let isMandatory = expectedKeys.has(key);
 
@@ -478,8 +560,14 @@ export default function ClassResultsPage() {
                     if (r.hasMarks) { hasAnyMarks = true; isAnyPaperPresentForSub = true; }
                     const w = r.sumW, m = r.sumM, pr = r.sumP;
                     const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen);
-                    totalW += w; totalM += m; totalP += pr; totalObtained += (w + m + pr) > 0 ? (w + m + pr) : (parseFloat(r.total_obtained) || 0);
-                    totalPossible += (spec.cq + spec.mcq + spec.pr || 100);
+                    const paperMax = (spec.cq + spec.mcq + spec.pr || 100);
+
+                    let obtained = (w + m + pr) > 0 ? (w + m + pr) : (parseFloat(r.total_obtained) || 0);
+                    // Surgical Cap: ensure obtained marks do not exceed total possible
+                    if (obtained > paperMax) obtained = paperMax;
+
+                    totalW += w; totalM += m; totalP += pr; totalObtained += obtained;
+                    totalPossible += paperMax;
                     cqM += spec.cq; mcqM += spec.mcq; prM += spec.pr;
                 });
                 if (isClassNineOrTen && (key === 'bangla' || key === 'english')) {
@@ -518,10 +606,15 @@ export default function ClassResultsPage() {
         if (isMounted.current) {
             setResultsByStudent(cleanedMap);
             setOverallTotals(totals);
-            setLoading(false);
         }
+    } catch (err) {
+        if (err.name !== 'AbortError') console.error("Fetch error:", err);
+    } finally {
+        if (isMounted.current && currentSchoolId === id) setLoading(false);
+    }
     })();
-  }, [id, selectedClass, selectedSection, selectedYear, studentListFiltered, isClassNineOrTen, currentGroupFromURL, detectedGroup]);
+    return () => { if (fetchController.current) fetchController.current.abort(); };
+  }, [id, selectedClass, selectedSection, selectedYear, studentListFiltered.length, isClassNineOrTen, currentGroupFromURL, detectedGroup]);
 
   const displaySubjects = useMemo(() => {
     const set = new Set();
@@ -533,17 +626,8 @@ export default function ClassResultsPage() {
 
     resultsByStudent.forEach(list => list.forEach(r => {
         if (r.hasMarks) {
-            const rawName = String(r.subject?.name || r.subject_name || '');
-            const normKey = normalizeSubjKey(rawName);
-            let key = normKey;
-
-            // পত্র (Paper 1/2) অনুযায়ী আলাদা কি (key) তৈরি করি (শুধুমাত্র ৬ষ্ঠ-অষ্টম শ্রেণির জন্য)
-            if (!isClassNineOrTen && (normKey === 'bangla' || normKey === 'english')) {
-                const is2 = BN_2ND_REGEX.test(rawName) || rawName.includes('2nd') || rawName.includes('second');
-                const has1 = BN_1ST_REGEX.test(rawName) || rawName.includes('1st') || rawName.includes('first') || rawName.includes('পত্র') || rawName.includes('paper');
-                if (is2) key = normKey + '_p2';
-                else if (has1) key = normKey + '_p1';
-            }
+            const rawName = String(r.subject_name || r.subject?.name || '');
+            const key = r.standard_key || normalizeSubjKey(rawName);
 
             // যদি এই কি (key) আগে না থাকে, তবে যোগ করি
             if (!subjectsWithMarks.has(key)) {
@@ -556,14 +640,20 @@ export default function ClassResultsPage() {
         // নবম-দশম শ্রেণিতে বাংলা ও ইংরেজি আলাদা কলামে না দেখিয়ে মার্জ করা কলামে দেখানো হয়
         if (isClassNineOrTen && (key.startsWith('bangla') || key.startsWith('english'))) return;
 
+        // ধর্ম সমন্বয়: হিন্দু ধর্ম বা ইসলাম শিক্ষা যাই হোক, সব 'ধর্ম' হিসেবে দেখাবো
+        if (isRelSubj(label)) {
+            set.add({ label: 'ধর্ম', key: 'religion_merged' });
+            return;
+        }
+
         // নবম-দশম শ্রেণিতে গ্রুপ অনুযায়ী সাবজেক্ট ফিল্টারিং (আরও কঠোর করা হলো)
         if (isClassNineOrTen && g) {
             const lLow = label.toLowerCase();
-            const isScienceSub = sciOnly.some(x => lLow.includes(x.toLowerCase()));
-            const isCommerceSub = comOnly.some(x => lLow.includes(x.toLowerCase()));
-            const isHumanitiesSub = artOnly.some(x => lLow.includes(x.toLowerCase()));
-            const isBGS = /bgs|bangladesh|global|বাংলাদেশ ও বিশ্ব|বিশ্বপরিচয়/i.test(lLow);
-            const isGenScience = /^(science|বিজ্ঞান|general science|সাধারণ বিজ্ঞান)$/i.test(lLow.trim());
+            const isScienceSub = key === 'physics' || key === 'chemistry' || key === 'biology' || key === 'higher' || sciOnly.some(x => lLow.includes(x.toLowerCase()));
+            const isCommerceSub = key === 'accounting' || key === 'finance' || key === 'business' || comOnly.some(x => lLow.includes(x.toLowerCase()));
+            const isHumanitiesSub = key === 'history' || key === 'geography' || key === 'civics' || key === 'economics' || artOnly.some(x => lLow.includes(x.toLowerCase())) || lLow.includes('ভুগোল');
+            const isBGS = key === 'bgs' || /bgs|bangladesh|global|বাংলাদেশ ও বিশ্ব|বিশ্বপরিচয়/i.test(lLow);
+            const isGenScience = key === 'science' || /^(science|বিজ্ঞান|general science|সাধারণ বিজ্ঞান)$/i.test(lLow.trim());
 
             if (g === 'science') {
                 if (isCommerceSub || isHumanitiesSub || isGenScience) return;
@@ -610,17 +700,17 @@ export default function ClassResultsPage() {
     if (relResults.length > 1) {
         const withMarks = relResults.filter(r => (parseFloat(r.total_obtained) > 0));
         if (withMarks.length > 0) {
-            const bestRelKey = String(withMarks[0].subject?.name || withMarks[0].subject_name).toLowerCase();
+            const bestRelKey = (withMarks[0].standard_key || normalizeSubjKey(withMarks[0].subject?.name || withMarks[0].subject_name)).toLowerCase();
             relResults.forEach(r => {
-                const rKey = String(r.subject?.name || r.subject_name).toLowerCase();
+                const rKey = (r.standard_key || normalizeSubjKey(r.subject?.name || r.subject_name)).toLowerCase();
                 if (rKey !== bestRelKey) suppressedKeys.add(rKey);
             });
         } else {
             const islam = relResults.find(r => /islam|ইসলাম/i.test(r.subject?.name || r.subject_name));
             const primaryRel = islam || relResults[0];
-            const pKey = String(primaryRel.subject?.name || primaryRel.subject_name).toLowerCase();
+            const pKey = (primaryRel.standard_key || normalizeSubjKey(primaryRel.subject?.name || primaryRel.subject_name)).toLowerCase();
             relResults.forEach(r => {
-                const rKey = String(r.subject?.name || r.subject_name).toLowerCase();
+                const rKey = (r.standard_key || normalizeSubjKey(r.subject?.name || r.subject_name)).toLowerCase();
                 if (rKey !== pKey) suppressedKeys.add(rKey);
             });
         }
@@ -651,33 +741,32 @@ export default function ClassResultsPage() {
             list = list.filter(r => { const ln = String(r.subject?.name || r.subject_name).toLowerCase(); if (/higher|উচ্চতর/.test(ln)) return showHM; if (/agriculture|home|কৃষি|গার্হস্থ্য/.test(ln)) return !showHM; return true; });
         }
     }
-    const m = new Map(), b = [], e = [];
+    const m = new Map(), b = [], e = [], rel = [];
     list.forEach(r => {
-        const nm = String(r.subject?.name || r.subject_name || ''), low = nm.toLowerCase();
-        if (suppressedKeys.has(low)) return;
+        const key = (r.standard_key || normalizeSubjKey(r.subject_name || r.subject?.name || '')).toLowerCase();
+        if (suppressedKeys.has(key)) return;
 
-        const normKey = normalizeSubjKey(nm);
-        let key = normKey;
-
-        if (isClassNineOrTen) {
-            if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('বিশ্ব')) { b.push(r); return; }
-            if (low.includes('english') || low.includes('ইংরেজি')) { e.push(r); return; }
-        } else {
-            // For Class 6-8, use standardized keys for lookup to handle spelling variations
-            const is2 = BN_2ND_REGEX.test(nm) || low.includes('2nd') || low.includes('second');
-            const has1 = BN_1ST_REGEX.test(nm) || low.includes('1st') || low.includes('first') || low.includes('পত্র') || low.includes('paper');
-            if (normKey === 'bangla' || normKey === 'english') {
-                if (is2) key = normKey + '_p2'; else if (has1) key = normKey + '_p1';
-            }
+        if (isRelSubj(r.subject?.name || r.subject_name)) {
+            rel.push(r);
+            return;
         }
 
-        const w = parseFloat(r.written_marks)||0, mcq = parseFloat(r.mcq_marks)||0, pr = parseFloat(r.practical_marks)||0, tot = w + mcq + pr, has = r.hasMarks;
-        const spec = getSubjectMaxima(nm, isClassNineOrTen);
+        if (isClassNineOrTen) {
+            if (key.startsWith('bangla')) { b.push(r); return; }
+            if (key.startsWith('english')) { e.push(r); return; }
+        }
+
+        const w = parseFloat(r.written_marks)||0, mcq = parseFloat(r.mcq_marks)||0, pr = parseFloat(r.practical_marks)||0, has = r.hasMarks;
+        const spec = getSubjectMaxima(r.subject_name || r.subject?.name || '', isClassNineOrTen);
+        const totalPossible = (spec.cq + spec.mcq + spec.pr || 100);
+        let tot = w + mcq + pr;
+        if (tot > totalPossible) tot = totalPossible;
+
         const p = []; if (spec.cq > 0) p.push(r.written_marks !== '' ? Math.round(w) : '0'); if (spec.mcq > 0) p.push(r.mcq_marks !== '' ? Math.round(mcq) : '0'); if (spec.pr > 0) p.push(r.practical_marks !== '' ? Math.round(pr) : '0');
         const cqPass = spec.cq === 0 || w >= Math.round(spec.cq * 0.33 - 0.5),
               mcqPass = spec.mcq === 0 || mcq >= Math.round(spec.mcq * 0.33 - 0.5),
               prPass = spec.pr === 0 || pr >= Math.round(spec.pr * 0.33 - 0.5),
-              totPass = tot >= Math.round((spec.cq + spec.mcq + spec.pr) * 0.33 - 0.5);
+              totPass = tot >= Math.round(totalPossible * 0.33 - 0.5);
         const isPassed = has && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
         m.set(key, { total: tot, display: (has && tot > 0) ? (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot))) : (has && tot === 0 ? '0' : 'Absent'), is_passed: isPassed, hasMarks: has });
     });
@@ -698,6 +787,7 @@ export default function ClassResultsPage() {
         return { total: sum, display: disp, is_passed: anyM && (isClassNineOrTen ? (cqP && mcqP && prP && totP) : totP), hasMarks: anyM };
     };
     if (isClassNineOrTen) { if (b.length>0) m.set('merged-bangla', merge(b, 'merged-bangla')); if (e.length>0) m.set('merged-english', merge(e, 'merged-english')); }
+    if (rel.length > 0) m.set('religion_merged', merge(rel, 'religion_merged'));
     return m;
   }, [resultsByStudent, isClassNineOrTen]);
 
@@ -706,16 +796,21 @@ export default function ClassResultsPage() {
     studentListFiltered.forEach(stu => {
         const data = overallTotals.get(String(stu.id));
         if (!data) return;
+        // Grouping by Section ID is crucial for section-wise ranking
         const secId = (selectedSection ? 'single' : (stu.section?.id || stu.section || 'other'));
         if (!sectionGroups.has(secId)) sectionGroups.set(secId, []);
         sectionGroups.get(secId).push({ ...data, sid: String(stu.id) });
     });
+
     const ranks = new Map();
     sectionGroups.forEach(scores => {
         scores.sort((a, b) => {
             if (a.isAbsent !== b.isAbsent) return a.isAbsent ? 1 : -1;
-            // Standard board priority: 1. Fewer Fails, 2. Higher GPA (points), 3. Higher Total Marks (rawScore), 4. Roll Number
-            return (a.fails - b.fails) || (b.points - a.points) || (b.rawScore - a.rawScore) || (a.roll - b.roll);
+            // Standard board priority within section: 1. Fewer Fails, 2. Higher GPA, 3. Higher Total, 4. Roll
+            if (a.fails !== b.fails) return a.fails - b.fails;
+            if (Math.abs(b.points - a.points) > 0.0001) return b.points - a.points;
+            if (Math.abs(b.rawScore - a.rawScore) > 0.01) return b.rawScore - a.rawScore;
+            return a.roll - b.roll;
         });
         scores.forEach((s, i) => {
             ranks.set(s.sid, i + 1);
@@ -781,7 +876,10 @@ export default function ClassResultsPage() {
                       const display = r?.display === 'Absent' || (!r && mandatory) ? <span style={{ color: 'red', fontWeight: 'normal' }}>Absent</span> : (r?.display || '');
                       return <TableCell key={sub.key} align="center" sx={{ color: isF ? 'red' : 'inherit' }}>{display}</TableCell>;
                   }); })()}
-                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{stuData?.total || 0}</TableCell><TableCell align="center" sx={{ fontWeight: 'bold', color: stuData?.isAbsent ? 'red' : 'inherit' }}>{meritRanks.get(String(stu.id)) || '--'}</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{stuData?.total || 0}</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', color: stuData?.isAbsent ? 'red' : 'inherit' }}>
+                    {meritRanks.get(String(stu.id)) || '--'}
+                  </TableCell>
                 </TableRow>
               );
             })}</TableBody>

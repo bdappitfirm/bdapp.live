@@ -110,9 +110,17 @@ SECTION_MAXIMA = {
         "চারু ও কারুকলা": {"written": 50, "mcq": 0, "practical": 0},
         
         # Physical Education
-        "physical education": {"written": 0, "mcq": 0, "practical": 50}, # Assumption
+        "physical education": {"written": 0, "mcq": 0, "practical": 50},
         "শারীরিক শিক্ষা": {"written": 0, "mcq": 0, "practical": 50},
         "শারীরিক শিক্ষা ও স্বাস্থ্য": {"written": 0, "mcq": 0, "practical": 50},
+
+        # Book Reading / Continuous Assessment
+        "book reading": {"written": 50, "mcq": 0, "practical": 0},
+        "বই পড়া": {"written": 50, "mcq": 0, "practical": 0},
+        "বই পড়া": {"written": 50, "mcq": 0, "practical": 0},
+        "word achievement": {"written": 50, "mcq": 0, "practical": 0},
+        "word collection": {"written": 50, "mcq": 0, "practical": 0},
+        "wcat": {"written": 50, "mcq": 0, "practical": 0},
     },
     "nine_ten": {
         # Bangla
@@ -210,14 +218,19 @@ SECTION_MAXIMA = {
         "কৃষি": DIST_50_25_25,
         "কৃষি শিক্ষা": DIST_50_25_25,
         
-        "career education": {"written": 50, "mcq": 0, "practical": 0},
-        "ক্যারিয়ার শিক্ষা": {"written": 50, "mcq": 0, "practical": 0},
+        "career education": {"written": 0, "mcq": 0, "practical": 100},
+        "ক্যারিয়ার শিক্ষা": {"written": 0, "mcq": 0, "practical": 100},
+        "book reading": {"written": 0, "mcq": 0, "practical": 100},
+        "বই পড়া": {"written": 0, "mcq": 0, "practical": 100},
+        "word achievement": {"written": 0, "mcq": 0, "practical": 100},
+        "wcat": {"written": 0, "mcq": 0, "practical": 100},
+
         "গার্হস্থ্য বিজ্ঞান": DIST_50_25_25,
         "home economics": DIST_50_25_25,
 
-        "physical education": {"written": 0, "mcq": 0, "practical": 50}, # Assumption
-        "শারীরিক শিক্ষা": {"written": 0, "mcq": 0, "practical": 50},
-        "শারীরিক শিক্ষা ও স্বাস্থ্য": {"written": 0, "mcq": 0, "practical": 50},
+        "physical education": {"written": 0, "mcq": 0, "practical": 100},
+        "শারীরিক শিক্ষা": {"written": 0, "mcq": 0, "practical": 100},
+        "শারীরিক শিক্ষা ও স্বাস্থ্য": {"written": 0, "mcq": 0, "practical": 100},
     }
 }
 
@@ -283,7 +296,10 @@ def get_subject_maxima(group, subject_name):
         'কৃষি': 'কৃষি',
         'গার্হস্থ্য': 'গার্হস্থ্য',
         'agriculture': 'agriculture',
-        'home economics': 'home economics'
+        'home economics': 'home economics',
+        'book reading': 'book reading',
+        'word achievement': 'word achievement',
+        'physical education': 'physical education'
     }
 
     for kw, target in keywords_map.items():

@@ -23,17 +23,17 @@ def transliterate_bangla(text):
     # Mapping of Bangla characters to English phonetic equivalents
     mapping = {
         'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
-        'চ': 'ch', 'ছ': 'sh', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
+        'চ': 'ch', 'ছ': 's', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
         'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
         'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
-        'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
-        'য': 'z', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
+        'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'v', 'ম': 'm',
+        'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
         'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y', 'ৎ': 't', 'ং': 'ng', 'ঃ': 'h', 'ঁ': 'n',
         'অ': 'o', 'আ': 'a', 'ই': 'i', 'ঈ': 'i', 'উ': 'u', 'ঊ': 'u', 'ঋ': 'ri',
         'এ': 'e', 'ঐ': 'oi', 'ও': 'o', 'ঔ': 'ou',
         'া': 'a', 'ি': 'i', 'ী': 'i', 'ু': 'u', 'ূ': 'u', 'ৃ': 'ri',
         'ে': 'e', 'ৈ': 'oi', 'ো': 'o', 'ৌ': 'ou',
-        '্': '', '্য': 'y', '্র': 'r', '্ব': 'b', '্ল': 'l',
+        '্': '', '্য': 'y', '্র': 'r', '্ব': 'b', '্ল': 'l', '়': '',
         '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
     }
 
@@ -41,7 +41,12 @@ def transliterate_bangla(text):
     special_names = {
         'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
         'আক্তার': 'Aktar', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam',
-        'রহমান': 'Rahman', 'মো:': 'Md.', 'মোঃ': 'Md.', 'মোসাম্মৎ': 'Mst.', 'মোসা:': 'Mst.', 'মোসাঃ': 'Mst.'
+        'রহমান': 'Rahman', 'মো:': 'Md.', 'মোঃ': 'Md.', 'মোসাম্মৎ': 'Mst.', 'মোসা:': 'Mst.', 'মোসাঃ': 'Mst.',
+        'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
+        'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
+        'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
+        'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
+        'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful'
     }
 
     # Handle common titles first
@@ -67,9 +72,15 @@ def transliterate_bangla(text):
                 next_char = word[j+1]
                 if next_char in mapping and not is_vowel(next_char) and char != '্':
                     # Add 'a' or 'o' based on common patterns
-                    if len(word) > 3 and j == 0: result += "a"
-                    elif word == 'ওমর' or char == 'ম': result += "o"
-                    else: result += "a"
+                    if char == 'ম' or word == 'ওমর':
+                        result += "o"
+                    elif j == 0:
+                        result += "a"
+                    else:
+                        # Only add 'a' if the previous character was NOT a vowel
+                        prev_char = word[j-1]
+                        if prev_char in mapping and not is_vowel(prev_char):
+                            result += "a"
 
         translated_words.append(result.capitalize())
 

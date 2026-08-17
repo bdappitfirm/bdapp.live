@@ -49,4 +49,4 @@ class StudentOverallResultSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = StudentOverallResult
-        fields = ['id', 'examination', 'student', 'student_roll_number', 'total_marks_obtained', 'total_marks_possible', 'percentage', 'cgpa', 'grade', 'rank', 'is_passed', 'failed_subjects_count']
+        fields = ['id', 'examination', 'student', 'student_roll_number', 'total_marks_obtained', 'total_marks_possible', 'percentage', 'cgpa', 'grade', 'rank', 'is_passed', 'failed_subjects_count', 'failed_subjects_list']

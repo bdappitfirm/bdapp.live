@@ -127,6 +127,10 @@ const SUB_MAP = {
   'তথ্য ও যোগাযোগ প্রযুক্তি': 'ICT',
   'আইসিটি': 'ICT',
   'ict': 'ICT',
+  'বাংলা প্রথম পত্র': 'Bangla 1st Paper',
+  'বাংলা দ্বিতীয় পত্র': 'Bangla 2nd Paper',
+  'ইংরেজি প্রথম পত্র': 'English 1st Paper',
+  'ইংরেজি দ্বিতীয় পত্র': 'English 2nd Paper',
   'বাংলা ১ম পত্র': 'Bangla 1st Paper',
   'বাংলা ২য় পত্র': 'Bangla 2nd Paper',
   'ইংরেজি ১ম পত্র': 'English 1st Paper',
@@ -219,8 +223,8 @@ const SUB_MAP = {
   'Bangla-১ম Paper': 'Bangla 1st Paper'
 };
 
-const BN_TO_EN_PAPER_REGEX_1 = /[- ]?[১1]ম\s*(পত্র|paper|part)?/gi;
-const BN_TO_EN_PAPER_REGEX_2 = /[- ]?[২2][য়য]়?\s*(পত্র|paper|part)?/gi;
+const BN_TO_EN_PAPER_REGEX_1 = /[- ]?([১1]ম|1st|first|প্রথম)\s*(পত্র|paper|part)?/gi;
+const BN_TO_EN_PAPER_REGEX_2 = /[- ]?([২2][য়য]়?|2nd|second|দ্বিতীয়|দ্বিতীয়)\s*(পত্র|paper|part)?/gi;
 
 const OPT_SUB_MAP = {
   'উচ্চতর গণিত': 'Higher Mathematics',
@@ -304,7 +308,7 @@ const getSubjectMaxima = (name, isClassNineOrTen) => {
 
   const isPracticalScience = lower.includes('পদার্থ') || lower.includes('physics') || lower.includes('রসায়ন') || lower.includes('রসায়ন') || lower.includes('chemistry') || lower.includes('জীব') || lower.includes('biology') || lower.includes('উচ্চতর') || lower.includes('higher');
   const isAgriHome = lower.includes('কৃষি') || lower.includes('agriculture') || lower.includes('গার্হস্থ্য') || lower.includes('home science') || lower.includes('home economics');
-  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার');
+  const isCA = lower.includes('শারীরিক') || lower.includes('physical') || lower.includes('career') || lower.includes('ক্যারিয়ার') || lower.includes('ক্যারিয়ার') || lower.includes('word') || lower.includes('book') || lower.includes('পড়া') || lower.includes('পড়া') || lower.includes('achievement');
 
   if (isClassNineOrTen) {
     if (isPracticalScience || isAgriHome) return { cq: 50, mcq: 25, pr: 25 };
@@ -312,7 +316,7 @@ const getSubjectMaxima = (name, isClassNineOrTen) => {
   } else {
     if (isPracticalScience) return { cq: 50, mcq: 25, pr: 25 };
     if (isAgriHome) return { cq: 35, mcq: 15, pr: 0 };
-    if (isCA) return { cq: 0, mcq: 0, pr: 100 };
+    if (isCA) return { cq: 0, mcq: 0, pr: 50 };
     if (lower.includes('ধর্ম') || lower.includes('religion') || lower.includes('islam') || lower.includes('hindu') || lower.includes('ইসলাম') || lower.includes('হিন্দ')) return { cq: 70, mcq: 30, pr: 0 };
   }
 
@@ -346,16 +350,21 @@ const transliterateBnToEn = (text) => {
     'চ': 'Ch', 'ছ': 'Chh', 'জ': 'J', 'ঝ': 'Jh', 'ঞ': 'N',
     'ট': 'T', 'ঠ': 'Th', 'ড': 'D', 'ঢ': 'Dh', 'ণ': 'N',
     'ত': 'T', 'থ': 'Th', 'দ': 'D', 'ধ': 'Dh', 'ন': 'N',
-    'প': 'P', 'ফ': 'F', 'ব': 'B', 'ভ': 'Bh', 'ম': 'M',
-    'য': 'Z', 'র': 'R', 'ল': 'L', 'শ': 'Sh', 'ষ': 'Sh', 'স': 'S', 'হ': 'H',
+    'প': 'P', 'ফ': 'F', 'ব': 'B', 'ভ': 'V', 'ম': 'M',
+    'য': 'J', 'র': 'R', 'ল': 'L', 'শ': 'Sh', 'ষ': 'Sh', 'স': 'S', 'হ': 'H',
     'ড়': 'R', 'ঢ়': 'Rh', 'য়': 'Y', 'ৎ': 'T', 'ং': 'Ng', 'ঃ': 'H', 'ঁ': '',
-    'া': 'A', 'ি': 'I', 'ী': 'I', 'ু': 'U', 'ূ': 'U', 'ৃ': 'Ri', 'ে': 'E', 'ৈ': 'Oi', 'ো': 'O', 'ৌ': 'Ou', '্': ''
+    'া': 'A', 'ি': 'I', 'ী': 'I', 'ু': 'U', 'ূ': 'U', 'ৃ': 'Ri', 'ে': 'E', 'ৈ': 'Oi', 'ো': 'O', 'ৌ': 'Ou', '্': '', '়': ''
   };
 
   // Special cases for common name parts
   const specialNames = {
     'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
-    'আক্তার': 'Aktar', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam', 'রহমান': 'Rahman'
+    'আক্তার': 'Aktar', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam', 'রহমান': 'Rahman',
+    'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
+    'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
+    'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
+    'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
+    'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful'
   };
 
   let words = text.split(/\s+/);
@@ -373,9 +382,12 @@ const transliterateBnToEn = (text) => {
       // Logic for implicit 'o/a' vowels between consonants
       if (bnToEnMap[char] && !isVowel(char) && nextChar && bnToEnMap[nextChar] && !isVowel(nextChar) && char !== '্') {
         // If current and next are consonants, add an implicit vowel based on common names
-        if (word.length > 3 && i === 0) result += "a"; // e.g., Mariyam
-        else if (word === 'ওমর' || char === 'ম') result += "o";
-        else result += "a";
+        if (char === 'ম' || word === 'ওমর') result += "o";
+        else if (i === 0) result += "a";
+        else {
+          const prevChar = word[i-1];
+          if (prevChar && !isVowel(prevChar)) result += "a";
+        }
       }
     }
     return result;
@@ -688,9 +700,9 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     const resultsMap = new Map();
     const getPaperKey = (nm) => {
       const low = nm.toLowerCase();
-      const p = (low.includes('১ম') || low.includes('1st') || low.includes('first') || low.includes(' i ') || low.endsWith(' i') || low.includes(' 1')) ? '1' :
-                (low.includes('২য়') || low.includes('২য়') || low.includes('2nd') || low.includes('second') || low.includes(' ii ') || low.endsWith(' ii') || low.includes(' 2')) ? '2' : '';
-      const b = low.replace(/(১ম|২য়|২য়|1st|2nd|first|second|paper|পত্র|\bi\b|\bii\b| 1| 2)/gi, '').replace(/\s*\(.*?\)\s*/g, '').trim();
+      const p = /(১ম|1st|first|প্রথম|\bi\b| 1)/i.test(low) ? '1' :
+                /(২য়|২য়|2nd|second|দ্বিতীয়|দ্বিতীয়|\bii\b| 2)/i.test(low) ? '2' : '';
+      const b = low.replace(/(১ম|২য়|২য়|1st|2nd|first|second|প্রথম|দ্বিতীয়|দ্বিতীয়|paper|পত্র|\bi\b|\bii\b| 1| 2)/gi, '').replace(/\s*\(.*?\)\s*/g, '').trim();
       return b + (p ? `_p${p}` : '');
     };
     allRecalculated.forEach(r => {
@@ -707,25 +719,38 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
 
             const partsToRemove = [/continuous assessment/g, /achievement test/g, /ব্যবহারিক/g, /প্রাকটিক্যাল/g, /practical/g, /ধারাবাহিক মূল্যায়ন/g];
             partsToRemove.forEach(p => { low = low.replace(p, ''); });
-            low = low.trim().replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
 
+            // 1. Try exact match in SUB_MAP with original name (preserving parentheses for paper identification)
             for (const [bn, en] of Object.entries(SUB_MAP)) {
                 if (low === bn.toLowerCase().trim() || low === en.toLowerCase().trim()) {
                     const base = en.toLowerCase();
-                    return isClassNineOrTen ? getPaperKey(base) : base;
+                    return isClassNineOrTen ? getPaperKey(low) : base;
                 }
             }
-            return isClassNineOrTen ? getPaperKey(low) : low;
+
+            // 2. Cleanup Noise and Parentheses for secondary matching
+            const lowCleaned = low.trim().replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+
+            // 3. Try match in SUB_MAP with cleaned name
+            for (const [bn, en] of Object.entries(SUB_MAP)) {
+                if (lowCleaned === bn.toLowerCase().trim() || lowCleaned === en.toLowerCase().trim()) {
+                    const base = en.toLowerCase();
+                    return isClassNineOrTen ? getPaperKey(low) : base;
+                }
+            }
+
+            // 4. Final Fallback (Call getPaperKey on RAW low if Class 9-10 to catch parentheses paper info)
+            return isClassNineOrTen ? getPaperKey(low) : lowCleaned;
         };
 
         const normKey = getNormKey(name);
         if (!normKey) return;
 
         // Skip redundant combined records if specific papers exist (Matches Merit List logic)
-        const isCombined = !name.match(/(1st|2nd|১ম|২য়|২য়)/);
+        const isCombined = !name.match(/(1st|2nd|১ম|২য়|২য়|first|second|প্রথম|দ্বিতীয়|দ্বিতীয়)/i);
         const hasSpecificPapers = allRecalculated.some(x => {
             const xName = (x.subject?.name || x.subject_name || '').toLowerCase();
-            return getNormKey(xName).startsWith(normKey.split('_')[0]) && xName.match(/(1st|2nd|১ম|২য়|২য়)/);
+            return getNormKey(xName).startsWith(normKey.split('_')[0]) && xName.match(/(1st|2nd|১ম|২য়|২য়|first|second|প্রথম|দ্বিতীয়|দ্বিতীয়)/i);
         });
         if (isClassNineOrTen && isCombined && hasSpecificPapers) return;
 
@@ -849,8 +874,8 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
 
       const getPaperNum = (nm) => {
         const low = String(nm || '').toLowerCase();
-        if (low.includes('১ম') || low.includes('1st') || low.includes('first') || low.includes(' i ') || low.endsWith(' i') || low.includes(' 1')) return 1;
-        if (low.includes('২য়') || low.includes('২য়') || low.includes('2nd') || low.includes('second') || low.includes(' ii ') || low.endsWith(' ii') || low.includes(' 2')) return 2;
+        if (/(১ম|1st|first|প্রথম|\bi\b| 1)/i.test(low)) return 1;
+        if (/(২য়|২য়|2nd|second|দ্বিতীয়|দ্বিতীয়|\bii\b| 2)/i.test(low)) return 2;
         return 1;
       };
 
@@ -950,9 +975,9 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
           const sname = (r.subject?.name || r.subject_name || '').toLowerCase().trim();
           if (!handledSubjectIds.has(String(sid)) && !handledSubjectIds.has(sname)) merged.push(r);
       });
-      return { main: sortSubjectsByOrder(merged, allRecalculated, studentGroup), optional: sortSubjectsByOrder(optionalResults, allRecalculated, studentGroup), coCurricular: coCurricularResults };
+      return { main: sortSubjectsByOrder(merged, allRecalculated, studentGroup), optional: sortSubjectsByOrder(optionalResults, allRecalculated, studentGroup), coCurricular: sortSubjectsByOrder(coCurricularResults, allRecalculated, studentGroup) };
     }
-    return { main: sortSubjectsByOrder(mainResults, allRecalculated, studentGroup), optional: sortSubjectsByOrder(optionalResults, allRecalculated, studentGroup), coCurricular: coCurricularResults };
+    return { main: sortSubjectsByOrder(mainResults, allRecalculated, studentGroup), optional: sortSubjectsByOrder(optionalResults, allRecalculated, studentGroup), coCurricular: sortSubjectsByOrder(coCurricularResults, allRecalculated, studentGroup) };
   }, [allRecalculated, isClassNineOrTen, student]);
 
   const finalSummary = useMemo(() => {
@@ -1344,7 +1369,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                             <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: 'inherit' }}>{finalSummary.grade}</Typography>
                             <Typography sx={{ fontWeight: 900, fontSize: '0.85rem', color: 'inherit', lineHeight: 1.1 }}>
                               {finalSummary.isPassed
-                                ? `${l.merit}: ${n(overallResult?.rank_in_section ?? overallResult?.rank ?? '--')}`
+                                ? `${l.merit}: ${n(studentData?.rank_in_section ?? studentData?.rank ?? overallResult?.rank_in_section ?? overallResult?.rank ?? '--')}`
                                 : (forceLanguage === 'bn' ? 'ফলাফল: অনুত্তীর্ণ' : 'Result: Failed')}
                             </Typography>
                           </Box>

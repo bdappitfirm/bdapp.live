@@ -230,7 +230,8 @@ class StudentOverallResult(models.Model):
     rank = models.IntegerField(null=True, blank=True)
     is_passed = models.BooleanField(default=False)
     failed_subjects_count = models.IntegerField(default=0)
-    
+    failed_subjects_list = models.JSONField(default=list, blank=True)
+
     class Meta:
         unique_together = ('examination', 'student')
         ordering = ['-cgpa', 'student']

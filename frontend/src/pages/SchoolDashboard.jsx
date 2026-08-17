@@ -137,8 +137,11 @@ const SchoolDashboard = () => {
     if (item.key === 'billing') {
         return String(id) === '6' || isSuperUser;
     }
+    if (item.key === 'rank-list') {
+        return username === 'bdadmin';
+    }
     return true;
-  }), [menuItems, isSuperUser, id]);
+  }), [menuItems, isSuperUser, id, username]);
 
   const toggleSubmenu = (label) => {
     setOpenSubmenus(prev => ({ ...prev, [label]: !prev[label] }));

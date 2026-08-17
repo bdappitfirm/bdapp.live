@@ -159,17 +159,30 @@ export const transliterateBangla = (text) => {
   // Mapping of Bangla characters to English phonetic equivalents
   const mapping = {
     'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
-    'চ': 'ch', 'ছ': 'sh', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
+    'চ': 'ch', 'ছ': 's', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
     'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
     'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
-    'প': 'p', 'ফ': 'p', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
-    'য': 'z', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
+    'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'v', 'ম': 'm',
+    'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
     'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y', 'ৎ': 't', 'ং': 'ng', 'ঃ': 'h', 'ঁ': 'n',
     'অ': 'o', 'আ': 'a', 'ই': 'i', 'ঈ': 'i', 'উ': 'u', 'ঊ': 'u', 'ঋ': 'ri',
     'এ': 'e', 'ঐ': 'oi', 'ও': 'o', 'ঔ': 'ou',
     'া': 'a', 'ি': 'i', 'ী': 'i', 'ু': 'u', 'ূ': 'u', 'ৃ': 'ri',
     'ে': 'e', 'ৈ': 'oi', 'ো': 'o', 'ৌ': 'ou',
-    '্': '', '্য': 'y', '্র': 'r', '্ব': 'b', '্ল': 'l'
+    '্': '', '্য': 'y', '্র': 'r', '্ব': 'b', '্ল': 'l', '়': ''
+  };
+
+  const specialNames = {
+    'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
+    'আক্তার': 'Aktar', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam',
+    'রহমান': 'Rahman', 'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
+    'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
+    'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
+    'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
+    'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful',
+    'হক': 'Haque', 'মিলন': 'Milon', 'ইমদাদুল': 'Emdadul', 'এমদাদুল': 'Emdadul',
+    'শেখ': 'Sheikh', 'খন্দকার': 'Khandaker', 'চৌধুরী': 'Chowdhury', 'আহমেদ': 'Ahmed',
+    'মাহমুদ': 'Mahmud', 'হাসান': 'Hasan', 'হোসাইন': 'Hossain'
   };
 
   let result = text;
@@ -181,37 +194,45 @@ export const transliterateBangla = (text) => {
                  .replace(/মোসা:/g, 'Mst.')
                  .replace(/মোসাঃ/g, 'Mst.');
 
-  // Special handling for common name suffixes and patterns
-  result = result.replace(/উদ্দীন/g, 'uddin')
-                 .replace(/ইসলাম/g, 'islam')
-                 .replace(/রহমান/g, 'rahman')
-                 .replace(/আহমেদ/g, 'ahmed')
-                 .replace(/খান/g, 'khan')
-                 .replace(/চৌধুরী/g, 'chowdhury')
-                 .replace(/বেগম/g, 'begum')
-                 .replace(/মন্ডল/g, 'mondal')
-                 .replace(/বিশ্বাস/g, 'biswas')
-                 .replace(/সরকার/g, 'sarkar');
+  const isVowel = (c) => 'অআইঈউঊঋএঐওঔািীুূৃেৈোৌ'.includes(c);
 
-  let output = "";
-  for (let i = 0; i < result.length; i++) {
-    const char = result[i];
+  const words = result.split(/\s+/);
+  const output = words.map(word => {
+    if (specialNames[word]) return specialNames[word];
 
-    // Handle inherent vowel 'o' for some cases or specific character combinations
-    // For simplicity in names, we stay with basic mapping but can add rules here.
+    let wordOutput = "";
+    for (let i = 0; i < word.length; i++) {
+      const char = word[i];
+      const nextChar = word[i+1];
 
-    if (mapping[char] !== undefined) {
-      output += mapping[char];
-    } else {
-      output += char;
+      if (mapping[char] !== undefined) {
+        wordOutput += mapping[char];
+
+        // Implicit vowel logic: if current char is consonant and next char is consonant
+        if (!isVowel(char) && nextChar && mapping[nextChar] !== undefined && !isVowel(nextChar) && char !== '্') {
+          if (char === 'ম' || word === 'ওমর') {
+            wordOutput += "o";
+          } else if (i === 0) {
+            wordOutput += "a";
+          } else {
+            const prevChar = word[i-1];
+            if (prevChar && !isVowel(prevChar)) {
+              wordOutput += "a";
+            }
+          }
+        }
+      } else {
+        wordOutput += char;
+      }
     }
-  }
+    return wordOutput;
+  }).join(' ');
 
   // Cleanup: remove multiple spaces, fix capitalization
-  output = output.replace(/\s+/g, ' ').trim();
+  let finalOutput = output.replace(/\s+/g, ' ').trim();
 
   // Return with proper casing (Capitalize Each Word)
-  return output.split(' ').map(word => {
+  return finalOutput.split(' ').map(word => {
     if (!word) return '';
     // Handle honorifics that should stay abbreviated
     if (word.toLowerCase() === 'md') return 'Md.';

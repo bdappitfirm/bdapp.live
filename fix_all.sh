@@ -27,8 +27,18 @@ echo "🔧 Ensuring permissions..."
 chown -R www-data:www-data $BACKEND_DIR
 chmod +x $BACKEND_DIR/.venv/bin/* 2>/dev/null || true
 
-# 4. Restart Services
+# 4. Profile Name Fix (Transliteration)
+echo "📝 Fixing profile names (Bangla -> English)..."
+$VENV_PYTHON auto_translate.py --force
+
+# 5. Fix CA Subjects (Book Reading, Physical Ed, etc. pass status)
+echo "📝 Fixing CA subjects pass status..."
+$VENV_PYTHON fix_ca_subjects.py
+
+# 6. Restart Services
 echo "🔄 Restarting Gunicorn & Daphne..."
 systemctl restart gunicorn daphne
+# Note: Backend merit recalculation skipped because frontend now calculates on-the-fly.
+
 
 echo "✅ Update Successful! No unnecessary cleanup performed."
