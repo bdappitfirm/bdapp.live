@@ -1,57 +1,665 @@
-# sync_live_to_local.ps1
-# Super Robust Sync Script for bdapp.live
-# No complex dependencies required. Handles DB and Media separately.
+# ====================================================================
+# sync_live_to_local.ps1  -  LIVE -> LOCAL  (DATA ONLY)
+# ====================================================================
+# Purpose:
+#   Pull ONLY user/admin-entered DATA from the live server database.
+#   NO code, NO logic, NO schema, NO migration files, NO settings
+#   are ever downloaded from LIVE to LOCAL.
+#
+# Design rules:
+#   1. LIVE db is READ-ONLY to us: only SELECT / pg_dump --data-only
+#   2. LOCAL db existing rows are PRESERVED  (ON CONFLICT DO NOTHING)
+#   3. NO DROP / TRUNCATE / CREATE TABLE / ALTER TABLE anywhere
+#   4. Tables are synced in FOREIGN-KEY dependency order
+#   5. Only specific tables (student/user/profile + result chain) are synced
+#   6. Media files: only referenced profile/school photos, skip if local exists
+# ====================================================================
 
-$VPS_IP = "103.112.62.72"
-$USER = "root"
-$REMOTE_DB_NAME = "local_pg_db" 
-$LOCAL_DB_NAME = "local_pg_db"  
-$LOCAL_DB_USER = "local_pg_user"
-$LOCAL_DB_PASSWORD = "Bangladesh@4321$" 
+# ---------------- CONFIGURATION  (edit these as needed) ----------------
+$VPS_IP          = "103.112.62.72"
+$SSH_USER        = "root"
+$REMOTE_DB_NAME  = "local_pg_db"
+$REMOTE_DB_USER  = "postgres"
+$LOCAL_DB_NAME   = "local_pg_db"
+$LOCAL_DB_USER   = "local_pg_user"
+$LOCAL_DB_PASS   = "Bangladesh@4321$"
+$REMOTE_APP_DIR  = "/var/www/bdapp"
 
-Write-Host "`n🔄 Initializing Secure Data Sync..." -ForegroundColor Cyan
+# Tables to sync - ORDER MATTERS (parents before children for FKs)
+# Each entry = "schema.table_name"
+$SYNC_TABLES = @(
+    "public.schools_school",
+    "public.users_user",
+    "public.academics_classroom",
+    "public.academics_section",
+    "public.academics_subject",
+    "public.academics_subject_classrooms",
+    "public.academics_subject_sections",
+    "public.users_profile",
+    "public.academics_studentprofile",
+    "public.academics_building",
+    "public.academics_room",
+    "public.results_examination",
+    "public.results_examslot",
+    "public.academics_examseatplan",
+    "public.results_result",
+    "public.results_studentoverallresult",
+    "public.academics_teacherassignment",
+    "public.academics_virtualclass",
+    "public.academics_studentyearrecord"
+)
 
-# --- 1. Find PostgreSQL Path ---
+# ---------------- UTILITY: find psql ----------------
 $psql = "psql"
 $commonPsqlPaths = @(
     "C:\Program Files\PostgreSQL\17\bin\psql.exe",
     "C:\Program Files\PostgreSQL\16\bin\psql.exe",
-    "C:\Program Files\PostgreSQL\15\bin\psql.exe"
+    "C:\Program Files\PostgreSQL\15\bin\psql.exe",
+    "C:\Program Files\PostgreSQL\14\bin\psql.exe"
 )
-foreach ($p in $commonPsqlPaths) { if (Test-Path $p) { $psql = "`"$p`""; break } }
+foreach ($p in $commonPsqlPaths) {
+    if (Test-Path $p) { $psql = "`"$p`""; break }
+}
+$env:PGPASSWORD = $LOCAL_DB_PASS
 
-# --- 2. Database Sync (Using temporary file for Windows stability) ---
-Write-Host "[1/2] Syncing Database Records (No password needed now)..." -ForegroundColor Yellow
-$env:PGPASSWORD = $LOCAL_DB_PASSWORD
+# ---------------- TEMP FILES ----------------
+$TMP_DIR       = Join-Path $PWD "tmp_sync_$(Get-Date -Format 'yyyyMMddHHmmss')"
+$TMP_DUMP_SQL  = Join-Path $TMP_DIR "live_data_dump.sql"
+$TMP_MEDIA_LIST= Join-Path $TMP_DIR "live_media_list.txt"
+$TMP_REMOTE_DUMP = "/tmp/live_local_sync_$(Get-Date -Format 'yyyyMMddHHmmss').sql"
+$TMP_REMOTE_MEDIA = "/tmp/live_local_sync_media_$(Get-Date -Format 'yyyyMMddHHmmss').txt"
+
+$ERRORS = [System.Collections.Generic.List[string]]::new()
+$MEDIA_COPIED = 0
+$MEDIA_SKIPPED = 0
+
+function Write-Step($msg, $color='Yellow') { Write-Host "`n==> $msg" -ForegroundColor $color }
+function Write-Info($msg) { Write-Host "    $msg" -ForegroundColor Gray }
+function Write-Err($msg)  { Write-Host "  !! $msg" -ForegroundColor Red; $ERRORS.Add($msg) }
+
+# ====================================================================
+# STEP 0: Housekeeping
+# ====================================================================
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "   LIVE -> LOCAL  DATA SYNC  (DATA ONLY - NO CODE/LOGIC)"    -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
 
 try {
-    # Dump on server
-    ssh "${USER}@${VPS_IP}" "sudo -u postgres pg_dump --clean --if-exists --no-owner --no-privileges $REMOTE_DB_NAME > /tmp/db_sync.sql"
-
-    # Download to local
-    scp "${USER}@${VPS_IP}:/tmp/db_sync.sql" ./db_sync.sql
-
-    # Restore locally
-    & cmd /c "$psql -U $LOCAL_DB_USER -d $LOCAL_DB_NAME -f ./db_sync.sql" | Out-Null
-
-    Write-Host "✅ Database Synced Successfully." -ForegroundColor Green
+    New-Item -ItemType Directory -Path $TMP_DIR -Force | Out-Null
 } catch {
-    Write-Host "❌ Database sync failed! Check if PostgreSQL is running locally." -ForegroundColor Red
+    Write-Err "Failed to create temp dir $TMP_DIR : $_"
+    exit 1
 }
 
-# --- 3. Media Sync (Student Photos, etc.) ---
-Write-Host "`n[2/2] Syncing Media Files (Images)..." -ForegroundColor Yellow
-if (!(Test-Path "media")) { New-Item -ItemType Directory -Path "media" | Out-Null }
+# ====================================================================
+# STEP 1: Pre-flight - ensure local schema exists, capture BEFORE counts
+# ====================================================================
+Write-Step "Step 1/6 : Pre-flight checks + BEFORE count snapshot"
+try {
+    Invoke-Expression "& cmd /c $psql -U $LOCAL_DB_USER -d $LOCAL_DB_NAME -v ON_ERROR_STOP=1 -f live_db_sync.sql 2>&1" | Out-Null
+    Write-Info "Schema OK, BEFORE counts recorded."
+} catch {
+    Write-Err "Pre-flight check FAILED: $_"
+    Write-Host "  -> Run `python manage.py migrate` in the backend to create tables first." -ForegroundColor Yellow
+    exit 1
+}
 
-Write-Host "🚀 Syncing images from VPS..." -ForegroundColor Gray
-# Standard scp for broad compatibility
-scp -r "${USER}@${VPS_IP}:/var/www/bdapp/media/*" ./media/
+# ====================================================================
+# STEP 2: Dump ONLY the required tables (DATA ONLY - NO schema) from LIVE
+# ====================================================================
+Write-Step "Step 2/6 : Extracting DATA-ONLY dump from LIVE server (pg_dump, read-only)"
 
-# --- 4. Cleanup ---
-Write-Host "`n🧹 Cleaning up temporary files..." -ForegroundColor Gray
-ssh "${USER}@${VPS_IP}" "rm /tmp/db_sync.sql"
-if (Test-Path "./db_sync.sql") { Remove-Item "./db_sync.sql" -Force }
+# Build pg_dump -t list
+$tableArgs = ($SYNC_TABLES | ForEach-Object { "-t $_" }) -join " "
 
-Write-Host "`n✨ SYNC COMPLETE!" -ForegroundColor Green
-Write-Host "Your local project is now up-to-date with live data." -ForegroundColor Cyan
-Write-Host "Happy coding!" -ForegroundColor White
+# FIX #1: DO NOT merge stderr into dump SQL file.
+#   Old `2>&1 > dump.sql` caused pg_dump warnings like "pg_dump: could not..."
+#   to be written INTO the .sql file, producing "syntax error at or near 'could'"
+#   Now: stdout -> dump.sql, stderr -> separate .log file; then check exit code.
+$TMP_REMOTE_DUMP_LOG = $TMP_REMOTE_DUMP + ".log"
+
+$remoteCmd = @"
+cd /tmp 2>/dev/null; sudo -u $REMOTE_DB_USER pg_dump --data-only --column-inserts --no-owner --no-privileges --no-tablespaces $tableArgs $REMOTE_DB_NAME > $TMP_REMOTE_DUMP 2> $TMP_REMOTE_DUMP_LOG
+_DUMP_RC=`$?
+if [ `$_DUMP_RC -eq 0 ]; then echo DUMP_EXITCODE:True; else echo DUMP_EXITCODE:False; fi
+echo DUMP_RC:`$_DUMP_RC
+wc -c < $TMP_REMOTE_DUMP | tr -d ' '
+"@
+
+# ---------------------------------------------------------------------------
+# RETRY LOGIC for transient SSH failures (timeout, connection reset, etc.)
+# ---------------------------------------------------------------------------
+$maxRetries  = 3
+$retryWait   = 8            # seconds, doubles each retry
+$dumpOk      = $false
+$dumpRes     = $null
+$lastSshExit = -1
+
+for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+    if ($attempt -gt 1) {
+        Write-Info ("  Retry {0}/{1} after {2}s backoff ..." -f $attempt, $maxRetries, $retryWait)
+        Start-Sleep -Seconds $retryWait
+        $retryWait *= 2
+    }
+    # Use a real subshell so $LASTEXITCODE reflects ssh's actual exit code
+    $ErrorActionPreference = 'Continue'
+    $dumpRes = @( & ssh -o ConnectTimeout=15 -o ServerAliveInterval=10 "${SSH_USER}@${VPS_IP}" $remoteCmd 2>&1 )
+    $lastSshExit = $LASTEXITCODE
+    $dumpFlat  = ($dumpRes | Out-String)
+    Write-Info ("  SSH exit={0}; stdout/stderr snippet: {1}" -f $lastSshExit, $dumpFlat.Trim())
+
+    # Classify success: SSH exit 0 AND DUMP_EXITCODE:True present AND a number present (size)
+    if ($lastSshExit -eq 0 -and $dumpFlat -match 'DUMP_EXITCODE:True' -and $dumpFlat -match '\d') {
+        $dumpOk = $true
+        break
+    }
+    # Diagnose common SSH failures
+    if ($dumpFlat -match 'Connection timed out') {
+        Write-Info ("  [attempt $attempt] SSH: connection timed out (network / firewall / VPS down?)")
+    } elseif ($dumpFlat -match 'Connection refused') {
+        Write-Info ("  [attempt $attempt] SSH: connection refused (sshd stopped on VPS?)")
+    } elseif ($dumpFlat -match 'Permission denied') {
+        Write-Info ("  [attempt $attempt] SSH: auth failed (password/ssh key wrong?); RETRY WON'T FIX this.")
+        break
+    } elseif ($dumpFlat -match 'DUMP_EXITCODE:False') {
+        Write-Info ("  [attempt $attempt] pg_dump itself failed on LIVE (NOT a network error).")
+        break
+    }
+}
+
+# ---------------------------------------------------------------------------
+# HANDLE FAILURE
+# ---------------------------------------------------------------------------
+if (-not $dumpOk) {
+    Write-Host ""
+    Write-Host "  !!! FAILED TO REACH LIVE SERVER AFTER $maxRetries ATTEMPTS" -ForegroundColor Red
+    Write-Host "      SSH exit code = $lastSshExit" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  TROUBLESHOOTING CHECKLIST:" -ForegroundColor Yellow
+    Write-Host "  1. Internet active?  (browser theke 103.112.62.72 ping করুন)"
+    Write-Host "  2. VPS LIVE (running)?  (Console/Replit দিয়ে check)"
+    Write-Host "  3. Port 22 open?       (ISP/Corporate firewall বা GP block করতে পারে)"
+    Write-Host "  4. SSH auth OK?        (ssh root@103.112.62.72 চালিয়ে দেখুন password/key prompt আসে কিনা)"
+    Write-Host "  5. বিলম্বে আবার চেষ্টা করুন (VPS restart হলে 1-2 min লাগে)"
+    Write-Host ""
+    try {
+        # Best-effort pull pg_dump error log if ssh recovered
+        scp -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_DUMP_LOG" `
+            (Join-Path $TMP_DIR "dump_error.log") 2>$null | Out-Null
+        if (Test-Path (Join-Path $TMP_DIR "dump_error.log")) {
+            Write-Host "  pg_dump remote ERROR LOG:" -ForegroundColor Red
+            Get-Content (Join-Path $TMP_DIR "dump_error.log") | ForEach-Object { Write-Host ("    " + $_) -ForegroundColor DarkRed }
+        }
+    } catch {}
+    # Cleanup anything left on the remote end (best-effort; ignore errors)
+    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" `
+        "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
+    exit 1
+}
+
+Write-Info "LIVE dump completed remotely (after $attempt attempt(s))."
+
+# Download the dump
+try {
+    scp -o ConnectTimeout=30 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_DUMP" $TMP_DUMP_SQL 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $TMP_DUMP_SQL) -or (Get-Item $TMP_DUMP_SQL).Length -eq 0) {
+        throw "scp download failed or file is empty (scp exit=$LASTEXITCODE)."
+    }
+    Write-Info ("Dump downloaded: {0:N1} KB" -f ((Get-Item $TMP_DUMP_SQL).Length/1KB))
+} catch {
+    Write-Err "Failed to download dump: $_"
+    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
+    exit 1
+}
+
+# Cleanup remote dump immediately
+ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
+
+# ====================================================================
+# STEP 3: Post-process dump -> inject ON CONFLICT DO NOTHING
+# ====================================================================
+Write-Step "Step 3/6 : Post-processing dump (inject ON CONFLICT DO NOTHING)"
+
+# ---------------------------------------------------------------------
+# STATEFUL PARSER (FIX 2 -> multi-line INSERTs + sequence restores)
+#
+# Rules (anything not explicitly allowed is dropped):
+#   (1) Empty line, pg_dump standard SET commands, pg_catalog.set_config -> KEEP
+#   (2) \restrict ... / \unrestrict ... (pg_dump ACL blobs) -> DROP (noise)
+#   (3) SELECT pg_catalog.setval(...) (sequence restores) -> KEEP (ESSENTIAL
+#       so future Django PK inserts don't collide)
+#   (4) Lines starting with a Bangla/other Unicode glyphs that CONTINUE a
+#       previous INSERT INTO ... VALUES(  clause: ACCUMULATE (NOT DROP).
+#       pg_dump --column-inserts nominally writes 1 row per INSERT, but
+#       when values contain embedded newlines (or very long Bangla text
+#       wrapped by the COPY/send layer), VALUES( spans several PHYSICAL
+#       lines until `);` terminator.  Our old filter dropped these and
+#       produced SQL like "NULL 1," (missing comma).
+#   (5) Lines inside a VALUES(...) block are joined into the INSERT, then
+#       the terminating `);` is replaced with `) ON CONFLICT DO NOTHING;`.
+#   (6) Everything not matching the above -> DROP and log.
+# ---------------------------------------------------------------------
+$filteredSqlLines = New-Object System.Collections.Generic.List[string]
+$inInsert       = $false          # currently inside a VALUES( block?
+$insertBuffer   = [System.Text.StringBuilder]::new()
+$keptSetvals    = 0
+$droppedCount   = 0
+
+foreach ($rawLine in [System.IO.File]::ReadLines($TMP_DUMP_SQL)) {
+    if ($rawLine -eq $null) { continue }
+    $trim = $rawLine.Trim()
+
+    # ---------- (A) Simple keepers (not inside an INSERT) ----------
+    if (-not $inInsert) {
+        if ($trim -eq '')                             { $filteredSqlLines.Add($rawLine); continue }
+        if ($trim.StartsWith('--') -and
+            -not $trim.StartsWith('--,') -and
+            -not $trim.StartsWith('--,,') -and
+            -not $trim.StartsWith('--\') -and
+            -not ($trim -match '^--[^ \-A-Za-z].*VALUES\b|^--.*''')) {
+            # Real pg_dump comment lines (header comments start with -- + space)
+            $filteredSqlLines.Add($rawLine); continue
+        }
+        if ($trim -match '(?i)^SET\b')                { $filteredSqlLines.Add($rawLine); continue }
+        if ($trim -match '(?i)^SELECT\s+pg_catalog\.set_config\b') { $filteredSqlLines.Add($rawLine); continue }
+        if ($trim -match '(?i)^SELECT\s+pg_catalog\.setval\b')     {
+            $filteredSqlLines.Add($rawLine)
+            $keptSetvals++
+            continue
+        }
+        if ($trim -match '^\\restrict\b' -or $trim -match '^\\unrestrict\b') {
+            Write-Info ("  dropped noise line (\restrict/unrestrict blob)")
+            $droppedCount++
+            continue
+        }
+
+        # ---------- (B) Start of a new INSERT statement ----------
+        if ($trim -match '(?is)^\s*INSERT\s+INTO\b') {
+            # Does this INSERT end on the SAME physical line?
+            if ($trim -match '\);\s*$') {
+                $done = [regex]::Replace($rawLine, '\)\s*;\s*$', ') ON CONFLICT DO NOTHING;')
+                $filteredSqlLines.Add($done)
+            } else {
+                # Multi-line INSERT: start buffering
+                $null = $insertBuffer.Clear()
+                $null = $insertBuffer.Append($rawLine)
+                $inInsert = $true
+            }
+            continue
+        }
+
+        # ---------- (C) Anything else -> noise ----------
+        Write-Info ("  dropped noise line: " + $rawLine)
+        $droppedCount++
+        continue
+    }
+    # -----------------------------------------------------------------
+    # inside an INSERT buffer (continuation lines)
+    # -----------------------------------------------------------------
+    else {
+        $null = $insertBuffer.AppendLine().Append($rawLine)
+        # Did we just reach the terminator?
+        if ($trim -match '\);\s*$') {
+            $fullStmt = $insertBuffer.ToString()
+            # Replace the VERY LAST ); with our conflict clause
+            $done = [regex]::Replace($fullStmt, '\)\s*;\s*$', ') ON CONFLICT DO NOTHING;')
+            $filteredSqlLines.Add($done)
+            $inInsert = $false
+            $null = $insertBuffer.Clear()
+        }
+        # (otherwise keep accumulating)
+        continue
+    }
+}
+
+# Safety net: if parser finished while still inside INSERT, flush buffer as-is
+# (shouldn't happen, but prevents losing rows)
+if ($inInsert -and $insertBuffer.Length -gt 0) {
+    $fullStmt = $insertBuffer.ToString()
+    $done = [regex]::Replace($fullStmt, '\)\s*;?\s*$', ') ON CONFLICT DO NOTHING;')
+    $filteredSqlLines.Add($done)
+    Write-Err "Parser finished while still inside INSERT block - may be truncated (last stmt appended anyway)."
+}
+
+Write-Info ("Stateful parser: kept {0} setval restores, dropped {1} noise lines." -f $keptSetvals, $droppedCount)
+
+# Write processed file
+$PROCESSED_SQL = Join-Path $TMP_DIR "live_data_processed.sql"
+$processedContent = $filteredSqlLines -join [Environment]::NewLine
+Set-Content -LiteralPath $PROCESSED_SQL -Value $processedContent -Encoding UTF8 -NoNewline
+
+$insertsCnt = ([regex]::Matches($processedContent, 'ON CONFLICT DO NOTHING')).Count
+Write-Info ("Processed {0} INSERT statements with ON CONFLICT DO NOTHING." -f $insertsCnt)
+
+# Small safety: dump first 20 + last 5 lines for forensic audit
+$debugFirst = @(Get-Content -LiteralPath $PROCESSED_SQL -TotalCount 20)
+Write-Info "First 20 lines of processed file for audit:"
+$debugFirst | ForEach-Object { Write-Info ("  | " + $_) }
+Write-Info "..."
+$debugLast = @(Get-Content -LiteralPath $PROCESSED_SQL)
+if ($debugLast.Count -gt 5) { $debugLast = $debugLast[($debugLast.Count-5)..($debugLast.Count-1)] }
+$debugLast | ForEach-Object { Write-Info ("  | " + $_) }
+
+# ====================================================================
+# STEP 4: Import into LOCAL db
+# ====================================================================
+Write-Step "Step 4/6 : Importing into LOCAL PostgreSQL (existing data preserved)"
+# FIX #3: NO explicit BEGIN/COMMIT wrap, NO psql -1 (--single-transaction).
+#   Why: ANY error inside a single explicit transaction (or -1) aborts the
+#   ENTIRE tx -> every subsequent statement prints
+#   "current transaction is aborted, commands ignored until end of transaction block".
+#   Solution: each INSERT runs in its OWN IMPLICIT mini-transaction.
+#   - `ON CONFLICT DO NOTHING` already handles PK/unique duplicates → no rollback needed
+#   - FK-dependency order is enforced via $SYNC_TABLES ordering
+#   - Isolated FK/constraint errors will only fail THAT row; remaining 72392 rows OK
+#   - This "partial success" behavior is EXACTLY what we want vs. 0 rows inserted.
+try {
+    $output = @(& cmd /c "$psql -U $LOCAL_DB_USER -d $LOCAL_DB_NAME -v ON_ERROR_STOP=0 -f `"$($PROCESSED_SQL.Replace('\','/'))`" 2>&1")
+    $errorHits = 0
+    foreach ($line in $output) {
+        if ($line -match 'ERROR' -or $line -match 'FATAL' -or $line -match 'PANIC') {
+            Write-Err ("SQL: " + $line)
+            $errorHits++
+            if ($errorHits -eq 1) {
+                Write-Info "  --- BEGIN FIRST 40 LINES OF PROCESSED SQL (forensic) ---"
+                Get-Content -LiteralPath $PROCESSED_SQL -TotalCount 40 | ForEach-Object { Write-Info ("  SQL> " + $_) }
+                Write-Info "  --- END FORENSIC DUMP ---"
+            }
+        }
+    }
+    Write-Info ("Import phase done  (SQL errors encountered: {0})." -f $errorHits)
+} catch {
+    Write-Err "Import crashed: $_"
+}
+
+# ====================================================================
+# STEP 5: MEDIA SYNC  (selective - only referenced photos, skip if local exists)
+# APPROACH: BATCH TAR  (1-2 SSH connections TOTAL, not 3668 per-file connections)
+#   1. Query LIVE for distinct referenced media paths  (1 SSH)
+#   2. Locally compute which are MISSING  (no SSH)
+#   3. Upload missing list to LIVE, build a tar.gz of ONLY missing files  (1 SSH)
+#   4. scp the single tar.gz  (1 SCP)
+#   5. Extract locally  (no SSH)
+# ====================================================================
+Write-Step "Step 5/6 : Syncing ONLY referenced MEDIA files (photos, logos, signatures) [BATCH TAR mode]"
+
+# ---------------- 5a: Query LIVE for distinct referenced media paths ----------------
+$TMP_LOCAL_MEDIA_SQL = Join-Path $TMP_DIR "get_media_list.sql"
+@"
+COPY (
+  SELECT DISTINCT TRIM(photo)            AS p FROM public.users_user       WHERE photo IS NOT NULL             AND photo <> ''
+  UNION SELECT DISTINCT TRIM(thumbnail)    FROM public.users_user       WHERE thumbnail IS NOT NULL         AND thumbnail <> ''
+  UNION SELECT DISTINCT TRIM(logo)         FROM public.schools_school   WHERE logo IS NOT NULL              AND logo <> ''
+  UNION SELECT DISTINCT TRIM(logo_thumbnail) FROM public.schools_school WHERE logo_thumbnail IS NOT NULL    AND logo_thumbnail <> ''
+  UNION SELECT DISTINCT TRIM(principal_signature) FROM public.schools_school WHERE principal_signature IS NOT NULL AND principal_signature <> ''
+  UNION SELECT DISTINCT TRIM(school_seal) FROM public.schools_school   WHERE school_seal IS NOT NULL       AND school_seal <> ''
+) TO STDOUT WITH (FORMAT text);
+"@ | Set-Content -LiteralPath $TMP_LOCAL_MEDIA_SQL -Encoding UTF8 -NoNewline
+
+$TMP_REMOTE_MEDIA_SQL = "/tmp/$(Split-Path $TMP_LOCAL_MEDIA_SQL -Leaf)"
+$mediaListOk = $false
+try {
+    scp -o ConnectTimeout=30 $TMP_LOCAL_MEDIA_SQL "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_MEDIA_SQL" 2>$null | Out-Null
+    $runSqlRes = ssh -o ConnectTimeout=30 "${SSH_USER}@${VPS_IP}" "sudo -u $REMOTE_DB_USER psql -d $REMOTE_DB_NAME -f $TMP_REMOTE_MEDIA_SQL > $TMP_REMOTE_MEDIA 2>/dev/null; echo LIVEMEDIA_RES:`$?"
+    if ($runSqlRes -match 'LIVEMEDIA_RES:0') {
+        scp -o ConnectTimeout=30 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_MEDIA" $TMP_MEDIA_LIST 2>$null | Out-Null
+        if (Test-Path $TMP_MEDIA_LIST) { $mediaListOk = $true }
+    } else {
+        Write-Err "LIVE media psql -f failed: $runSqlRes"
+    }
+} catch {
+    Write-Err "LIVE media list query failed: $_"
+} finally {
+    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_MEDIA_SQL" 2>$null | Out-Null
+}
+if (-not $mediaListOk -and -not (Test-Path $TMP_MEDIA_LIST)) {
+    Write-Err "Media list could not be obtained from LIVE."
+}
+
+# ---------------- 5b: Compute MISSING set (local-only, no SSH) ----------------
+$missingPaths  = New-Object System.Collections.Generic.List[string]
+$staleMissing  = New-Object System.Collections.Generic.List[string]
+$mediaRoot = Join-Path $PWD.Path "media"
+try { [void][IO.Directory]::CreateDirectory($mediaRoot) } catch {
+    Write-Err ("Failed to create media root: " + $_.Exception.Message)
+}
+
+if (Test-Path -LiteralPath $TMP_MEDIA_LIST) {
+    $mediaPaths = @(Get-Content -LiteralPath $TMP_MEDIA_LIST -Encoding UTF8 | Where-Object {
+        $v = $null
+        if ($_) { $v = $_.Trim() }
+        ($v) -and ($v -ne '\N') -and ($v -notmatch '^\\')
+    })
+    Write-Info ("Discovered {0} distinct media references on LIVE." -f $mediaPaths.Count)
+
+    foreach ($relPath in $mediaPaths) {
+        $rel = $relPath.Trim()
+        if (-not $rel) { continue }
+        $localPath = [IO.Path]::Combine($mediaRoot, $rel)
+        try {
+            $localPath = [IO.Path]::GetFullPath($localPath)
+            if (-not $localPath.StartsWith($mediaRoot, [StringComparison]::OrdinalIgnoreCase)) {
+                Write-Err ("Media path outside media root (skipped): $rel")
+                continue
+            }
+            if ([IO.File]::Exists($localPath)) {
+                $MEDIA_SKIPPED++
+            } else {
+                # Classify: user_thumbnails/* -> Django/sorl auto-generates on 1st request,
+                # so a missing source file on LIVE is considered STALE (normal), not an error.
+                if ($rel.StartsWith("user_thumbnails/")) {
+                    $staleMissing.Add($rel)
+                } else {
+                    $missingPaths.Add($rel)
+                }
+            }
+        } catch {
+            Write-Err ("Media path check error for $rel : " + $_.Exception.Message)
+        }
+    }
+}
+
+Write-Info ("Already on local (skipped): {0}" -f $MEDIA_SKIPPED)
+Write-Info ("Auto-thumbs (stale; Django regenerates): {0}" -f $staleMissing.Count)
+Write-Info ("To fetch from LIVE: {0}" -f $missingPaths.Count)
+
+if ($staleMissing.Count -gt 0) {
+    Write-Info "LIVE stale media (auto-thumbnails / missing on disk; ignored - Django will regenerate):"
+    $staleMissing | Select-Object -First 20 | ForEach-Object { Write-Info ("    - $_") }
+    if ($staleMissing.Count -gt 20) { Write-Info ("    ... and {0} more." -f ($staleMissing.Count - 20)) }
+}
+
+# ---------------- 5c: BATCH TAR download (1 SSH + 1 SCP) ----------------
+if ($missingPaths.Count -gt 0) {
+    $TMP_MISSING_LIST   = Join-Path $TMP_DIR "missing_media.txt"
+    $TMP_REMOTE_MISSING = "/tmp/missing_media_$(Get-Date -Format 'yyyyMMddHHmmss').txt"
+    $TMP_REMOTE_TAR     = "/tmp/live_media_batch_$(Get-Date -Format 'yyyyMMddHHmmss').tar.gz"
+    $TMP_LOCAL_TAR      = Join-Path $TMP_DIR "live_media_batch.tar.gz"
+    $TMP_REMOTE_BUILDLOG= $TMP_REMOTE_TAR + ".log"
+
+    # Write missing list (NUL chars trimmed, pure UTF-8)
+    $missingContent = ($missingPaths.ToArray() -join [Environment]::NewLine) + [Environment]::NewLine
+    Set-Content -LiteralPath $TMP_MISSING_LIST -Value $missingContent -Encoding UTF8 -NoNewline
+    Write-Info ("Uploading missing-file list ({0} entries) ..." -f $missingPaths.Count)
+
+    try {
+        scp -o ConnectTimeout=30 $TMP_MISSING_LIST "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_MISSING" 2>&1 | Out-Null
+    } catch {
+        Write-Err "Failed to upload missing-media list: $_"
+        $missingPaths.Clear()
+    }
+}
+
+if ($missingPaths.Count -gt 0) {
+    # Build tar remotely:
+    #   - cd to REMOTE_APP_DIR/media (so tar entries are RELATIVE)
+    #   - tar only files that EXIST on disk (ignore stale DB refs)
+    #   - report count of files actually included
+    Write-Info "Building batch tar.gz on LIVE (only existing files) ..."
+    $buildTarCmd = @"
+cd /tmp
+if [ ! -f '$TMP_REMOTE_MISSING' ]; then echo TAR_FAIL:nolist; exit 0; fi
+cd '$REMOTE_APP_DIR/media' 2>/dev/null || { echo TAR_FAIL:nomediadir; exit 0; }
+_COUNT=0
+_VALID=/tmp/_valid_media.$$
+rm -f "`$_VALID"
+while IFS= read -r p; do
+    [ -z "`$p" ] && continue
+    if [ -f "`$p" ]; then printf '%s\n' "`$p" >> "`$_VALID"; _COUNT=`$((_COUNT+1)); fi
+done < '$TMP_REMOTE_MISSING'
+echo TAR_FILES:`$_COUNT
+if [ `$_COUNT -eq 0 ]; then echo TAR_OK:empty; exit 0; fi
+tar -czf '$TMP_REMOTE_TAR' -T "`$_VALID" 2> '$TMP_REMOTE_BUILDLOG'
+_RC=`$?
+rm -f "`$_VALID"
+if [ `$_RC -eq 0 ]; then echo TAR_OK:`$_RC; ls -la '$TMP_REMOTE_TAR' | awk '{print `$5}'; else echo TAR_FAIL:`$_RC; cat '$TMP_REMOTE_BUILDLOG'; fi
+"@
+    $tarRes = ssh -o ConnectTimeout=60 -o ServerAliveInterval=30 "${SSH_USER}@${VPS_IP}" $buildTarCmd 2>&1
+    $tarFlat = ($tarRes | Out-String)
+    Write-Info ("  Remote tar log snippet: " + ($tarFlat.Trim() -replace '\r?\n',' | '))
+
+    $tarEmpty = ($tarFlat -match 'TAR_OK:empty')
+    $tarOk    = ($tarFlat -match 'TAR_OK:')
+    $fileCnt  = 0
+    if ($tarFlat -match 'TAR_FILES:(\d+)') { $fileCnt = [int]$matches[1] }
+
+    if (-not $tarOk) {
+        Write-Err "Remote batch tar build failed."
+    } elseif ($tarEmpty -or $fileCnt -eq 0) {
+        Write-Info "  (No valid files on LIVE to include in tar; all were stale DB references.)"
+    } else {
+        Write-Info ("  {0} valid files packed on LIVE; downloading batch tar.gz ..." -f $fileCnt)
+        try {
+            scp -o ConnectTimeout=120 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_TAR" $TMP_LOCAL_TAR 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $TMP_LOCAL_TAR) -or (Get-Item $TMP_LOCAL_TAR).Length -eq 0) {
+                throw "scp of tar.gz failed (exit=$LASTEXITCODE)."
+            }
+            Write-Info ("  Tar.gz downloaded: {0:N1} KB" -f ((Get-Item $TMP_LOCAL_TAR).Length/1KB))
+
+            # Extract to media root.  tar -tzf first to count entries, then extract.
+            $listEntries = & tar -tzf $TMP_LOCAL_TAR 2>$null
+            $entryCount = @($listEntries).Count
+            Write-Info ("  Extracting {0} entries to {1} ..." -f $entryCount, $mediaRoot)
+
+            # Use tar -xzf; force relative extract inside media root
+            Push-Location -LiteralPath $mediaRoot
+            try {
+                & tar -xzf $TMP_LOCAL_TAR
+                if ($LASTEXITCODE -ne 0) { throw "tar -xzf exited with $LASTEXITCODE" }
+                $MEDIA_COPIED = $entryCount
+            } finally {
+                Pop-Location
+            }
+            Write-Info ("  Extraction done.  Copied = {0}." -f $MEDIA_COPIED)
+        } catch {
+            Write-Err ("Batch tar download/extract FAILED: {0}" -f $_.Exception.Message)
+        }
+    }
+
+    # Cleanup remote artifacts (best-effort)
+    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f '$TMP_REMOTE_MISSING' '$TMP_REMOTE_TAR' '$TMP_REMOTE_BUILDLOG'" 2>$null | Out-Null
+}
+
+# ====================================================================
+# STEP 6: Build SUMMARY by querying BEFORE vs AFTER counts
+# ====================================================================
+Write-Step "Step 6/6 : Computing SYNC SUMMARY"
+
+$SUMMARY_SQL = @"
+WITH before_counts AS (
+    SELECT table_name, cnt FROM pg_temp.sync_counts WHERE phase='before'
+),
+after_counts AS (
+    SELECT 'schools_school'::text          t, (SELECT COUNT(*) FROM public.schools_school) c
+    UNION ALL SELECT 'users_user',               (SELECT COUNT(*) FROM public.users_user)
+    UNION ALL SELECT 'users_profile',            (SELECT COUNT(*) FROM public.users_profile)
+    UNION ALL SELECT 'academics_classroom',      (SELECT COUNT(*) FROM public.academics_classroom)
+    UNION ALL SELECT 'academics_section',        (SELECT COUNT(*) FROM public.academics_section)
+    UNION ALL SELECT 'academics_subject',        (SELECT COUNT(*) FROM public.academics_subject)
+    UNION ALL SELECT 'academics_studentprofile', (SELECT COUNT(*) FROM public.academics_studentprofile)
+    UNION ALL SELECT 'results_examination',      (SELECT COUNT(*) FROM public.results_examination)
+    UNION ALL SELECT 'results_examslot',         (SELECT COUNT(*) FROM public.results_examslot)
+    UNION ALL SELECT 'results_result',           (SELECT COUNT(*) FROM public.results_result)
+    UNION ALL SELECT 'results_studentoverallresult',(SELECT COUNT(*) FROM public.results_studentoverallresult)
+)
+SELECT a.t AS table_name,
+       COALESCE(b.cnt,0) AS before_count,
+       a.c AS after_count,
+       GREATEST(a.c - COALESCE(b.cnt,0), 0) AS inserted,
+       LEAST($insertsCnt - GREATEST(a.c - COALESCE(b.cnt,0), 0), $insertsCnt) AS skipped_estimate
+FROM after_counts a
+LEFT JOIN before_counts b ON b.table_name = a.t
+ORDER BY a.t;
+"@
+
+$SUMMARY_FILE = Join-Path $TMP_DIR "summary.csv"
+try {
+    & cmd /c "$psql -U $LOCAL_DB_USER -d $LOCAL_DB_NAME -v ON_ERROR_STOP=0 -c `"COPY ($SUMMARY_SQL) TO STDOUT WITH (FORMAT csv, HEADER);`"" 2>$null | Out-File -LiteralPath $SUMMARY_FILE -Encoding UTF8
+} catch {
+    Write-Err "Summary query failed: $_"
+}
+
+# ====================================================================
+# STEP 7: Cleanup temp files
+# ====================================================================
+Write-Step "Cleanup : removing temp files"
+try {
+    if (Test-Path $TMP_DIR) { Remove-Item $TMP_DIR -Recurse -Force }
+} catch {
+    Write-Info "Could not clean up temp dir (may be in use): $TMP_DIR"
+}
+
+# ====================================================================
+# FINAL: Print summary
+# ====================================================================
+Write-Host ""
+Write-Host "--------------------------------" -ForegroundColor Cyan
+Write-Host "       SYNC SUMMARY             " -ForegroundColor Cyan
+Write-Host "--------------------------------" -ForegroundColor Cyan
+
+$totalInserted = 0
+$totalSkipped  = 0
+$cntProfiles   = 0
+$cntStudents   = 0
+$cntExams      = 0
+$cntResults    = 0
+
+if (Test-Path $SUMMARY_FILE) {
+    $rows = Import-Csv -LiteralPath $SUMMARY_FILE
+    Write-Host ""
+    Write-Host ("{0,-35} {1,10} {2,10} {3,10} {4,10}" -f "TABLE","BEFORE","AFTER","INSERTED","SKIP~") -ForegroundColor Gray
+    Write-Host ("-" * 80) -ForegroundColor Gray
+    foreach ($r in $rows) {
+        $ins = [int]$r.inserted
+        $skp = [int]$r.skipped_estimate
+        $totalInserted += $ins
+        $totalSkipped  += $skp
+        switch ($r.table_name) {
+            "users_profile"            { $cntProfiles += [int]$r.after_count }
+            "academics_studentprofile" { $cntStudents += [int]$r.after_count }
+            "results_examination"      { $cntExams    += [int]$r.after_count }
+            "results_result"           { $cntResults  += [int]$r.after_count }
+        }
+        Write-Host ("{0,-35} {1,10} {2,10} {3,10} {4,10}" -f $r.table_name, $r.before_count, $r.after_count, $ins, $skp)
+    }
+}
+
+Write-Host ""
+Write-Host ("{0,-22} {1}" -f "Total Inserted:",    $totalInserted) -ForegroundColor Green
+Write-Host ("{0,-22} {1}" -f "Est. Skipped (dup):", $totalSkipped)  -ForegroundColor DarkYellow
+Write-Host ("{0,-22} {1}" -f "Profiles (total):",   $cntProfiles)   -ForegroundColor Cyan
+Write-Host ("{0,-22} {1}" -f "Students (total):",   $cntStudents)   -ForegroundColor Cyan
+Write-Host ("{0,-22} {1}" -f "Examinations:",       $cntExams)      -ForegroundColor Cyan
+Write-Host ("{0,-22} {1}" -f "Results:",            $cntResults)    -ForegroundColor Cyan
+Write-Host ("{0,-22} {1}" -f "Media copied:",       $MEDIA_COPIED)  -ForegroundColor Green
+Write-Host ("{0,-22} {1}" -f "Media skipped:",      $MEDIA_SKIPPED) -ForegroundColor DarkYellow
+Write-Host ("{0,-22} {1}" -f "Errors:",             $ERRORS.Count)  -ForegroundColor $(if ($ERRORS.Count) { 'Red' } else { 'Green' })
+if ($ERRORS.Count) {
+    Write-Host ""
+    Write-Host "ERROR DETAILS:" -ForegroundColor Red
+    $ERRORS | ForEach-Object { Write-Host ("  * " + $_) -ForegroundColor Red }
+}
+Write-Host "--------------------------------" -ForegroundColor Cyan
+Write-Host "  DONE - only DATA synced (NO code/logic/schema)." -ForegroundColor Green
+Write-Host ""

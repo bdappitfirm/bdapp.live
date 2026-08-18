@@ -183,6 +183,28 @@ export default function ClassResultsPage() {
   const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const pendingClassRef = React.useRef('');
+  const pendingSectionRef = React.useRef('');
+
+  // SAFETY: Only apply pending classroom/section after async lists finish loading.
+  // Prevents MUI Select "out-of-range value" error on URL-hydration with query params.
+  useEffect(() => {
+    const pending = pendingClassRef.current;
+    if (!pending) return;
+    if (classrooms.some(c => String(c.id) === String(pending))) {
+      setSelectedClass(String(pending));
+      pendingClassRef.current = '';
+    }
+  }, [classrooms]);
+  useEffect(() => {
+    const pending = pendingSectionRef.current;
+    if (!pending) return;
+    if (sections.some(s => String(s.id) === String(pending))) {
+      setSelectedSection(String(pending));
+      pendingSectionRef.current = '';
+    }
+  }, [sections]);
+
   const [students, setStudents] = useState([]);
   const [resultsByStudent, setResultsByStudent] = useState(new Map());
   const [overallTotals, setOverallTotals] = useState(new Map());
@@ -253,10 +275,21 @@ export default function ClassResultsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('classroom')) setSelectedClass(params.get('classroom'));
-    if (params.get('section')) setSelectedSection(params.get('section'));
-    if (params.get('year')) setSelectedYear(params.get('year'));
-  }, [location.search]);
+    const qClass = params.get('classroom') || '';
+    const qSection = params.get('section') || '';
+    const qYear = params.get('year') || '';
+    if (qClass) {
+      const ok = classrooms.some(c => String(c.id) === String(qClass));
+      if (ok) setSelectedClass(String(qClass));
+      else pendingClassRef.current = qClass;
+    }
+    if (qSection) {
+      const ok = sections.some(s => String(s.id) === String(qSection));
+      if (ok) setSelectedSection(String(qSection));
+      else pendingSectionRef.current = qSection;
+    }
+    if (qYear) setSelectedYear(qYear);
+  }, [location.search, classrooms, sections]);
 
   useEffect(() => {
     if (!id || !selectedClass) return;
@@ -500,14 +533,19 @@ export default function ClassResultsPage() {
 
             allKeys.forEach(key => {
                 let papers = virtualMap.get(key) || [];
-                // নবম-দশম শ্রেণির জন্য বাংলা ও ইংরেজির সকল পেপার একত্রিত করি (টোটাল ক্যালকুলেশনের জন্য)
-                if (isClassNineOrTen && (key === 'bangla' || key === 'english')) {
-                    papers = [
+                if (key === 'bangla' || key === 'english') {
+                    const merged = [
                         ...(virtualMap.get(key + '_p1') || []),
                         ...(virtualMap.get(key + '_p2') || []),
                         ...(virtualMap.get(key + '_combined') || []),
                         ...(virtualMap.get(key) || [])
                     ];
+                    if (merged.length > 0) papers = merged;
+                }
+                if ((key.endsWith('_p1') || key.endsWith('_p2') || key.endsWith('_combined')) && papers.length === 0) {
+                    const base = key.replace(/_(p1|p2|combined)$/, '');
+                    const fallback = virtualMap.get(base) || [];
+                    if (fallback.length > 0) papers = fallback;
                 }
                 const isRel = isRelSubj(key);
                 let isMandatory = expectedKeys.has(key);
@@ -759,15 +797,22 @@ export default function ClassResultsPage() {
         const w = parseFloat(r.written_marks)||0, mcq = parseFloat(r.mcq_marks)||0, pr = parseFloat(r.practical_marks)||0, has = r.hasMarks;
         const spec = getSubjectMaxima(r.subject_name || r.subject?.name || '', isClassNineOrTen);
         const totalPossible = (spec.cq + spec.mcq + spec.pr || 100);
-        let tot = w + mcq + pr;
+
+        // Consistent with ResultCard and MeritList: fallback to total_obtained if sum of parts is 0
+        let tot = (w + mcq + pr) > 0 ? (w + mcq + pr) : (parseFloat(r.total_obtained) || 0);
         if (tot > totalPossible) tot = totalPossible;
 
-        const p = []; if (spec.cq > 0) p.push(r.written_marks !== '' ? Math.round(w) : '0'); if (spec.mcq > 0) p.push(r.mcq_marks !== '' ? Math.round(mcq) : '0'); if (spec.pr > 0) p.push(r.practical_marks !== '' ? Math.round(pr) : '0');
+        const p = [];
+        if (spec.cq > 0) p.push(r.written_marks !== '' && r.written_marks !== null ? Math.round(w) : '0');
+        if (spec.mcq > 0) p.push(r.mcq_marks !== '' && r.mcq_marks !== null ? Math.round(mcq) : '0');
+        if (spec.pr > 0) p.push(r.practical_marks !== '' && r.practical_marks !== null ? Math.round(pr) : '0');
+
         const cqPass = spec.cq === 0 || w >= Math.round(spec.cq * 0.33 - 0.5),
               mcqPass = spec.mcq === 0 || mcq >= Math.round(spec.mcq * 0.33 - 0.5),
               prPass = spec.pr === 0 || pr >= Math.round(spec.pr * 0.33 - 0.5),
               totPass = tot >= Math.round(totalPossible * 0.33 - 0.5);
         const isPassed = has && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
+
         m.set(key, { total: tot, display: (has && tot > 0) ? (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot))) : (has && tot === 0 ? '0' : 'Absent'), is_passed: isPassed, hasMarks: has });
     });
     const merge = (arr, key) => {

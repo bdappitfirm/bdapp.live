@@ -84,6 +84,7 @@ const normalizeSubjKey = (n) => {
     if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
     if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
     if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
+    if (low.includes('bgs') || low.includes('বাংলাদেশ') || low.includes('বিশ্বপরিচয়') || low.includes('বিজিএস') || low.includes('বিএজিএস') || low.includes('bangladesh studies')) return 'bgs';
 
     if (is2 && !has1) return low.replace(/([২2][য়য়য]|2nd|second|ii|দ্বিতীয়|Boy|দ্বিতীয়)/gi, '').replace(/[- ]/g, '').trim() + '_p2';
     if (has1 && !is2) return low.replace(/([১1][ম]|1st|first|i|প্রথম)/gi, '').replace(/[- ]/g, '').trim() + '_p1';
@@ -183,18 +184,48 @@ const MeritListPage = () => {
   const [sections, setSections] = useState([]);
 
   // Lazy initialize state from URL to prevent resets
-  const [selectedClass, setSelectedClass] = useState(() => {
-    return new URLSearchParams(window.location.search).get('classroom') || '';
-  });
-  const [selectedSection, setSelectedSection] = useState(() => {
-    return new URLSearchParams(window.location.search).get('section') || '';
-  });
-  const [selectedGroup, setSelectedGroup] = useState(() => {
-    return new URLSearchParams(window.location.search).get('group') || '';
-  });
+  const initialUrl = new URLSearchParams(window.location.search);
+  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedSection, setSelectedSection] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedYear, setSelectedYear] = useState(() => {
-    return parseInt(new URLSearchParams(window.location.search).get('year')) || new Date().getFullYear();
+    return parseInt(initialUrl.get('year')) || new Date().getFullYear();
   });
+  const pendingClassRef = useRef(initialUrl.get('classroom') || '');
+  const pendingSectionRef = useRef(initialUrl.get('section') || '');
+  const pendingGroupRef = useRef(initialUrl.get('group') || '');
+
+  // SAFETY-1: Only set selectedClass once the classroom option actually
+  // exists in the `classrooms` array.  Otherwise Select gets out-of-range value.
+  useEffect(() => {
+    const pending = pendingClassRef.current;
+    if (!pending) return;
+    const ok = classrooms.some(c => String(c.id) === String(pending));
+    if (ok) {
+      setSelectedClass(String(pending));
+      pendingClassRef.current = '';
+    }
+  }, [classrooms]);
+
+  // SAFETY-2: Only set selectedSection once the section option exists.
+  useEffect(() => {
+    const pending = pendingSectionRef.current;
+    if (!pending) return;
+    const ok = sections.some(s => String(s.id) === String(pending));
+    if (ok) {
+      setSelectedSection(String(pending));
+      pendingSectionRef.current = '';
+    }
+  }, [sections]);
+
+  // SAFETY-3: Apply pending group value (immediate: group MenuItems are static, not async)
+  useEffect(() => {
+    const pending = pendingGroupRef.current;
+    if (pending) {
+      setSelectedGroup(String(pending));
+      pendingGroupRef.current = '';
+    }
+  }, []);
 
   const [students, setStudents] = useState([]);
   const [rankings, setRankings] = useState([]);
@@ -218,11 +249,20 @@ const MeritListPage = () => {
     const qGroup = params.get('group') || '';
     const qYear = parseInt(params.get('year')) || new Date().getFullYear();
 
-    if (qClass !== selectedClass) setSelectedClass(qClass);
-    if (qSection !== selectedSection) setSelectedSection(qSection);
+    // Only apply qClass if the classroom option EXISTS in the loaded list.
+    if (qClass !== selectedClass) {
+      const isValid = !qClass || classrooms.some(c => String(c.id) === String(qClass));
+      if (isValid) setSelectedClass(qClass);
+      else pendingClassRef.current = qClass;
+    }
+    if (qSection !== selectedSection) {
+      const isValid = !qSection || sections.some(s => String(s.id) === String(qSection));
+      if (isValid) setSelectedSection(qSection);
+      else pendingSectionRef.current = qSection;
+    }
     if (qGroup !== selectedGroup) setSelectedGroup(qGroup);
     if (qYear !== selectedYear) setSelectedYear(qYear);
-  }, [location.search, selectedClass, selectedSection, selectedGroup, selectedYear]);
+  }, [location.search, selectedClass, selectedSection, selectedGroup, selectedYear, classrooms, sections]);
 
   // Helper to update URL
   const updateUrl = useCallback((updates) => {
@@ -450,8 +490,19 @@ const MeritListPage = () => {
 
                 allKeys.forEach(key => {
                     let papers = virtualMap.get(key) || [];
-                    if (isNT && (key === 'bangla' || key === 'english')) {
-                        papers = [...(virtualMap.get(key + '_p1') || []), ...(virtualMap.get(key + '_p2') || []), ...(virtualMap.get(key + '_combined') || []), ...(virtualMap.get(key) || [])];
+                    if (key === 'bangla' || key === 'english') {
+                        const merged = [
+                            ...(virtualMap.get(key + '_p1') || []),
+                            ...(virtualMap.get(key + '_p2') || []),
+                            ...(virtualMap.get(key + '_combined') || []),
+                            ...(virtualMap.get(key) || [])
+                        ];
+                        if (merged.length > 0) papers = merged;
+                    }
+                    if ((key.endsWith('_p1') || key.endsWith('_p2') || key.endsWith('_combined')) && papers.length === 0) {
+                        const base = key.replace(/_(p1|p2|combined)$/, '');
+                        const fallback = virtualMap.get(base) || [];
+                        if (fallback.length > 0) papers = fallback;
                     }
                     const isRel = isRelSubj(key);
                     let isMandatory = expectedKeys.has(key);
