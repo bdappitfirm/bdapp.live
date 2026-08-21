@@ -105,6 +105,7 @@ const CacheClearer = () => {
   return null;
 };
 
+const PublicVerify = React.lazy(() => import('./pages/PublicVerify'));
 const WelcomePage = React.lazy(() => import('./pages/WelcomePage'));
 const SchoolDashboard = React.lazy(() => import('./pages/SchoolDashboard.jsx'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -289,6 +290,7 @@ function App() {
                     <Routes>
           {/* হোমপেজে WelcomePage */}
           <Route path="/" element={<WelcomePage />} />
+          <Route path="/verify/:studentId" element={<PublicVerify />} />
 
         {/* স্কুল ড্যাশবোর্ড + nested */}
         <Route path="/school/:id" element={<SchoolDashboard />}>

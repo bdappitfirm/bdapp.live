@@ -41,7 +41,12 @@ export default function EditStudentPage() {
     address: '',
     address_en: '',
     remarks: '',
-    voter_number: ''
+    voter_number: '',
+    ssc_board: 'Board of Intermediate and Secondary Education, Cumilla',
+    ssc_roll: '',
+    ssc_registration: '',
+    ssc_session: '',
+    ssc_gpa: ''
   });
 
   const [photoFile, setPhotoFile] = useState(null);
@@ -57,7 +62,7 @@ export default function EditStudentPage() {
   const [tourStep, setTourStep] = useState(0);
 
   const selectedClassObj = classrooms.find(c => String(c.id) === String(form.classroom_id));
-  const isNineTen = selectedClassObj ? /নবম|দশম|nine|ten|ix|x|\b9\b|\b10\b/i.test(selectedClassObj.name) : false;
+  const isNineTen = selectedClassObj ? /নবম|দশম|[৯১০]ম|nine|ten|ix|x|\b9\b|\b10\b|s[\s.]*?s[\s.]*?c|এসএসসি|এস[\s.]*?এস[\s.]*?সি|পরীক্ষার্থী/i.test(selectedClassObj.name) : false;
 
   const guidanceSteps = [
     { selector: '#student-photo-edit', text: 'আপনি চাইলে শিক্ষার্থীর ছবি পরিবর্তন করতে পারেন', autoNext: false },
@@ -98,10 +103,10 @@ export default function EditStudentPage() {
     const load = async () => {
       try {
         const [classes, secs, studentRes, subjsRes] = await Promise.all([
-          api.get(`/api/academics/classrooms/?school=${id}`),
-          api.get(`/api/academics/sections/?school=${id}`),
+          api.get(`/api/academics/classrooms/?school=${id}&page_size=1000`),
+          api.get(`/api/academics/sections/?school=${id}&page_size=1000`),
           api.get(`/api/academics/students/${studentId}/`),
-          api.get(`/api/academics/subjects/?school=${id}`)
+          api.get(`/api/academics/subjects/?school=${id}&page_size=1000`)
         ]);
 
         setClassrooms(Array.isArray(classes.data) ? classes.data : (classes.data?.results || []));
@@ -109,6 +114,16 @@ export default function EditStudentPage() {
         setSubjects(Array.isArray(subjsRes.data) ? subjsRes.data : (subjsRes.data?.results || []));
 
         const s = studentRes.data;
+
+        const formatToDisplay = (dateStr) => {
+          if (!dateStr) return '';
+          if (dateStr.includes('-') && dateStr.split('-')[0].length === 4) {
+            const [y, m, d] = dateStr.split('-');
+            return `${d}-${m}-${y}`;
+          }
+          return dateStr;
+        };
+
         setForm({
           username: s.user?.username || s.username || '',
           first_name: s.user?.first_name || s.first_name || '',
@@ -129,13 +144,18 @@ export default function EditStudentPage() {
           father_name_en: s.father_name_en || '',
           mother_name: s.mother_name || '',
           mother_name_en: s.mother_name_en || '',
-          admission_date: s.admission_date || '',
-          birth_date: s.birth_date || '',
+          admission_date: formatToDisplay(s.admission_date) || '',
+          birth_date: formatToDisplay(s.birth_date) || '',
           optional_subject_id: s.optional_subject?.id || s.optional_subject || '',
           address: s.address || '',
           address_en: s.address_en || '',
           remarks: s.remarks || '',
-          voter_number: s.voter_number || ''
+          voter_number: s.voter_number || '',
+          ssc_board: s.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla',
+          ssc_roll: s.ssc_roll || '',
+          ssc_registration: s.ssc_registration || '',
+          ssc_session: s.ssc_session || '',
+          ssc_gpa: s.ssc_gpa || ''
         });
         setCurrentPhoto(s.user?.photo_url || s.photo_url || s.photo);
       } catch (e) {
@@ -188,12 +208,25 @@ export default function EditStudentPage() {
 
     try {
       const fd = new FormData();
+
+      const formatToISO = (dateStr) => {
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        if (parts.length === 3 && parts[2].length === 4) {
+          return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+        return dateStr;
+      };
+
       Object.entries(form).forEach(([k, v]) => {
+        let valueToSend = v;
+        if ((k === 'birth_date' || k === 'admission_date') && typeof v === 'string' && v.includes('-')) {
+            valueToSend = formatToISO(v);
+        }
         // Only append if value is not null/undefined
-        if (v !== undefined && v !== null && v !== '') {
-            fd.append(k, v);
-        } else if (v === '') {
-            // For empty strings, we might want to send them to clear fields
+        if (valueToSend !== undefined && valueToSend !== null && valueToSend !== '') {
+            fd.append(k, valueToSend);
+        } else if (valueToSend === '') {
             fd.append(k, '');
         }
       });
@@ -275,7 +308,19 @@ export default function EditStudentPage() {
               </>
             )}
             <Grid item xs={12} sm={2}>
-                <TextField fullWidth label="ভর্তির তারিখ" type="date" InputLabelProps={{ shrink: true }} value={form.admission_date} onChange={e => setForm({...form, admission_date: e.target.value})} />
+                <TextField
+                  fullWidth
+                  label="ভর্তির তারিখ (DD-MM-YYYY)"
+                  value={form.admission_date}
+                  onChange={e => {
+                    let val = e.target.value.replace(/\D/g, '');
+                    if (val.length > 8) val = val.slice(0, 8);
+                    let formatted = val;
+                    if (val.length > 2) formatted = val.slice(0, 2) + '-' + val.slice(2);
+                    if (val.length > 4) formatted = formatted.slice(0, 5) + '-' + formatted.slice(5);
+                    setForm({...form, admission_date: formatted});
+                  }}
+                />
             </Grid>
           </Grid>
 
@@ -331,7 +376,21 @@ export default function EditStudentPage() {
               </TextField>
             </Grid>
             <Grid item xs={12} sm={4}>
-                <TextField id="birth-date-edit" fullWidth label="জন্ম তারিখ" type="date" InputLabelProps={{ shrink: true }} value={form.birth_date} onFocus={() => updateStep('#birth-date-edit')} onChange={e => setForm({...form, birth_date: e.target.value})} />
+                <TextField
+                  id="birth-date-edit"
+                  fullWidth
+                  label="জন্ম তারিখ (DD-MM-YYYY)"
+                  value={form.birth_date}
+                  onFocus={() => updateStep('#birth-date-edit')}
+                  onChange={e => {
+                    let val = e.target.value.replace(/\D/g, '');
+                    if (val.length > 8) val = val.slice(0, 8);
+                    let formatted = val;
+                    if (val.length > 2) formatted = val.slice(0, 2) + '-' + val.slice(2);
+                    if (val.length > 4) formatted = formatted.slice(0, 5) + '-' + formatted.slice(5);
+                    setForm({...form, birth_date: formatted});
+                  }}
+                />
             </Grid>
           </Grid>
 
@@ -405,6 +464,30 @@ export default function EditStudentPage() {
               <TextField fullWidth label="মন্তব্য" value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} />
             </Grid>
           </Grid>
+
+          {isNineTen && (
+            <>
+              <Divider />
+              <Typography variant="h6">এস.এস.সি. তথ্য (SSC Information)</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Board Name" value={form.ssc_board} onChange={e => setForm({...form, ssc_board: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Roll No." value={form.ssc_roll} onChange={e => setForm({...form, ssc_roll: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Registration No." value={form.ssc_registration} onChange={e => setForm({...form, ssc_registration: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Session" value={form.ssc_session} onChange={e => setForm({...form, ssc_session: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="GPA" value={form.ssc_gpa} onChange={e => setForm({...form, ssc_gpa: e.target.value})} />
+                </Grid>
+              </Grid>
+            </>
+          )}
 
           <Divider />
 

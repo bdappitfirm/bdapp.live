@@ -36,7 +36,7 @@ export default function AdmissionCardGenerator() {
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
   const [school, setSchool] = useState(null);
-  const { classrooms, sections, refreshAll, students: allStudents } = useAcademics();
+  const { classrooms, sections, refreshAll, students: allStudents, fetchStudentsScoped } = useAcademics();
   const [searchResults, setSearchResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -143,19 +143,29 @@ export default function AdmissionCardGenerator() {
     try {
       let foundStudents = [];
 
+      // Always try to fetch from server for the specific filters to ensure fresh/complete data
       if (searchQuery) {
         const normalizedQuery = searchQuery.toLowerCase().trim();
-        foundStudents = allStudents.filter(s => 
+        // First check local list for speed
+        foundStudents = allStudents.filter(s =>
           (s.roll_number?.toString().includes(searchQuery)) || 
           (s.user?.first_name?.toLowerCase().includes(normalizedQuery)) || 
           (s.user?.last_name?.toLowerCase().includes(normalizedQuery)) || 
           (s.name?.toLowerCase().includes(normalizedQuery))
         );
-      } else if (classFilter) {
-        foundStudents = allStudents.filter(s => String(s.classroom?.id) === String(classFilter));
-        if (sectionFilter) {
-          foundStudents = foundStudents.filter(s => String(s.section?.id) === String(sectionFilter));
+
+        // If nothing found locally or query is a roll number, try server
+        if (foundStudents.length === 0 || !isNaN(searchQuery)) {
+            const params = isNaN(searchQuery) ? { search: normalizedQuery } : { roll_number: searchQuery };
+            if (classFilter) params.classroom = classFilter;
+            if (sectionFilter) params.section = sectionFilter;
+            foundStudents = await fetchStudentsScoped(id, params);
         }
+      } else if (classFilter) {
+        // Fetch class/section students from server directly
+        const params = { classroom: classFilter };
+        if (sectionFilter) params.section = sectionFilter;
+        foundStudents = await fetchStudentsScoped(id, params);
       } else {
         showSnackbar('Please enter search criteria or select class', 'warning');
         setLoading(false);
@@ -297,14 +307,14 @@ export default function AdmissionCardGenerator() {
                 display: flex;
                 flex-direction: row;
                 flex-wrap: nowrap;
-                gap: 15mm;
+                gap: 5mm;
                 width: 100%;
                 box-sizing: border-box;
                 align-items: stretch;
                 justify-content: center;
               }
               .card-slot {
-                width: calc(50% - 10mm);
+                width: calc(50% - 5mm);
                 box-sizing: border-box;
                 break-inside: avoid;
                 page-break-inside: avoid;
@@ -580,7 +590,7 @@ export default function AdmissionCardGenerator() {
               id="class-select"
               select
               fullWidth
-              label="Select Class"
+              label="শ্রেণি নির্বাচন করুন"
               value={classFilter}
               onChange={(e) => {
                     setClassFilter(e.target.value);
@@ -591,7 +601,7 @@ export default function AdmissionCardGenerator() {
               size="small"
               required
             >
-              <MenuItem value="">All Classes</MenuItem>
+              <MenuItem value="">সব শ্রেণি</MenuItem>
               {classrooms.map((cls) => (
                 <MenuItem key={cls.id} value={cls.id}>
                   {cls.name}
@@ -605,7 +615,7 @@ export default function AdmissionCardGenerator() {
               id="section-select"
               select
               fullWidth
-              label="Select Section"
+              label="সেকশন নির্বাচন করুন"
               value={sectionFilter}
               onChange={(e) => {
                 setSectionFilter(e.target.value);
@@ -615,7 +625,7 @@ export default function AdmissionCardGenerator() {
               size="small"
               disabled={!classFilter}
             >
-              <MenuItem value="">All Sections</MenuItem>
+              <MenuItem value="">সব সেকশন</MenuItem>
               {filteredSections.map((sec) => (
                 <MenuItem key={sec.id} value={sec.id}>
                   {sec.name}
@@ -629,7 +639,7 @@ export default function AdmissionCardGenerator() {
               id="exam-select"
               select
               fullWidth
-              label="Select Exam"
+              label="পরীক্ষা নির্বাচন করুন"
               value={selectedExam}
               onChange={(e) => setSelectedExam(e.target.value)}
               variant="outlined"
@@ -637,20 +647,24 @@ export default function AdmissionCardGenerator() {
               required
               disabled={loadingExams}
             >
-              <MenuItem value="">Select an exam</MenuItem>
+              <MenuItem value="">একটি পরীক্ষা নির্বাচন করুন</MenuItem>
               {exams
                 .filter(exam => {
                   const name = (exam.name || '').trim();
                   const type = (exam.exam_type || '').toLowerCase();
 
-                  if (type === 'half_yearly' || type === 'annual') return true;
+                  // Include major exam types
+                  const majorTypes = ['half_yearly', 'annual', 'terminal', 'pre_test', 'test', 'model', 'first_term', 'second_term', 'third_term'];
+                  if (majorTypes.includes(type)) return true;
 
                   const parts = name.split('(');
                   const beforeBracket = parts[0].toLowerCase().trim();
-                  const hasKeywordBefore = beforeBracket.includes('অর্ধ') || beforeBracket.includes('বার্ষিক') ||
-                                         beforeBracket.includes('half') || beforeBracket.includes('yearly') || beforeBracket.includes('annual');
+                  const keywords = [
+                    'অর্ধ', 'বার্ষিক', 'টার্মিনাল', 'নির্বাচনী', 'মডেল', 'টেস্ট', 'পরীক্ষা', 'টার্ম',
+                    'half', 'yearly', 'annual', 'terminal', 'pre-test', 'test', 'model', 'exam', 'term'
+                  ];
 
-                  return hasKeywordBefore;
+                  return keywords.some(kw => beforeBracket.includes(kw));
                 })
                 .map((exam) => {
                 const yr = (() => {
@@ -673,7 +687,7 @@ export default function AdmissionCardGenerator() {
             <TextField
               id="skip-to-button"
               fullWidth
-              label="Search by Name or Roll Number (Optional)"
+              label="নাম অথবা রোল নম্বর দিয়ে খুঁজুন (ঐচ্ছিক)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               variant="outlined"
@@ -694,7 +708,7 @@ export default function AdmissionCardGenerator() {
               sx={{ height: '40px' }}
               startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
             >
-              {loading ? 'Searching...' : 'Search Students'}
+              {loading ? 'অনুসন্ধান হচ্ছে...' : (searchQuery ? 'খুঁজুন' : 'সব প্রবেশপত্র জেনারেট করুন')}
             </Button>
           </Grid>
         </Grid>

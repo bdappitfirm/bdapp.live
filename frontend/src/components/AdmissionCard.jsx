@@ -302,57 +302,58 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                     display: 'grid',
                     gridTemplateColumns: '0.8fr 1.7fr 0.8fr 1.7fr',
                     gridAutoRows: 'auto',
-                    gap: 0.3,
+                    gap: 0.2,
                     border: '1px solid #e0e8ff',
                     borderRadius: '4px',
-                    overflow: 'visible'
+                    overflow: 'visible',
+                    fontSize: '11.5px !important'
                   }}>
                     {/* Header */}
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.8,
-                      px: 0.2,
+                      py: 0.3,
+                      px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '0.9rem',
-                      lineHeight: 1.2
+                      fontSize: '11px !important',
+                      lineHeight: 1.1
                     }}>
                       তারিখ
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.8,
-                      px: 0.2,
+                      py: 0.3,
+                      px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '0.9rem',
-                      lineHeight: 1.2
+                      fontSize: '11px !important',
+                      lineHeight: 1.1
                     }}>
                       বিষয়
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.8,
-                      px: 0.2,
+                      py: 0.3,
+                      px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '0.9rem',
-                      lineHeight: 1.2
+                      fontSize: '11px !important',
+                      lineHeight: 1.1
                     }}>
                       তারিখ
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.8,
-                      px: 0.2,
+                      py: 0.3,
+                      px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '0.9rem',
-                      lineHeight: 1.2
+                      fontSize: '11px !important',
+                      lineHeight: 1.1
                     }}>
                       বিষয়
                     </Box>
@@ -366,48 +367,48 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                         rows.push(
                           <React.Fragment key={`row-${i}`}>
                             <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
+                              py: 0.3,
+                              px: 0.1,
                               backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Typography variant="body1" sx={{ fontWeight: '600', fontSize: { xs: '0.7rem', sm: '0.85rem' }, whiteSpace: 'nowrap', lineHeight: 1.3, pb: 0.2 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
                                 {slot1 ? formatDate(slot1.exam_date) + (formatTime(slot1.start_time) ? ` (${formatTime(slot1.start_time)})` : '') : ''}
-                              </Typography>
+                              </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
+                              py: 0.3,
+                              px: 0.1,
                               backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Typography variant="body1" sx={{ fontWeight: '600', fontSize: { xs: '0.7rem', sm: '0.85rem' }, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3, pb: 0.2 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.1 }}>
                                 {slot1?.subject_name || ''}
-                              </Typography>
+                              </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
+                              py: 0.3,
+                              px: 0.1,
                               backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Typography variant="body1" sx={{ fontWeight: '600', fontSize: { xs: '0.7rem', sm: '0.85rem' }, whiteSpace: 'nowrap', lineHeight: 1.3, pb: 0.2 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
                                 {slot2 ? formatDate(slot2.exam_date) + (formatTime(slot2.start_time) ? ` (${formatTime(slot2.start_time)})` : '') : ''}
-                              </Typography>
+                              </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
+                              py: 0.3,
+                              px: 0.1,
                               backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Typography variant="body1" sx={{ fontWeight: '600', fontSize: { xs: '0.7rem', sm: '0.85rem' }, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3, pb: 0.2 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.1 }}>
                                 {slot2?.subject_name || ''}
-                              </Typography>
+                              </Box>
                             </Box>
                           </React.Fragment>
                         );
@@ -433,19 +434,19 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
       }}>
         <Typography variant="subtitle1" sx={{ 
             fontWeight: 'bold', 
-            mb: 0.2, // Reduced
+            mb: 0.1,
             color: '#1a237e',
             textAlign: 'center',
-            fontSize: '0.9rem', // Reduced
-            lineHeight: 1.3
+            fontSize: '13px !important',
+            lineHeight: 1.1
           }}>
             নির্দেশনা
           </Typography>
           <Box component="p" sx={{ 
-            pl: 0.5,
+            px: 0.5,
             m: 0,
-            fontSize: '0.8rem', // Reduced
-            lineHeight: 1.4, // Reduced
+            fontSize: '12px !important',
+            lineHeight: 1.2,
             color: '#333',
             textAlign: 'center'
           }}>

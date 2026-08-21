@@ -1087,6 +1087,37 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     return name || year;
   }, [examination, student, l.examinationTypes, forceLanguage]);
 
+  const displayAttendance = useMemo(() => {
+    const summary = studentData?.attendance_summary;
+    if (!summary || !summary.monthly_data) return summary ? { present: summary.total_present, absent: summary.total_absent } : null;
+
+    const manualWorkingDays = { 1: 21, 2: 9, 3: 3, 4: 17, 5: 15, 6: 18, 7: 22, 8: 22, 9: 22, 10: 22, 11: 22, 12: 22 };
+
+    const isHalfYearly = examination?.exam_type === 'half_yearly' ||
+                        /half|অর্ধ/i.test(String(examination?.name || ''));
+
+    let pSum = 0;
+    let totalWorkDays = 0;
+
+    // Determine which months to count
+    const endMonth = isHalfYearly ? 6 : 12;
+
+    for (let m = 1; m <= endMonth; m++) {
+      const mData = summary.monthly_data[m] || summary.monthly_data[String(m)];
+      // Only count months that have a non-empty presence input
+      if (mData && mData.present !== '' && mData.present !== undefined && mData.present !== null) {
+        const pVal = (parseInt(mData.present, 10) || 0);
+        pSum += pVal;
+        totalWorkDays += (manualWorkingDays[m] || 0);
+      }
+    }
+
+    // Absence = Total Work Days in period - Total Presence
+    const absent = Math.max(0, totalWorkDays - pSum);
+
+    return { present: pSum, absent: absent };
+  }, [studentData, examination]);
+
   if (shouldSkip) return null;
 
   const safeSchoolName = schoolName;
@@ -1452,17 +1483,17 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
           )}
 
           {/* Attendance Summary */}
-          {studentData?.attendance_summary && (
+          {displayAttendance && (
             <Box sx={{ mt: 1, mb: 1, border: '1.5px solid #000', p: 1, borderRadius: 0, bgcolor: '#fdfaea' }}>
               <Typography sx={{ fontWeight: 'bold', fontSize: '14px', mb: 0.5, textDecoration: 'underline', color: '#000', display: 'block' }}>
                 {forceLanguage === 'bn' ? 'হাজিরা সংক্রান্ত তথ্য:' : 'Attendance Information:'}
               </Typography>
               <Box sx={{ display: 'flex', gap: 4 }}>
                 <Typography sx={{ fontSize: '13px', color: '#000' }}>
-                  {forceLanguage === 'bn' ? 'মোট উপস্থিতি:' : 'Total Presence:'} <b>{n(studentData.attendance_summary.total_present ?? 0)}</b>
+                  {forceLanguage === 'bn' ? 'মোট উপস্থিতি:' : 'Total Presence:'} <b>{n(displayAttendance.present)}</b>
                 </Typography>
                 <Typography sx={{ fontSize: '13px', color: '#000' }}>
-                  {forceLanguage === 'bn' ? 'মোট অনুপস্থিতি:' : 'Total Absence:'} <b>{n(studentData.attendance_summary.total_absent ?? 0)}</b>
+                  {forceLanguage === 'bn' ? 'মোট অনুপস্থিতি:' : 'Total Absence:'} <b>{n(displayAttendance.absent)}</b>
                 </Typography>
               </Box>
             </Box>

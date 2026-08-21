@@ -21,14 +21,16 @@ import {
   DialogContent,
   DialogActions,
   Chip,
-  IconButton
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import {
   Assignment as ExamIcon,
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  School as SchoolIcon
+  School as SchoolIcon,
+  CalendarToday as RoutineIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -64,6 +66,13 @@ export default function ExaminationsPage() {
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [selectedExamForSlots, setSelectedExamForSlots] = useState(null);
   const [examSlots, setExamSlots] = useState([]);
+  const [newSlotData, setNewSlotData] = useState({
+    subject: '',
+    exam_date: null,
+    start_time: '10:00',
+    room: ''
+  });
+  const [savingSlot, setSavingSlot] = useState(false);
 
   const toast = useToast();
 
@@ -252,11 +261,63 @@ export default function ExaminationsPage() {
 
   const loadExamSlots = useCallback(async (exam) => {
     setSelectedExamForSlots(exam);
+    setNewSlotData({
+      subject: '',
+      exam_date: exam.exam_date ? new Date(exam.exam_date) : null,
+      start_time: '10:00',
+      room: ''
+    });
     try {
-      const res = await api.get(`/api/results/exam-slots/`, { params: { school: id, classroom: exam.classroom, exam_type: exam.exam_type } });
+      const res = await api.get(`/api/results/exam-slots/`, { params: { school: id, examination: exam.id } });
       setExamSlots(Array.isArray(res.data) ? res.data : (res.data?.results || []));
     } catch (error) { toast.error('Failed to load routine'); }
   }, [id, toast]);
+
+  const handleSaveSlot = async () => {
+    if (!selectedExamForSlots) return;
+    if (!newSlotData.subject || !newSlotData.exam_date) {
+      toast.error('Subject and Date are required');
+      return;
+    }
+
+    setSavingSlot(true);
+    try {
+      const formatDate = (date) => {
+        if (!date) return null;
+        const d = new Date(date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      };
+
+      const payload = {
+        examination: selectedExamForSlots.id,
+        subject: newSlotData.subject,
+        exam_date: formatDate(newSlotData.exam_date),
+        start_time: newSlotData.start_time,
+        room: newSlotData.room,
+        classroom: selectedExamForSlots.classroom,
+        section: selectedExamForSlots.section || null,
+        school: parseInt(id)
+      };
+
+      await api.post('/api/results/exam-slots/', payload);
+      toast.success('Slot added successfully');
+      loadExamSlots(selectedExamForSlots);
+    } catch (error) {
+      toast.error('Failed to add slot');
+    } finally {
+      setSavingSlot(false);
+    }
+  };
+
+  const handleDeleteSlot = async (slotId) => {
+    try {
+      await api.delete(`/api/results/exam-slots/${slotId}/`);
+      toast.success('Slot deleted');
+      loadExamSlots(selectedExamForSlots);
+    } catch (error) {
+      toast.error('Failed to delete slot');
+    }
+  };
 
   const getExamTypeLabel = (type) => EXAM_TYPES.find(t => t.value === type)?.label || type;
 
@@ -300,7 +361,10 @@ export default function ExaminationsPage() {
                     <TableCell>{exam.name}</TableCell>
                     <TableCell><Chip label={getExamTypeLabel(exam.exam_type)} size="small" /></TableCell>
                     <TableCell>{exam.exam_date || '-'}</TableCell>
-                    <TableCell align="center"><Stack direction="row" spacing={1}>
+                    <TableCell align="center"><Stack direction="row" spacing={1} justifyContent="center">
+                      <Tooltip title="রুটিন সেট করুন">
+                        <IconButton size="small" onClick={() => { loadExamSlots(exam); setSlotDialogOpen(true); }} color="secondary"><RoutineIcon /></IconButton>
+                      </Tooltip>
                       <IconButton size="small" onClick={() => handleDialogOpen(exam)} color="primary"><EditIcon /></IconButton>
                       <IconButton size="small" onClick={() => setDeleteDialog({ open: true, exam })} color="error"><DeleteIcon /></IconButton>
                     </Stack></TableCell>
@@ -383,6 +447,95 @@ export default function ExaminationsPage() {
         </Dialog>
 
         <ConfirmDialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, exam: null })} onConfirm={handleDelete} title="মুছে ফেলুন" message="আপনি কি নিশ্চিত?" />
+
+        <Dialog open={slotDialogOpen} onClose={() => setSlotDialogOpen(false)} fullWidth maxWidth="md">
+          <DialogTitle>পরীক্ষার রুটিন সেট করুন: {selectedExamForSlots?.name}</DialogTitle>
+          <DialogContent dividers>
+            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>নতুন বিষয় যোগ করুন</Typography>
+            <Grid container spacing={2} sx={{ mb: 4, mt: 0.5 }}>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  select
+                  label="বিষয়"
+                  fullWidth
+                  size="small"
+                  value={newSlotData.subject}
+                  onChange={(e) => setNewSlotData({ ...newSlotData, subject: e.target.value })}
+                >
+                  {subjects.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <DatePicker
+                  label="তারিখ"
+                  value={newSlotData.exam_date}
+                  onChange={(d) => setNewSlotData({ ...newSlotData, exam_date: d })}
+                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                />
+              </Grid>
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="সময়"
+                  type="time"
+                  fullWidth
+                  size="small"
+                  value={newSlotData.start_time}
+                  onChange={(e) => setNewSlotData({ ...newSlotData, start_time: e.target.value })}
+                  slotProps={{ label: { shrink: true } }}
+                />
+              </Grid>
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="রুম"
+                  fullWidth
+                  size="small"
+                  value={newSlotData.room}
+                  onChange={(e) => setNewSlotData({ ...newSlotData, room: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} md={1}>
+                <Button variant="contained" fullWidth onClick={handleSaveSlot} disabled={savingSlot} sx={{ height: '40px' }}>
+                  {savingSlot ? '...' : <AddIcon />}
+                </Button>
+              </Grid>
+            </Grid>
+
+            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>বিদ্যমান রুটিন</Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>তারিখ</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>বিষয়</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>সময়</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>রুম</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 'bold' }}>অ্যাকশন</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {examSlots.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} align="center">কোনো বিষয় যোগ করা হয়নি</TableCell></TableRow>
+                  ) : (
+                    examSlots.map((slot) => (
+                      <TableRow key={slot.id}>
+                        <TableCell>{slot.exam_date}</TableCell>
+                        <TableCell>{slot.subject_name || slot.subject?.name}</TableCell>
+                        <TableCell>{slot.start_time}</TableCell>
+                        <TableCell>{slot.room || '-'}</TableCell>
+                        <TableCell align="center">
+                          <IconButton size="small" color="error" onClick={() => handleDeleteSlot(slot.id)}><DeleteIcon fontSize="small" /></IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSlotDialogOpen(false)}>বন্ধ করুন</Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </LocalizationProvider>
   );

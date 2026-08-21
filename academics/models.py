@@ -76,6 +76,13 @@ class StudentProfile(models.Model):
     father = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='father_of')
     mother = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='mother_of')
 
+    # SSC Information
+    ssc_board = models.CharField(max_length=255, blank=True, null=True, default="Board of Intermediate and Secondary Education, Cumilla", verbose_name="SSC Board")
+    ssc_roll = models.CharField(max_length=50, blank=True, null=True, verbose_name="SSC Roll No.")
+    ssc_registration = models.CharField(max_length=50, blank=True, null=True, verbose_name="SSC Registration No.")
+    ssc_session = models.CharField(max_length=20, blank=True, null=True, verbose_name="SSC Session")
+    ssc_gpa = models.CharField(max_length=10, blank=True, null=True, verbose_name="SSC GPA")
+
     def __str__(self):
         return f"{self.user.username} - {self.classroom.name if self.classroom else 'N/A'}"
 

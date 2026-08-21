@@ -86,7 +86,13 @@ export default function ProfileCard({
     occupation: '',
     income: '',
     designation: '',
-    gender: ''
+    gender: '',
+    group: '',
+    ssc_board: 'Board of Intermediate and Secondary Education, Cumilla',
+    ssc_roll: '',
+    ssc_registration: '',
+    ssc_session: '',
+    ssc_gpa: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [photoFile, setPhotoFile] = useState(null);
@@ -169,7 +175,12 @@ export default function ProfileCard({
       income: (profile?.income ?? profile?.user?.income ?? '') !== '' ? String(profile?.income ?? profile?.user?.income ?? '') : '',
       designation: profile?.designation || '',
       gender: profile?.gender || '',
-      group: profile?.group || ''
+      group: profile?.group || '',
+      ssc_board: profile?.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla',
+      ssc_roll: profile?.ssc_roll || '',
+      ssc_registration: profile?.ssc_registration || '',
+      ssc_session: profile?.ssc_session || '',
+      ssc_gpa: profile?.ssc_gpa || ''
     });
     setFormErrors({});
     setPhotoFile(null);
@@ -555,6 +566,13 @@ export default function ProfileCard({
       if ((roleLower === 'student' || localProfile?.classroom || localProfile?.roll_number || localProfile?.student_custom_id) && formData.group) {
         fd.append('group', formData.group);
       }
+      if (roleLower === 'student') {
+        fd.append('ssc_board', formData.ssc_board || '');
+        fd.append('ssc_roll', formData.ssc_roll || '');
+        fd.append('ssc_registration', formData.ssc_registration || '');
+        fd.append('ssc_session', formData.ssc_session || '');
+        fd.append('ssc_gpa', formData.ssc_gpa || '');
+      }
       if (photoFile) fd.append('photo', photoFile);
 
       // Choose correct endpoint per role
@@ -588,6 +606,11 @@ export default function ProfileCard({
         income: formData.income || '',
         gender: formData.gender || '',
         group: formData.group || '',
+        ssc_board: formData.ssc_board || '',
+        ssc_roll: formData.ssc_roll || '',
+        ssc_registration: formData.ssc_registration || '',
+        ssc_session: formData.ssc_session || '',
+        ssc_gpa: formData.ssc_gpa || '',
         user: {
           ...(prev?.user || {}),
           blood_group: formData.blood_group || (prev?.user?.blood_group || ''),
@@ -1199,6 +1222,32 @@ export default function ProfileCard({
                       </TextField>
                     </Grid>
                   </>
+                )}
+                {roleLower === 'student' && (
+                  <Grid size={{ xs: 12 }}>
+                    <Box sx={{ mt: 2, p: 2, border: '1px dashed', borderColor: 'primary.main', borderRadius: 2 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>
+                        SSC Information (For Testimonial)
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <TextField label="Board" value={formData.ssc_board} onChange={(e) => setFormData({ ...formData, ssc_board: e.target.value })} fullWidth size="small" />
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <TextField label="Roll" value={formData.ssc_roll} onChange={(e) => setFormData({ ...formData, ssc_roll: e.target.value })} fullWidth size="small" />
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <TextField label="Registration" value={formData.ssc_registration} onChange={(e) => setFormData({ ...formData, ssc_registration: e.target.value })} fullWidth size="small" />
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <TextField label="Session" value={formData.ssc_session} onChange={(e) => setFormData({ ...formData, ssc_session: e.target.value })} fullWidth size="small" />
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <TextField label="GPA" value={formData.ssc_gpa} onChange={(e) => setFormData({ ...formData, ssc_gpa: e.target.value })} fullWidth size="small" />
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  </Grid>
                 )}
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField label="Occupation" value={formData.occupation} onChange={(e) => setFormData({ ...formData, occupation: e.target.value })} fullWidth />

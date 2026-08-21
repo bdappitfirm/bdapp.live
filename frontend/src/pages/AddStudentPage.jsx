@@ -39,11 +39,22 @@ export default function AddStudentPage() {
     mother_name_en: '',
     birth_date: '',
     optional_subject_id: '',
-    admission_date: new Date().toISOString().split('T')[0],
+    admission_date: (() => {
+      const d = new Date();
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dd}-${mm}-${yyyy}`;
+    })(),
     address: '',
     address_en: '',
     remarks: '',
-    voter_number: ''
+    voter_number: '',
+    ssc_board: 'Board of Intermediate and Secondary Education, Cumilla',
+    ssc_roll: '',
+    ssc_registration: '',
+    ssc_session: '',
+    ssc_gpa: ''
   });
 
   const [photoFile, setPhotoFile] = useState(null);
@@ -58,7 +69,7 @@ export default function AddStudentPage() {
   const [tourStep, setTourStep] = useState(0);
 
   const selectedClassObj = classrooms.find(c => String(c.id) === String(form.classroom_id));
-  const isNineTen = selectedClassObj ? /নবম|দশম|nine|ten|ix|x|\b9\b|\b10\b/i.test(selectedClassObj.name) : false;
+  const isNineTen = selectedClassObj ? /নবম|দশম|[৯১০]ম|nine|ten|ix|x|\b9\b|\b10\b|s[\s.]*?s[\s.]*?c|এসএসসি|এস[\s.]*?এস[\s.]*?সি|পরীক্ষার্থী/i.test(selectedClassObj.name) : false;
 
   const guidanceSteps = [
     { selector: '#student-photo-box', text: 'প্রথমে শিক্ষার্থীর ছবি আপলোড করুন', autoNext: false },
@@ -98,9 +109,9 @@ export default function AddStudentPage() {
     const load = async () => {
       try {
         const [classes, secs, subjs] = await Promise.all([
-          api.get(`/api/academics/classrooms/?school=${id}`),
-          api.get(`/api/academics/sections/?school=${id}`),
-          api.get(`/api/academics/subjects/?school=${id}`)
+          api.get(`/api/academics/classrooms/?school=${id}&page_size=1000`),
+          api.get(`/api/academics/sections/?school=${id}&page_size=1000`),
+          api.get(`/api/academics/subjects/?school=${id}&page_size=1000`)
         ]);
         setClassrooms(Array.isArray(classes.data) ? classes.data : (classes.data?.results || []));
         setSections(Array.isArray(secs.data) ? secs.data : (secs.data?.results || []));
@@ -174,8 +185,23 @@ export default function AddStudentPage() {
 
     try {
       const fd = new FormData();
+
+      // Helper to convert DD-MM-YYYY to YYYY-MM-DD
+      const formatToISO = (dateStr) => {
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        if (parts.length === 3 && parts[2].length === 4) {
+          return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+        return dateStr;
+      };
+
       Object.entries(form).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== '') fd.append(k, v);
+        let valueToSend = v;
+        if ((k === 'birth_date' || k === 'admission_date') && typeof v === 'string' && v.includes('-')) {
+            valueToSend = formatToISO(v);
+        }
+        if (valueToSend !== undefined && valueToSend !== null && valueToSend !== '') fd.append(k, valueToSend);
       });
       fd.append('school_id', id);
       if (photoFile) fd.append('photo', photoFile);
@@ -295,7 +321,24 @@ export default function AddStudentPage() {
               </TextField>
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField id="birth-date-input" fullWidth label="জন্ম তারিখ" type="date" value={form.birth_date} onFocus={() => updateStep('#birth-date-input')} onChange={e => setForm({...form, birth_date: e.target.value})} InputLabelProps={{ shrink: true }} />
+              <TextField
+                id="birth-date-input"
+                fullWidth
+                label="জন্ম তারিখ (দিন-মাস-বছর)"
+                placeholder="DD-MM-YYYY"
+                value={form.birth_date}
+                onFocus={() => updateStep('#birth-date-input')}
+                onChange={e => {
+                    let val = e.target.value.replace(/\D/g, '');
+                    if (val.length > 8) val = val.slice(0, 8);
+                    let formatted = val;
+                    if (val.length > 2) formatted = val.slice(0, 2) + '-' + val.slice(2);
+                    if (val.length > 4) formatted = formatted.slice(0, 5) + '-' + formatted.slice(5);
+                    setForm({...form, birth_date: formatted});
+                }}
+                helperText="উদাহরণ: 15-08-2005"
+                error={!!formErrors.birth_date}
+              />
             </Grid>
             {isNineTen && (
               <>
@@ -376,7 +419,21 @@ export default function AddStudentPage() {
           <Typography variant="h6">অন্যান্য তথ্য</Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="ভর্তির তারিখ" type="date" value={form.admission_date} onChange={e => setForm({...form, admission_date: e.target.value})} InputLabelProps={{ shrink: true }} />
+              <TextField
+                fullWidth
+                label="ভর্তির তারিখ (দিন-মাস-বছর)"
+                placeholder="DD-MM-YYYY"
+                value={form.admission_date}
+                onChange={e => {
+                    let val = e.target.value.replace(/\D/g, '');
+                    if (val.length > 8) val = val.slice(0, 8);
+                    let formatted = val;
+                    if (val.length > 2) formatted = val.slice(0, 2) + '-' + val.slice(2);
+                    if (val.length > 4) formatted = formatted.slice(0, 5) + '-' + formatted.slice(5);
+                    setForm({...form, admission_date: formatted});
+                }}
+                helperText="উদাহরণ: 01-01-2024"
+              />
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -395,6 +452,30 @@ export default function AddStudentPage() {
               <TextField fullWidth label="ঠিকানা (ইংরেজিতে)" multiline rows={2} value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} />
             </Grid>
           </Grid>
+
+          {isNineTen && (
+            <>
+              <Divider />
+              <Typography variant="h6">এস.এস.সি. তথ্য (SSC Information)</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Board Name" value={form.ssc_board} onChange={e => setForm({...form, ssc_board: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Roll No." value={form.ssc_roll} onChange={e => setForm({...form, ssc_roll: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Registration No." value={form.ssc_registration} onChange={e => setForm({...form, ssc_registration: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Session" value={form.ssc_session} onChange={e => setForm({...form, ssc_session: e.target.value})} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="GPA" value={form.ssc_gpa} onChange={e => setForm({...form, ssc_gpa: e.target.value})} />
+                </Grid>
+              </Grid>
+            </>
+          )}
 
           <Stack direction="row" spacing={2} justifyContent="flex-end">
             <Button variant="outlined" onClick={() => navigate(-1)}>বাতিল</Button>

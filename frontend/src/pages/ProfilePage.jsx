@@ -38,6 +38,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [studentProfile, setStudentProfile] = useState(null);
   const [editing, setEditing] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -56,7 +57,12 @@ export default function ProfilePage() {
     designation: '',
     designation_en: '',
     educational_qualification: '',
-    assigned_subject: ''
+    assigned_subject: '',
+    ssc_board: 'Board of Intermediate and Secondary Education, Cumilla',
+    ssc_roll: '',
+    ssc_registration: '',
+    ssc_session: '',
+    ssc_gpa: ''
   });
   const [passwordForm, setPasswordForm] = useState({ old_password: '', new_password: '', confirm_password: '' });
   const [formErrors, setFormErrors] = useState({});
@@ -98,10 +104,12 @@ export default function ProfilePage() {
       // Handle different API response formats
       const userData = res.data.user || res.data;
       const profileData = res.data.profile || {};
-      
+      const studentProfileData = res.data.student_profile || {};
+
       setUser(userData);
       setProfile(profileData);
-      
+      setStudentProfile(studentProfileData);
+
       setFormData({
         username: userData.username || '',
         first_name: userData.first_name || '',
@@ -112,13 +120,18 @@ export default function ProfilePage() {
         phone_number: userData.phone_number || '',
         gender: profileData.gender || '',
         school: profileData.school?.id || userData.school || '',
-        classroom: profileData.classroom?.id || '',
-        section: profileData.section?.id || '',
+        classroom: profileData.classroom?.id || studentProfileData.classroom?.id || '',
+        section: profileData.section?.id || studentProfileData.section?.id || '',
         category: profileData.category?.id || profileData.category || '',
         designation: profileData.designation || '',
         designation_en: profileData.designation_en || '',
         educational_qualification: profileData.educational_qualification || '',
-        assigned_subject: profileData.assigned_subject || userData.assigned_subject || ''
+        assigned_subject: profileData.assigned_subject || userData.assigned_subject || '',
+        ssc_board: studentProfileData.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla',
+        ssc_roll: studentProfileData.ssc_roll || '',
+        ssc_registration: studentProfileData.ssc_registration || '',
+        ssc_session: studentProfileData.ssc_session || '',
+        ssc_gpa: studentProfileData.ssc_gpa || ''
       });
       
       setLoading(false);
@@ -305,7 +318,12 @@ export default function ProfilePage() {
           category: formData.category,
           school: formData.school,
           classroom: formData.classroom || null,
-          section: formData.section || null
+          section: formData.section || null,
+          ssc_board: formData.ssc_board,
+          ssc_roll: formData.ssc_roll,
+          ssc_registration: formData.ssc_registration,
+          ssc_session: formData.ssc_session,
+          ssc_gpa: formData.ssc_gpa
         };
         await api.patch('/api/users/profile/', profilePayload);
 
@@ -783,6 +801,69 @@ export default function ProfilePage() {
               </Grid>
             </Grid>
 
+            {profile?.role === 'student' && (
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>
+                  SSC Information (For Certificate)
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Board Name"
+                      name="ssc_board"
+                      value={formData.ssc_board}
+                      onChange={handleInputChange}
+                      disabled={!editing}
+                      fullWidth
+                      placeholder="e.g. Dhaka"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Roll No."
+                      name="ssc_roll"
+                      value={formData.ssc_roll}
+                      onChange={handleInputChange}
+                      disabled={!editing}
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Registration No."
+                      name="ssc_registration"
+                      value={formData.ssc_registration}
+                      onChange={handleInputChange}
+                      disabled={!editing}
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Session"
+                      name="ssc_session"
+                      value={formData.ssc_session}
+                      onChange={handleInputChange}
+                      disabled={!editing}
+                      fullWidth
+                      placeholder="e.g. 2021-22"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="GPA"
+                      name="ssc_gpa"
+                      value={formData.ssc_gpa}
+                      onChange={handleInputChange}
+                      disabled={!editing}
+                      fullWidth
+                      placeholder="e.g. 5.00"
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+
             {editing && (
               <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
                 <Button
@@ -808,7 +889,12 @@ export default function ProfilePage() {
                       gender: profile?.gender || '',
                       category: profile?.category || '',
                       designation: profile?.designation || '',
-                      educational_qualification: profile?.educational_qualification || ''
+                      educational_qualification: profile?.educational_qualification || '',
+                      ssc_board: studentProfile?.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla',
+                      ssc_roll: studentProfile?.ssc_roll || '',
+                      ssc_registration: studentProfile?.ssc_registration || '',
+                      ssc_session: studentProfile?.ssc_session || '',
+                      ssc_gpa: studentProfile?.ssc_gpa || ''
                     });
                     setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });
                   }}

@@ -135,6 +135,20 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
             serializer = self.get_serializer(profile, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+
+            # Handle StudentProfile specific fields
+            if profile.role == 'student':
+                from academics.models import StudentProfile
+                sp = StudentProfile.objects.filter(user=request.user).first()
+                if sp:
+                    updated = False
+                    for f in ['ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']:
+                        if f in request.data:
+                            setattr(sp, f, request.data[f])
+                            updated = True
+                    if updated:
+                        sp.save()
+
             return Response(serializer.data)
         except Exception as e:
             return Response({"error": str(e)}, status=400)

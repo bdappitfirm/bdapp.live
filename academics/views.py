@@ -309,9 +309,34 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
             cid = p.get('classroom')
             secid_param = p.getlist('section') or p.get('section')
             group = p.get('group')
+            search = p.get('search')
+            roll = p.get('roll')
 
             if cid and str(cid).isdigit():
                 queryset = queryset.filter(classroom_id=int(cid))
+
+            if roll:
+                # Remove all whitespace for a cleaner match
+                clean_roll = re.sub(r'\s+', '', str(roll))
+                queryset = queryset.filter(
+                    Q(roll_number__icontains=roll) |
+                    Q(ssc_roll__icontains=roll) |
+                    Q(student_custom_id__icontains=roll) |
+                    Q(roll_number__icontains=clean_roll) |
+                    Q(ssc_roll__icontains=clean_roll)
+                )
+
+            if search:
+                # Remove potential zero-width characters or extra spaces
+                clean_search = ''.join(c for c in str(search) if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF)).strip()
+                queryset = queryset.filter(
+                    Q(user__first_name__icontains=clean_search) |
+                    Q(user__last_name__icontains=clean_search) |
+                    Q(user__first_name_en__icontains=clean_search) |
+                    Q(user__last_name_en__icontains=clean_search) |
+                    Q(roll_number__icontains=clean_search) |
+                    Q(ssc_roll__icontains=clean_search)
+                )
 
             if secid_param:
                 if isinstance(secid_param, str):
@@ -422,7 +447,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                                 instance.user.save()
 
                         # 2. Update StudentProfile
-                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks', 'optional_subject_id']
+                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks', 'optional_subject_id', 'ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']
                         safe_data = {}
                         profile_changed = False
 

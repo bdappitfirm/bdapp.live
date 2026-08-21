@@ -55,15 +55,15 @@ echo "[3/6] Ensuring correct ownership/permissions..."
 chown -R www-data:www-data "$BACKEND_DIR"
 chmod +x "$BACKEND_DIR/.venv/bin/"* 2>/dev/null || true
 
-# 4) Data-quality helpers (non-destructive)
-echo "[4/6] Transliterating Bangla names -> English (only empty EN fields)..."
-"$VENV_PYTHON" auto_translate.py --force 2>/dev/null || true
+# 4) Data-quality helpers (DISABLED as per user request to avoid overwriting manual updates)
+# echo "[4/6] Transliterating Bangla names -> English (only empty EN fields)..."
+# "$VENV_PYTHON" auto_translate.py --force 2>/dev/null || true
 
-echo "[5/6] Fixing CA subject pass status (Book Reading, PE, etc.)..."
-"$VENV_PYTHON" fix_ca_subjects.py 2>/dev/null || true
+# echo "[5/6] Fixing CA subject pass status (Book Reading, PE, etc.)..."
+# "$VENV_PYTHON" fix_ca_subjects.py 2>/dev/null || true
 
 # 6) Restart application servers
-echo "[6/6] Restarting gunicorn + daphne..."
+echo "[4/6] Restarting gunicorn + daphne..."
 systemctl restart gunicorn daphne
 
 echo "========================================"

@@ -45,14 +45,21 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
 
   useEffect(() => {
     const initialDays = {};
+    // User requested specific working days for Jan-Jun: 21, 9, 3, 17, 15, 18
+    const manualDays = { 1: 21, 2: 9, 3: 3, 4: 17, 5: 15, 6: 18 };
+
     MONTH_LIST.forEach(m => {
-      let count = 0;
-      const daysInMonth = new Date(year, m.id, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(year, m.id - 1, day);
-        if (date.getDay() !== 5 && date.getDay() !== 6) count++;
+      if (manualDays[m.id]) {
+        initialDays[m.id] = manualDays[m.id];
+      } else {
+        let count = 0;
+        const daysInMonth = new Date(year, m.id, 0).getDate();
+        for (let day = 1; day <= daysInMonth; day++) {
+          const date = new Date(year, m.id - 1, day);
+          if (date.getDay() !== 5 && date.getDay() !== 6) count++;
+        }
+        initialDays[m.id] = count;
       }
-      initialDays[m.id] = count;
     });
     setWorkingDays(initialDays);
   }, [year]);
@@ -87,7 +94,22 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
       const res = await api.get('/api/attendance/summaries/get_by_section/', {
         params: { classroom: selectedClass, section: selectedSection, year, school_id: schoolId }
       });
-      setStudents(res.data || []);
+
+      const rawStudents = res.data || [];
+      // Re-calculate totals on load to ensure frontend logic consistency
+      const processedStudents = rawStudents.map(s => {
+        const { totalP, totalA } = calculateTotals(s.summary?.monthly_data);
+        return {
+          ...s,
+          summary: {
+            ...s.summary,
+            total_present: totalP,
+            total_absent: totalA
+          }
+        };
+      });
+
+      setStudents(processedStudents);
     } catch (err) {
       console.error(err);
       toast.error('ডাটা লোড করতে সমস্যা হয়েছে');
@@ -96,28 +118,48 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
     }
   };
 
+  const calculateTotals = (monthlyData) => {
+    let totalP = 0;
+    let totalWorkDays = 0;
+
+    Object.entries(monthlyData || {}).forEach(([monthId, m]) => {
+      // Only count months that have a non-empty presence input
+      if (m.present !== '' && m.present !== undefined && m.present !== null) {
+        totalP += (parseInt(m.present, 10) || 0);
+        totalWorkDays += (parseInt(workingDays[monthId], 10) || 0);
+      }
+    });
+
+    // Total Absence = Total Working Days - Total Presence (Can be negative if error, so clamp to 0)
+    const totalA = Math.max(0, totalWorkDays - totalP);
+    return { totalP, totalA };
+  };
+
   const handleWorkingDaysChange = (monthId, val) => {
     const days = parseInt(val, 10) || 0;
     setWorkingDays(prev => ({ ...prev, [monthId]: days }));
 
+    // Update ALL students' absence and totals for this month
     setStudents(prev => prev.map(s => {
-      const currentMonthlyData = s.summary?.monthly_data || {};
-      const mData = currentMonthlyData[monthId];
+      const currentSummary = s.summary || { monthly_data: {}, total_present: 0, total_absent: 0 };
+      const currentMonthlyData = { ...(currentSummary.monthly_data || {}) };
+      const mData = currentMonthlyData[monthId] || { present: '', absent: '' };
 
-      // If student has presence data, update their absence based on new working days
-      if (mData && (mData.present !== undefined || mData.absent !== undefined)) {
-        const newAbsent = Math.max(0, days - (mData.present || 0));
-        const newMonthlyData = { ...currentMonthlyData, [monthId]: { ...mData, absent: newAbsent } };
+      // Only update if there is presence data
+      if (mData.present !== '' && mData.present !== undefined && mData.present !== null) {
+        const pVal = parseInt(mData.present, 10) || 0;
+        const newAbsent = Math.max(0, days - pVal);
+        currentMonthlyData[monthId] = { ...mData, absent: newAbsent };
 
-        let totalP = 0, totalA = 0;
-        Object.values(newMonthlyData).forEach(m => {
-          totalP += (m.present || 0);
-          totalA += (m.absent || 0);
-        });
-
+        const { totalP, totalA } = calculateTotals(currentMonthlyData);
         return {
           ...s,
-          summary: { ...s.summary, monthly_data: newMonthlyData, total_present: totalP, total_absent: totalA }
+          summary: {
+            ...currentSummary,
+            monthly_data: currentMonthlyData,
+            total_present: totalP,
+            total_absent: totalA
+          }
         };
       }
       return s;
@@ -125,30 +167,35 @@ export default function AttendanceReportDialog({ open, onClose, classes = [], sc
   };
 
   const handleInputChange = (studentId, monthId, field, value) => {
-    const val = parseInt(value, 10) || 0;
+    const val = value === '' ? '' : (parseInt(value, 10) || 0);
     setStudents(prev => (prev || []).map(s => {
       if (s.student_id === studentId) {
         const currentSummary = s.summary || { monthly_data: {}, total_present: 0, total_absent: 0 };
         const newMonthlyData = { ...(currentSummary.monthly_data || {}) };
-        if (!newMonthlyData[monthId]) newMonthlyData[monthId] = { present: 0, absent: 0 };
+
+        if (!newMonthlyData[monthId]) newMonthlyData[monthId] = { present: '', absent: '' };
 
         newMonthlyData[monthId][field] = val;
 
-        // Auto-calculate absent if present is changed
+        // Auto-calculate absent ONLY if 'present' is changed
         if (field === 'present') {
-          const totalDays = workingDays[monthId] || 0;
-          newMonthlyData[monthId].absent = Math.max(0, totalDays - val);
+          if (val === '') {
+            newMonthlyData[monthId].absent = '';
+          } else {
+            const totalDays = workingDays[monthId] || 0;
+            newMonthlyData[monthId].absent = Math.max(0, totalDays - val);
+          }
         }
 
-        let totalP = 0, totalA = 0;
-        Object.values(newMonthlyData).forEach(m => {
-          totalP += (m.present || 0);
-          totalA += (m.absent || 0);
-        });
-
+        const { totalP, totalA } = calculateTotals(newMonthlyData);
         return {
           ...s,
-          summary: { ...currentSummary, monthly_data: newMonthlyData, total_present: totalP, total_absent: totalA }
+          summary: {
+            ...currentSummary,
+            monthly_data: newMonthlyData,
+            total_present: totalP,
+            total_absent: totalA
+          }
         };
       }
       return s;

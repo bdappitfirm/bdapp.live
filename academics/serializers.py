@@ -240,7 +240,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StudentProfile
-        fields = ['id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo', 'school', 'school_id', 'classroom', 'classroom_id', 'section', 'section_id', 'roll_number', 'group', 'student_group', 'blood_group', 'gender', 'birth_date', 'student_custom_id', 'optional_subject', 'optional_subject_id', 'guardian', 'guardian_id', 'guardian_name', 'guardian_name_en', 'father', 'father_id', 'father_name', 'father_name_en', 'mother', 'mother_id', 'mother_name', 'mother_name_en', 'admission_date', 'address', 'address_en', 'remarks', 'voter_number', 'subjects_list']
+        fields = ['id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo', 'school', 'school_id', 'classroom', 'classroom_id', 'section', 'section_id', 'roll_number', 'group', 'student_group', 'blood_group', 'gender', 'birth_date', 'student_custom_id', 'optional_subject', 'optional_subject_id', 'guardian', 'guardian_id', 'guardian_name', 'guardian_name_en', 'father', 'father_id', 'father_name', 'father_name_en', 'mother', 'mother_id', 'mother_name', 'mother_name_en', 'admission_date', 'address', 'address_en', 'remarks', 'voter_number', 'subjects_list', 'ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']
         read_only_fields = ['school']
 
     def create(self, validated_data):

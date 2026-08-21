@@ -1707,7 +1707,7 @@ export default function ResultCardGenerator() {
     }
   };
 
-  const buildCardForStudent = async (stuId, preFetchedStudent = null, preFetchedResults = null, preFetchedOverall = null, sectionSubjs = null, validSubjKeys = null) => {
+  const buildCardForStudent = async (stuId, preFetchedStudent = null, preFetchedResults = null, preFetchedOverall = null, sectionSubjs = null, validSubjKeys = null, preFetchedAttendance = null) => {
     try {
       const student = preFetchedStudent || (await api.get(`/api/academics/students/${stuId}/`).then(r => r.data));
       const selType = normalizeExamType(selectedExamType);
@@ -1749,7 +1749,11 @@ export default function ResultCardGenerator() {
          } catch (_) {}
       }
 
-      return { studentData: { student }, results: merged, overallResult: overall, examination: matchingExams[0] };
+      const cardData = { studentData: { student }, results: merged, overallResult: overall, examination: matchingExams[0] };
+      if (preFetchedAttendance) {
+        cardData.studentData.attendance_summary = preFetchedAttendance;
+      }
+      return cardData;
     } catch (_) { return null; }
   };
 
@@ -1781,15 +1785,24 @@ export default function ResultCardGenerator() {
       const normalizedSelType = normalizeExamType(selectedExamType);
 
       // 1. Fetch EVERYTHING in bulk
-      const [rRes, oRes] = await Promise.all([
+      const [rRes, oRes, aRes] = await Promise.all([
         scopedGet('/api/results/results/', id, { classroom: selectedClass, section: selectedSection, year: selectedYear, page_size: 10000 }),
         api.get('/api/results/overall/combined_rank_list_by_exam_type/', {
           params: { exam_type: normalizedSelType, classroom: selectedClass, section: selectedSection, school: id, year: selectedYear, page_size: 2000 }
+        }).catch(() => ({ data: [] })),
+        api.get('/api/attendance/summaries/get_by_section/', {
+          params: { classroom: selectedClass, section: selectedSection, year: selectedYear, school: id }
         }).catch(() => ({ data: [] }))
       ]);
 
       const rList = Array.isArray(rRes.data) ? rRes.data : (rRes.data?.results || []);
       const oList = Array.isArray(oRes.data) ? oRes.data : (oRes.data?.results || []);
+      const aList = Array.isArray(aRes.data) ? aRes.data : [];
+
+      const attendanceMap = {};
+      aList.forEach(item => {
+        if (item.student_id) attendanceMap[String(item.student_id)] = item.summary;
+      });
 
       // Filter: Identify valid subjects
       const validSubjKeys = new Set();
@@ -2067,7 +2080,7 @@ export default function ResultCardGenerator() {
           if (total > 0) subjectsWithPositiveData.add(String(r.subject?.id || r.subject_id || r.subject_name));
         });
         if (subjectsWithPositiveData.size < 3) continue;
-        const card = await buildCardForStudent(s.id, s, stuResults, stuOverall, sectionSubjs, validSubjKeys);
+        const card = await buildCardForStudent(s.id, s, stuResults, stuOverall, sectionSubjs, validSubjKeys, attendanceMap[sIdStr]);
         if (card) {
           allGeneratedCards.push(card);
           setBulkCards([...allGeneratedCards]);
