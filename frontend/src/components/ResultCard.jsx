@@ -393,12 +393,15 @@ const transliterateBnToEn = (text) => {
   // Special cases for common name parts
   const specialNames = {
     'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
-    'আক্তার': 'Aktar', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam', 'রহমান': 'Rahman',
+    'আক্তার': 'Akter', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam', 'রহমান': 'Rahman',
     'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
     'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
     'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
     'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
-    'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful'
+    'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful',
+    'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul',
+    'পাটওয়ারী': 'Patwary', 'দক্ষিণ': 'Dakshin', 'প্রধানিয়া': 'Prodhania',
+    'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed'
   };
 
   let words = text.split(/\s+/);

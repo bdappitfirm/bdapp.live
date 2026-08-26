@@ -162,10 +162,14 @@ const Certificate = ({ data, school, session }) => {
   const fatherName = toTitleCase(effectiveData.father_name_en || effectiveData.father_name || '');
   const motherName = toTitleCase(effectiveData.mother_name_en || effectiveData.mother_name || '');
 
-  const formatAddress = (addressStr) => {
+  const formatStudentAddress = (addressStr) => {
     if (!addressStr) return '';
     const trimmed = String(addressStr).trim();
     const parts = trimmed.split(/[,，]/).map(p => p.trim()).filter(Boolean);
+    if (parts.length === 4) {
+      const prefixes = ['Village-', 'P.O-', 'Upazilla-', 'District-'];
+      return parts.map((p, i) => `${prefixes[i]}${p}`).join(', ');
+    }
     if (parts.length === 3) {
       const prefixes = ['P.O-', 'Upazilla-', 'District-'];
       return parts.map((p, i) => `${prefixes[i]}${p}`).join(', ');
@@ -174,10 +178,8 @@ const Certificate = ({ data, school, session }) => {
   };
 
   const rawStudentAddress = effectiveData?.address_en || effectiveData?.address || user?.address_en || user?.address || '';
-  const fallbackSchoolAddress = (school?.address_en || school?.address || '').trim().replace(/[\.\s]+$/, '');
-
-  const schoolAddress = formatAddress(fallbackSchoolAddress);
-  const studentAddress = formatAddress(rawStudentAddress) || schoolAddress;
+  const schoolAddressDisplay = (school?.address_en || school?.address || '').trim().toUpperCase();
+  const studentAddress = formatStudentAddress(rawStudentAddress) || schoolAddressDisplay;
 
   const guardianName = toTitleCase(effectiveData.guardian_name_en ||
                        effectiveData.guardian_name ||
@@ -491,7 +493,7 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
               fontFamily: "'Playfair Display', serif",
               letterSpacing: '0.5px'
             }}>
-              {schoolAddress.toUpperCase()}
+              {schoolAddressDisplay}
             </Typography>
           </Box>
 

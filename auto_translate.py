@@ -44,7 +44,7 @@ def transliterate_bangla(text):
     # Special cases for common names to ensure accurate spelling
     special_names = {
         'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
-        'আক্তার': 'Aktar', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam',
+        'আক্তার': 'Akter', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam',
         'রহমান': 'Rahman', 'মো:': 'Md.', 'মোঃ': 'Md.', 'মোসাম্মৎ': 'Mst.', 'মোসা:': 'Mst.', 'মোসাঃ': 'Mst.',
         'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
         'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
@@ -53,7 +53,10 @@ def transliterate_bangla(text):
         'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful',
         'হক': 'Haque', 'মিলন': 'Milon', 'ইমদাদুল': 'Emdadul', 'এমদাদুল': 'Emdadul',
         'শেখ': 'Sheikh', 'খন্দকার': 'Khandaker', 'চৌধুরী': 'Chowdhury', 'আহমেদ': 'Ahmed',
-        'মাহমুদ': 'Mahmud', 'হাসান': 'Hasan', 'হোসাইন': 'Hossain'
+        'মাহমুদ': 'Mahmud', 'হাসান': 'Hasan', 'হোসাইন': 'Hossain',
+        'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul',
+        'পাটওয়ারী': 'Patwary', 'দক্ষিণ': 'Dakshin', 'প্রধানিয়া': 'Prodhania',
+        'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed'
     }
 
     # Handle common titles first
