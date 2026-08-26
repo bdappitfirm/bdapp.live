@@ -78,8 +78,6 @@ export default function ProfileCard({
     password: '',
     first_name: '',
     first_name_en: '',
-    last_name: '',
-    last_name_en: '',
     email: '',
     phone_number: '',
     blood_group: '',
@@ -166,8 +164,6 @@ export default function ProfileCard({
       password: '',
       first_name: user?.first_name || '',
       first_name_en: user?.first_name_en || '',
-      last_name: user?.last_name || '',
-      last_name_en: user?.last_name_en || '',
       email: user?.email || '',
       phone_number: user?.phone_number || '',
       blood_group: (profile?.blood_group ?? profile?.user?.blood_group ?? ''),
@@ -550,8 +546,6 @@ export default function ProfileCard({
       if (formData.password) fd.append('password', formData.password);
       fd.append('first_name', formData.first_name || '');
       fd.append('first_name_en', formData.first_name_en || '');
-      fd.append('last_name', formData.last_name || '');
-      fd.append('last_name_en', formData.last_name_en || '');
       fd.append('email', formData.email || '');
       fd.append('phone_number', formData.phone_number || '');
       fd.append('blood_group', formData.blood_group || '');
@@ -1154,36 +1148,6 @@ export default function ProfileCard({
                     fullWidth
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    id="edit-last-name"
-                    name="last_name"
-                    label="পদবী (Last Name)"
-                    value={formData.last_name}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const translated = transliterateBangla(val);
-                      setFormData({
-                        ...formData,
-                        last_name: val,
-                        last_name_en: translated
-                      });
-                    }}
-                    fullWidth
-                    error={!!formErrors.last_name}
-                    helperText={formErrors.last_name || ''}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    id="edit-last-name-en"
-                    name="last_name_en"
-                    label="Last Name (English)"
-                    value={formData.last_name_en}
-                    onChange={(e) => setFormData({ ...formData, last_name_en: e.target.value })}
-                    fullWidth
-                  />
-                </Grid>
                 <Grid size={{ xs: 12 }}>
                   <TextField id="edit-email" name="email" label="Email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} fullWidth error={!!formErrors.email} helperText={formErrors.email || ''} />
                 </Grid>
@@ -1223,7 +1187,7 @@ export default function ProfileCard({
                     </Grid>
                   </>
                 )}
-                {roleLower === 'student' && (
+                {roleLower === 'student' && (/নবম|দশম|এসএসসি|এস[\s.]*?এস[\s.]*?সি|[৯১০]ম|পরীক্ষার্থী|\b(nine|ten|ssc|ix|x|9|10)\b/i.test(localProfile?.classroom?.name || profile?.classroom?.name || '')) && (
                   <Grid size={{ xs: 12 }}>
                     <Box sx={{ mt: 2, p: 2, border: '1px dashed', borderColor: 'primary.main', borderRadius: 2 }}>
                       <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>

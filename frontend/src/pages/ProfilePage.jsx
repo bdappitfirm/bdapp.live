@@ -594,29 +594,6 @@ export default function ProfilePage() {
                   />
                 </Grid>
               )}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Last Name"
-                  name="last_name"
-                  value={formData.last_name}
-                  onChange={handleInputChange}
-                  fullWidth
-                  disabled={!editing}
-                  error={!!formErrors.last_name}
-                  helperText={formErrors.last_name || ''}
-                />
-              </Grid>
-              {editing && (
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Last Name (English)"
-                    name="last_name_en"
-                    value={formData.last_name_en}
-                    onChange={handleInputChange}
-                    fullWidth
-                  />
-                </Grid>
-              )}
               <Grid size={{ xs: 12 }}>
                 <TextField
                   label="Email"
@@ -801,7 +778,11 @@ export default function ProfilePage() {
               </Grid>
             </Grid>
 
-            {profile?.role === 'student' && (
+            {profile?.role === 'student' && (() => {
+              const selectedClassObj = classes.find(c => String(c.id) === String(formData.classroom));
+              const showSSC = selectedClassObj ? /নবম|দশম|এসএসসি|এস[\s.]*?এস[\s.]*?সি|[৯১০]ম|পরীক্ষার্থী|\b(nine|ten|ssc|ix|x|9|10)\b/i.test(selectedClassObj.name) : false;
+              return showSSC;
+            })() && (
               <Box sx={{ mt: 4 }}>
                 <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>
                   SSC Information (For Certificate)

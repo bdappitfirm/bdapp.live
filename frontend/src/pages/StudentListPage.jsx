@@ -9,7 +9,7 @@ import api from '../utils/api';
 import { scopedGet, scopedPost } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
-import { getCleanDisplayName } from '../utils/helpers';
+import { getCleanDisplayName, transliterateBangla } from '../utils/helpers';
 import dayjs from 'dayjs';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -56,8 +56,10 @@ export default function StudentListPage() {
       let manualAdmissionDate = s.admission_date ? dayjs(s.admission_date).format('DD/MM/YYYY') : '';
       return {
         ...s, father_name: fName, mother_name: mName,
-        first_name: s.user?.first_name || '', last_name: s.user?.last_name || '',
-        address: s.address || '', phone_number: s.user?.phone_number || '',
+        first_name: s.user?.first_name || '',
+        first_name_en: s.user?.first_name_en || s.first_name_en || '',
+        address: s.address || '', address_en: s.address_en || '',
+        phone_number: s.user?.phone_number || '',
         manual_admission_date: manualAdmissionDate, manual_birth_date: manualBirthDate,
         optional_subject_id: s.optional_subject?.id || s.optional_subject,
         student_group: s.student_group || s.group || ''
@@ -96,10 +98,11 @@ export default function StudentListPage() {
           return {
               id: s.id,
               first_name: s.first_name,
-              last_name: s.last_name,
+              first_name_en: s.first_name_en,
               father_name: s.father_name,
               mother_name: s.mother_name,
               address: s.address,
+              address_en: s.address_en,
               phone_number: s.phone_number,
               birth_date: bDate,
               admission_date: aDate,
@@ -122,6 +125,14 @@ export default function StudentListPage() {
     setStudents(prev => prev.map(s => {
         if (s.id !== studentId) return s;
         let updated = { ...s, [field]: value };
+
+        // Auto-transliterate fields
+        if (field === 'first_name') {
+            updated.first_name_en = transliterateBangla(value);
+        } else if (field === 'address') {
+            updated.address_en = transliterateBangla(value);
+        }
+
         if (field === 'optional_subject_id') {
             const sub = allSubjects.find(sub => String(sub.id) === String(value));
             updated.optional_subject = sub || null;
@@ -183,10 +194,10 @@ export default function StudentListPage() {
 
   const handleDownloadCSV = useCallback(() => {
     if (students.length === 0) return;
-    const headers = ['ক্র.', 'নাম', 'পদবী', 'পিতা', 'মাতা', 'জন্ম তারিখ', 'রোল', 'শাখা', 'গ্রুপ', '৪র্থ বিষয়'];
+    const headers = ['ক্র.', 'নাম', 'পিতা', 'মাতা', 'জন্ম তারিখ', 'রোল', 'শাখা', 'গ্রুপ', '৪র্থ বিষয়'];
     const groupMap = { 'science': 'বিজ্ঞান', 'arts': 'মানবিক', 'commerce': 'ব্যবসায় শিক্ষা' };
     const rows = students.map((s, idx) => [
-      idx + 1, s.first_name, s.last_name, s.father_name, s.mother_name, s.manual_birth_date,
+      idx + 1, s.first_name, s.father_name, s.mother_name, s.manual_birth_date,
       s.roll_number, s.section?.name, groupMap[s.student_group] || s.student_group || '', s.optional_subject?.name || ''
     ]);
     let csv = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\r\n" + rows.map(r => r.join(",")).join("\r\n");
@@ -259,8 +270,8 @@ export default function StudentListPage() {
               <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1350px' : '1150px', borderCollapse: 'collapse' }}>
                 <colgroup>
                   <col style={{ width: '30px' }} />
-                  <col style={{ width: '130px' }} />
-                  <col style={{ width: '100px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '115px' }} />
                   <col style={{ width: '115px' }} />
                   <col style={{ width: '115px' }} />
                   <col style={{ width: '75px' }} />
@@ -273,14 +284,14 @@ export default function StudentListPage() {
                       <col style={{ width: '120px' }} />
                     </>
                   )}
-                  <col style={{ width: '250px' }} />
+                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '200px' }} />
                   <col style={{ width: '110px' }} />
                 </colgroup>
                 <TableHead>
                     <TableRow sx={{ bgcolor: '#1976d2' }}>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ক্র.</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>নাম (First Name)</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>পদবী (Last Name)</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>পিতার নাম</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>মাতার নাম</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>জন্ম তারিখ</TableCell>
@@ -294,6 +305,7 @@ export default function StudentListPage() {
                           </>
                         )}
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>ঠিকানা</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>ঠিকানা (ইংরেজিতে)</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>মোবাইল</TableCell>
                     </TableRow>
                 </TableHead>
@@ -303,9 +315,6 @@ export default function StudentListPage() {
                         <TableCell sx={{ textAlign: 'center', p: 0, m: 0 }}>{cIdx * 17 + idx + 1}</TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.first_name || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'first_name', e.target.value)} style={{ fontWeight: 600 }} />
-                        </TableCell>
-                        <TableCell sx={{ p: 0, m: 0 }}>
-                          <input className="sl-cell-input" value={s.last_name || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'last_name', e.target.value)} style={{ fontWeight: 600 }} />
                         </TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.father_name || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'father_name', e.target.value)} />
@@ -348,6 +357,9 @@ export default function StudentListPage() {
                         )}
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.address || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'address', e.target.value)} />
+                        </TableCell>
+                        <TableCell sx={{ p: 0, m: 0 }}>
+                          <input className="sl-cell-input" value={s.address_en || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'address_en', e.target.value)} />
                         </TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.phone_number || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'phone_number', e.target.value)} />

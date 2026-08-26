@@ -229,8 +229,10 @@ api.interceptors.response.use(
 
       if (!refreshToken) {
         clearTokens();
-        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        // Avoid infinite reload loop on the login page itself
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?next=${next}`;
         }
         return Promise.reject(error);
       }
@@ -242,8 +244,9 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshErr) {
         clearTokens();
-        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?next=${next}`;
         }
       }
     }

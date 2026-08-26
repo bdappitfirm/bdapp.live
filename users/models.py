@@ -97,22 +97,18 @@ class Profile(models.Model):
                 self.role = 'admin'
 
         super().save(*args, **kwargs)
-        # Sync to StudentProfile if this is a student
+        # Sync to StudentProfile if this is a student, using direct update to avoid recursion
         if self.role == 'student':
             try:
                 from academics.models import StudentProfile
-                student_profile = StudentProfile.objects.filter(user=self.user).first()
-                if student_profile:
-                    updated_fields = []
-                    if self.gender and student_profile.gender != self.gender:
-                        student_profile.gender = self.gender
-                        updated_fields.append('gender')
-                    if self.blood_group and student_profile.blood_group != self.blood_group:
-                        student_profile.blood_group = self.blood_group
-                        updated_fields.append('blood_group')
+                update_data = {}
+                if self.gender:
+                    update_data['gender'] = self.gender
+                if self.blood_group:
+                    update_data['blood_group'] = self.blood_group
 
-                    if updated_fields:
-                        student_profile.save(update_fields=updated_fields)
+                if update_data:
+                    StudentProfile.objects.filter(user=self.user).update(**update_data)
             except Exception:
                 pass
 

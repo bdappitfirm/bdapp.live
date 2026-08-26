@@ -18,6 +18,7 @@ import {
   Paper,
   InputAdornment,
   Alert,
+  AlertTitle,
   Fade,
   Zoom,
   Card,
@@ -351,12 +352,31 @@ export default function SubjectsPage() {
     setSaving(true);
     try {
       await api.delete(`/api/academics/subjects/${selectedSubject.id}/`);
-      toast.success('Subject deleted successfully!');
+      toast.success('বিষয়টি এবং এর সব রেজাল্ট/ডাটা সফলভাবে মুছে ফেলা হয়েছে!');
       setDeleteDialogOpen(false);
       loadSubjects();
     } catch (err) {
       console.error(err);
-      toast.error('Failed to delete subject. It may be in use.');
+      const status = err?.response?.status;
+      const errMsg = err?.normalized?.message || err?.response?.data?.detail || '';
+
+      // Graceful handling: 404 "No Subject matches..." means the subject
+      // was already deleted (possibly by another request/user earlier).
+      // Treat it as success and refresh the list.
+      if (
+        status === 404 ||
+        /no subject matches/i.test(errMsg) ||
+        /not found/i.test(errMsg)
+      ) {
+        toast.info(
+          `বিষয়টি "${selectedSubject?.name || ''}" পূর্বেই মুছে ফেলা হয়েছিল। লিস্ট রিফ্রেশ করা হচ্ছে...`
+        );
+        setDeleteDialogOpen(false);
+        loadSubjects();
+        return;
+      }
+
+      toast.error(errMsg || 'বিষয়টি মুছতে সমস্যা হয়েছে।');
     } finally {
       setSaving(false);
     }
@@ -537,11 +557,34 @@ export default function SubjectsPage() {
       </Dialog>
 
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Subject?</DialogTitle>
-        <DialogContent><Typography>Are you sure you want to delete <strong>{selectedSubject?.name}</strong>?</Typography></DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={confirmDelete} disabled={saving}>{saving ? 'Deleting...' : 'Delete'}</Button>
+        <DialogTitle sx={{ color: 'error.main', fontWeight: 700 }}>
+          ⚠️ বিষয়টি মুছে ফেলা হবে
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              আপনি কি নিশ্চিত <strong style={{ color: 'error.main' }}>{selectedSubject?.name}</strong> এই বিষয়টি মুছে ফেলতে চান?
+            </Typography>
+            <Alert severity="warning" sx={{ bgcolor: 'warning.50', borderRadius: 2 }}>
+              <AlertTitle sx={{ fontWeight: 700 }}>সব ডাটা মুছে যাবে!</AlertTitle>
+              <Typography variant="body2" component="div">
+                এই বিষয়ের নিচে যতগুলো —
+                <ul style={{ marginTop: 4, marginBottom: 4, paddingLeft: 22 }}>
+                  <li>শিক্ষার্থীদের নাম্বার (Results / Marksheet)</li>
+                  <li>পরীক্ষার রুটিন (Exam Slots)</li>
+                  <li>শিক্ষক এসাইনমেন্ট (Teacher Assignments)</li>
+                  <li>ভার্চুয়াল ক্লাস (Virtual Classes)</li>
+                </ul>
+                সব একসাথে মুছে যাবে। পুনরুদ্ধার করা যাবে না।
+              </Typography>
+            </Alert>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setDeleteDialogOpen(false)}>বাতিল</Button>
+          <Button variant="contained" color="error" onClick={confirmDelete} disabled={saving}>
+            {saving ? 'মুছা হচ্ছে...' : 'হ্যাঁ, সব ডাটাসহ মুছুন'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

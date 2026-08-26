@@ -19,8 +19,6 @@ export default function EditStudentPage() {
     username: '',
     first_name: '',
     first_name_en: '',
-    last_name: '',
-    last_name_en: '',
     email: '',
     phone_number: '',
     roll_number: '',
@@ -62,7 +60,7 @@ export default function EditStudentPage() {
   const [tourStep, setTourStep] = useState(0);
 
   const selectedClassObj = classrooms.find(c => String(c.id) === String(form.classroom_id));
-  const isNineTen = selectedClassObj ? /নবম|দশম|[৯১০]ম|nine|ten|ix|x|\b9\b|\b10\b|s[\s.]*?s[\s.]*?c|এসএসসি|এস[\s.]*?এস[\s.]*?সি|পরীক্ষার্থী/i.test(selectedClassObj.name) : false;
+  const isNineTen = selectedClassObj ? /নবম|দশম|এসএসসি|এস[\s.]*?এস[\s.]*?সি|[৯১০]ম|পরীক্ষার্থী|\b(nine|ten|ssc|ix|x|9|10)\b/i.test(selectedClassObj.name) : false;
 
   const guidanceSteps = [
     { selector: '#student-photo-edit', text: 'আপনি চাইলে শিক্ষার্থীর ছবি পরিবর্তন করতে পারেন', autoNext: false },
@@ -74,7 +72,6 @@ export default function EditStudentPage() {
         { selector: '#optional-subject-edit', text: '৪র্থ বিষয় (Optional) সংশোধন করুন', autoNext: false }
     ] : []),
     { selector: '#student-name-edit', text: 'নাম সংশোধন করুন', autoNext: false },
-    { selector: '#last-name-edit', text: 'পদবী (Last Name) সংশোধন করুন', autoNext: false },
     { selector: '#username-edit', text: 'ইউজার আইডি সংশোধন করুন', autoNext: false },
     { selector: '#gender-edit', text: 'লিঙ্গ সংশোধন করুন', autoNext: false },
     { selector: '#blood-group-edit', text: 'রক্তের গ্রুপ সংশোধন করুন', autoNext: false },
@@ -345,22 +342,6 @@ export default function EditStudentPage() {
               <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({...form, first_name_en: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField
-                id="last-name-edit"
-                fullWidth
-                label="পদবী (Last Name)"
-                value={form.last_name}
-                onFocus={() => updateStep('#last-name-edit')}
-                onChange={e => {
-                  const val = e.target.value;
-                  setForm({...form, last_name: val, last_name_en: transliterateBangla(val)});
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField fullWidth label="পদবী (ইংরেজিতে)" value={form.last_name_en} onChange={e => setForm({...form, last_name_en: e.target.value})} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
               <TextField id="username-edit" fullWidth label="ইউজার আইডি (Username)" value={form.username} onFocus={() => updateStep('#username-edit')} onChange={e => setForm({...form, username: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={4}>
@@ -452,10 +433,21 @@ export default function EditStudentPage() {
           <Typography variant="h6">ঠিকানা ও অন্যান্য</Typography>
           <Grid container spacing={2}>
             <Grid item xs={12}>
-              <TextField fullWidth multiline rows={2} label="ঠিকানা" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+              <TextField
+                id="address-edit"
+                fullWidth
+                multiline
+                rows={2}
+                label="ঠিকানা"
+                value={form.address}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm({...form, address: val, address_en: transliterateBangla(val)});
+                }}
+              />
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth multiline rows={2} label="ঠিকানা (ইংরেজিতে)" value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} />
+              <TextField id="address-en-edit" fullWidth multiline rows={2} label="ঠিকানা (ইংরেজিতে)" value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth label="ভোটার আইডি/জন্ম নিবন্ধন নম্বর" value={form.voter_number} onChange={e => setForm({...form, voter_number: e.target.value})} />

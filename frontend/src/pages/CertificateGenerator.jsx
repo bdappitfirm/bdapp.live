@@ -162,6 +162,23 @@ const Certificate = ({ data, school, session }) => {
   const fatherName = toTitleCase(effectiveData.father_name_en || effectiveData.father_name || '');
   const motherName = toTitleCase(effectiveData.mother_name_en || effectiveData.mother_name || '');
 
+  const formatAddress = (addressStr) => {
+    if (!addressStr) return '';
+    const trimmed = String(addressStr).trim();
+    const parts = trimmed.split(/[,，]/).map(p => p.trim()).filter(Boolean);
+    if (parts.length === 3) {
+      const prefixes = ['P.O-', 'Upazilla-', 'District-'];
+      return parts.map((p, i) => `${prefixes[i]}${p}`).join(', ');
+    }
+    return trimmed;
+  };
+
+  const rawStudentAddress = effectiveData?.address_en || effectiveData?.address || user?.address_en || user?.address || '';
+  const fallbackSchoolAddress = (school?.address_en || school?.address || '').trim().replace(/[\.\s]+$/, '');
+
+  const schoolAddress = formatAddress(fallbackSchoolAddress);
+  const studentAddress = formatAddress(rawStudentAddress) || schoolAddress;
+
   const guardianName = toTitleCase(effectiveData.guardian_name_en ||
                        effectiveData.guardian_name ||
                        (effectiveData.guardian ?
@@ -237,7 +254,8 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
 
   const schoolName = (school?.name_en || school?.name || '');
   const schoolNameWords = schoolName.split(/\s+/).filter(Boolean).length;
-  const schoolNameFontSize = schoolNameWords >= 4 ? '2.2rem !important' : '2.8rem !important';
+  const schoolNameFontSize = schoolNameWords >= 6 ? '1.45rem !important' : schoolNameWords >= 4 ? '1.85rem !important' : '2.6rem !important';
+  const schoolNameLetterSpacing = schoolNameWords >= 6 ? '-0.8px' : '0.5px';
 
   const nameFontSize = name.length > 35 ? '2.2rem' : name.length > 25 ? '2.8rem' : '3.8rem';
   const fatherNameFontSize = fatherName.length > 35 ? '1.8rem' : fatherName.length > 25 ? '2.2rem' : '2.8rem';
@@ -272,8 +290,8 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
     <Box className="certificate-container" sx={{
       position: 'relative',
       backgroundColor: '#fdfbf7',
-      width: '1122px', // Exact A4 Landscape pixel width at 96dpi
-      height: '793px', // Exact A4 Landscape pixel height at 96dpi
+      width: '1122px', // Standard A4 Landscape Width
+      height: '793px', // Standard A4 Landscape Height
       p: 0,
       border: '30px solid #8B4513',
       display: 'flex',
@@ -342,11 +360,10 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
       <Box sx={{
         height: '100%',
         width: '100%',
-        p: '50px 80px',
+        p: '20px 60px 40px 60px', // Reduced top padding to move header up
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
         position: 'relative',
         zIndex: 12
       }}>
@@ -423,46 +440,22 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
         </Box>
 
         {/* Header Section */}
-        <Box sx={{ textAlign: 'center', position: 'relative', zIndex: 1, mb: 1 }}>
-          {/* Left Side: Logo and SL No */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0, position: 'relative', zIndex: 1 }}>
+          {/* Left Side: Logo */}
           <Box sx={{
-            position: 'absolute',
-            top: -10,
-            left: -40, // Moved inward to avoid border
+            width: '120px',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            zIndex: 15,
-            width: '180px'
+            flexShrink: 0
           }}>
             {school?.logo && (
-              <img src={processPhotoUrl(school.logo)} alt="Logo" style={{ height: '120px', width: '120px', objectFit: 'contain', marginBottom: '5px' }} />
+              <img src={processPhotoUrl(school.logo)} alt="Logo" style={{ height: '110px', width: '110px', objectFit: 'contain' }} />
             )}
-            <Typography sx={{ fontWeight: 'bold', fontSize: '1.2rem !important', color: '#5d4037', whiteSpace: 'nowrap' }}>
-              SL No: {effectiveData.student_custom_id || effectiveData.id}
-            </Typography>
-          </Box>
-
-          {/* Right Side: QR Code */}
-          <Box sx={{
-            position: 'absolute',
-            top: -15,
-            right: -60, // Adjusted to avoid overlapping with border
-            p: 1,
-            bgcolor: 'white',
-            borderRadius: 1,
-            zIndex: 15,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <QRCodeSVG value={qrData} size={125} level="M" />
-            <Typography sx={{ fontSize: '0.65rem', textAlign: 'center', mt: 0.5, fontWeight: 'bold', color: '#8b4513' }}>VERIFY STUDENT</Typography>
           </Box>
 
           {/* Centered School Info */}
-          <Box sx={{ mx: 'auto', maxWidth: '800px', pt: 0.5 }}>
+          <Box sx={{ flex: 1, px: 2, textAlign: 'center', minWidth: 0 }}>
             <Typography component="div" sx={{
               fontWeight: '900',
               color: '#5d4037',
@@ -470,19 +463,22 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
               fontFamily: "'Playfair Display', 'Georgia', serif",
               textTransform: 'uppercase',
               mb: 0.1,
-              textShadow: '1px 1px 2px rgba(0,0,0,0.1)',
+              textShadow: '1px 1px 1px rgba(0,0,0,0.05)',
               lineHeight: 1.1,
-              letterSpacing: '1px'
+              letterSpacing: schoolNameLetterSpacing,
+              whiteSpace: 'nowrap',
+              overflow: 'visible',
+              width: '100%'
             }}>
               {schoolName}
             </Typography>
             {school?.ein && (
               <Typography sx={{
                 color: '#8b4513',
-                fontSize: '1.2rem !important',
+                fontSize: '1.1rem !important',
                 fontWeight: 'bold',
                 mb: 0.2,
-                letterSpacing: '3px',
+                letterSpacing: '2px',
                 fontFamily: "'Playfair Display', serif"
               }}>
                 EIIN: {school.ein}
@@ -490,16 +486,34 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
             )}
             <Typography component="div" sx={{
               color: '#8b4513',
-              fontSize: '1.4rem !important',
+              fontSize: '1.0rem !important',
               fontWeight: '600',
               fontFamily: "'Playfair Display', serif",
               letterSpacing: '0.5px'
             }}>
-              {(school?.address_en || school?.address || '').toUpperCase()}
+              {schoolAddress.toUpperCase()}
             </Typography>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 1.5 }}>
+          {/* Right Side: QR Code */}
+          <Box sx={{
+            width: '120px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            flexShrink: 0,
+            p: 0.5,
+            bgcolor: 'white',
+            borderRadius: 1,
+            boxShadow: '0 0 10px rgba(0,0,0,0.05)',
+            mr: -2.5 // Shifted 20px right
+          }}>
+            <QRCodeSVG value={qrData} size={110} level="M" />
+          </Box>
+        </Box>
+
+        <Box sx={{ textAlign: 'center', position: 'relative', zIndex: 1, mt: -2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 0 }}>
             <Box sx={{
               position: 'relative',
               backgroundColor: '#8b4513',
@@ -527,11 +541,12 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
           color: '#1a202c',
           zIndex: 1,
           px: 0,
-          flex: 1,
+          mt: 2,
           display: 'flex',
           flexDirection: 'column',
+          flex: 1,
           justifyContent: 'center',
-          mb: 15
+          mb: 12
         }}>
           <Typography className="body-text" sx={{
             lineHeight: 1.5,
@@ -539,8 +554,7 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
             color: '#2c3e50',
             fontFamily: "'Libre Baskerville', serif !important"
           }}>
-            This is to certify that <span className="name-cursive" style={{ fontSize: nameFontSize, borderBottom: '2px solid #8b4513', padding: '0 8px', lineHeight: '1', display: 'inline-block', verticalAlign: 'baseline', fontFamily: "'Pinyon Script', cursive" }}>{name}</span> {genderWord} of <span className="name-cursive" style={{ fontSize: fatherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive" }}>{fatherName}</span> and <span className="name-cursive" style={{ fontSize: motherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive" }}>{motherName}</span> of <span className="body-text" style={{ fontWeight: '700', color: '#5d4037', fontFamily: "'Libre Baskerville', serif" }}>{(school?.address_en || school?.address || '').trim().replace(/[\.\s]+$/, '')}</span>
-            was a student of this institute. {pronoun} duly passed the <span style={{ fontWeight: 'bold', color: '#8b4513' }}>SSC Examination</span> under the <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla'}</span> held in <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{parseInt(session) || new Date().getFullYear()}</span> from <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{finalGroup}</span> group bearing Roll No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_roll || 'N/A'}</span> and Registration No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_registration || 'N/A'}</span> in the session <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{effectiveData.ssc_session || 'N/A'}</span> and achieved <span style={{ fontWeight: 'bold', color: '#1b5e20' }}>GPA {effectiveData.ssc_gpa || 'N/A'}</span>. {possessive} date of birth is <span style={{ fontWeight: 'bold' }}>{dob}</span>.
+            This is to certify that <span className="name-cursive" style={{ fontSize: nameFontSize, borderBottom: '2px solid #8b4513', padding: '0 8px', lineHeight: '1', display: 'inline-block', verticalAlign: 'baseline', fontFamily: "'Pinyon Script', cursive" }}>{name}</span> {genderWord} of <span className="name-cursive" style={{ fontSize: fatherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive" }}>{fatherName}</span> and <span className="name-cursive" style={{ fontSize: motherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive" }}>{motherName}</span> of <span className="body-text" style={{ fontWeight: '700', color: '#5d4037', fontFamily: "'Libre Baskerville', serif" }}>{studentAddress}</span> was a student of this institute. {pronoun} duly passed the <span style={{ fontWeight: 'bold', color: '#8b4513' }}>SSC Examination</span> under the <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla'}</span> held in <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{parseInt(session) || new Date().getFullYear()}</span> from <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{finalGroup}</span> group bearing Roll No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_roll || 'N/A'}</span> and Registration No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_registration || 'N/A'}</span> in the session <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{effectiveData.ssc_session || 'N/A'}</span> and achieved <span style={{ fontWeight: 'bold', color: '#1b5e20' }}>GPA {effectiveData.ssc_gpa || 'N/A'}</span>. {possessive} date of birth is <span style={{ fontWeight: 'bold' }}>{dob}</span>.
           </Typography>
 
           <Typography className="body-text" sx={{
@@ -560,7 +574,8 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
             mt: 1,
             fontFamily: "'Libre Baskerville', serif !important"
           }}>
-            {pronoun} has a good moral character. I wish {objective} every success in life.
+            {pronoun} possesses a good moral character. I wish {objective} every success in life.
+            <span style={{ fontSize: '10px', opacity: 0.1, position: 'absolute', bottom: 0 }}>V2-AUG25</span>
           </Typography>
         </Box>
 
@@ -576,9 +591,12 @@ Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
           alignItems: 'flex-end',
         }}>
           {/* Footer Info Section - LEFT */}
-          <Box sx={{ textAlign: 'left' }}>
-            <Typography sx={{ fontWeight: 'bold', fontSize: '1.4rem !important', color: '#5d4037' }}>
+          <Box sx={{ textAlign: 'left', mb: 1 }}>
+            <Typography sx={{ fontWeight: 'bold', fontSize: '1.5rem !important', color: '#5d4037' }}>
               Date: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </Typography>
+            <Typography className="sl-no-footer" sx={{ fontWeight: '900', fontSize: '1.5rem !important', color: '#5d4037', whiteSpace: 'nowrap', mt: 1, display: 'block' }}>
+              SL No: {effectiveData.student_custom_id || effectiveData.id}
             </Typography>
           </Box>
 
@@ -766,9 +784,8 @@ export default function CertificateGenerator() {
                 margin: 0;
                 padding: 0;
                 object-fit: fill;
-                /* High quality rendering and slight color boost for print */
                 image-rendering: -webkit-optimize-contrast;
-                filter: contrast(1.02) saturate(1.15);
+                filter: contrast(1.01) saturate(1.1);
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
               }

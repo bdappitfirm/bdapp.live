@@ -8,18 +8,28 @@ from .utils import log_activity
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def create_user_profile(sender, instance, created, **kwargs):
+def save_user_profile(sender, instance, created, **kwargs):
+    """
+    Ensure a profile exists for every user and is kept in sync.
+    We use a flag on the instance to avoid recursion during save.
+    """
     if created:
-        # Create a default profile with no school and default role
         Profile.objects.get_or_create(user=instance)
 
+    # Avoid recursion if we're already saving this profile
+    if getattr(instance, '_saving_profile', False):
+        return
 
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def save_user_profile(sender, instance, **kwargs):
-    # Ensure profile exists and is saved
-    Profile.objects.get_or_create(user=instance)
-    if hasattr(instance, 'profile'):
-        instance.profile.save()
+    try:
+        instance._saving_profile = True
+        if hasattr(instance, 'profile'):
+            instance.profile.save()
+        else:
+            Profile.objects.get_or_create(user=instance)
+    except Exception as e:
+        print(f"Error saving user profile: {e}")
+    finally:
+        instance._saving_profile = False
 
 @receiver(post_save, sender=Profile)
 def log_profile_creation(sender, instance, created, **kwargs):

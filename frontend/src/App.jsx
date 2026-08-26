@@ -164,25 +164,6 @@ const WhatsAppSettings = React.lazy(() => import('./pages/WhatsAppSettings.jsx')
 const BillingPage = React.lazy(() => import('./pages/billing/BillingPage.jsx'));
 const BanbeisPage = React.lazy(() => import('./pages/BanbeisPage.jsx'));
 
-const StartupRedirect = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  useEffect(() => {
-    try {
-      const unauth = !isAuthenticated();
-      const path = location.pathname || '/';
-      const protectedMatch = /^\/school\/[^/]+\/(results|examinations|fees|fee-receipt|receipt-book|groups|schools|id-card|certificate|admission-cards|sms|academics|attendance\/records|attendance\/report-card|year-report)(\/|$)/.test(path);
-      if (unauth && protectedMatch && window.location.pathname === path) {
-        const next = encodeURIComponent(path + location.search);
-        navigate(`/login?next=${next}`, { replace: true });
-      }
-    } catch (_) {}
-    // run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
-};
-
 const PathTracker = () => {
   const location = useLocation();
   useEffect(() => {
@@ -284,7 +265,6 @@ function App() {
                       <Typography variant="body1">Loading...</Typography>
                     </Box>
                   }>
-                    <StartupRedirect />
                     <PathTracker />
                     <ScrollToTop />
                     <Routes>
@@ -295,58 +275,58 @@ function App() {
         {/* স্কুল ড্যাশবোর্ড + nested */}
         <Route path="/school/:id" element={<SchoolDashboard />}>
           <Route index element={<Box sx={{ p: 0 }} />} />
-          <Route path="dashboard-stats" element={<Dashboard />} />
-          <Route path="teacher" element={<TeachersPage />} />
-          <Route path="teacher/add" element={<AddTeacherPage />} />
-          <Route path="teacher/cards" element={<TeacherCardsPage />} />
-          <Route path="student" element={<StudentsPage />} />
-          <Route path="student/add" element={<AddStudentPage />} />
-          <Route path="student/:studentId/edit" element={<EditStudentPage />} />
-          <Route path="billing" element={<BillingPage />} />
-          <Route path="banbeis" element={<BanbeisPage />} />
+          <Route path="dashboard-stats" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="teacher" element={<ProtectedRoute allowedRoles={['admin','teacher']}><TeachersPage /></ProtectedRoute>} />
+          <Route path="teacher/add" element={<ProtectedRoute allowedRoles={['admin']}><AddTeacherPage /></ProtectedRoute>} />
+          <Route path="teacher/cards" element={<ProtectedRoute allowedRoles={['admin','teacher']}><TeacherCardsPage /></ProtectedRoute>} />
+          <Route path="student" element={<ProtectedRoute allowedRoles={['admin','teacher']}><StudentsPage /></ProtectedRoute>} />
+          <Route path="student/add" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AddStudentPage /></ProtectedRoute>} />
+          <Route path="student/:studentId/edit" element={<ProtectedRoute allowedRoles={['admin','teacher']}><EditStudentPage /></ProtectedRoute>} />
+          <Route path="billing" element={<ProtectedRoute allowedRoles={['admin']}><BillingPage /></ProtectedRoute>} />
+          <Route path="banbeis" element={<ProtectedRoute allowedRoles={['admin','teacher']}><BanbeisPage /></ProtectedRoute>} />
           <Route path="promotion" element={<ProtectedRoute allowedRoles={['admin','teacher']}><StudentsPage /></ProtectedRoute>} />
           <Route path="year-report" element={<ProtectedRoute allowedRoles={['admin','teacher']}><YearReportPage /></ProtectedRoute>} />
-          <Route path="subjects" element={<SubjectsPage />} />
-          <Route path="classes" element={<ClassroomsPage />} />
-          <Route path="attendance" element={<AttendancePageNew />} />
+          <Route path="subjects" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SubjectsPage /></ProtectedRoute>} />
+          <Route path="classes" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ClassroomsPage /></ProtectedRoute>} />
+          <Route path="attendance" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AttendancePageNew /></ProtectedRoute>} />
           <Route path="attendance/records" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AttendanceRecordsPage /></ProtectedRoute>} />
           <Route path="attendance/report-card" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AttendanceReportCard /></ProtectedRoute>} />
           <Route path="academics" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AcademicsPage /></ProtectedRoute>} />
-          <Route path="live-class" element={<VirtualClassPage />} />
+          <Route path="live-class" element={<ProtectedRoute allowedRoles={['admin','teacher','student']}><VirtualClassPage /></ProtectedRoute>} />
           <Route path="results" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ResultsPage /></ProtectedRoute>} />
           <Route path="examinations" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ExaminationsPage /></ProtectedRoute>} />
           <Route path="fees" element={<ProtectedRoute allowedRoles={['admin','teacher']}><FeesPage /></ProtectedRoute>} />
           <Route path="fee-receipt" element={<ProtectedRoute allowedRoles={['admin','teacher']}><FeePaymentReceipt /></ProtectedRoute>} />
           <Route path="receipt-book" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ReceiptBook /></ProtectedRoute>} />
           <Route path="groups" element={<ProtectedRoute allowedRoles={['admin','teacher']}><GroupsPage /></ProtectedRoute>} />
-          <Route path="schools" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SchoolsPage /></ProtectedRoute>} />
-          <Route path="result-card" element={<ResultCardGenerator />} />
+          <Route path="schools" element={<ProtectedRoute allowedRoles={['admin']}><SchoolsPage /></ProtectedRoute>} />
+          <Route path="result-card" element={<ProtectedRoute allowedRoles={['admin','teacher','student','parent']}><ResultCardGenerator /></ProtectedRoute>} />
           <Route path="class-results" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ClassResultsPage /></ProtectedRoute>} />
-          <Route path="rank-list" element={<RankListPage />} />
-          <Route path="merit-list" element={<MeritListPage />} />
-          <Route path="tot-list" element={<ToTListPage />} />
-          <Route path="voter-list" element={<VoterListPage />} />
-          <Route path="student-list" element={<StudentListPage />} />
+          <Route path="rank-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><RankListPage /></ProtectedRoute>} />
+          <Route path="merit-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><MeritListPage /></ProtectedRoute>} />
+          <Route path="tot-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ToTListPage /></ProtectedRoute>} />
+          <Route path="voter-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><VoterListPage /></ProtectedRoute>} />
+          <Route path="student-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><StudentListPage /></ProtectedRoute>} />
           <Route path="siblings" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SiblingsPage /></ProtectedRoute>} />
-          <Route path="id-card" element={<IDCardGenerator />} />
+          <Route path="id-card" element={<ProtectedRoute allowedRoles={['admin','teacher']}><IDCardGenerator /></ProtectedRoute>} />
           <Route path="certificate" element={<ProtectedRoute allowedRoles={['admin','teacher']}><CertificateGenerator /></ProtectedRoute>} />
           <Route path="admission-cards" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AdmissionCardGenerator /></ProtectedRoute>} />
-          <Route path="assistant" element={<SoftwareAssistant />} />
+          <Route path="assistant" element={<ProtectedRoute><SoftwareAssistant /></ProtectedRoute>} />
           <Route path="support-live" element={<ProtectedRoute><SupportLivePage /></ProtectedRoute>} />
           <Route path="sms" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SMSPage /></ProtectedRoute>} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="admin" element={<RoleDashboard role="admin" />} />
+          <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="admin" element={<ProtectedRoute allowedRoles={['admin']}><RoleDashboard role="admin" /></ProtectedRoute>} />
           <Route path="settings" element={<ProtectedRoute allowedRoles={['admin']}><SchoolSettings /></ProtectedRoute>} />
           <Route path="whatsapp" element={<ProtectedRoute allowedRoles={['admin']}><WhatsAppSettings /></ProtectedRoute>} />
-          <Route path="parent" element={<ParentsPage />} />
+          <Route path="parent" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ParentsPage /></ProtectedRoute>} />
           <Route path="credentials" element={<ProtectedRoute allowedRoles={['admin']}><CredentialsPage /></ProtectedRoute>} />
-          <Route path="parent/add" element={<AddParentPage />} />
-          <Route path="parent/:parentId/dashboard" element={<ParentDashboard />} />
-          <Route path="student/:studentId/dashboard" element={<StudentDashboard />} />
+          <Route path="parent/add" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AddParentPage /></ProtectedRoute>} />
+          <Route path="parent/:parentId/dashboard" element={<ProtectedRoute allowedRoles={['admin','teacher','parent']}><ParentDashboard /></ProtectedRoute>} />
+          <Route path="student/:studentId/dashboard" element={<ProtectedRoute allowedRoles={['admin','teacher','student','parent']}><StudentDashboard /></ProtectedRoute>} />
           <Route path="seat-allocation" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SeatAllocationPage /></ProtectedRoute>} />
-          <Route path="committee" element={<RoleDashboard role="committee" />} />
-          <Route path="committee/add" element={<AddCommitteePage />} />
-          <Route path=":role/:itemId" element={<RoleDetail />} />
+          <Route path="committee" element={<ProtectedRoute allowedRoles={['admin','committee']}><RoleDashboard role="committee" /></ProtectedRoute>} />
+          <Route path="committee/add" element={<ProtectedRoute allowedRoles={['admin']}><AddCommitteePage /></ProtectedRoute>} />
+          <Route path=":role/:itemId" element={<ProtectedRoute><RoleDetail /></ProtectedRoute>} />
         </Route>
 
         {/* লগইন */}

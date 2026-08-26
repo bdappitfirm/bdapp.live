@@ -47,6 +47,39 @@ const isCoCurricularLocal = (name, isClassNineOrTen) => {
   return keywords.some(kw => n.includes(kw));
 };
 
+const SCI_KW = /physics|chemistry|biology|higher math|পদার্থ|রসায়ন|জীব|উচ্চতর/i;
+const COM_KW = /accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স/i;
+const HUM_KW = /history|geography|civics|economics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|পৌরণীতি|অর্থনীতি/i;
+
+const classifyPart = (part) => {
+  const s = String(part || '').trim();
+  if (!s) return null;
+  if (SCI_KW.test(s)) return 'science';
+  if (COM_KW.test(s)) return 'commerce';
+  if (HUM_KW.test(s)) return 'humanities';
+  return null;
+};
+
+const resolveGroupStr = (g) => {
+  const s = String(g || '').toLowerCase();
+  if (s.includes('science') || s.includes('বিজ্ঞান')) return 'science';
+  if (s.includes('commerce') || s.includes('business') || s.includes('ব্যবসায়')) return 'commerce';
+  if (s.includes('arts') || s.includes('humanities') || s.includes('মানবিক')) return 'humanities';
+  return '';
+};
+
+const getEffectiveSubjectForGroup = (subjectName, group) => {
+  const name = String(subjectName || '').trim();
+  if (!name || !name.includes('/')) return name;
+  const g = resolveGroupStr(group);
+  const parts = name.split(/\s*\/\s*/).filter(Boolean);
+  if (!g) return parts[0] || name;
+  for (const p of parts) {
+    if (classifyPart(p) === g) return p;
+  }
+  return parts[0] || name;
+};
+
 const normalizeSubjKeyLocal = (n) => {
     const low = String(n).toLowerCase().trim();
 
@@ -75,15 +108,30 @@ const normalizeSubjKeyLocal = (n) => {
     return low;
 };
 
-const inferGroupLocal = (resList, isNT) => {
+const inferGroupLocal = (resList, isNT, student = null) => {
     if (!isNT || !resList || resList.length === 0) return '';
-    const count = (regex) => resList.filter(r => {
+    const profileGroup = resolveGroupStr(
+        (student && (student.student_group || student.group)) || ''
+    );
+    if (profileGroup) return profileGroup;
+
+    const countPerGroup = { science: 0, commerce: 0, humanities: 0 };
+    resList.forEach(r => {
         const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0 || (parseFloat(r.total_obtained) > 0));
-        return hasMarks && regex.test(String(r.subject?.name || r.subject_name || '').toLowerCase());
-    }).length;
-    const sciCount = count(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
-    const comCount = count(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
-    const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
+        if (!hasMarks) return;
+        const rawName = String(r.subject?.name || r.subject_name || '');
+        const parts = rawName.includes('/')
+            ? rawName.split(/\s*\/\s*/).filter(Boolean)
+            : [rawName];
+        const seen = new Set();
+        parts.forEach(pt => {
+            const c = classifyPart(pt);
+            if (c && !seen.has(c)) { countPerGroup[c] += 1; seen.add(c); }
+        });
+    });
+    const sciCount = countPerGroup.science;
+    const comCount = countPerGroup.commerce;
+    const humCount = countPerGroup.humanities;
 
     const takesGeneralScience = resList.some(r => {
         const name = (r.subject?.name || r.subject_name || '').toLowerCase();
@@ -104,6 +152,8 @@ const inferGroupLocal = (resList, isNT) => {
 
 
 
+
+
 const translateSubLocal = (key) => {
     const map = {
         'bangla': 'Bangla', 'bangla_p1': 'Bangla 1st Paper', 'bangla_p2': 'Bangla 2nd Paper',
@@ -117,8 +167,9 @@ const translateSubLocal = (key) => {
     return map[key] || key;
 };
 
-const getSubjectMaxima = (name, isClassNineOrTen) => {
-  const lower = String(name || '').toLowerCase();
+const getSubjectMaxima = (name, isClassNineOrTen, group = '') => {
+  const effectiveName = getEffectiveSubjectForGroup(name, group);
+  const lower = String(effectiveName || '').toLowerCase();
 
   if (lower.includes('english') || lower.includes('ইংরেজি') || lower.includes('ইংরেজী') || lower.includes('eng')) {
     if (isClassNineOrTen) return { cq: 100, mcq: 0, pr: 0 };
@@ -449,7 +500,7 @@ export default function ResultCardGenerator() {
                 consolidatedMap.get(key).push(r);
             });
 
-            const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT) || '').toLowerCase();
+            const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT, stuObj) || '').toLowerCase();
             const classSubjs = new Set(allResults.map(r => r.subject?.name || r.subject_name));
             const expectedKeys = getExpectedSubjectsLocal(group, isNT, classSubjs);
             const relWithMarks = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0));
@@ -499,11 +550,12 @@ export default function ResultCardGenerator() {
                     return;
                 }
 
-                let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0;
+                let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0, pPresent = false;
                 papers.forEach(r => {
                     const w = sumStr(r.written_marks), m = sumStr(r.mcq_marks), p = sumStr(r.practical_marks);
-                    if (r.hasActualMarks || (w+m+p) > 0 || parseFloat(r.total_obtained) > 0) { hasAnyMarks = true; }
-                    const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT);
+                    const hasActual = (r.hasActualMarks !== undefined ? r.hasActualMarks : ((r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null)));
+                    if (hasActual || (w+m+p) > 0 || parseFloat(r.total_obtained) > 0) { hasAnyMarks = true; pPresent = true; }
+                    const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT, group);
                     const maxPossible = (spec.cq + spec.mcq + spec.pr || 100);
 
                     let obt = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
@@ -521,7 +573,11 @@ export default function ResultCardGenerator() {
                 const prPass = prMax === 0 || sumP >= Math.round(prMax * 0.33 - 0.5);
                 const totPass = tMarks >= Math.round(tPoss * 0.33 - 0.5);
 
-                const isPassed = totPass && (isNT ? (cqPass && mcqPass && prPass) : true);
+                const isCoCurric = isCoCurricularLocal(key, isNT);
+                let isPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
+                // SPECIAL SYNC: School 63 English/Combined Subject Correction (mirror MeritListPage.jsx L591-592)
+                if (isNT && key === 'english' && tPoss === 200 && tMarks >= 66) isPassed = true;
+                if (isNT && key === 'english' && tPoss === 100 && tMarks >= 33) isPassed = true;
                 const gp = isPassed ? computeGpa((tMarks / tPoss) * 100) : 0;
 
                 if (key === 'higher' || key === 'agriculture') {
@@ -1533,8 +1589,8 @@ export default function ResultCardGenerator() {
 
             if (matchIndex !== -1) {
               const match = sortedList[matchIndex];
-              // Sequential Rank within filtered section list (Use backend rank if available)
-              const finalRank = Number(match.rank_in_section || match.rank || (matchIndex + 1));
+              // Sequential Rank within filtered section list - use frontend sorted position first (not stale backend rank)
+              const finalRank = Number(matchIndex + 1);
 
               overall = {
                 percentage: match.percentage,
@@ -1584,11 +1640,14 @@ export default function ResultCardGenerator() {
       }
 
       if (overall) {
-          // ALWAYS Recalculate rank on the frontend to match Class Results/Merit List logic exactly
-          const newRank = await calculateStudentRank(student.id, sectionResults.length > 0 ? sectionResults : null, stuSectionId);
-          if (newRank) {
-              overall.rank = newRank;
-              overall.rank_in_section = newRank;
+          // Only recalculate rank if the combined_rank_list_by_exam_type flow did NOT already provide
+          // a frontend-sorted rank (that list uses the exact Merit List exam-specific pool).
+          if (overall.rank == null || overall.rank_in_section == null) {
+              const newRank = await calculateStudentRank(student.id, sectionResults.length > 0 ? sectionResults : null, stuSectionId);
+              if (newRank) {
+                  overall.rank = newRank;
+                  overall.rank_in_section = newRank;
+              }
           }
       }
 
@@ -1916,7 +1975,7 @@ export default function ResultCardGenerator() {
               consolidatedMap.get(key).push(r);
           });
 
-          const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT) || '').toLowerCase();
+          const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT, stuObj) || '').toLowerCase();
           const expectedKeys = getExpectedSubjectsLocal(group, isNT, sectionSubjs);
           const relWithMarks = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0));
           const takenRelId = relWithMarks?.subject?.id || relWithMarks?.subject;
@@ -1960,11 +2019,12 @@ export default function ResultCardGenerator() {
                   return;
               }
 
-              let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0;
+              let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0, pPresent = false;
               papers.forEach(r => {
                   const w = sumStr(r.written_marks), m = sumStr(r.mcq_marks), p = sumStr(r.practical_marks);
-                  if (r.hasActualMarks || (w+m+p) > 0 || parseFloat(r.total_obtained) > 0) { hasAnyMarks = true; }
-                  const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT);
+                  const hasActual = (r.hasActualMarks !== undefined ? r.hasActualMarks : ((r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null)));
+                  if (hasActual || (w+m+p) > 0 || parseFloat(r.total_obtained) > 0) { hasAnyMarks = true; pPresent = true; }
+                  const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT, group);
                   const maxPossible = (spec.cq + spec.mcq + spec.pr || 100);
 
                   let obt = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
@@ -1982,7 +2042,11 @@ export default function ResultCardGenerator() {
               const prPass = prMax === 0 || sumP >= Math.round(prMax * 0.33 - 0.5);
               const totPass = tMarks >= Math.round(tPoss * 0.33 - 0.5);
 
-              const isPassed = totPass && (isNT ? (cqPass && mcqPass && prPass) : true);
+              const isCoCurric = isCoCurricularLocal(key, isNT);
+              let isPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
+              // SPECIAL SYNC: School 63 English/Combined Subject Correction (mirror MeritListPage.jsx L591-592)
+              if (isNT && key === 'english' && tPoss === 200 && tMarks >= 66) isPassed = true;
+              if (isNT && key === 'english' && tPoss === 100 && tMarks >= 33) isPassed = true;
               const gp = isPassed ? computeGpa((tMarks / tPoss) * 100) : 0;
 
               if (key === 'higher' || key === 'agriculture') {

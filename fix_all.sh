@@ -36,7 +36,7 @@ echo "========================================"
 cd "$BACKEND_DIR"
 
 # 1) Apply NEW Django migrations only (existing tables/data untouched)
-echo "[1/6] Running Django migrations (--noinput, no data loss)..."
+echo "[1/7] Running Django migrations (--noinput, no data loss)..."
 # Safety: never use --fake-initial here; only regular migrate.
 "$VENV_PYTHON" manage.py migrate --noinput || {
     # Very specific workaround for historical academics 0010 constraint
@@ -46,28 +46,45 @@ echo "[1/6] Running Django migrations (--noinput, no data loss)..."
     "$VENV_PYTHON" manage.py migrate --noinput
 }
 
-# 2) Collect static (React frontend build files)
-echo "[2/6] Collecting static files..."
-"$VENV_PYTHON" manage.py collectstatic --noinput
+# 2) Clear STATIC_ROOT FIRST to force full refresh (avoids stale hashed JS/CSS)
+echo "[2/7] Wiping staticfiles/ for clean collectstatic ..."
+if [ -d "$BACKEND_DIR/staticfiles" ]; then
+    rm -rf "$BACKEND_DIR/staticfiles" 2>/dev/null || true
+fi
+mkdir -p "$BACKEND_DIR/staticfiles"
 
-# 3) Permissions
-echo "[3/6] Ensuring correct ownership/permissions..."
+# Extra: Wipe Django system cache to clear template caching
+echo "[2b/7] Clearing Django cache..."
+"$VENV_PYTHON" manage.py shell -c "from django.core.cache import cache; cache.clear()" 2>/dev/null || true
+
+# 3) Collect static (React frontend build files) - with --clear + --noinput
+echo "[3/7] Collecting static files (full refresh)..."
+"$VENV_PYTHON" manage.py collectstatic --clear --noinput
+
+# 4) Permissions
+echo "[4/7] Ensuring correct ownership/permissions..."
 chown -R www-data:www-data "$BACKEND_DIR"
 chmod +x "$BACKEND_DIR/.venv/bin/"* 2>/dev/null || true
 
-# 4) Data-quality helpers (DISABLED as per user request to avoid overwriting manual updates)
-# echo "[4/6] Transliterating Bangla names -> English (only empty EN fields)..."
+# 5) Data-quality helpers (DISABLED as per user request to avoid overwriting manual updates)
+# echo "[5/7] Transliterating Bangla names -> English (only empty EN fields)..."
 # "$VENV_PYTHON" auto_translate.py --force 2>/dev/null || true
 
-# echo "[5/6] Fixing CA subject pass status (Book Reading, PE, etc.)..."
+# echo "[6/7] Fixing CA subject pass status (Book Reading, PE, etc.)..."
 # "$VENV_PYTHON" fix_ca_subjects.py 2>/dev/null || true
 
 # 6) Restart application servers
-echo "[4/6] Restarting gunicorn + daphne..."
-systemctl restart gunicorn daphne
+echo "[5/7] Restarting gunicorn + daphne..."
+systemctl daemon-reload 2>/dev/null || true
+systemctl restart gunicorn daphne 2>/dev/null || systemctl restart gunicorn.service daphne.service 2>/dev/null || true
+
+# 7) Reload nginx (in case new static files need picking up)
+echo "[6/7] Reloading nginx..."
+nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || echo "nginx reload skipped"
 
 echo "========================================"
 echo " fix_all.sh complete."
 echo " NOTE: LIVE DATA never leaves this server."
 echo " For local dev data, run sync_live_to_local.ps1 on your Windows PC."
+echo " After deploy, do browser Ctrl+Shift+R (hard reload) to bypass service worker cache."
 echo "========================================"

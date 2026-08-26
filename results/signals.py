@@ -54,6 +54,30 @@ def calculate_student_overall_result(examination, student):
     student_group = (student.student_group or "").lower()
     is_910 = _class_group(getattr(examination.classroom, "name", None)) == 'nine_ten'
 
+    # Helpers for combined slash-separated subject names (e.g. Physics/Geography/Accounting)
+    SCI_KW = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর']
+    COM_KW = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়']
+    ART_KW = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি']
+
+    def _classify_part(part):
+        p = (part or '').strip().lower()
+        if not p: return None
+        if any(k in p for k in SCI_KW): return 'science'
+        if any(k in p for k in COM_KW): return 'commerce'
+        if any(k in p for k in ART_KW): return 'arts'
+        return None
+
+    def _effective_subject(name, sgroup):
+        n = (name or '').strip()
+        if not n or '/' not in n: return n
+        parts = [pt.strip() for pt in n.split('/') if pt.strip()]
+        if not parts: return n
+        if not sgroup: return parts[0]
+        for pt in parts:
+            if _classify_part(pt) == sgroup:
+                return pt
+        return parts[0]
+
     # 1. Group Filtering: For 9-10, only keep subjects that belong to the student's group
     valid_results = []
     SCIENCE_SUBJS = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর']
@@ -76,10 +100,11 @@ def calculate_student_overall_result(examination, student):
         name = r.subject.name
 
         if is_910 and student_group:
-            name_low = name.lower()
-            if student_group == 'science' and any(kw in name_low for kw in (COMMERCE_SUBJS + ARTS_SUBJS)): continue
-            if student_group == 'commerce' and any(kw in name_low for kw in (SCIENCE_SUBJS + ARTS_SUBJS)): continue
-            if student_group == 'arts' and any(kw in name_low for kw in (SCIENCE_SUBJS + COMMERCE_SUBJS)): continue
+            eff_name = _effective_subject(name, student_group)
+            eff_low = eff_name.lower()
+            if student_group == 'science' and any(kw in eff_low for kw in (COMMERCE_SUBJS + ARTS_SUBJS)): continue
+            if student_group == 'commerce' and any(kw in eff_low for kw in (SCIENCE_SUBJS + ARTS_SUBJS)): continue
+            if student_group == 'arts' and any(kw in eff_low for kw in (SCIENCE_SUBJS + COMMERCE_SUBJS)): continue
 
         # Special logic for Religion: keep only ONE religion record (the one with marks)
         if is_religion(name):
@@ -149,7 +174,7 @@ def calculate_student_overall_result(examination, student):
     group = _class_group(getattr(examination.classroom, "name", None))
     total_possible = 0
     for r in results_to_calculate:
-        maxima = get_subject_maxima(group, getattr(r.subject, "name", None))
+        maxima = get_subject_maxima(group, getattr(r.subject, "name", None), student_group if is_910 else None)
         if maxima:
             total_possible += (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0)))
         else:
@@ -159,7 +184,7 @@ def calculate_student_overall_result(examination, student):
     bonus_marks = 0
     if optional_result:
         opt_obtained = float(optional_result.total_obtained)
-        maxima = get_subject_maxima(group, getattr(optional_result.subject, "name", None))
+        maxima = get_subject_maxima(group, getattr(optional_result.subject, "name", None), student_group if is_910 else None)
         opt_possible = (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0))) if maxima else 100
         opt_threshold = opt_possible * 0.4
         if opt_obtained > opt_threshold:

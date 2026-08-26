@@ -65,7 +65,7 @@ const LoginPage = () => {
         console.log('LoginPage - next:', next);
 
         const goHome = () => {
-          if (lastPath && lastPath !== '/login') navigate(lastPath, { replace: true });
+          if (lastPath && lastPath !== '/login' && !lastPath.startsWith('/login')) navigate(lastPath, { replace: true });
           else if (lastSchoolId) navigate(`/school/${lastSchoolId}`, { replace: true });
           else navigate('/', { replace: true });
         };

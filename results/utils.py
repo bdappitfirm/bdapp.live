@@ -234,82 +234,137 @@ SECTION_MAXIMA = {
     }
 }
 
-def get_subject_maxima(group, subject_name):
+def get_subject_maxima(group, subject_name, student_group=None, target_total=None):
     """
     Returns the maxima dictionary for a given subject in a class group.
-    Enhanced with priority matching for 2nd papers to ensure correct divisors.
+    Enhanced with priority matching for 2nd papers and student groups.
+    If target_total is provided, it scales the standard distribution.
     """
     if not group:
         return None
     raw = (subject_name or "").strip().lower()
+
+    # Handle combined subjects if student_group is provided
+    s = raw
+    if '/' in raw and student_group:
+        parts = [p.strip() for p in raw.split('/')]
+
+        # Keywords for group detection
+        SCI_KW = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর']
+        COM_KW = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়']
+        ART_KW = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি']
+
+        target_part = None
+        for p in parts:
+            p_low = p.lower()
+            if student_group == 'science' and any(k in p_low for k in SCI_KW):
+                target_part = p
+                break
+            if student_group == 'commerce' and any(k in p_low for k in COM_KW):
+                target_part = p
+                break
+            if student_group == 'arts' and any(k in p_low for k in ART_KW):
+                target_part = p
+                break
+
+        if target_part:
+            s = target_part
+        else:
+            s = parts[0] # Fallback to first part if no group match
+
     # Remove contents inside parentheses
-    s = re.sub(r"\s*\(.*?\)\s*", "", raw).strip()
+    s = re.sub(r"\s*\(.*?\)\s*", "", s).strip()
     # Normalize spaces and punctuation
     s = re.sub(r"[-_.,]", " ", s).strip()
     s = " ".join(s.split())
 
     group_maxima = SECTION_MAXIMA.get(group, {})
-    
+    res = None
+
     # 1. Exact match
     if s in group_maxima:
-        return group_maxima[s]
+        res = group_maxima[s].copy()
 
-    # 2. Priority: Check for 2nd papers or specific complex names
-    if any(k in s for k in ["2nd", "second", "২য়", "২য়"]):
-        if "bangla" in s or "বাংলা" in s:
-            target = "bangla second paper"
-            if target in group_maxima: return group_maxima[target]
-        if "english" in s or "english" in s or "ইংরেজি" in s or "ইংরেজী" in s:
-            target = "english second paper"
-            if target in group_maxima: return group_maxima[target]
+    if not res:
+        # 2. Priority: Check for 2nd papers or specific complex names
+        if any(k in s for k in ["2nd", "second", "২য়", "২য়"]):
+            if "bangla" in s or "বাংলা" in s:
+                target = "bangla second paper"
+                if target in group_maxima: res = group_maxima[target].copy()
+            if not res and ("english" in s or "ইংরেজি" in s or "ইংরেজী" in s):
+                target = "english second paper"
+                if target in group_maxima: res = group_maxima[target].copy()
 
-    # Priority 2: Check for Agriculture/Home Economics (to avoid partial match with 'Science/বিজ্ঞান')
-    if any(k in s for k in ["কৃষি", "গার্হস্থ্য", "agri", "home ec"]):
-        if "কৃষি" in s or "agri" in s:
-            return group_maxima.get("কৃষি") or group_maxima.get("agriculture")
-        if "গার্হস্থ্য" in s or "home" in s:
-            return group_maxima.get("গার্হস্থ্য") or group_maxima.get("home economics")
+    if not res:
+        # Priority 2: Check for Agriculture/Home Economics
+        if any(k in s for k in ["কৃষি", "গার্হস্থ্য", "agri", "home ec"]):
+            if "কৃষি" in s or "agri" in s:
+                target = "agriculture"
+                if target in group_maxima: res = group_maxima[target].copy()
+            if not res and ("গার্হস্থ্য" in s or "home" in s):
+                target = "home economics"
+                if target in group_maxima: res = group_maxima[target].copy()
 
-    # 3. Check for Paper 1
-    if any(k in s for k in ["1st", "first", "১ম"]):
-        if "bangla" in s or "বাংলা" in s:
-            target = "bangla first paper"
-            if target in group_maxima: return group_maxima[target]
-        if "english" in s or "english" in s or "ইংরেজি" in s or "ইংরেজী" in s:
-            target = "english first paper"
-            if target in group_maxima: return group_maxima[target]
+    if not res:
+        # 3. Check for Paper 1
+        if any(k in s for k in ["1st", "first", "১ম"]):
+            if "bangla" in s or "বাংলা" in s:
+                target = "bangla first paper"
+                if target in group_maxima: res = group_maxima[target].copy()
+            if not res and ("english" in s or "ইংরেজি" in s or "ইংরেজী" in s):
+                target = "english first paper"
+                if target in group_maxima: res = group_maxima[target].copy()
 
-    # 4. Check for general keywords
-    keywords_map = {
-        'bangla': 'bangla first paper',
-        'বাংলা': 'বাংলা প্রথম পত্র',
-        'english': 'english first paper',
-        'ইংরেজি': 'ইংরেজি প্রথম পত্র',
-        'math': 'mathematics',
-        'গণিত': 'গণিত',
-        'science': 'science',
-        'বিজ্ঞান': 'বিজ্ঞান',
-        'religion': 'religion',
-        'ধর্ম': 'ধর্ম',
-        'ict': 'ict',
-        'তথ্য': 'তথ্য ও যোগাযোগ প্রযুক্তি',
-        'কৃষি': 'কৃষি',
-        'গার্হস্থ্য': 'গার্হস্থ্য',
-        'agriculture': 'agriculture',
-        'home economics': 'home economics',
-        'book reading': 'book reading',
-        'word achievement': 'word achievement',
-        'physical education': 'physical education'
-    }
+    if not res:
+        # 4. Check for general keywords
+        keywords_map = {
+            'bangla': 'bangla first paper',
+            'বাংলা': 'বাংলা প্রথম পত্র',
+            'english': 'english first paper',
+            'ইংরেজি': 'ইংরেজি প্রথম পত্র',
+            'math': 'mathematics',
+            'গণিত': 'গণিত',
+            'science': 'science',
+            'বিজ্ঞান': 'বিজ্ঞান',
+            'religion': 'religion',
+            'ধর্ম': 'ধর্ম',
+            'ict': 'ict',
+            'তথ্য': 'তথ্য ও যোগাযোগ প্রযুক্তি',
+            'কৃষি': 'কৃষি',
+            'গার্হস্থ্য': 'গার্হস্থ্য',
+            'agriculture': 'agriculture',
+            'home economics': 'home economics',
+            'book reading': 'book reading',
+            'word achievement': 'word achievement',
+            'physical education': 'physical education'
+        }
 
-    for kw, target in keywords_map.items():
-        if kw in s:
-            if target in group_maxima:
-                return group_maxima[target]
+        for kw, target in keywords_map.items():
+            if kw in s:
+                if target in group_maxima:
+                    res = group_maxima[target].copy()
+                    break
 
-    # 5. Final fallback: check if any key in group_maxima is part of s or vice-versa
-    for k, v in group_maxima.items():
-        if k in s or s in k:
-            return v
+    if not res:
+        # 5. Final fallback
+        for k, v in group_maxima.items():
+            if k in s or s in k:
+                res = v.copy()
+                break
     
-    return None
+    if res and target_total:
+        current_total = sum(res.values())
+        if current_total > 0 and current_total != target_total:
+            scale = float(target_total) / float(current_total)
+            res['written'] = int(round(res.get('written', 0) * scale))
+            res['mcq'] = int(round(res.get('mcq', 0) * scale))
+            res['practical'] = int(round(res.get('practical', 0) * scale))
+
+            # Adjust diff
+            new_sum = res['written'] + res['mcq'] + res['practical']
+            if new_sum != target_total:
+                diff = target_total - new_sum
+                if res['written'] > 0: res['written'] += diff
+                elif res['mcq'] > 0: res['mcq'] += diff
+
+    return res

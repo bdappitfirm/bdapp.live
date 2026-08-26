@@ -133,7 +133,14 @@ class Result(models.Model):
         self.total_obtained = wm + mm + pm
         
         group = _class_group(getattr(self.examination.classroom, "name", None))
-        maxima = get_subject_maxima(group, getattr(self.subject, "name", None)) or {}
+        # Resolve student_group for combined slash subject names (9-10) to pick correct maxima
+        _sg = None
+        try:
+            if group == 'nine_ten':
+                _sg = (getattr(getattr(self, 'student', None), 'student_group', None) or '').lower() or None
+        except Exception:
+            _sg = None
+        maxima = get_subject_maxima(group, getattr(self.subject, "name", None), _sg) or {}
         
         if maxima:
             wm_max = int(maxima.get("written", 0))

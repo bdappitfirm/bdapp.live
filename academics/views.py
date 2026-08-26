@@ -249,6 +249,116 @@ class SubjectViewSet(viewsets.ModelViewSet):
             traceback.print_exc()
             raise ValidationError({"detail": f"বিষয় আপডেট করতে সমস্যা: {str(e)}"})
 
+    def perform_destroy(self, instance):
+        """
+        Explicit cascade destroy: delete ALL related data (Results, ExamSlots,
+        TeacherAssignments, VirtualClasses, M2M links, optional_subject refs)
+        before removing the Subject itself. Works even if the Subject has data
+        entry because each step explicitly clears references.
+        """
+        from django.db.models.deletion import ProtectedError
+        from academics.models import TeacherAssignment, VirtualClass, StudentProfile
+        from results.models import Result, ExamSlot
+
+        try:
+            with transaction.atomic():
+                subject_id = instance.id
+                school_id = getattr(instance, 'school_id', None)
+
+                # 1) Delete all Result rows that point to this Subject
+                res_del = Result.objects.filter(subject_id=subject_id).delete()
+                print(f"[SubjectDestroy] Deleted {res_del[0]} Result rows for subject#{subject_id}")
+
+                # 2) Delete all ExamSlot rows that point to this Subject
+                es_del = ExamSlot.objects.filter(subject_id=subject_id).delete()
+                print(f"[SubjectDestroy] Deleted {es_del[0]} ExamSlot rows for subject#{subject_id}")
+
+                # 3) Delete all TeacherAssignment rows that point to this Subject
+                ta_del = TeacherAssignment.objects.filter(subject_id=subject_id).delete()
+                print(f"[SubjectDestroy] Deleted {ta_del[0]} TeacherAssignment rows for subject#{subject_id}")
+
+                # 4) Delete all VirtualClass rows that point to this Subject
+                vc_del = VirtualClass.objects.filter(subject_id=subject_id).delete()
+                print(f"[SubjectDestroy] Deleted {vc_del[0]} VirtualClass rows for subject#{subject_id}")
+
+                # 5) Unlink StudentProfile.optional_subject references
+                sp_count = StudentProfile.objects.filter(optional_subject_id=subject_id).update(optional_subject=None)
+                print(f"[SubjectDestroy] Unlinked {sp_count} StudentProfile optional_subject refs")
+
+                # 6) Clear M2M relations (classrooms, sections)
+                try:
+                    instance.classrooms.clear()
+                    instance.sections.clear()
+                except Exception as m2m_err:
+                    print(f"[SubjectDestroy] M2M clear warning: {m2m_err}")
+
+                # 7) Finally delete the Subject instance itself
+                instance.delete()
+                print(f"[SubjectDestroy] Subject #{subject_id} fully deleted with all related data.")
+        except ProtectedError as pe:
+            import traceback
+            traceback.print_exc()
+            raise ValidationError({
+                "detail": (
+                    f"বিষয়টি মুছতে পারছি না কারণ এর সাথে সংযুক্ত অন্য ডাটা আছে: "
+                    f"{len(getattr(pe, 'protected_objects', []))} items. "
+                    "অ্যাডমিনকে যোগাযোগ করুন।"
+                )
+            })
+        except Exception as e:
+            import traceback
+            print(f"[SubjectDestroy] Fatal error during destroy: {type(e).__name__}: {e}")
+            traceback.print_exc()
+            raise ValidationError({"detail": f"বিষয় মুছতে সমস্যা হয়েছে: {str(e)}"})
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Overridden destroy: fetch Subject ONLY by (pk + school_id) without
+        applying the extra classroom/section filters that are used in the
+        list queryset. This prevents 404 "No Subject matches the given query"
+        errors when the user deletes a subject that was loaded from a
+        classroom-scoped or section-scoped list view.
+        """
+        from rest_framework.generics import get_object_or_404
+
+        sid = get_user_school_id(request.user, request)
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        pk = kwargs.get(lookup_url_kwarg, None)
+
+        try:
+            if not sid and not is_global_admin(request.user):
+                return Response(
+                    {"detail": "School not determined for current user."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            if is_global_admin(request.user) and not sid:
+                # Global admin can delete any subject by PK
+                base_qs = Subject.objects.all()
+            else:
+                base_qs = Subject.objects.filter(school_id=sid)
+
+            # Fetch by pk ONLY, no classroom/section filter
+            instance = get_object_or_404(base_qs, pk=pk)
+            self.check_object_permissions(request, instance)
+            self.perform_destroy(instance)
+            return Response(
+                {"detail": "Subject and all related data deleted successfully.", "id": pk},
+                status=status.HTTP_200_OK
+            )
+        except ValidationError as ve:
+            return Response(
+                {"detail": ve.detail if hasattr(ve, 'detail') else str(ve)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"detail": f"বিষয় মুছতে সমস্যা হয়েছে: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class StudentProfileViewSet(viewsets.ModelViewSet):
     queryset = StudentProfile.objects.all()
     serializer_class = StudentProfileSerializer
@@ -437,7 +547,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                     with transaction.atomic():
                         # 1. Update User model (only if fields actually changed)
                         user_changed = False
-                        user_fields = ['first_name', 'last_name', 'phone_number', 'email']
+                        user_fields = ['first_name', 'last_name', 'first_name_en', 'last_name_en', 'phone_number', 'email']
                         if instance.user:
                             for field in user_fields:
                                 if field in data and getattr(instance.user, field) != data[field]:
@@ -447,7 +557,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                                 instance.user.save()
 
                         # 2. Update StudentProfile
-                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks', 'optional_subject_id', 'ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']
+                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'address_en', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks', 'optional_subject_id', 'ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']
                         safe_data = {}
                         profile_changed = False
 

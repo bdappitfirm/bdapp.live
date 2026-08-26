@@ -10,8 +10,25 @@ import { getMediaUrl } from '../utils/media';
 import { bengaliToEnglishNumber } from '../utils/helpers';
 
 // --- SHARED LOGIC ENGINE (MIRROR OF CLASSRESULTSPAGE) ---
-const getSubjectMaxima = (name, isNT) => {
-  const lower = String(name || '').toLowerCase();
+const getSubjectMaxima = (name, isNT, group = '') => {
+  let lower = String(name || '').toLowerCase();
+  const g = String(group || '').toLowerCase();
+
+  // Handle combined subjects (e.g. Physics/Geography/Accounting)
+  if (lower.includes('/') && g) {
+      const parts = lower.split('/');
+      const sciPool = ['physics', 'chemistry', 'biology', 'higher', 'পদার্থ', 'রসায়ন', 'রসায়ন', 'জীব', 'উচ্চতর'];
+      const comPool = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়', 'ব্যবসায়', 'entrepreneurship', 'উদ্যোগ'];
+      const humPool = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'পৌরণীতি', 'অর্থনীতি'];
+
+      let found = '';
+      if (g.includes('science')) found = parts.find(p => sciPool.some(kw => p.includes(kw)));
+      else if (g.includes('commerce') || g.includes('business')) found = parts.find(p => comPool.some(kw => p.includes(kw)));
+      else if (g.includes('arts') || g.includes('humanities') || g.includes('manobik') || g.includes('মানবিক')) found = parts.find(p => humPool.some(kw => p.includes(kw)));
+
+      if (found) lower = found.trim();
+  }
+
   if (lower.includes('বাংলা') || lower.includes('bangla')) {
     if (isNT && (lower.includes('১ম+২য়') || lower.includes('1st+2nd'))) return { cq: 140, mcq: 60, pr: 0 };
     if (!isNT && (lower.includes('২য়') || lower.includes('২য়') || lower.includes('2nd') || lower.includes('second') || lower.includes('ii'))) return { cq: 35, mcq: 15, pr: 0 };
@@ -54,7 +71,7 @@ const normalizeSubjKey = (n) => {
     const has1 = /([- ]([১1]ম|1st|first|i|প্রথম)(\s|$))|(\bi\b)/i.test(low);
 
     if (low.includes('higher') || low.includes('উচ্চতর')) return 'higher';
-    if (low.includes('math') || low.includes('গণিত')) return 'math';
+    if (low.includes('math') || low.includes('গণিত') || low.includes('গনিত')) return 'math';
     if (low.includes('history') || low.includes('ইতিহাস') || low.includes('সভ্যতা')) return 'history';
     if (low.includes('bgs') || (low.includes('বাংলাদেশ') && (low.includes('পরিচয়') || low.includes('পরিচয়') || low.includes('বিজিএস'))) || (low.includes('বাঃ') && low.includes('পরিচয়')) || low.includes('global studies')) return 'bgs';
 
@@ -84,9 +101,8 @@ const normalizeSubjKey = (n) => {
     if (low.includes('civics') || low.includes('পৌরনীতি') || low.includes('পৌরণীতি')) return 'civics';
     if (low.includes('economics') || low.includes('অর্থনীতি')) return 'economics';
     if ((low.includes('science') || low.includes('বিজ্ঞান')) && !low.includes('social') && !low.includes('সমাজ')) return 'science';
-    if (low.includes('bgs') || low.includes('বাংলাদেশ') || low.includes('বিশ্বপরিচয়') || low.includes('বিজিএস') || low.includes('বিএজিএস') || low.includes('bangladesh studies')) return 'bgs';
 
-    if (is2 && !has1) return low.replace(/([২2][য়য়য]|2nd|second|ii|দ্বিতীয়|Boy|দ্বিতীয়)/gi, '').replace(/[- ]/g, '').trim() + '_p2';
+    if (is2 && !has1) return low.replace(/([২2][য়য়য]|2nd|second|ii|দ্বিতীয়|দ্বিতীয়)/gi, '').replace(/[- ]/g, '').trim() + '_p2';
     if (has1 && !is2) return low.replace(/([১1][ম]|1st|first|i|প্রথম)/gi, '').replace(/[- ]/g, '').trim() + '_p1';
 
     return low;
@@ -150,11 +166,11 @@ const translateSub = (n) => {
 const inferGroup = (resList, isNT) => {
     if (!isNT || !resList || resList.length === 0) return '';
     const count = (regex) => resList.filter(r => {
-        const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0);
+        const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0 || parseFloat(r.total_obtained) > 0);
         return hasMarks && regex.test(String(r.subject?.name || r.subject_name || '').toLowerCase());
     }).length;
     const sciCount = count(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
-    const comCount = count(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
+    const comCount = count(/accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স|ব্যবসায়/i);
     const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
     const takesGeneralScience = resList.some(r => {
         const name = (r.subject?.name || r.subject_name || '').toLowerCase();
@@ -308,14 +324,10 @@ const MeritListPage = () => {
         const ln = (s.user?.last_name || '').toUpperCase();
         const fullName = (fn + ' ' + ln).trim();
         const isTC = fullName.includes('TC') || fn.includes('TC') || ln.includes('TC');
+        const hasNoInfo = !fn && !ln && !s.roll_number;
 
-        // 1. Strict Section filtering
-        if (selectedSection) {
-            const stuSecId = String(s.section?.id || s.section || s.section_id || '');
-            if (stuSecId !== String(selectedSection)) return false;
-        }
-
-        return !isTC && (fn || ln || s.roll_number);
+        if (selectedSection && String(s.section?.id || s.section) !== String(selectedSection)) return false;
+        return !isTC && !hasNoInfo;
     }).sort((a, b) => parseRoll(a.roll_number) - parseRoll(b.roll_number));
   }, [students, selectedSection]);
 
@@ -504,6 +516,20 @@ const MeritListPage = () => {
                         const fallback = virtualMap.get(base) || [];
                         if (fallback.length > 0) papers = fallback;
                     }
+
+                    // Surgical Fallback for combined subjects (e.g. Science/BGS, Physics/Geography/Accounting)
+                    if (papers.length === 0) {
+                        for (let [vKey, vPapers] of virtualMap.entries()) {
+                            if (vPapers.length > 0) {
+                                const vName = String(vPapers[0].subject_name || vPapers[0].subject?.name || '').toLowerCase();
+                                if (vName.includes('/') && vName.includes(key)) {
+                                    papers = vPapers;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     const isRel = isRelSubj(key);
                     let isMandatory = expectedKeys.has(key);
 
@@ -546,7 +572,7 @@ const MeritListPage = () => {
                     papers.forEach(r => {
                         const hasActualMarks = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null);
                         if (hasActualMarks || r.total_obtained > 0) { hasAnyMarks = true; pPresent = true; }
-                        const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT);
+                        const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT, group);
                         const pMax = (spec.cq + spec.mcq + spec.pr || 100);
                         tW += r.sumW; tM += r.sumM; tP += r.sumP; tO += Math.min(r.total_obtained, pMax);
                         tPossible += pMax; cqM += spec.cq; mcqM += spec.mcq; prM += spec.pr;
@@ -560,6 +586,11 @@ const MeritListPage = () => {
 
                     const isCoCurric = CO_CURRICULAR.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
                     let isSubjectPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
+
+                    // SPECIAL SYNC: School 63 English/Combined Subject Correction
+                    if (isNT && key === 'english' && tPossible === 200 && tO >= 66) isSubjectPassed = true;
+                    if (isNT && key === 'english' && tPossible === 100 && tO >= 33) isSubjectPassed = true;
+
                     const gp = isSubjectPassed ? computeGpa((tO / tPossible) * 100) : 0;
 
                     if ((key === 'higher' && showHM) || (key === 'agriculture' && showAgri)) {
@@ -567,6 +598,7 @@ const MeritListPage = () => {
                         if (tO > threshold) score += (tO - threshold);
                         totalPoints += Math.max(0, gp - 2.0);
                     } else if (isMandatory || belongsToGroup) {
+                        if (isNT && (key === 'bgs' || key === 'science') && !group.includes('science')) { if (!pPresent) return; }
                         if (isRel && takenRelId && !papers.some(r => String(r.subject?.id || r.subject) === String(takenRelId))) return;
                         score += tO; totalPoints += gp;
                         if (isMandatory && !isSubjectPassed) {
@@ -608,7 +640,6 @@ const MeritListPage = () => {
                     if (a.fails !== b.fails) return a.fails - b.fails;
                     if (Math.abs(b.points - a.points) > 0.0001) return b.points - a.points;
                     if (Math.abs(b.rawScore - a.rawScore) > 0.01) return b.rawScore - a.rawScore;
-                    // Standard board priority: use browser roll as tie-breaker
                     return a.roll - b.roll;
                 });
                 list.forEach((it, i) => { it.browserRank = i + 1; ranked.push(it); });

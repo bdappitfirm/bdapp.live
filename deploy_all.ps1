@@ -55,9 +55,13 @@ Write-Host "  bdapp.live - 103.112.62.72" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 
 if (-not $NoFrontend) {
-    Write-Host "Cleaning old build..." -ForegroundColor Yellow
+    Write-Host "Cleaning old build and build cache..." -ForegroundColor Yellow
     if (Test-Path "$PROJECT_ROOT\frontend\build") {
         Remove-Item -Path "$PROJECT_ROOT\frontend\build" -Recurse -Force
+    }
+    # Clear webpack cache to prevent incremental build issues
+    if (Test-Path "$PROJECT_ROOT\frontend\node_modules\.cache") {
+        Remove-Item -Path "$PROJECT_ROOT\frontend\node_modules\.cache" -Recurse -Force
     }
     
     Write-Host "Building Frontend..." -ForegroundColor Yellow
@@ -70,7 +74,37 @@ if (-not $NoFrontend) {
         exit 1
     }
     Set-Location $PROJECT_ROOT
-    
+
+    # Verify build timestamp
+    $mainJs = Get-ChildItem -Path "$PROJECT_ROOT\frontend\build\static\js\main.*.js" | Select-Object -First 1
+    if ($mainJs) {
+        Write-Host "Build successful! New main.js: $($mainJs.Name) (Modified: $($mainJs.LastWriteTime))" -ForegroundColor Green
+    }
+
+    Write-Host "Syncing build/index.html -> templates/index.html ..." -ForegroundColor Yellow
+    $srcIdx = "$PROJECT_ROOT\frontend\build\index.html"
+    $dstIdx = "$PROJECT_ROOT\templates\index.html"
+    if (Test-Path $srcIdx) {
+        Copy-Item -Path $srcIdx -Destination $dstIdx -Force
+        Write-Host "  - Copied build\index.html -> templates\index.html" -ForegroundColor Gray
+    } else {
+        Write-Warning "  - WARNING: build\index.html not found!"
+    }
+
+    Write-Host "Syncing frontend\build\static\* -> static\ (for collectstatic) ..." -ForegroundColor Yellow
+    $srcBuildStatic = "$PROJECT_ROOT\frontend\build\static"
+    $dstStaticRoot = "$PROJECT_ROOT\static"
+    if (Test-Path $srcBuildStatic) {
+        if (Test-Path $dstStaticRoot) {
+            Remove-Item -Path "$dstStaticRoot\*" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        New-Item -ItemType Directory -Path $dstStaticRoot -Force | Out-Null
+        Copy-Item -Path "$srcBuildStatic\*" -Destination $dstStaticRoot -Recurse -Force
+        Write-Host "  - Synced frontend\build\static\ -> static\" -ForegroundColor Gray
+    } else {
+        Write-Warning "  - WARNING: frontend\build\static\ not found!"
+    }
+
     Write-Host "Packaging Frontend..." -ForegroundColor Cyan
     if (Test-Path "frontend.tar.gz") { Remove-Item "frontend.tar.gz" -Force }
     tar -czf frontend.tar.gz -C frontend build
@@ -103,7 +137,9 @@ if (-not $NoBackend) {
         "nginx_setup.sh",
         "gunicorn_setup.sh",
         "deploy_rsync_vps.sh",
-        "school_19_students.json"
+        "school_19_students.json",
+        "static",
+        "templates"
     )
     if (Test-Path "backend_minimal.tar") { Remove-Item "backend_minimal.tar" -Force }
     tar -cf backend_minimal.tar --exclude="media" --exclude="staticfiles" --exclude=".venv" --exclude="venv" --exclude="node_modules" --exclude="__pycache__" --exclude="*.pyc" --exclude="*.tar" --exclude="*.tar.gz" --exclude="*.zip" @includes
@@ -114,6 +150,7 @@ $uploadFiles = @()
 if (Test-Path "backend_minimal.tar") { $uploadFiles += "backend_minimal.tar" }
 if (Test-Path "frontend.tar.gz") { $uploadFiles += "frontend.tar.gz" }
 $uploadFiles += "fix_all.sh"
+$uploadFiles += "nginx_setup.sh"
 
 $maxRetries = 3
 $retryCount = 0
@@ -131,13 +168,12 @@ while (-not $success -and $retryCount -lt $maxRetries) {
         $retryCount++
     }
 }
-
 if (-not $success) {
     Write-Error "Upload failed after $maxRetries attempts! Aborting deployment. Please check your internet connection and try again."
     exit 1
 }
 
-Write-Host "Running Deployment on VPS (Extraction & Restart)..." -ForegroundColor Cyan
+Write-Host "Running Deployment on VPS (Extraction + nginx config + migrations)..." -ForegroundColor Cyan
 $remoteCmd = "cd /root; " +
              "tar -xf backend_minimal.tar -C /var/www/bdapp/ 2>/dev/null; " +
              "rm -rf /var/www/bdapp/frontend/build; " +
@@ -145,8 +181,11 @@ $remoteCmd = "cd /root; " +
              "tar -xzf frontend.tar.gz -C /var/www/bdapp/frontend/build --strip-components=1 2>/dev/null; " +
              "cp fix_all.sh /var/www/bdapp/fix_all.sh; " +
              "chmod +x /var/www/bdapp/fix_all.sh; " +
+             "cp nginx_setup.sh /var/www/bdapp/nginx_setup.sh 2>/dev/null; " +
+             "chmod +x /var/www/bdapp/nginx_setup.sh 2>/dev/null; " +
+             "bash /var/www/bdapp/nginx_setup.sh; " +
              "bash /var/www/bdapp/fix_all.sh; " +
-             "rm -f /root/backend_minimal.tar /root/frontend.tar.gz /root/fix_all.sh"
+             "rm -f /root/backend_minimal.tar /root/frontend.tar.gz /root/fix_all.sh /root/nginx_setup.sh 2>/dev/null"
 
 ssh -t "${USER}@${VPS_IP}" "$remoteCmd"
 

@@ -262,6 +262,39 @@ const isCoCurricular = (name, isClassNineOrTen) => {
   return baseList.some(sub => n.includes(sub.toLowerCase()));
 };
 
+const SCI_KW = /physics|chemistry|biology|higher math|পদার্থ|রসায়ন|জীব|উচ্চতর/i;
+const COM_KW = /accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স/i;
+const HUM_KW = /history|geography|civics|economics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|পৌরণীতি|অর্থনীতি/i;
+
+const classifyPart = (part) => {
+  const s = String(part || '').trim();
+  if (!s) return null;
+  if (SCI_KW.test(s)) return 'science';
+  if (COM_KW.test(s)) return 'commerce';
+  if (HUM_KW.test(s)) return 'humanities';
+  return null;
+};
+
+const resolveGroupStr = (g) => {
+  const s = String(g || '').toLowerCase();
+  if (s.includes('science') || s.includes('বিজ্ঞান')) return 'science';
+  if (s.includes('commerce') || s.includes('business') || s.includes('ব্যবসায়')) return 'commerce';
+  if (s.includes('arts') || s.includes('humanities') || s.includes('মানবিক')) return 'humanities';
+  return '';
+};
+
+const getEffectiveSubjectForGroup = (subjectName, group) => {
+  const name = String(subjectName || '').trim();
+  if (!name || !name.includes('/')) return name;
+  const g = resolveGroupStr(group);
+  const parts = name.split(/\s*\/\s*/).filter(Boolean);
+  if (!g) return parts[0] || name;
+  for (const p of parts) {
+    if (classifyPart(p) === g) return p;
+  }
+  return parts[0] || name;
+};
+
 const isOptionalSubject = (r, student, isClassNineOrTen, group = '') => {
   if (!r) return false;
   const sname = String(r.subject?.name || r.subject_name || '').toLowerCase();
@@ -286,8 +319,9 @@ const isOptionalSubject = (r, student, isClassNineOrTen, group = '') => {
   return sname.includes('optional') || sname.includes('ঐচ্ছিক') || sname.includes('fourth') || sname.includes('৪র্থ');
 };
 
-const getSubjectMaxima = (name, isClassNineOrTen) => {
-  const lower = String(name || '').toLowerCase();
+const getSubjectMaxima = (name, isClassNineOrTen, group = '') => {
+  const effectiveName = getEffectiveSubjectForGroup(name, group);
+  const lower = String(effectiveName || '').toLowerCase();
 
   if (lower.includes('বাংলা') || lower.includes('bangla')) {
     if (isClassNineOrTen && (lower.includes('১ম+২য়') || lower.includes('1st+2nd'))) return { cq: 140, mcq: 60, pr: 0 };
@@ -621,16 +655,34 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
 
   const inferredGroup = useMemo(() => {
     const results = Array.isArray(rawResults) ? rawResults : (studentData?.results || []);
-    if (!isClassNineOrTen || results.length === 0) return student?.student_group || student?.group || '';
 
-    const countGroup = (regex) => results.filter(r => {
-        const hasPositiveMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0);
-        return hasPositiveMarks && (r.subject?.name || r.subject_name || '').match(regex);
-    }).length;
+    const profileGroupRaw = student?.student_group || student?.group || '';
+    const profileGroup = resolveGroupStr(profileGroupRaw);
+    if (profileGroup) {
+      return profileGroup === 'science' ? 'Science'
+           : profileGroup === 'commerce' ? 'Commerce'
+           : profileGroup === 'humanities' ? 'Humanities' : '';
+    }
+    if (!isClassNineOrTen || results.length === 0) return '';
 
-    const scienceCount = countGroup(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
-    const commerceCount = countGroup(/accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i);
-    const humanitiesCount = countGroup(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
+    const countPerGroup = { science: 0, commerce: 0, humanities: 0 };
+    results.forEach(r => {
+        const hasPositiveMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0 || parseFloat(r.total_obtained) > 0);
+        if (!hasPositiveMarks) return;
+        const rawName = r.subject?.name || r.subject_name || '';
+        const parts = String(rawName).includes('/')
+            ? String(rawName).split(/\s*\/\s*/).filter(Boolean)
+            : [rawName];
+        const seen = new Set();
+        parts.forEach(pt => {
+            const c = classifyPart(pt);
+            if (c && !seen.has(c)) { countPerGroup[c] += 1; seen.add(c); }
+        });
+    });
+
+    const scienceCount = countPerGroup.science;
+    const commerceCount = countPerGroup.commerce;
+    const humanitiesCount = countPerGroup.humanities;
 
     // If student takes 'General Science', they are definitely NOT Science group
     // UNLESS they have a high count of Science electives (data error fallback)
@@ -649,7 +701,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     if (commerceCount > 0 && commerceCount >= humanitiesCount) return 'Commerce';
     if (humanitiesCount > 0) return 'Humanities';
 
-    return student?.student_group || student?.group || '';
+    return '';
   }, [rawResults, studentData, isClassNineOrTen, student]);
 
   const allRecalculated = useMemo(() => {
@@ -669,7 +721,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       const m = sumStr(r.mcq_marks);
       const p = sumStr(r.practical_marks);
 
-      const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen);
+      const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen, inferredGroup);
       const totalPossible = spec.cq + spec.mcq + spec.pr || 100;
       let obtained = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
 
@@ -819,17 +871,22 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         if (isClassNineOrTen) {
             const group = String(studentGroup).toLowerCase();
             const isScienceSub = /physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i.test(name);
-            const isCommerceSub = /accounting|finance|entrepreneurship|ব্যবসায়|হিসাব|ফিন্যান্স/i.test(name);
+            const isCommerceSub = /accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স|ব্যবসায়/i.test(name);
             const isHumanitiesSub = /history|geography|civics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|economics|অর্থনীতি/i.test(name);
             const isBGS = /bgs|bangladesh|global studies|বাংলাদেশ ও বিশ্ব|বিশ্বপরিচয়/i.test(name);
             const isGeneralScience = /^(science|বিজ্ঞান|general science|সাধারণ বিজ্ঞান)$/i.test(name.trim()) || (name.includes('science') && !isScienceSub && !isCommerceSub && !isBGS);
+            const isAgriHomeSub = /agriculture|home|কৃষি|গার্হস্থ্য/i.test(name);
+            const isCombined = name.includes('/');
 
             if (group.includes('science') || group.includes('বিজ্ঞান')) {
-                if (isCommerceSub || isHumanitiesSub || isGeneralScience) return false;
+                const belongs = isScienceSub || isBGS || isAgriHomeSub || isCombined;
+                if ((isCommerceSub || isHumanitiesSub || isGeneralScience) && !belongs) return false;
             } else if (group.includes('commerce') || group.includes('business') || group.includes('ব্যবসায়')) {
-                if (isScienceSub || isHumanitiesSub || isBGS) return false;
+                const belongs = isCommerceSub || isGeneralScience || isAgriHomeSub || isCombined;
+                if ((isScienceSub || isHumanitiesSub || isBGS) && !belongs) return false;
             } else if (group.includes('arts') || group.includes('humanities') || group.includes('মানবিক')) {
-                if (isScienceSub || isCommerceSub || isBGS) return false;
+                const belongs = isHumanitiesSub || isGeneralScience || isAgriHomeSub || isCombined;
+                if ((isScienceSub || isCommerceSub || isBGS) && !belongs) return false;
             }
         }
 
@@ -1128,13 +1185,18 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
   const translateSubject = (name) => {
     if (!name) return "";
     const nameStr = String(name);
-    if (nameStr === 'Bangla (1st+2nd)') return forceLanguage === 'bn' ? 'বাংলা (১ম+২য়)' : 'Bangla (1st+2nd)';
-    if (nameStr === 'English (1st+2nd)') return forceLanguage === 'bn' ? 'ইংরেজি (১ম+২য়)' : 'English (1st+2nd)';
-    if (nameStr === 'Religion') return forceLanguage === 'bn' ? 'ধর্ম' : 'Religion';
+    const _resolved = getEffectiveSubjectForGroup(nameStr, inferredGroup);
+
+    if (_resolved === 'Bangla (1st+2nd)' || nameStr === 'Bangla (1st+2nd)') return forceLanguage === 'bn' ? 'বাংলা (১ম+২য়)' : 'Bangla (1st+2nd)';
+    if (_resolved === 'English (1st+2nd)' || nameStr === 'English (1st+2nd)') return forceLanguage === 'bn' ? 'ইংরেজি (১ম+২য়)' : 'English (1st+2nd)';
+    if (_resolved === 'Religion' || nameStr === 'Religion') return forceLanguage === 'bn' ? 'ধর্ম' : 'Religion';
+
+    // (group-aware resolution via _resolved handles combined names)
 
     if (forceLanguage === 'en') {
-      // 1. Normalize and Deep Clean
-      const clean = nameStr
+      // 1. Normalize and Deep Clean (group-aware via _resolved)
+      const _src = (_resolved && _resolved.trim()) ? _resolved : nameStr;
+      const clean = _src
         .replace(/[\u200b-\u200d\ufeff\u00a0]/g, '') // Remove invisible characters
         .replace(/\s*\(.*?\)\s*/g, ' ')             // Remove parentheses and content
         .replace(/\s+/g, ' ')                        // Normalize spaces
@@ -1201,7 +1263,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       return sName;
     }
     else if (forceLanguage === 'bn') {
-      let sName = name;
+      let sName = (_resolved && _resolved.trim()) ? _resolved : name;
       const lowName = String(sName).toLowerCase();
       if (lowName.includes('agriculture') || lowName.includes('home science') || lowName.includes('কৃষি') || lowName.includes('গার্হস্থ্য')) {
         return 'কৃষি / গার্হস্থ্য বিজ্ঞান';
@@ -1400,7 +1462,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
                             <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: 'inherit' }}>{finalSummary.grade}</Typography>
                             <Typography sx={{ fontWeight: 900, fontSize: '0.85rem', color: 'inherit', lineHeight: 1.1 }}>
                               {finalSummary.isPassed
-                                ? `${l.merit}: ${n(studentData?.rank_in_section ?? studentData?.rank ?? overallResult?.rank_in_section ?? overallResult?.rank ?? '--')}`
+                                ? `${l.merit}: ${n(overallResult?.rank_in_section ?? overallResult?.rank ?? studentData?.rank_in_section ?? studentData?.rank ?? '--')}`
                                 : (forceLanguage === 'bn' ? 'ফলাফল: অনুত্তীর্ণ' : 'Result: Failed')}
                             </Typography>
                           </Box>
@@ -1483,7 +1545,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
           )}
 
           {/* Attendance Summary */}
-          {displayAttendance && (
+          {displayAttendance && (Number(displayAttendance.present) > 0 || Number(displayAttendance.absent) > 0) && (
             <Box sx={{ mt: 1, mb: 1, border: '1.5px solid #000', p: 1, borderRadius: 0, bgcolor: '#fdfaea' }}>
               <Typography sx={{ fontWeight: 'bold', fontSize: '14px', mb: 0.5, textDecoration: 'underline', color: '#000', display: 'block' }}>
                 {forceLanguage === 'bn' ? 'হাজিরা সংক্রান্ত তথ্য:' : 'Attendance Information:'}

@@ -69,7 +69,7 @@ export default function AddStudentPage() {
   const [tourStep, setTourStep] = useState(0);
 
   const selectedClassObj = classrooms.find(c => String(c.id) === String(form.classroom_id));
-  const isNineTen = selectedClassObj ? /নবম|দশম|[৯১০]ম|nine|ten|ix|x|\b9\b|\b10\b|s[\s.]*?s[\s.]*?c|এসএসসি|এস[\s.]*?এস[\s.]*?সি|পরীক্ষার্থী/i.test(selectedClassObj.name) : false;
+  const isNineTen = selectedClassObj ? /নবম|দশম|এসএসসি|এস[\s.]*?এস[\s.]*?সি|[৯১০]ম|পরীক্ষার্থী|\b(nine|ten|ssc|ix|x|9|10)\b/i.test(selectedClassObj.name) : false;
 
   const guidanceSteps = [
     { selector: '#student-photo-box', text: 'প্রথমে শিক্ষার্থীর ছবি আপলোড করুন', autoNext: false },
@@ -77,7 +77,6 @@ export default function AddStudentPage() {
     { selector: '#section-select', text: 'শাখা নির্বাচন করুন', autoNext: false },
     { selector: '#roll-number-input', text: 'রোল নম্বর লিখুন', autoNext: false },
     { selector: '#student-name-input', text: 'শিক্ষার্থীর নাম লিখুন', autoNext: false },
-    { selector: '#last-name-input', text: 'পদবী/বংশ লিখুন', autoNext: false },
     { selector: '#username-input', text: 'ইউজার আইডি লিখুন (ঐচ্ছিক)', autoNext: false },
     { selector: '#password-input', text: 'পাসওয়ার্ড সেট করুন', autoNext: false },
     { selector: '#gender-select', text: 'লিঙ্গ নির্বাচন করুন', autoNext: false },
@@ -288,22 +287,6 @@ export default function AddStudentPage() {
               <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({...form, first_name_en: e.target.value})} />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                id="last-name-input"
-                fullWidth
-                label="পদবী/বংশ (Last Name)"
-                value={form.last_name}
-                onFocus={() => updateStep('#last-name-input')}
-                onChange={e => {
-                  const val = e.target.value;
-                  setForm({...form, last_name: val, last_name_en: transliterateBangla(val)});
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="পদবী (ইংরেজিতে)" value={form.last_name_en} onChange={e => setForm({...form, last_name_en: e.target.value})} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField id="username-input" fullWidth label="ইউজার আইডি (Username)" value={form.username} onFocus={() => updateStep('#username-input')} onChange={e => setForm({...form, username: e.target.value})} helperText="খালি রাখলে স্বয়ংক্রিয়ভাবে তৈরি হবে" error={usernameCheck.available === false} />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -437,6 +420,7 @@ export default function AddStudentPage() {
             </Grid>
             <Grid item xs={12}>
               <TextField
+                id="address-input"
                 fullWidth
                 label="ঠিকানা"
                 multiline
@@ -449,7 +433,7 @@ export default function AddStudentPage() {
               />
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth label="ঠিকানা (ইংরেজিতে)" multiline rows={2} value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} />
+              <TextField id="address-en-input" fullWidth label="ঠিকানা (ইংরেজিতে)" multiline rows={2} value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} />
             </Grid>
           </Grid>
 
