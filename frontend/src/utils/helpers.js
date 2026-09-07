@@ -111,11 +111,33 @@ export const canViewAll = (user) => {
 
 // Global helper to combine first and last names while removing duplicates (Bangla-aware)
 export const getCleanDisplayName = (firstName, lastName, fallback = '') => {
-  const fn = (firstName || '').trim();
+  let fn = (firstName || '').trim();
   const ln = (lastName || '').trim();
 
   if (!fn) return ln || fallback;
-  if (!ln) return fn || fallback;
+
+  // If fn has Bangla characters, strip trailing pure English words (e.g. Pradhania, Bakaul, Ahmed, Islam)
+  if (/[\u0980-\u09ff]/.test(fn)) {
+    const words = fn.split(/\s+/);
+    let lastBanglaIdx = -1;
+    for (let i = 0; i < words.length; i++) {
+      if (/[\u0980-\u09ff]/.test(words[i])) {
+        lastBanglaIdx = i;
+      }
+    }
+    if (lastBanglaIdx !== -1) {
+      fn = words.slice(0, lastBanglaIdx + 1).join(' ');
+    }
+  }
+
+  if (!ln) return fn;
+
+  const fnLower = fn.toLowerCase();
+  const lnLower = ln.toLowerCase();
+
+  if (fnLower.includes(lnLower)) {
+    return fn;
+  }
 
   // If lastName is English (e.g. Islam, Hossain) and firstName is not purely English, ignore lastName
   const isEnglish = (str) => /^[a-zA-Z\s.]+$/.test(str);

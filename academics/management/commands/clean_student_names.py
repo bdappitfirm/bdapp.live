@@ -17,6 +17,16 @@ def clean_student_name(fn, ln=''):
     fn = (fn or '').strip()
     ln = (ln or '').strip()
 
+    # If fn has Bangla characters, strip trailing pure English words (e.g. Pradhania, Bakaul, Ahmed, Islam)
+    if re.search(r'[\u0980-\u09ff]', fn):
+        words = re.split(r'\s+', fn)
+        last_bangla_idx = -1
+        for i, w in enumerate(words):
+            if re.search(r'[\u0980-\u09ff]', w):
+                last_bangla_idx = i
+        if last_bangla_idx != -1:
+            fn = ' '.join(words[:last_bangla_idx + 1])
+
     is_english = lambda s: bool(re.match(r'^[a-zA-Z\s.]+$', s))
     if is_english(ln) and not is_english(fn):
         ln = ''
@@ -25,11 +35,7 @@ def clean_student_name(fn, ln=''):
     if not combined:
         return ''
 
-    common_english_surnames = ['islam', 'hossain', 'hossen', 'gazi', 'mizi', 'khan', 'das', 'shil', 'chowdhury', 'bhuiya', 'patwari', 'tapadar', 'sarkar', 'ali', 'mia', 'miji', 'bepari', 'akter', 'jahan']
     words = re.split(r'\s+', combined)
-    if len(words) > 1 and is_english(words[-1]) and words[-1].lower() in common_english_surnames and not is_english(words[0]):
-        words.pop()
-
     result = []
     seen_bases = set()
 
