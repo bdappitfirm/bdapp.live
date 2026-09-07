@@ -24,7 +24,12 @@ def clean_student_name(fn, ln=''):
     combined = f"{fn} {ln}".strip()
     if not combined:
         return ''
+
+    common_english_surnames = ['islam', 'hossain', 'hossen', 'gazi', 'mizi', 'khan', 'das', 'shil', 'chowdhury', 'bhuiya', 'patwari', 'tapadar', 'sarkar', 'ali', 'mia', 'miji', 'bepari', 'akter', 'jahan']
     words = re.split(r'\s+', combined)
+    if len(words) > 1 and is_english(words[-1]) and words[-1].lower() in common_english_surnames and not is_english(words[0]):
+        words.pop()
+
     result = []
     seen_bases = set()
 
@@ -43,7 +48,7 @@ def clean_student_name(fn, ln=''):
     return ' '.join(result)
 
 class Command(BaseCommand):
-    help = 'Clean up student names by merging first and last names and removing duplicate/designation parts.'
+    help = 'Clean up student names by merging first and last names and removing duplicate/designation/trailing English surname parts.'
 
     def handle(self, *args, **options):
         self.stdout.write('Starting student name cleanup...')
@@ -56,12 +61,24 @@ class Command(BaseCommand):
             if user:
                 fn = user.first_name or ''
                 ln = user.last_name or ''
+                ln_en = user.last_name_en or ''
+
+                updated = False
                 if ln or fn:
                     new_name = clean_student_name(fn, ln)
-                    if user.first_name != new_name or user.last_name != '':
+                    if user.first_name != new_name:
                         user.first_name = new_name
+                        updated = True
+                    if user.last_name != '':
                         user.last_name = ''
-                        user.save(update_fields=['first_name', 'last_name'])
-                        count += 1
+                        updated = True
+
+                if ln_en and user.first_name.lower().endswith(ln_en.lower()):
+                    user.last_name_en = ''
+                    updated = True
+
+                if updated:
+                    user.save(update_fields=['first_name', 'last_name', 'last_name_en'])
+                    count += 1
 
         self.stdout.write(self.style.SUCCESS(f'Successfully cleaned up {count} student names!'))
