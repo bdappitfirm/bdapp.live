@@ -14,7 +14,14 @@ def normalize_bangla_base(word):
     return n
 
 def clean_student_name(fn, ln=''):
-    combined = f"{fn or ''} {ln or ''}".strip()
+    fn = (fn or '').strip()
+    ln = (ln or '').strip()
+
+    is_english = lambda s: bool(re.match(r'^[a-zA-Z\s.]+$', s))
+    if is_english(ln) and not is_english(fn):
+        ln = ''
+
+    combined = f"{fn} {ln}".strip()
     if not combined:
         return ''
     words = re.split(r'\s+', combined)

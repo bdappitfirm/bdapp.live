@@ -117,6 +117,12 @@ export const getCleanDisplayName = (firstName, lastName, fallback = '') => {
   if (!fn) return ln || fallback;
   if (!ln) return fn || fallback;
 
+  // If lastName is English (e.g. Islam, Hossain) and firstName is not purely English, ignore lastName
+  const isEnglish = (str) => /^[a-zA-Z\s.]+$/.test(str);
+  if (isEnglish(ln) && !isEnglish(fn)) {
+    return fn;
+  }
+
   // Split into words
   const words = `${fn} ${ln}`.split(/\s+/).filter(w => w.trim() !== '');
 
@@ -159,7 +165,7 @@ export const transliterateBangla = (text) => {
   // Mapping of Bangla characters to English phonetic equivalents
   const mapping = {
     'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
-    'চ': 'ch', 'ছ': 's', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
+    'চ': 'ch', 'ছ': 's', 'জ': 'z', 'ঝ': 'jh', 'ঞ': 'n',
     'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
     'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
     'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'v', 'ম': 'm',
@@ -177,17 +183,23 @@ export const transliterateBangla = (text) => {
   const specialNames = {
     'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
     'আক্তার': 'Akter', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam',
-    'রহমান': 'Rahman', 'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
-    'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
+    'রহমান': 'Rahman', 'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
+    'আলম': 'Alam', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
     'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
     'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
     'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful',
     'হক': 'Haque', 'মিলন': 'Milon', 'ইমদাদুল': 'Emdadul', 'এমদাদুল': 'Emdadul',
     'শেখ': 'Sheikh', 'খন্দকার': 'Khandaker', 'চৌধুরী': 'Chowdhury', 'আহমেদ': 'Ahmed',
     'মাহমুদ': 'Mahmud', 'হাসান': 'Hasan', 'হোসাইন': 'Hossain',
-    'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul',
+    'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul', 'মিজানুর': 'Mizanur',
     'পাটওয়ারী': 'Patwary', 'দক্ষিণ': 'Dakshin', 'প্রধানিয়া': 'Prodhania',
-    'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed'
+    'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed',
+    'রায়': 'Roy', 'চন্দ্র': 'Chandra', 'প্রা': 'Pra', 'কর্দি': 'kardi',
+    'বাজার': 'Bazar', 'সূর্য': 'Surjo', 'খোকন': 'Khokan', 'রাজ্জাক': 'Razzak',
+    'রোজিনা': 'Rozina', 'মধ্য হামানকর্দি': 'Moddha Hamankardi', 'তপাদার': 'Tapader',
+    'আনোয়ারা': 'Anwara', 'হামানকর্দি': 'Hamankardi', 'দেলোয়ার': 'Delowar',
+    'চাঁদপুর': 'Chandpur', 'সদর': 'Sadar', 'শাহাতলী': 'Shahatali', 'শাহতলী': 'Shahatali', 'হামানকর্দ্দি': 'Hamankardi',
+    'কাকলী': 'Kakali', 'খানম': 'Khanom', 'চক্রবর্তী': 'Chakraborty', 'অপন': 'Apan'
   };
 
   let result = text;
@@ -203,6 +215,14 @@ export const transliterateBangla = (text) => {
 
   const words = result.split(/\s+/);
   const output = words.map(word => {
+    // Separate trailing punctuation for specialNames check
+    const punctMatch = word.match(/^([\u0980-\u09FF]+)([,.]?)$/);
+    if (punctMatch) {
+      const baseWord = punctMatch[1];
+      const punct = punctMatch[2];
+      if (specialNames[baseWord]) return specialNames[baseWord] + punct;
+    }
+
     if (specialNames[word]) return specialNames[word];
 
     let wordOutput = "";
@@ -219,11 +239,6 @@ export const transliterateBangla = (text) => {
             wordOutput += "o";
           } else if (i === 0) {
             wordOutput += "a";
-          } else {
-            const prevChar = word[i-1];
-            if (prevChar && !isVowel(prevChar)) {
-              wordOutput += "a";
-            }
           }
         }
       } else {
