@@ -46,6 +46,10 @@ echo "[1/7] Running Django migrations (--noinput, no data loss)..."
     "$VENV_PYTHON" manage.py migrate --noinput
 }
 
+# 1.5) Clean up student duplicate names / designation remnants
+echo "[1.5/7] Cleaning up student duplicate names and title remnants..."
+"$VENV_PYTHON" manage.py clean_student_names 2>/dev/null || true
+
 # 2) Clear STATIC_ROOT FIRST to force full refresh (avoids stale hashed JS/CSS)
 echo "[2/7] Wiping staticfiles/ for clean collectstatic ..."
 if [ -d "$BACKEND_DIR/staticfiles" ]; then

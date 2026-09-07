@@ -7,7 +7,10 @@ def normalize_bangla_base(word):
     if not word:
         return ''
     n = unicodedata.normalize('NFKC', str(word)).lower().strip()
-    n = re.sub(r'[\u0981-\u0983\u09bc-\u09d7]', '', n)
+    n = re.sub(r'[\u09cd\u0981-\u0983\u09bc-\u09d7]', '', n)
+    n = n.replace('শ', 'স').replace('ষ', 'স')
+    if 'চক্রব' in n or 'চক্রবর্ত' in n or 'চক্রবত' in n:
+        return 'চক্রবর্তী'
     return n
 
 def clean_student_name(fn, ln=''):
