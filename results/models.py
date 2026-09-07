@@ -16,6 +16,7 @@ class Examination(models.Model):
         ('test', 'Class Test'),
         ('terminal', 'Terminal'),
         ('model', 'Model Test'),
+        ('pre_test', 'Pre-Test'),
     ]
     
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='examinations')

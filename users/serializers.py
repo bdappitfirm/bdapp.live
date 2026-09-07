@@ -296,6 +296,7 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
                 pass
         if first_name_en or last_name_en:
             user.save()
+        return user
 
     def create(self, validated_data):
         role = self.role_value or 'student'

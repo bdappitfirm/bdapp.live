@@ -7,7 +7,7 @@ from users.permissions import (
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import Sum, F, Count, Q
@@ -157,6 +157,7 @@ class AdminProfileViewSet(viewsets.ModelViewSet):
     queryset = AdminProfile.objects.all()
     serializer_class = AdminProfileSerializer
     permission_classes = [AdminOrReadOnly]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     def get_queryset(self):
         sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
         if sid and str(sid).isdigit():
@@ -173,6 +174,7 @@ class ParentProfileViewSet(viewsets.ModelViewSet):
     queryset = ParentProfile.objects.all()
     serializer_class = ParentProfileSerializer
     permission_classes = [AdminOrReadOnly]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     def get_queryset(self):
         sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
         if sid and str(sid).isdigit():
@@ -189,6 +191,7 @@ class CommitteeProfileViewSet(viewsets.ModelViewSet):
     queryset = CommitteeProfile.objects.all()
     serializer_class = CommitteeProfileSerializer
     permission_classes = [AdminOrReadOnly]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     def get_queryset(self):
         sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
         if sid and str(sid).isdigit():
@@ -205,6 +208,7 @@ class TeacherProfileViewSet(viewsets.ModelViewSet):
     queryset = Profile.objects.filter(Q(role='teacher') | Q(role='admin'))
     serializer_class = TeacherProfileSerializer
     permission_classes = [AdminOrReadOnly]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     def get_queryset(self):
         sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
         if sid and str(sid).isdigit():

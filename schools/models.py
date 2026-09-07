@@ -110,9 +110,20 @@ class Advertisement(models.Model):
 
 
 class SchoolOnboarding(models.Model):
+    SCHOOL_TYPE_CHOICES = [
+        ('general', 'General'),
+        ('madrasah', 'Madrasah'),
+    ]
     school = models.OneToOneField(School, on_delete=models.CASCADE, related_name='onboarding')
+    school_type = models.CharField(max_length=20, choices=SCHOOL_TYPE_CHOICES, default='general')
     headmaster_name = models.CharField(max_length=255, blank=True, null=True)
     headmaster_photo = models.ImageField(upload_to='headmaster_photos/', null=True, blank=True)
+
+    # Automation Fields
+    class_range_start = models.IntegerField(null=True, blank=True, help_text="Starting class (e.g. 6)")
+    class_range_end = models.IntegerField(null=True, blank=True, help_text="Ending class (e.g. 12)")
+    sample_student_count = models.IntegerField(default=1, help_text="Number of sample students to create (e.g. 1)")
+
     is_processed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

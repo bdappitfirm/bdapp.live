@@ -258,12 +258,25 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             base = re.sub(r'[^a-z]', '', (user_data.get('first_name') or 'student').lower()) or 'student'
             user_data['username'] = f"{base}{User.objects.count() + 1}"
 
+        def clean_student_name(fn, ln):
+            fn = (fn or '').strip()
+            ln = (ln or '').strip()
+            combined = f"{fn} {ln}".strip()
+            words = re.split(r'\s+', combined)
+            seen = []
+            for w in words:
+                if w not in seen:
+                    seen.append(w)
+            return ' '.join(seen)
+
+        full_name = clean_student_name(user_data.get('first_name', ''), user_data.get('last_name', ''))
+
         user = User.objects.create_user(
             username=user_data['username'],
             password=user_data['password'] or '12345678',
-            first_name=user_data['first_name'] or '',
-            last_name=user_data['last_name'] or '',
-            email=user_data['email'] or ''
+            first_name=full_name,
+            last_name='',
+            email=user_data.get('email') or ''
         )
 
         # Update English names and other fields not in create_user
@@ -300,8 +313,25 @@ class StudentProfileSerializer(serializers.ModelSerializer):
                      raise serializers.ValidationError({'username': 'This username is already taken.'})
                 user.username = norm_username; user_updated = True
             if 'password' in user_data and user_data['password']: user.set_password(user_data['password']); user_updated = True
-            if 'first_name' in user_data: user.first_name = user_data['first_name']; user_updated = True
-            if 'last_name' in user_data: user.last_name = user_data['last_name']; user_updated = True
+
+            def clean_student_name(fn, ln):
+                fn = (fn or '').strip()
+                ln = (ln or '').strip()
+                combined = f"{fn} {ln}".strip()
+                words = re.split(r'\s+', combined)
+                seen = []
+                for w in words:
+                    if w not in seen:
+                        seen.append(w)
+                return ' '.join(seen)
+
+            if 'first_name' in user_data or 'last_name' in user_data:
+                fn = user_data.get('first_name', user.first_name)
+                ln = user_data.get('last_name', user.last_name)
+                user.first_name = clean_student_name(fn, ln)
+                user.last_name = ''
+                user_updated = True
+
             if 'first_name_en' in user_data: user.first_name_en = user_data['first_name_en']; user_updated = True
             if 'last_name_en' in user_data: user.last_name_en = user_data['last_name_en']; user_updated = True
             if 'email' in user_data: user.email = user_data['email']; user_updated = True

@@ -1,0 +1,57 @@
+from django.core.management.base import BaseCommand
+from academics.models import StudentProfile
+import re
+import unicodedata
+
+def normalize_bangla_base(word):
+    if not word:
+        return ''
+    n = unicodedata.normalize('NFKC', str(word)).lower().strip()
+    n = re.sub(r'[\u0981-\u0983\u09bc-\u09d7]', '', n)
+    return n
+
+def clean_student_name(fn, ln=''):
+    combined = f"{fn or ''} {ln or ''}".strip()
+    if not combined:
+        return ''
+    words = re.split(r'\s+', combined)
+    result = []
+    seen_bases = set()
+
+    for word in words:
+        w_clean = word.strip()
+        if not w_clean:
+            continue
+        base = normalize_bangla_base(w_clean)
+        if base and base not in seen_bases:
+            seen_bases.add(base)
+            result.append(w_clean)
+        elif not base and w_clean.lower() not in seen_bases:
+            seen_bases.add(w_clean.lower())
+            result.append(w_clean)
+
+    return ' '.join(result)
+
+class Command(BaseCommand):
+    help = 'Clean up student names by merging first and last names and removing duplicate/designation parts.'
+
+    def handle(self, *args, **options):
+        self.stdout.write('Starting student name cleanup...')
+        students = StudentProfile.objects.select_related('user').all()
+        self.stdout.write(f'Found {students.count()} student profiles.')
+
+        count = 0
+        for student in students:
+            user = student.user
+            if user:
+                fn = user.first_name or ''
+                ln = user.last_name or ''
+                if ln or fn:
+                    new_name = clean_student_name(fn, ln)
+                    if user.first_name != new_name or user.last_name != '':
+                        user.first_name = new_name
+                        user.last_name = ''
+                        user.save(update_fields=['first_name', 'last_name'])
+                        count += 1
+
+        self.stdout.write(self.style.SUCCESS(f'Successfully cleaned up {count} student names!'))

@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 
 import re
 import unicodedata
+from .number_utils import bengali_to_english_number
 
 PUNCT_RE = re.compile(r'[\s\-–—_()（）【】\[\]{}.,;:\'"!?।,|·•・/\\]+', re.UNICODE)
 
@@ -426,26 +427,32 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(classroom_id=int(cid))
 
             if roll:
-                # Remove all whitespace for a cleaner match
-                clean_roll = re.sub(r'\s+', '', str(roll))
+                # Normalizing roll number (Convert Bengali to English)
+                roll = bengali_to_english_number(str(roll).strip())
+                clean_roll = re.sub(r'\s+', '', roll)
+
+                # Use iexact for roll_number to avoid loose partial matches (e.g. 3 matching 63)
                 queryset = queryset.filter(
-                    Q(roll_number__icontains=roll) |
-                    Q(ssc_roll__icontains=roll) |
-                    Q(student_custom_id__icontains=roll) |
-                    Q(roll_number__icontains=clean_roll) |
-                    Q(ssc_roll__icontains=clean_roll)
+                    Q(roll_number__iexact=roll) |
+                    Q(ssc_roll__iexact=roll) |
+                    Q(student_custom_id__iexact=roll) |
+                    Q(roll_number__iexact=clean_roll) |
+                    Q(ssc_roll__iexact=clean_roll)
                 )
 
             if search:
+                # Normalizing search (Convert Bengali to English if it looks like a number)
+                search = bengali_to_english_number(str(search).strip())
                 # Remove potential zero-width characters or extra spaces
                 clean_search = ''.join(c for c in str(search) if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF)).strip()
+
                 queryset = queryset.filter(
                     Q(user__first_name__icontains=clean_search) |
                     Q(user__last_name__icontains=clean_search) |
                     Q(user__first_name_en__icontains=clean_search) |
                     Q(user__last_name_en__icontains=clean_search) |
-                    Q(roll_number__icontains=clean_search) |
-                    Q(ssc_roll__icontains=clean_search)
+                    Q(roll_number__iexact=clean_search) |
+                    Q(ssc_roll__iexact=clean_search)
                 )
 
             if secid_param:
