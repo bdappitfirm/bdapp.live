@@ -291,10 +291,15 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                 // Helper to format time
                 const formatTime = (timeStr) => {
                   if (!timeStr) return '';
-                  const [h] = timeStr.split(':').map(Number);
-                  const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-                  const period = h < 12 ? 'সকাল' : 'বিকাল';
-                  return `${period} ${toBnDigits(displayH)}টা`;
+                  const [hStr, mStr] = timeStr.split(':');
+                  const h = parseInt(hStr, 10) || 0;
+                  const m = mStr ? mStr.padStart(2, '0') : '00';
+                  const ampm = h >= 12 ? 'PM' : 'AM';
+                  let h12 = h % 12;
+                  if (h12 === 0) h12 = 12;
+                  const period = h < 12 ? 'সকাল' : (h < 15 ? 'দুপুর' : 'বিকাল');
+                  const minPart = m !== '00' ? `:${toBnDigits(m)}` : '';
+                  return `${period} ${toBnDigits(h12)}${minPart} ${ampm}`;
                 };
 
                 return (
