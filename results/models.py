@@ -10,18 +10,9 @@ User = settings.AUTH_USER_MODEL
 
 class Examination(models.Model):
     """Exam/Test definition"""
-    EXAM_TYPES = [
-        ('half_yearly', 'Half Yearly'),
-        ('annual', 'Annual'),
-        ('test', 'Class Test'),
-        ('terminal', 'Terminal'),
-        ('model', 'Model Test'),
-        ('pre_test', 'Pre-Test'),
-    ]
-    
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='examinations')
     name = models.CharField(max_length=200)
-    exam_type = models.CharField(max_length=20, choices=EXAM_TYPES, default='test')
+    exam_type = models.CharField(max_length=50, default='test')
     classroom = models.ForeignKey(ClassRoom, on_delete=models.CASCADE, related_name='examinations')
     section = models.ForeignKey(Section, on_delete=models.SET_NULL, null=True, blank=True, related_name='examinations')
     exam_date = models.DateField(null=True, blank=True)
