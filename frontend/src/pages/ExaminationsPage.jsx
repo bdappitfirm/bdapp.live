@@ -47,7 +47,9 @@ const EXAM_TYPES = [
   { value: 'annual', label: 'বার্ষিক' },
   { value: 'test', label: 'বিশেষ মূল্যায়ন' },
   { value: 'terminal', label: 'টার্মিনাল' },
-  { value: 'model', label: 'মডেল টেস্ট' }
+  { value: 'model', label: 'মডেল টেস্ট' },
+  { value: 'pre_test', label: 'প্রাক-নির্বাচনী' },
+  { value: 'Midterm-2', label: 'মিডটার্ম-২' }
 ];
 
 export default function ExaminationsPage() {
@@ -244,7 +246,18 @@ export default function ExaminationsPage() {
       handleDialogClose();
       loadData();
     } catch (error) {
-      toast.error('Failed to save');
+      console.error('Exam save error:', error.response?.data);
+      let errMsg = 'Failed to save';
+      if (error.response?.data) {
+        if (typeof error.response.data === 'string') {
+          errMsg = error.response.data;
+        } else {
+          errMsg = Object.entries(error.response.data)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join(' | ');
+        }
+      }
+      toast.error(errMsg);
     }
   }, [id, formData, editingExam, handleDialogClose, loadData, navigate, toast]);
 
