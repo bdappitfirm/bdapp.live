@@ -298,8 +298,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   let h12 = h % 12;
                   if (h12 === 0) h12 = 12;
                   const period = h < 12 ? 'সকাল' : (h < 15 ? 'দুপুর' : 'বিকাল');
-                  const minPart = m !== '00' ? `:${toBnDigits(m)}` : '';
-                  return `${period} ${toBnDigits(h12)}${minPart} ${ampm}`;
+                  const minPart = m !== '00' ? `:${m}` : '';
+                  return `${period} ${h12}${minPart} ${ampm}`;
                 };
 
                 return (
