@@ -381,7 +381,7 @@ const transliterateBnToEn = (text) => {
   const bnToEnMap = {
     'অ': 'O', 'আ': 'A', 'ই': 'I', 'ঈ': 'I', 'উ': 'U', 'ঊ': 'U', 'ঋ': 'Ri', 'এ': 'E', 'ঐ': 'Oi', 'ও': 'O', 'ঔ': 'Ou',
     'ক': 'K', 'খ': 'Kh', 'গ': 'G', 'ঘ': 'Gh', 'ঙ': 'Ng',
-    'চ': 'Ch', 'ছ': 'Chh', 'জ': 'J', 'ঝ': 'Jh', 'ঞ': 'N',
+    'চ': 'Ch', 'ছ': 'Chh', 'জ': 'Z', 'ঝ': 'Jh', 'ঞ': 'N',
     'ট': 'T', 'ঠ': 'Th', 'ড': 'D', 'ঢ': 'Dh', 'ণ': 'N',
     'ত': 'T', 'থ': 'Th', 'দ': 'D', 'ধ': 'Dh', 'ন': 'N',
     'প': 'P', 'ফ': 'F', 'ব': 'B', 'ভ': 'V', 'ম': 'M',
@@ -394,18 +394,32 @@ const transliterateBnToEn = (text) => {
   const specialNames = {
     'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
     'আক্তার': 'Akter', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam', 'রহমান': 'Rahman',
-    'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
-    'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
+    'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
+    'আলম': 'Alam', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
     'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
     'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
     'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful',
-    'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul',
+    'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul', 'মিজানুর': 'Mizanur',
     'পাটওয়ারী': 'Patwary', 'দক্ষিণ': 'Dakshin', 'প্রধানিয়া': 'Prodhania',
-    'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed'
+    'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed',
+    'রায়': 'Roy', 'চন্দ্র': 'Chandra', 'প্রা': 'Pra', 'কর্দি': 'kardi',
+    'বাজার': 'Bazar', 'সূর্য': 'Surjo', 'খোকন': 'Khokan', 'রাজ্জাক': 'Razzak',
+    'রোজিনা': 'Rozina', 'মধ্য হামানকর্দি': 'Moddha Hamankardi', 'তপাদার': 'Tapader',
+    'আনোয়ারা': 'Anwara', 'হামানকর্দি': 'Hamankardi', 'দেলোয়ার': 'Delowar',
+    'চাঁদপুর': 'Chandpur', 'সদর': 'Sadar', 'শাহাতলী': 'Shahatali', 'শাহতলী': 'Shahatali', 'হামানকর্দ্দি': 'Hamankardi',
+    'কাকলী': 'Kakali', 'খানম': 'Khanom', 'চক্রবর্তী': 'Chakraborty', 'অপন': 'Apan'
   };
 
   let words = text.split(/\s+/);
   let translatedWords = words.map(word => {
+    // Separate trailing punctuation for specialNames check
+    const punctMatch = word.match(/^([\u0980-\u09FF]+)([,.]?)$/);
+    if (punctMatch) {
+      const baseWord = punctMatch[1];
+      const punct = punctMatch[2];
+      if (specialNames[baseWord]) return specialNames[baseWord] + punct;
+    }
+
     if (specialNames[word]) return specialNames[word];
 
     let result = "";
@@ -421,10 +435,6 @@ const transliterateBnToEn = (text) => {
         // If current and next are consonants, add an implicit vowel based on common names
         if (char === 'ম' || word === 'ওমর') result += "o";
         else if (i === 0) result += "a";
-        else {
-          const prevChar = word[i-1];
-          if (prevChar && !isVowel(prevChar)) result += "a";
-        }
       }
     }
     return result;
@@ -1356,7 +1366,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             pb: '0mm'
           }
         }}>
-          <Box sx={{ textAlign: 'center', mb: 0.5, mt: 1, height: '120px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'visible' }}>
+          <Box sx={{ textAlign: 'center', mb: 0.5, mt: '-15px', height: '95px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'visible' }}>
             <Typography className="school-name-header" sx={{
               fontSize: schoolFontSize,
               letterSpacing: schoolName.length > 30 ? '-1.0px' : 'normal',
