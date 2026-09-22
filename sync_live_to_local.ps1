@@ -119,13 +119,8 @@ $tableArgs = ($SYNC_TABLES | ForEach-Object { "-t $_" }) -join " "
 #   Now: stdout -> dump.sql, stderr -> separate .log file; then check exit code.
 $TMP_REMOTE_DUMP_LOG = $TMP_REMOTE_DUMP + ".log"
 
-$remoteCmd = @"
-cd /tmp 2>/dev/null; sudo -u $REMOTE_DB_USER pg_dump --data-only --column-inserts --no-owner --no-privileges --no-tablespaces $tableArgs $REMOTE_DB_NAME > $TMP_REMOTE_DUMP 2> $TMP_REMOTE_DUMP_LOG
-_DUMP_RC=`$?
-if [ `$_DUMP_RC -eq 0 ]; then echo DUMP_EXITCODE:True; else echo DUMP_EXITCODE:False; fi
-echo DUMP_RC:`$_DUMP_RC
-wc -c < $TMP_REMOTE_DUMP | tr -d ' '
-"@
+$remoteCmd = "cd /tmp 2>/dev/null; sudo -u $REMOTE_DB_USER pg_dump --data-only --column-inserts --no-owner --no-privileges --no-tablespaces $tableArgs $REMOTE_DB_NAME > $TMP_REMOTE_DUMP 2> $TMP_REMOTE_DUMP_LOG; _DUMP_RC=`$?; if [ `$_DUMP_RC -eq 0 ]; then echo DUMP_EXITCODE:True; else echo DUMP_EXITCODE:False; fi; echo DUMP_RC:`$_DUMP_RC; wc -c < $TMP_REMOTE_DUMP | tr -d ' '"
+
 
 # ---------------------------------------------------------------------------
 # RETRY LOGIC for transient SSH failures (timeout, connection reset, etc.)
@@ -144,7 +139,7 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     }
     # Use a real subshell so $LASTEXITCODE reflects ssh's actual exit code
     $ErrorActionPreference = 'Continue'
-    $dumpRes = @( & ssh -o ConnectTimeout=15 -o ServerAliveInterval=10 "${SSH_USER}@${VPS_IP}" $remoteCmd 2>&1 )
+    $dumpRes = @( & ssh -n -o ConnectTimeout=15 -o ServerAliveInterval=10 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" $remoteCmd 2>&1 )
     $lastSshExit = $LASTEXITCODE
     $dumpFlat  = ($dumpRes | Out-String)
     Write-Info ("  SSH exit={0}; stdout/stderr snippet: {1}" -f $lastSshExit, $dumpFlat.Trim())
@@ -185,7 +180,7 @@ if (-not $dumpOk) {
     Write-Host ""
     try {
         # Best-effort pull pg_dump error log if ssh recovered
-        scp -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_DUMP_LOG" `
+        scp -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_DUMP_LOG" `
             (Join-Path $TMP_DIR "dump_error.log") 2>$null | Out-Null
         if (Test-Path (Join-Path $TMP_DIR "dump_error.log")) {
             Write-Host "  pg_dump remote ERROR LOG:" -ForegroundColor Red
@@ -193,7 +188,7 @@ if (-not $dumpOk) {
         }
     } catch {}
     # Cleanup anything left on the remote end (best-effort; ignore errors)
-    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" `
+    & ssh -n -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" `
         "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
     exit 1
 }
@@ -202,19 +197,19 @@ Write-Info "LIVE dump completed remotely (after $attempt attempt(s))."
 
 # Download the dump
 try {
-    scp -o ConnectTimeout=30 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_DUMP" $TMP_DUMP_SQL 2>&1 | Out-Null
+    scp -o ConnectTimeout=30 -o BatchMode=yes "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_DUMP" $TMP_DUMP_SQL 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $TMP_DUMP_SQL) -or (Get-Item $TMP_DUMP_SQL).Length -eq 0) {
         throw "scp download failed or file is empty (scp exit=$LASTEXITCODE)."
     }
     Write-Info ("Dump downloaded: {0:N1} KB" -f ((Get-Item $TMP_DUMP_SQL).Length/1KB))
 } catch {
     Write-Err "Failed to download dump: $_"
-    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
+    & ssh -n -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
     exit 1
 }
 
 # Cleanup remote dump immediately
-ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
+& ssh -n -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_DUMP $TMP_REMOTE_DUMP_LOG" 2>$null | Out-Null
 
 # ====================================================================
 # STEP 3: Post-process dump -> inject ON CONFLICT DO NOTHING
@@ -384,34 +379,17 @@ try {
 # ====================================================================
 Write-Step "Step 5/6 : Syncing ONLY referenced MEDIA files (photos, logos, signatures) [BATCH TAR mode]"
 
-# ---------------- 5a: Query LIVE for distinct referenced media paths ----------------
-$TMP_LOCAL_MEDIA_SQL = Join-Path $TMP_DIR "get_media_list.sql"
-@"
-COPY (
-  SELECT DISTINCT TRIM(photo)            AS p FROM public.users_user       WHERE photo IS NOT NULL             AND photo <> ''
-  UNION SELECT DISTINCT TRIM(thumbnail)    FROM public.users_user       WHERE thumbnail IS NOT NULL         AND thumbnail <> ''
-  UNION SELECT DISTINCT TRIM(logo)         FROM public.schools_school   WHERE logo IS NOT NULL              AND logo <> ''
-  UNION SELECT DISTINCT TRIM(logo_thumbnail) FROM public.schools_school WHERE logo_thumbnail IS NOT NULL    AND logo_thumbnail <> ''
-  UNION SELECT DISTINCT TRIM(principal_signature) FROM public.schools_school WHERE principal_signature IS NOT NULL AND principal_signature <> ''
-  UNION SELECT DISTINCT TRIM(school_seal) FROM public.schools_school   WHERE school_seal IS NOT NULL       AND school_seal <> ''
-) TO STDOUT WITH (FORMAT text);
-"@ | Set-Content -LiteralPath $TMP_LOCAL_MEDIA_SQL -Encoding UTF8 -NoNewline
-
-$TMP_REMOTE_MEDIA_SQL = "/tmp/$(Split-Path $TMP_LOCAL_MEDIA_SQL -Leaf)"
 $mediaListOk = $false
 try {
-    scp -o ConnectTimeout=30 $TMP_LOCAL_MEDIA_SQL "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_MEDIA_SQL" 2>$null | Out-Null
-    $runSqlRes = ssh -o ConnectTimeout=30 "${SSH_USER}@${VPS_IP}" "sudo -u $REMOTE_DB_USER psql -d $REMOTE_DB_NAME -f $TMP_REMOTE_MEDIA_SQL > $TMP_REMOTE_MEDIA 2>/dev/null; echo LIVEMEDIA_RES:`$?"
-    if ($runSqlRes -match 'LIVEMEDIA_RES:0') {
-        scp -o ConnectTimeout=30 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_MEDIA" $TMP_MEDIA_LIST 2>$null | Out-Null
-        if (Test-Path $TMP_MEDIA_LIST) { $mediaListOk = $true }
-    } else {
-        Write-Err "LIVE media psql -f failed: $runSqlRes"
-    }
+    Write-Info "Querying LIVE database for media references via Python..."
+    $listCmd = "cd '$REMOTE_APP_DIR' && ./venv/bin/python get_media_list.py"
+    & ssh -n -o ConnectTimeout=30 -o ServerAliveInterval=15 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" $listCmd 2>&1 | Out-Null
+    scp -o ConnectTimeout=30 -o BatchMode=yes "${SSH_USER}@${VPS_IP}:/tmp/live_media_list.txt" $TMP_MEDIA_LIST 2>&1 | Out-Null
+    & ssh -n -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" "rm -f /tmp/live_media_list.txt" 2>$null | Out-Null
+
+    if (Test-Path $TMP_MEDIA_LIST) { $mediaListOk = $true }
 } catch {
     Write-Err "LIVE media list query failed: $_"
-} finally {
-    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f $TMP_REMOTE_MEDIA_SQL" 2>$null | Out-Null
 }
 if (-not $mediaListOk -and -not (Test-Path $TMP_MEDIA_LIST)) {
     Write-Err "Media list could not be obtained from LIVE."
@@ -428,14 +406,14 @@ try { [void][IO.Directory]::CreateDirectory($mediaRoot) } catch {
 if (Test-Path -LiteralPath $TMP_MEDIA_LIST) {
     $mediaPaths = @(Get-Content -LiteralPath $TMP_MEDIA_LIST -Encoding UTF8 | Where-Object {
         $v = $null
-        if ($_) { $v = $_.Trim() }
-        ($v) -and ($v -ne '\N') -and ($v -notmatch '^\\')
+        if ($_) { $v = $_.Trim(" `t`r`n") }
+        ($v) -and ($v -ne '\N') -and ($v -notmatch '^\\') -and (-not $v.StartsWith("could not"))
     })
     Write-Info ("Discovered {0} distinct media references on LIVE." -f $mediaPaths.Count)
 
     foreach ($relPath in $mediaPaths) {
-        $rel = $relPath.Trim()
-        if (-not $rel) { continue }
+        $rel = $relPath.Trim(" `t`r`n")
+        if (-not $rel -or $rel.StartsWith("could not")) { continue }
         $localPath = [IO.Path]::Combine($mediaRoot, $rel)
         try {
             $localPath = [IO.Path]::GetFullPath($localPath)
@@ -446,13 +424,8 @@ if (Test-Path -LiteralPath $TMP_MEDIA_LIST) {
             if ([IO.File]::Exists($localPath)) {
                 $MEDIA_SKIPPED++
             } else {
-                # Classify: user_thumbnails/* -> Django/sorl auto-generates on 1st request,
-                # so a missing source file on LIVE is considered STALE (normal), not an error.
-                if ($rel.StartsWith("user_thumbnails/")) {
-                    $staleMissing.Add($rel)
-                } else {
-                    $missingPaths.Add($rel)
-                }
+                # Fetch all missing media including user_thumbnails from LIVE
+                $missingPaths.Add($rel)
             }
         } catch {
             Write-Err ("Media path check error for $rel : " + $_.Exception.Message)
@@ -466,83 +439,82 @@ Write-Info ("To fetch from LIVE: {0}" -f $missingPaths.Count)
 
 if ($staleMissing.Count -gt 0) {
     Write-Info "LIVE stale media (auto-thumbnails / missing on disk; ignored - Django will regenerate):"
-    $staleMissing | Select-Object -First 20 | ForEach-Object { Write-Info ("    - $_") }
+    $staleMissing | Select-Object -First 20 | ForEach-Object { Write-Info ("    - $_\") }
     if ($staleMissing.Count -gt 20) { Write-Info ("    ... and {0} more." -f ($staleMissing.Count - 20)) }
 }
 
-# ---------------- 5c: BATCH TAR download (1 SSH + 1 SCP) ----------------
+# ---------------- 5c: BATCH TAR download (1 SCP + 1 SSH + 1 SCP) ----------------
 if ($missingPaths.Count -gt 0) {
     $TMP_MISSING_LIST   = Join-Path $TMP_DIR "missing_media.txt"
+    $TMP_PY_SCRIPT      = Join-Path $TMP_DIR "build_tar.py"
     $TMP_REMOTE_MISSING = "/tmp/missing_media_$(Get-Date -Format 'yyyyMMddHHmmss').txt"
+    $TMP_REMOTE_PY      = "/tmp/build_tar_$(Get-Date -Format 'yyyyMMddHHmmss').py"
     $TMP_REMOTE_TAR     = "/tmp/live_media_batch_$(Get-Date -Format 'yyyyMMddHHmmss').tar.gz"
     $TMP_LOCAL_TAR      = Join-Path $TMP_DIR "live_media_batch.tar.gz"
-    $TMP_REMOTE_BUILDLOG= $TMP_REMOTE_TAR + ".log"
 
-    # Write missing list (NUL chars trimmed, pure UTF-8)
-    $missingContent = ($missingPaths.ToArray() -join [Environment]::NewLine) + [Environment]::NewLine
+    # Write missing list
+    $missingContent = ($missingPaths.ToArray() -join "`n") + "`n"
     Set-Content -LiteralPath $TMP_MISSING_LIST -Value $missingContent -Encoding UTF8 -NoNewline
-    Write-Info ("Uploading missing-file list ({0} entries) ..." -f $missingPaths.Count)
+
+    # Write remote python builder script
+    $pyScriptContent = @"
+import os, sys
+missing_file = sys.argv[1]
+valid_file = sys.argv[2]
+try:
+    with open(missing_file, 'r', encoding='utf-8-sig', errors='ignore') as f:
+        lines = [line.strip().lstrip('\ufeff') for line in f if line.strip()]
+    valid = [l for l in lines if os.path.isfile(l)]
+    with open(valid_file, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(valid) + ('\n' if valid else ''))
+    print('TAR_FILES:' + str(len(valid)))
+except Exception as e:
+    print('TAR_PYTHON_ERR:' + str(e))
+"@
+    Set-Content -LiteralPath $TMP_PY_SCRIPT -Value $pyScriptContent -Encoding UTF8 -NoNewline
+
+    Write-Info ("Uploading missing-file list ({0} entries) and builder script..." -f $missingPaths.Count)
 
     try {
-        scp -o ConnectTimeout=30 $TMP_MISSING_LIST "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_MISSING" 2>&1 | Out-Null
+        scp -o ConnectTimeout=30 -o BatchMode=yes $TMP_MISSING_LIST "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_MISSING" 2>&1 | Out-Null
+        scp -o ConnectTimeout=30 -o BatchMode=yes $TMP_PY_SCRIPT "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_PY" 2>&1 | Out-Null
     } catch {
-        Write-Err "Failed to upload missing-media list: $_"
+        Write-Err "Failed to upload missing-media files: $_"
         $missingPaths.Clear()
     }
 }
 
 if ($missingPaths.Count -gt 0) {
-    # Build tar remotely:
-    #   - cd to REMOTE_APP_DIR/media (so tar entries are RELATIVE)
-    #   - tar only files that EXIST on disk (ignore stale DB refs)
-    #   - report count of files actually included
-    Write-Info "Building batch tar.gz on LIVE (only existing files) ..."
-    $buildTarCmd = @"
-cd /tmp
-if [ ! -f '$TMP_REMOTE_MISSING' ]; then echo TAR_FAIL:nolist; exit 0; fi
-cd '$REMOTE_APP_DIR/media' 2>/dev/null || { echo TAR_FAIL:nomediadir; exit 0; }
-_COUNT=0
-_VALID=/tmp/_valid_media.$$
-rm -f "`$_VALID"
-while IFS= read -r p; do
-    [ -z "`$p" ] && continue
-    if [ -f "`$p" ]; then printf '%s\n' "`$p" >> "`$_VALID"; _COUNT=`$((_COUNT+1)); fi
-done < '$TMP_REMOTE_MISSING'
-echo TAR_FILES:`$_COUNT
-if [ `$_COUNT -eq 0 ]; then echo TAR_OK:empty; exit 0; fi
-tar -czf '$TMP_REMOTE_TAR' -T "`$_VALID" 2> '$TMP_REMOTE_BUILDLOG'
-_RC=`$?
-rm -f "`$_VALID"
-if [ `$_RC -eq 0 ]; then echo TAR_OK:`$_RC; ls -la '$TMP_REMOTE_TAR' | awk '{print `$5}'; else echo TAR_FAIL:`$_RC; cat '$TMP_REMOTE_BUILDLOG'; fi
-"@
-    $tarRes = ssh -o ConnectTimeout=60 -o ServerAliveInterval=30 "${SSH_USER}@${VPS_IP}" $buildTarCmd 2>&1
+    Write-Info ("Building batch tar.gz on LIVE for {0} missing files ..." -f $missingPaths.Count)
+    $remoteTarCmd = "cd '$REMOTE_APP_DIR/media' && python3 '$TMP_REMOTE_PY' '$TMP_REMOTE_MISSING' /tmp/_valid_media.txt && tar -czf '$TMP_REMOTE_TAR' -T /tmp/_valid_media.txt 2>/dev/null && echo 'TAR_OK:0' && echo 'TAR_PATH:$TMP_REMOTE_TAR' ; rm -f '$TMP_REMOTE_MISSING' '$TMP_REMOTE_PY' /tmp/_valid_media.txt"
+
+    $tarRes = & ssh -n -o ConnectTimeout=60 -o ServerAliveInterval=15 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" $remoteTarCmd 2>&1
     $tarFlat = ($tarRes | Out-String)
     Write-Info ("  Remote tar log snippet: " + ($tarFlat.Trim() -replace '\r?\n',' | '))
 
-    $tarEmpty = ($tarFlat -match 'TAR_OK:empty')
+    $tarEmpty = ($tarFlat -match 'TAR_FILES:0')
     $tarOk    = ($tarFlat -match 'TAR_OK:')
+    $remoteTarPath = $TMP_REMOTE_TAR
     $fileCnt  = 0
     if ($tarFlat -match 'TAR_FILES:(\d+)') { $fileCnt = [int]$matches[1] }
 
-    if (-not $tarOk) {
-        Write-Err "Remote batch tar build failed."
-    } elseif ($tarEmpty -or $fileCnt -eq 0) {
-        Write-Info "  (No valid files on LIVE to include in tar; all were stale DB references.)"
+    if (-not $tarOk -or $fileCnt -eq 0) {
+        Write-Info "  (No valid missing files found on LIVE disk to tar.)"
     } else {
         Write-Info ("  {0} valid files packed on LIVE; downloading batch tar.gz ..." -f $fileCnt)
         try {
-            scp -o ConnectTimeout=120 "${SSH_USER}@${VPS_IP}:$TMP_REMOTE_TAR" $TMP_LOCAL_TAR 2>&1 | Out-Null
+            $scpOutput = scp -o ConnectTimeout=120 -o BatchMode=yes "${SSH_USER}@${VPS_IP}:$remoteTarPath" $TMP_LOCAL_TAR 2>&1
             if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $TMP_LOCAL_TAR) -or (Get-Item $TMP_LOCAL_TAR).Length -eq 0) {
+                Write-Err "scp output: $scpOutput"
                 throw "scp of tar.gz failed (exit=$LASTEXITCODE)."
             }
             Write-Info ("  Tar.gz downloaded: {0:N1} KB" -f ((Get-Item $TMP_LOCAL_TAR).Length/1KB))
 
-            # Extract to media root.  tar -tzf first to count entries, then extract.
+            # Extract to media root
             $listEntries = & tar -tzf $TMP_LOCAL_TAR 2>$null
             $entryCount = @($listEntries).Count
             Write-Info ("  Extracting {0} entries to {1} ..." -f $entryCount, $mediaRoot)
 
-            # Use tar -xzf; force relative extract inside media root
             Push-Location -LiteralPath $mediaRoot
             try {
                 & tar -xzf $TMP_LOCAL_TAR
@@ -551,14 +523,14 @@ if [ `$_RC -eq 0 ]; then echo TAR_OK:`$_RC; ls -la '$TMP_REMOTE_TAR' | awk '{pri
             } finally {
                 Pop-Location
             }
-            Write-Info ("  Extraction done.  Copied = {0}." -f $MEDIA_COPIED)
+            Write-Info ("  Extraction done. Copied = {0}." -f $MEDIA_COPIED)
         } catch {
             Write-Err ("Batch tar download/extract FAILED: {0}" -f $_.Exception.Message)
+        } finally {
+            # Cleanup remote tar file
+            & ssh -n -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" "rm -f '$remoteTarPath'" 2>$null | Out-Null
         }
     }
-
-    # Cleanup remote artifacts (best-effort)
-    ssh -o ConnectTimeout=10 "${SSH_USER}@${VPS_IP}" "rm -f '$TMP_REMOTE_MISSING' '$TMP_REMOTE_TAR' '$TMP_REMOTE_BUILDLOG'" 2>$null | Out-Null
 }
 
 # ====================================================================

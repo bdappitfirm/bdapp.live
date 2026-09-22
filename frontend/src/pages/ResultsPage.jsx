@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { db } from '../utils/offlineDb';
 import {
   Box,
   Typography,
@@ -30,10 +31,8 @@ import {
   InputLabel,
   Select,
   CircularProgress,
-  Backdrop,
   IconButton,
   Autocomplete,
-  Tooltip,
   Checkbox,
   ListItemText
 } from '@mui/material';
@@ -46,7 +45,6 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ClearIcon from '@mui/icons-material/Clear';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EmptyState from '../components/EmptyState';
-import { TableSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ProtectedButton from '../components/ProtectedButton';
@@ -63,7 +61,8 @@ const EXAM_TYPES = [
   { value: 'annual', label: 'বার্ষিক' },
   { value: 'test', label: 'বিশেষ মূল্যায়ন' },
   { value: 'terminal', label: 'টার্মিনাল' },
-  { value: 'model', label: 'মডেল টেস্ট' }
+  { value: 'model', label: 'মডেল টেস্ট' },
+  { value: 'pre_test', label: 'প্রাক-নির্বাচনী' }
 ];
 
 const getExamTypeLabel = (type) => {
@@ -87,6 +86,201 @@ const CO_CURRICULAR_SUBJECTS = [
   'ওয়ার্ড কালেকশন', 'word collection', 'achievement test'
 ];
 
+const SUBJECT_MAXIMA = {
+  six_to_eight: {
+    'bangla first paper': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা প্রথম পত্র': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা-১ম পত্র': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা-১ম': { written: 70, mcq: 30, practical: 0 },
+    'bangla second paper': { written: 35, mcq: 15, practical: 0 },
+    'বাংলা দ্বিতীয় পত্র': { written: 35, mcq: 15, practical: 0 },
+    'বাংলা-২য় পত্র': { written: 35, mcq: 15, practical: 0 },
+    'বাংলা-২য়': { written: 35, mcq: 15, practical: 0 },
+    'english first paper': { written: 100, mcq: 0, practical: 0 },
+    'english': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজী': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি-১ম': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজী-১ম': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি প্রথম পত্র': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি-১ম পত্র': { written: 100, mcq: 0, practical: 0 },
+    'english second paper': { written: 50, mcq: 0, practical: 0 },
+    'ইংরেজি-২য়': { written: 50, mcq: 0, practical: 0 },
+    'ইংরেজী-২য়': { written: 50, mcq: 0, practical: 0 },
+    'ইংরেজি দ্বিতীয় পত্র': { written: 50, mcq: 0, practical: 0 },
+    'ইংরেজি-২য় পত্র': { written: 50, mcq: 0, practical: 0 },
+    'mathematics': { written: 70, mcq: 30, practical: 0 },
+    'গণিত': { written: 70, mcq: 30, practical: 0 },
+    'সাধারণ গণিত': { written: 70, mcq: 30, practical: 0 },
+    'science': { written: 70, mcq: 30, practical: 0 },
+    'বিজ্ঞান': { written: 70, mcq: 30, practical: 0 },
+    'bgs': { written: 70, mcq: 30, practical: 0 },
+    'বাংলাদেশ ও বিশ্বপরিচয়': { written: 70, mcq: 30, practical: 0 },
+    'বাংলাদেশ ও বিশ্বপরিচয়': { written: 70, mcq: 30, practical: 0 },
+    'সমাজ': { written: 70, mcq: 30, practical: 0 },
+    'ict': { written: 10, mcq: 15, practical: 25 },
+    'আইসিটি': { written: 10, mcq: 15, practical: 25 },
+    'তথ্য ও যোগাযোগ প্রযুক্তি': { written: 10, mcq: 15, practical: 25 },
+    'religion': { written: 70, mcq: 30, practical: 0 },
+    'ধর্ম': { written: 70, mcq: 30, practical: 0 },
+    'ইসলাম শিক্ষা': { written: 70, mcq: 30, practical: 0 },
+    'ইসলাম ও নৈতিক শিক্ষা': { written: 70, mcq: 30, practical: 0 },
+    'হিন্দু ধর্ম': { written: 70, mcq: 30, practical: 0 },
+    'agriculture': { written: 50, mcq: 0, practical: 0 },
+    'কৃষি শিক্ষা': { written: 50, mcq: 0, practical: 0 },
+    'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 0, practical: 0 },
+    'home economics': { written: 50, mcq: 0, practical: 0 },
+    'গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 0, practical: 0 }
+  },
+  nine_ten: {
+    'bangla first paper': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা প্রথম পত্র': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা-১ম পত্র': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা-১ম': { written: 70, mcq: 30, practical: 0 },
+    'bangla second paper': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা দ্বিতীয় পত্র': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা-২য় পত্র': { written: 70, mcq: 30, practical: 0 },
+    'বাংলা-২য়': { written: 70, mcq: 30, practical: 0 },
+    'english first paper': { written: 100, mcq: 0, practical: 0 },
+    'english': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজী': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি-১ম': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজী-১ম': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি প্রথম পত্র': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি-১ম পত্র': { written: 100, mcq: 0, practical: 0 },
+    'english second paper': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি-২য়': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজী-২য়': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি দ্বিতীয় পত্র': { written: 100, mcq: 0, practical: 0 },
+    'ইংরেজি-২য় পত্র': { written: 100, mcq: 0, practical: 0 },
+    'mathematics': { written: 70, mcq: 30, practical: 0 },
+    'গণিত': { written: 70, mcq: 30, practical: 0 },
+    'সাধারণ গণিত': { written: 70, mcq: 30, practical: 0 },
+    'ict': { written: 0, mcq: 25, practical: 25 },
+    'আইসিটি': { written: 0, mcq: 25, practical: 25 },
+    'তথ্য ও যোগাযোগ প্রযুক্তি': { written: 0, mcq: 25, practical: 25 },
+    'physics': { written: 50, mcq: 25, practical: 25 },
+    'পদার্থবিজ্ঞান': { written: 50, mcq: 25, practical: 25 },
+    'পদার্থ': { written: 50, mcq: 25, practical: 25 },
+    'chemistry': { written: 50, mcq: 25, practical: 25 },
+    'রসায়ন': { written: 50, mcq: 25, practical: 25 },
+    'রসায়ন': { written: 50, mcq: 25, practical: 25 },
+    'biology': { written: 50, mcq: 25, practical: 25 },
+    'জীববিজ্ঞান': { written: 50, mcq: 25, practical: 25 },
+    'higher math': { written: 50, mcq: 25, practical: 25 },
+    'higher mathematics': { written: 50, mcq: 25, practical: 25 },
+    'উচ্চতর গণিত': { written: 50, mcq: 25, practical: 25 },
+    'religion': { written: 70, mcq: 30, practical: 0 },
+    'ধর্ম': { written: 70, mcq: 30, practical: 0 },
+    'ইসলাম শিক্ষা': { written: 70, mcq: 30, practical: 0 },
+    'ইসলাম ও নৈতিক শিক্ষা': { written: 70, mcq: 30, practical: 0 },
+    'হিন্দু ধর্ম': { written: 70, mcq: 30, practical: 0 },
+    'history': { written: 70, mcq: 30, practical: 0 },
+    'বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা': { written: 70, mcq: 30, practical: 0 },
+    'geography': { written: 70, mcq: 30, practical: 0 },
+    'ভূগোল ও পরিবেশ': { written: 70, mcq: 30, practical: 0 },
+    'civics': { written: 70, mcq: 30, practical: 0 },
+    'পৌরনীতি ও नागरिकতা': { written: 70, mcq: 30, practical: 0 },
+    'economics': { written: 70, mcq: 30, practical: 0 },
+    'অর্থনীতি': { written: 70, mcq: 30, practical: 0 },
+    'accounting': { written: 70, mcq: 30, practical: 0 },
+    'হিসাববিজ্ঞান': { written: 70, mcq: 30, practical: 0 },
+    'finance': { written: 70, mcq: 30, practical: 0 },
+    'ফিন্যান্স ও ব্যাংকিং': { written: 70, mcq: 30, practical: 0 },
+    'business entrepreneurship': { written: 70, mcq: 30, practical: 0 },
+    'ব্যবসায় উদ্যোগ': { written: 70, mcq: 30, practical: 0 },
+    'agriculture': { written: 50, mcq: 25, practical: 25 },
+    'কৃষি শিক্ষা': { written: 50, mcq: 25, practical: 25 },
+    'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 25, practical: 25 },
+    'home economics': { written: 50, mcq: 25, practical: 25 },
+    'গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 25, practical: 25 }
+  }
+};
+
+// MEMOIZED ROW FOR INSTANT SMOOTH BULK MARK INPUT ON MOBILE
+const MemoizedBulkMarkRow = React.memo(({
+  student,
+  mark,
+  isOptional,
+  isCA,
+  isNineTen,
+  wMax,
+  mMax,
+  pMax,
+  onSetMark,
+  onKeyDown
+}) => {
+  const name = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || '-';
+  const m = mark || { written: '', mcq: '', practical: '' };
+
+  return (
+    <TableRow hover sx={{ bgcolor: isOptional ? 'rgba(76, 175, 80, 0.05)' : 'inherit' }}>
+      <TableCell>{student.roll_number || '-'}</TableCell>
+      <TableCell>
+        <Typography variant="body2" sx={{ fontWeight: isOptional ? 'bold' : 'normal' }}>
+          {name} {isOptional && <Chip label="৪র্থ" size="small" color="success" sx={{ height: 18, fontSize: '0.6rem', ml: 0.5 }} />}
+        </Typography>
+      </TableCell>
+      {isCA ? (
+        <TableCell align="center">
+          <TextField
+            type="number" size="small" value={m.written}
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => onSetMark(student.id, 'written', e.target.value)}
+            onKeyDown={(e) => onKeyDown(e, student.id, 'written')}
+            placeholder={isNineTen ? "100" : "50"}
+            autoComplete="off"
+            inputProps={{ 'data-student-id': student.id, 'data-field': 'written', style: { textAlign: 'center', width: '80px' }, autoComplete: 'off' }}
+          />
+        </TableCell>
+      ) : (
+        <>
+          {wMax > 0 && (
+            <TableCell align="center">
+              <TextField
+                type="number" size="small" value={m.written}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => onSetMark(student.id, 'written', e.target.value)}
+                onKeyDown={(e) => onKeyDown(e, student.id, 'written')}
+                placeholder={String(wMax)}
+                autoComplete="off"
+                inputProps={{ 'data-student-id': student.id, 'data-field': 'written', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+              />
+            </TableCell>
+          )}
+          {mMax > 0 && (
+            <TableCell align="center">
+              <TextField
+                type="number" size="small" value={m.mcq}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => onSetMark(student.id, 'mcq', e.target.value)}
+                onKeyDown={(e) => onKeyDown(e, student.id, 'mcq')}
+                placeholder={String(mMax)}
+                autoComplete="off"
+                inputProps={{ 'data-student-id': student.id, 'data-field': 'mcq', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+              />
+            </TableCell>
+          )}
+          {pMax > 0 && (
+            <TableCell align="center">
+              <TextField
+                type="number" size="small" value={m.practical}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => onSetMark(student.id, 'practical', e.target.value)}
+                onKeyDown={(e) => onKeyDown(e, student.id, 'practical')}
+                placeholder={String(pMax)}
+                autoComplete="off"
+                inputProps={{ 'data-student-id': student.id, 'data-field': 'practical', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+              />
+            </TableCell>
+          )}
+        </>
+      )}
+    </TableRow>
+  );
+});
+
 export default function ResultsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -96,15 +290,11 @@ export default function ResultsPage() {
      user?.user?.is_superuser || 
      user?.is_staff || 
      user?.user?.is_staff ||
-     (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'bdadmin' || 
+     (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'bdadmin' ||
      (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'shamir' ||
      (user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim() === 'umor'
    );
-  const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').toLowerCase();
-  const currentUserId = (user && (user.user?.id || user.id)) || null;
-  const [assignments, setAssignments] = useState([]);
   const [tabValue, setTabValue] = useState(0);
-  const [tourStep, setTourStep] = useState(0);
 
   // Examinations
   const [examinations, setExaminations] = useState([]);
@@ -127,9 +317,11 @@ export default function ResultsPage() {
   const [addResultsDialogOpen, setAddResultsDialogOpen] = useState(false);
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState('');
+  const [bulkForm, setBulkForm] = useState({ classroom: '', section: null, subject: '', exam: '' });
   const [students, setStudents] = useState([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
+  const [selectedStudentMain, setSelectedStudentMain] = useState('');
   const [subjects, setSubjects] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('');
   // Section selection for Add Result dialog
@@ -140,6 +332,14 @@ export default function ResultsPage() {
     mcq: '',
     practical: ''
   });
+
+  const isPrimaryClass = useMemo(() => {
+    const clsObj = classes.find(c => String(c.id) === String(bulkForm.classroom || selectedClass)) || {};
+    const className = String(clsObj.name || '').toLowerCase();
+    return /প্লে|play|শিশু|nursery|প্রথম|১ম|\b1\b|দ্বিতীয়|দ্বিতীয়|২য়|\b2\b|তৃতীয়|তৃতীয়|৩য়|\b3\b|চতুর্থ|৪র্থ|\b4\b|পঞ্চম|৫ম|\b5\b/i.test(className);
+  }, [classes, bulkForm.classroom, selectedClass]);
+
+  const mcqLabel = isPrimaryClass ? 'টিউটোরিয়াল' : 'এমসিকিউ';
   const [multiSubjectMarks, setMultiSubjectMarks] = useState({});
   const [calculatedGrade, setCalculatedGrade] = useState('');
   const [loadingClasses, setLoadingClasses] = useState(false);
@@ -147,7 +347,6 @@ export default function ResultsPage() {
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [savingResult, setSavingResult] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
-  const [bulkForm, setBulkForm] = useState({ classroom: '', section: null, subject: '', exam: '' });
   const [bulkYear, setBulkYear] = useState('');
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [bulkStudents, setBulkStudents] = useState([]);
@@ -188,6 +387,9 @@ export default function ResultsPage() {
       examination: parseInt(examId),
       school_id: id,
       results: resultsToSave
+    })
+    .then(() => {
+      db.genericCache.clear().catch(() => {});
     })
     .catch(err => {
       console.error('Consolidated auto-save failed:', err);
@@ -232,7 +434,7 @@ export default function ResultsPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
   
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryRows, setSummaryRows] = useState([]);
   const [summaryExamType, setSummaryExamType] = useState('annual');
@@ -258,7 +460,7 @@ export default function ResultsPage() {
 
   const loadExaminations = useCallback(() => {
     setLoading(true);
-    scopedGet('/api/results/examinations/', id, {}, { timeout: 30000 })
+    scopedGet('/api/results/examinations/', id, { page_size: 100 }, { timeout: 30000 })
       .then(res => {
         const data = Array.isArray(res.data) ? res.data : res.data.results || [];
         setExaminations(data);
@@ -273,7 +475,7 @@ export default function ResultsPage() {
   const loadExaminationsByClass = React.useCallback((classId) => {
     if (!classId) { setExaminations([]); return; }
     setLoading(true);
-    scopedGet('/api/results/examinations/', id, { classroom: classId }, { timeout: 30000 })
+    scopedGet('/api/results/examinations/', id, { classroom: classId, page_size: 100 }, { timeout: 30000 })
       .then(res => {
         const data = Array.isArray(res.data) ? res.data : res.data.results || [];
         setExaminations(data);
@@ -342,7 +544,7 @@ export default function ResultsPage() {
         };
 
         try {
-          const { items, partial } = await fetchResultsPaginated();
+          const { items } = await fetchResultsPaginated();
           setResults(items);
           try {
             const overallRes = await scopedGet('/api/results/overall/', id, { examination: examId, page_size: 500 }, { timeout: 12000 });
@@ -352,13 +554,13 @@ export default function ResultsPage() {
           setLoading(false);
         } catch (e2) { console.error('Fallback failed:', e2); setLoading(false); }
       });
-  }, [id, selectedClass]);
+  }, [id, selectedClass, selectedSectionMain]);
 
   const loadSubjectsByClass = useCallback((classId, sectionId = null) => {
-    if (!classId || sectionId === null) return;
+    if (!classId) return;
     setLoadingSubjects(true);
     const params = { classroom: classId };
-    if (sectionId && (Array.isArray(sectionId) ? sectionId.length > 0 : true)) {
+    if (sectionId && sectionId !== 'all' && !(Array.isArray(sectionId) && sectionId.length === 0)) {
       params.section = sectionId;
     }
     scopedGet('/api/academics/subjects/', id, params, { timeout: 30000 })
@@ -380,6 +582,9 @@ export default function ResultsPage() {
         });
 
         setSubjects(filtered);
+        if (filtered.length > 0) {
+          setBulkForm(prev => (prev.subject ? prev : { ...prev, subject: String(filtered[0].id) }));
+        }
         // Reset selections if they are no longer valid, without creating a loop
         const initial = {};
         for (const s of data) initial[s.id] = { written: '', mcq: '', practical: '' };
@@ -397,16 +602,16 @@ export default function ResultsPage() {
   }, [id]);
 
   const loadStudentsByClass = useCallback((classId, sectionId = null) => {
-    if (!classId || sectionId === null) {
+    if (!classId) {
       setStudents([]);
       return;
     }
     setLoadingStudents(true);
     const params = { classroom: classId, page_size: 1000 };
-    if (sectionId && (Array.isArray(sectionId) ? sectionId.length > 0 : true)) {
-      if (Array.isArray(sectionId)) {
+    if (sectionId && sectionId !== 'all' && sectionId !== 'null' && (Array.isArray(sectionId) ? sectionId.length > 0 : true)) {
+      if (Array.isArray(sectionId) && sectionId.length > 0) {
         params.section = sectionId.join(',');
-      } else {
+      } else if (!Array.isArray(sectionId)) {
         params.section = sectionId === 'UNASSIGNED' ? 'null' : sectionId;
       }
     }
@@ -425,7 +630,7 @@ export default function ResultsPage() {
         setLoadingStudents(false);
       })
       .catch(err => { console.error('Error loading students:', err); toast.error('Failed to load students'); setLoadingStudents(false); });
-  }, [id, selectedSectionAdd, toast]);
+  }, [id, toast]);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -564,8 +769,15 @@ export default function ResultsPage() {
       return null;
     } catch (_) { return null; }
   };
-  const normalizeName = (s) => String(s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-  const findSubjectExam = (subjectName, overrideClassId = null) => {
+  const getExamById = useCallback((eid) => {
+    const n = parseInt(eid, 10);
+    if (Number.isNaN(n)) return undefined;
+    return examinations.find(ex => ex.id === n);
+  }, [examinations]);
+
+  const normalizeName = useCallback((s) => String(s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase(), []);
+
+  const findSubjectExam = useCallback((subjectName, overrideClassId = null) => {
     try {
       const classId = overrideClassId || selectedClass;
       if (!classId || !subjectName) return null;
@@ -582,7 +794,7 @@ export default function ResultsPage() {
       }
       return candidates[0] || null;
     } catch (_) { return null; }
-  };
+  }, [selectedClass, selectedExam, selectedSectionAdd, getExamById, getExamsForClass, normalizeName]);
 
   // Filter students based on search term (handled by Autocomplete, but kept here if students list changes)
   useEffect(() => {
@@ -614,6 +826,7 @@ export default function ResultsPage() {
     setSelectedClass(classId);
     setSelectedSubject('');
     setSelectedStudent('');
+    setSelectedStudentMain('');
     setSelectedSectionAdd(null);
     setSelectedSectionMain(''); // Reset main section
     setMarks({ written: 0, mcq: 0, practical: 0 });
@@ -622,9 +835,10 @@ export default function ResultsPage() {
     // Load exams filtered by class; user will select an exam
     setSelectedExam('');
     loadExaminationsByClass(classId);
-    // Only load students after section selection
+    // Load subjects, sections, and students by class
     loadSubjectsByClass(classId);
     loadSectionsByClass(classId);
+    loadStudentsByClass(classId, '');
 
     // Load sections for main view
     scopedGet('/api/academics/sections/', id, { classroom: classId })
@@ -656,31 +870,6 @@ export default function ResultsPage() {
       return next;
     });
   };
-
-  const loadExistingMarksForStudent = React.useCallback(async (examId, studentId) => {
-    if (!examId || !studentId) return;
-    try {
-      const res = await scopedGet('/api/results/results/', id, { examination: parseInt(examId, 10), student: parseInt(studentId, 10), page_size: 500 }, { timeout: 20000 });
-      const arr = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-      setMultiSubjectMarks(prev => {
-        const next = { ...prev };
-        for (const r of arr) {
-          const sid = r.subject?.id || r.subject;
-          if (sid) {
-            const w = r.written_marks;
-            const m = r.mcq_marks;
-            const p = r.practical_marks;
-            next[sid] = {
-              written: (w !== null && w !== undefined && w !== '') ? parseFloat(w) : '',
-              mcq: (m !== null && m !== undefined && m !== '') ? parseFloat(m) : '',
-              practical: (p !== null && p !== undefined && p !== '') ? parseFloat(p) : ''
-            };
-          }
-        }
-        return next;
-      });
-    } catch (_) {}
-  }, [id]);
 
   /*
   // Dangerous Auto-Exam Switcher - Removed because it causes data loss and confusion during input
@@ -742,7 +931,7 @@ export default function ResultsPage() {
         examination: parseInt(examId, 10),
         subject: parseInt(subjectId, 10),
         page_size: 1000
-      }, { timeout: 20000 });
+      }, { timeout: 20000, _skipCache: true });
 
       const arr = Array.isArray(res.data) ? res.data : (res.data?.results || []);
       const incomingMarks = {};
@@ -770,24 +959,18 @@ export default function ResultsPage() {
           const resAlt = await scopedGet('/api/results/results/', id, {
               examination: parseInt(examId, 10),
               page_size: 2000
-          });
+          }, { timeout: 20000, _skipCache: true });
           const allRes = Array.isArray(resAlt.data) ? resAlt.data : (resAlt.data?.results || []);
           const matches = allRes.filter(r => (r.subject?.name === subjName || r.subject_name === subjName) && String(r.subject?.id || r.subject) !== String(subjectId));
           processResults(matches);
       }
 
-      // SAFE MERGE: Start with current local UI state and only fill in gaps from server,
-      // UNLESS the local state is completely empty (initial load).
       setBulkMarks(prev => {
-          const hasLocalData = Object.keys(prev).length > 0;
-          if (!hasLocalData) return incomingMarks;
-
-          const merged = { ...prev };
-          Object.keys(incomingMarks).forEach(sid => {
-              // Only overwrite if we don't have a value OR if we aren't currently editing this student
+          const merged = { ...incomingMarks };
+          Object.keys(prev).forEach(sid => {
               const isDirty = !!dirtyMarksBuffer.current[`${sid}-${subjectId}`];
-              if (!merged[sid] && !isDirty) {
-                  merged[sid] = incomingMarks[sid];
+              if (isDirty && prev[sid]) {
+                  merged[sid] = prev[sid];
               }
           });
           return merged;
@@ -861,131 +1044,7 @@ export default function ResultsPage() {
     setCalculatedGrade('');
     setMultiSubjectMarks({});
   };
-  
-  const getExamById = (eid) => {
-    const n = parseInt(eid);
-    if (Number.isNaN(n)) return undefined;
-    return examinations.find(ex => ex.id === n);
-  };
-  const getClassGroup = (className) => {
-    const x = String(className || '').toLowerCase();
-    if (/ষষ্ঠ|six|\b6\b|সপ্তম|seven|\b7\b|অষ্টম|eight|\b8\b/.test(x)) return 'six_to_eight';
-    if (/নবম|nine|\b9\b|দশম|ten|\b10\b/.test(x)) return 'nine_ten';
-    return null;
-  };
-  const SUBJECT_MAXIMA = {
-    six_to_eight: {
-      'bangla first paper': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা প্রথম পত্র': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা-১ম পত্র': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা-১ম': { written: 70, mcq: 30, practical: 0 },
-      'bangla second paper': { written: 35, mcq: 15, practical: 0 },
-      'বাংলা দ্বিতীয় পত্র': { written: 35, mcq: 15, practical: 0 },
-      'বাংলা-২য় পত্র': { written: 35, mcq: 15, practical: 0 },
-      'বাংলা-২য়': { written: 35, mcq: 15, practical: 0 },
-      'english first paper': { written: 100, mcq: 0, practical: 0 },
-      'english': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজী': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি-১ম': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজী-১ম': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি প্রথম পত্র': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি-১ম পত্র': { written: 100, mcq: 0, practical: 0 },
-      'english second paper': { written: 50, mcq: 0, practical: 0 },
-      'ইংরেজি-২য়': { written: 50, mcq: 0, practical: 0 },
-      'ইংরেজী-২য়': { written: 50, mcq: 0, practical: 0 },
-      'ইংরেজি দ্বিতীয় পত্র': { written: 50, mcq: 0, practical: 0 },
-      'ইংরেজি-২য় পত্র': { written: 50, mcq: 0, practical: 0 },
-      'mathematics': { written: 70, mcq: 30, practical: 0 },
-      'গণিত': { written: 70, mcq: 30, practical: 0 },
-      'সাধারণ গণিত': { written: 70, mcq: 30, practical: 0 },
-      'science': { written: 70, mcq: 30, practical: 0 },
-      'বিজ্ঞান': { written: 70, mcq: 30, practical: 0 },
-      'bgs': { written: 70, mcq: 30, practical: 0 },
-      'বাংলাদেশ ও বিশ্বপরিচয়': { written: 70, mcq: 30, practical: 0 },
-      'বাংলাদেশ ও বিশ্বপরিচয়': { written: 70, mcq: 30, practical: 0 },
-      'সমাজ': { written: 70, mcq: 30, practical: 0 },
-      'ict': { written: 10, mcq: 15, practical: 25 },
-      'আইসিটি': { written: 10, mcq: 15, practical: 25 },
-      'তথ্য ও যোগাযোগ প্রযুক্তি': { written: 10, mcq: 15, practical: 25 },
-      'religion': { written: 70, mcq: 30, practical: 0 },
-      'ধর্ম': { written: 70, mcq: 30, practical: 0 },
-      'ইসলাম শিক্ষা': { written: 70, mcq: 30, practical: 0 },
-      'ইসলাম ও নৈতিক শিক্ষা': { written: 70, mcq: 30, practical: 0 },
-      'হিন্দু ধর্ম': { written: 70, mcq: 30, practical: 0 },
-      'agriculture': { written: 50, mcq: 0, practical: 0 },
-      'কৃষি শিক্ষা': { written: 50, mcq: 0, practical: 0 },
-      'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 0, practical: 0 },
-      'home economics': { written: 50, mcq: 0, practical: 0 },
-      'গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 0, practical: 0 }
-    },
-    nine_ten: {
-      'bangla first paper': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা প্রথম পত্র': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা-১ম পত্র': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা-১ম': { written: 70, mcq: 30, practical: 0 },
-      'bangla second paper': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা দ্বিতীয় পত্র': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা-২য় পত্র': { written: 70, mcq: 30, practical: 0 },
-      'বাংলা-২য়': { written: 70, mcq: 30, practical: 0 },
-      'english first paper': { written: 100, mcq: 0, practical: 0 },
-      'english': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজী': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি-১ম': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজী-১ম': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি প্রথম পত্র': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি-১ম পত্র': { written: 100, mcq: 0, practical: 0 },
-      'english second paper': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি-২য়': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজী-২য়': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি দ্বিতীয় পত্র': { written: 100, mcq: 0, practical: 0 },
-      'ইংরেজি-২য় পত্র': { written: 100, mcq: 0, practical: 0 },
-      'mathematics': { written: 70, mcq: 30, practical: 0 },
-      'গণিত': { written: 70, mcq: 30, practical: 0 },
-      'সাধারণ গণিত': { written: 70, mcq: 30, practical: 0 },
-      'ict': { written: 0, mcq: 25, practical: 25 },
-      'আইসিটি': { written: 0, mcq: 25, practical: 25 },
-      'তথ্য ও যোগাযোগ প্রযুক্তি': { written: 0, mcq: 25, practical: 25 },
-      'physics': { written: 50, mcq: 25, practical: 25 },
-      'পদার্থবিজ্ঞান': { written: 50, mcq: 25, practical: 25 },
-      'পদার্থ': { written: 50, mcq: 25, practical: 25 },
-      'chemistry': { written: 50, mcq: 25, practical: 25 },
-      'রসায়ন': { written: 50, mcq: 25, practical: 25 },
-      'রসায়ন': { written: 50, mcq: 25, practical: 25 },
-      'biology': { written: 50, mcq: 25, practical: 25 },
-      'জীববিজ্ঞান': { written: 50, mcq: 25, practical: 25 },
-      'higher math': { written: 50, mcq: 25, practical: 25 },
-      'higher mathematics': { written: 50, mcq: 25, practical: 25 },
-      'উচ্চতর গণিত': { written: 50, mcq: 25, practical: 25 },
-      'religion': { written: 70, mcq: 30, practical: 0 },
-      'ধর্ম': { written: 70, mcq: 30, practical: 0 },
-      'ইসলাম শিক্ষা': { written: 70, mcq: 30, practical: 0 },
-      'ইসলাম ও নৈতিক শিক্ষা': { written: 70, mcq: 30, practical: 0 },
-      'হিন্দু ধর্ম': { written: 70, mcq: 30, practical: 0 },
-      'history': { written: 70, mcq: 30, practical: 0 },
-      'বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা': { written: 70, mcq: 30, practical: 0 },
-      'geography': { written: 70, mcq: 30, practical: 0 },
-      'ভূগোল ও পরিবেশ': { written: 70, mcq: 30, practical: 0 },
-      'civics': { written: 70, mcq: 30, practical: 0 },
-      'পৌরনীতি ও নাগরিকতা': { written: 70, mcq: 30, practical: 0 },
-      'economics': { written: 70, mcq: 30, practical: 0 },
-      'অর্থনীতি': { written: 70, mcq: 30, practical: 0 },
-      'accounting': { written: 70, mcq: 30, practical: 0 },
-      'হিসাববিজ্ঞান': { written: 70, mcq: 30, practical: 0 },
-      'finance': { written: 70, mcq: 30, practical: 0 },
-      'ফিন্যান্স ও ব্যাংকিং': { written: 70, mcq: 30, practical: 0 },
-      'business entrepreneurship': { written: 70, mcq: 30, practical: 0 },
-      'ব্যবসায় উদ্যোগ': { written: 70, mcq: 30, practical: 0 },
-      'agriculture': { written: 50, mcq: 25, practical: 25 },
-      'কৃষি শিক্ষা': { written: 50, mcq: 25, practical: 25 },
-      'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 25, practical: 25 },
-      'home economics': { written: 50, mcq: 25, practical: 25 },
-      'গার্হস্থ্য বিজ্ঞান': { written: 50, mcq: 25, practical: 25 }
-    }
-  };
-
-  const getSubjectMaximaForClass = (subjectName, overrideClassId = null) => {
+  const getSubjectMaximaForClass = useCallback((subjectName, overrideClassId = null) => {
     const classId = overrideClassId || selectedClass;
     const clsObj = classes.find(c => c.id === parseInt(classId)) || {};
     const className = String(clsObj.name || '').toLowerCase();
@@ -993,9 +1052,18 @@ export default function ResultsPage() {
     let group = 'six_to_eight';
     if (/\b9\b|\b10\b|\bnine\b|\bten\b|\bssc\b|\bix\b|\bx\b|নবম|দশম/i.test(className)) {
         group = 'nine_ten';
+    } else if (/প্লে|play|শিশু|nursery|প্রথম|১ম|\b1\b|দ্বিতীয়|দ্বিতীয়|২য়|\b2\b|তৃতীয়|তৃতীয়|৩য়|\b3\b|চতুর্থ|৪র্থ|\b4\b|পঞ্চম|৫ম|\b5\b/i.test(className)) {
+        group = 'primary';
     }
 
     const s = String(subjectName || '').trim().toLowerCase();
+
+    if (group === 'primary') {
+        if (s.includes('অংকন') || s.includes('drawing') || s.includes('চিত্রাংকন')) {
+            return { written: 50, mcq: 30, practical: 0 };
+        }
+        return { written: 100, mcq: 30, practical: 0 };
+    }
 
     // Continuous Assessment detection
     const isCA = CO_CURRICULAR_SUBJECTS.some(sub => s.includes(sub.toLowerCase())) ||
@@ -1028,51 +1096,21 @@ export default function ResultsPage() {
     }
 
     return SUBJECT_MAXIMA[group][s] || { written: 70, mcq: 30, practical: 0 };
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClass, classes]);
 
-  // Grade and GPA Calculation with 4th Subject logic
-  const calculateResultStats = (studentResults, isNineTen = false) => {
-    let totalGradePoints = 0;
-    let totalSubjects = 0;
-    let failed = false;
-    let fourthSubjectPoints = 0;
+  const getMaxForField = useCallback((examObj, field, subjectName, overrideClassId = null) => {
+    const m = getSubjectMaximaForClass(subjectName, overrideClassId);
+    const defaultVal = m ? (field === 'written' ? m.written : field === 'mcq' ? m.mcq : m.practical) : undefined;
 
-    studentResults.forEach(r => {
-      const gpa = parseFloat(r.gpa) || 0;
-      const subjName = (r.subject?.name || '').toLowerCase();
-
-      // Skip co-curricular subjects from GPA calculation
-      const isCoCurricular = CO_CURRICULAR_SUBJECTS.some(sub => subjName.includes(sub.toLowerCase()));
-      if (isCoCurricular) return;
-
-      // Check if it's 4th subject (assuming 'agriculture' or 'কৃষি' for now, can be dynamic)
-      const isFourth = subjName.includes('কৃষি') || subjName.includes('agriculture') || subjName.includes('fourth');
-
-      if (isFourth && isNineTen) {
-        fourthSubjectPoints = Math.max(0, gpa - 2);
-      } else {
-        totalGradePoints += gpa;
-        totalSubjects++;
-        if (gpa === 0) failed = true;
-      }
-    });
-
-    let finalGpa = totalSubjects > 0 ? (totalGradePoints + fourthSubjectPoints) / totalSubjects : 0;
-    if (failed) finalGpa = 0;
-
-    return Math.min(5.00, finalGpa).toFixed(2);
-  };
-  const getMaxForField = (examObj, field, subjectName, overrideClassId = null) => {
     const subjExam = findSubjectExam(subjectName, overrideClassId);
     const e = subjExam || ((examObj && normalizeName(examObj.name) === normalizeName(subjectName)) ? examObj : null);
     if (e) {
       const val = field === 'written' ? parseFloat(e.written_max) : field === 'mcq' ? parseFloat(e.mcq_max) : field === 'practical' ? parseFloat(e.practical_max) : undefined;
-      if (Number.isFinite(val)) return val;
+      if (Number.isFinite(val) && val > 0) return val;
     }
-    const m = getSubjectMaximaForClass(subjectName, overrideClassId);
-    if (!m) return undefined;
-    return field === 'written' ? m.written : field === 'mcq' ? m.mcq : m.practical;
-  };
+    return defaultVal;
+  }, [findSubjectExam, normalizeName, getSubjectMaximaForClass]);
 
   const handleMarksChange = (field, value) => {
     const examObj = getExamById(selectedExam);
@@ -1376,21 +1414,47 @@ export default function ResultsPage() {
     window.open(url, '_blank');
   };
 
-  const openBulkDialog = () => {
+  const openBulkDialog = async () => {
     if (!isAuthenticated()) {
       navigate('/login');
       return;
     }
-    // Security checks removed as per request
     if (!classes.length) {
       loadClasses();
     }
     setBulkDialogOpen(true);
-    // Reset everything to empty for better performance
-    setBulkForm({ classroom: '', section: null, subject: '', exam: '' });
+
+    const currentExamObj = examinations.find(e => String(e.id) === String(selectedExam));
+    const currentClassId = selectedClass || (currentExamObj ? getClassroomId(currentExamObj.classroom) : '');
+    const classExams = currentClassId ? getExamsForClass(currentClassId) : examinations;
+    const defaultExamId = selectedExam || (classExams.length > 0 ? classExams[0].id : '');
+
+    let defaultSubjectId = '';
+    if (currentClassId) {
+      try {
+        const subRes = await scopedGet('/api/academics/subjects/', id, { classroom: currentClassId, page_size: 100 }, { timeout: 15000, _skipCache: true });
+        const subData = Array.isArray(subRes.data) ? subRes.data : subRes.data?.results || [];
+        if (subData.length > 0) {
+          defaultSubjectId = String(subData[0].id);
+          setSubjects(subData);
+        }
+      } catch (_) {}
+    }
+
+    setBulkForm({
+      classroom: currentClassId ? String(currentClassId) : '',
+      section: selectedSectionMain ? [String(selectedSectionMain)] : null,
+      subject: defaultSubjectId,
+      exam: defaultExamId ? String(defaultExamId) : ''
+    });
+    setBulkYear(currentExamObj?.academic_year ? String(currentExamObj.academic_year) : String(new Date().getFullYear()));
     setBulkStudents([]);
     setBulkMarks({});
-    setBulkYear('');
+
+    if (currentClassId) {
+      loadStudentsByClass(currentClassId, selectedSectionMain ? [selectedSectionMain] : []);
+      loadSectionsByClass(currentClassId);
+    }
   };
 
   const closeBulkDialog = () => {
@@ -1413,24 +1477,6 @@ export default function ResultsPage() {
   }, [examinations, selectedExam]);
 
   // Removed redundant examinations length check that caused flickering selection
-
-  useEffect(() => {
-    if (role === 'teacher' && currentUserId && id) {
-      api.get(`/api/academics/assignments/?teacher=${currentUserId}&school=${id}`)
-        .then(res => {
-          const arr = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-          const normalized = arr.map(a => ({
-            classroom: a.classroom?.id || a.classroom,
-            section: a.section?.id || a.section || null,
-            subject: a.subject?.id || a.subject
-          })).filter(x => x.classroom && x.subject);
-          setAssignments(normalized);
-        })
-        .catch(() => setAssignments([]));
-    } else {
-      setAssignments([]);
-    }
-  }, [role, currentUserId, id]);
 
   useEffect(() => {
     if (selectedClass && !selectedExam) {
@@ -1495,7 +1541,7 @@ export default function ResultsPage() {
     }
   }, [bulkDialogOpen, bulkForm.classroom, examinations, bulkYear, bulkForm.exam, getExamsForClass]);
 
-  const setBulkMark = (sid, field, value) => {
+  const setBulkMark = useCallback((sid, field, value) => {
     const examObj = getExamById(bulkForm.exam || selectedExam);
     const subjectName = (subjects.find(s => s.id === parseInt(bulkForm.subject)) || {}).name;
     const max = getMaxForField(examObj, field, subjectName, bulkForm.classroom);
@@ -1513,9 +1559,9 @@ export default function ResultsPage() {
 
       return next;
     });
-  };
+  }, [bulkForm.exam, selectedExam, bulkForm.subject, bulkForm.classroom, subjects, getExamById, getMaxForField, queueAutoSave]);
 
-  const handleKeyDown = (e, studentId, field) => {
+  const handleKeyDown = useCallback((e, studentId, field) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       const currentIndex = bulkStudents.findIndex(s => s.id === studentId);
@@ -1528,7 +1574,7 @@ export default function ResultsPage() {
         }
       }
     }
-  };
+  }, [bulkStudents]);
 
   const saveBulkMarks = async () => {
     const examId = parseInt(bulkForm.exam || selectedExam);
@@ -1562,8 +1608,11 @@ export default function ResultsPage() {
       await api.post(`/api/results/examinations/${examId}/bulk_results/?school=${id}`, payload);
       closeBulkDialog();
       loadResults(examId);
+      toast.success('নম্বর সফলভাবে সংরক্ষণ করা হয়েছে');
     } catch (e) {
       console.error('Bulk save error:', e?.response?.data || e);
+      const errMsg = e?.response?.data?.detail || JSON.stringify(e?.response?.data) || 'নম্বর সংরক্ষণ করতে ব্যর্থ হয়েছে';
+      toast.error(errMsg);
     } finally {
       setBulkSaving(false);
     }
@@ -1582,15 +1631,6 @@ export default function ResultsPage() {
     };
     return map[grade] || { bg: '#9e9e9e', fg: '#ffffff' };
   };
-
-  const isClassNineOrTen = () => {
-    try {
-      const clsId = parseInt(selectedClass);
-      const clsObj = classes.find(c => parseInt(c.id) === clsId);
-      const name = String(clsObj?.name || '').toLowerCase();
-      return /নবম|দশম|\b9\b|\b10\b/.test(name);
-    } catch (_) { return false; }
-  };
   const isBanglaFirst = (name) => {
     const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim();
     const lower = n.toLowerCase();
@@ -1604,28 +1644,6 @@ export default function ResultsPage() {
     return !!(lower.includes('বাংলা দ্বিত') || lower.includes('bangla second') || lower.includes('বাংলা-২') || lower.includes('2nd'));
   };
   const isBanglaPaper = (name) => isBanglaFirst(name) || isBanglaSecond(name);
-  const banglaCombinedPassForStudent = (studentId) => {
-    try {
-      const list = (results || []).filter(r => {
-        const sid = typeof r.student === 'object' ? r.student?.id : r.student;
-        return sid === studentId && isBanglaPaper(r.subject?.name || r.subject_name);
-      });
-      if (!list.length) return false;
-      const examObj = examinations.find(ex => ex.id === selectedExam) || {};
-      const passMarks = parseFloat(examObj?.pass_marks) || 33;
-
-      const totalObtained = list.reduce((s, r) => {
-        const w = parseFloat(r.written_marks) || 0;
-        const m = parseFloat(r.mcq_marks) || 0;
-        const p = parseFloat(r.practical_marks) || 0;
-        return s + (w + m + p);
-      }, 0);
-
-      // Pass if total obtained is at least 33% of 200 (for two papers)
-      return totalObtained >= (passMarks * 2);
-    } catch (_) { return false; }
-  };
-
   // Pass rule for display across all tabs: any non-'F' grade counts as Passed
   const isPassed = (row) => {
     const g = row?.grade;
@@ -1744,6 +1762,8 @@ export default function ResultsPage() {
               onChange={(e) => {
                 const secId = e.target.value;
                 setSelectedSectionMain(secId);
+                setSelectedStudentMain('');
+                loadStudentsByClass(selectedClass, secId);
                 if (selectedExam) loadResults(selectedExam, secId);
               }}
               sx={{ minWidth: 200 }}
@@ -1771,6 +1791,22 @@ export default function ResultsPage() {
                     {(exam.name || 'বিষয়')} — {getExamTypeLabel(exam.exam_type)}
                   </MenuItem>
                 ))}
+            </TextField>
+            <TextField
+              select
+              label="শিক্ষার্থী নির্বাচন করুন"
+              value={selectedStudentMain}
+              onChange={(e) => setSelectedStudentMain(e.target.value)}
+              sx={{ minWidth: 220 }}
+              disabled={!selectedClass}
+              inputProps={{ autoComplete: 'off' }}
+            >
+              <MenuItem value="">সব শিক্ষার্থী</MenuItem>
+              {students.map(stu => (
+                <MenuItem key={stu.id} value={stu.id}>
+                  {stu.roll_number ? `[রোল: ${stu.roll_number}] ` : ''}{stu.user?.first_name} {stu.user?.last_name}
+                </MenuItem>
+              ))}
             </TextField>
             
             <Button
@@ -1856,7 +1892,7 @@ export default function ResultsPage() {
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">লিখিত</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">এমসিকিউ</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">{mcqLabel}</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">প্র্যাকটিক্যাল</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">মোট</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">গ্রেড</TableCell>
@@ -1868,6 +1904,11 @@ export default function ResultsPage() {
               <TableBody>
                 {results
                   .filter(r => !tab0SubjectFilter || (r.subject?.name || r.subject_name) === tab0SubjectFilter)
+                  .filter(r => {
+                    if (!selectedStudentMain) return true;
+                    const rStuId = typeof r.student === 'object' ? r.student?.id : r.student;
+                    return String(rStuId) === String(selectedStudentMain);
+                  })
                   .sort((a, b) => {
                     const studentA = typeof a.student === 'object' ? a.student : (students.find(s => s.id === a.student) || {});
                     const studentB = typeof b.student === 'object' ? b.student : (students.find(s => s.id === b.student) || {});
@@ -2089,7 +2130,7 @@ export default function ResultsPage() {
                   for (const classroom of clsArr) {
                     const secRes = await scopedGet('/api/academics/sections/', id, { classroom: classroom.id }, { timeout: 20000 });
                     const secArr = Array.isArray(secRes.data) ? secRes.data : (secRes.data?.results || []);
-                    const exRes = await scopedGet('/api/results/examinations/', id, { classroom: classroom.id }, { timeout: 20000 });
+                    const exRes = await scopedGet('/api/results/examinations/', id, { classroom: classroom.id, page_size: 100 }, { timeout: 20000 });
                     const exArr = Array.isArray(exRes.data) ? exRes.data : (exRes.data?.results || []);
                     const targetYear = parseInt(summaryYear, 10);
                     let exam = exArr.find(e => (String(e.exam_type || '').toLowerCase() === String(summaryExamType).toLowerCase()) && (parseInt(e.academic_year || e.year, 10) === targetYear));
@@ -2538,7 +2579,9 @@ export default function ResultsPage() {
                 InputProps={{ autoComplete: 'off', inputProps: { min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', (subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name) ?? undefined } }}
                 disabled={(() => {
                   const sname = String((subjects.find(s => s.id === parseInt(selectedSubject)) || {}).name || '').toLowerCase();
-                  return sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
+                  const isEng = sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
+                  if (isPrimaryClass) return false;
+                  return isEng;
                 })()}
               />
             </Grid>
@@ -2583,7 +2626,7 @@ export default function ResultsPage() {
                     <TableRow sx={{ bgcolor: 'secondary.main' }}>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">লিখিত</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">এমসিকিউ</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">{mcqLabel}</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">প্র্যাকটিক্যাল</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">মোট</TableCell>
                     </TableRow>
@@ -2608,7 +2651,9 @@ export default function ResultsPage() {
                               inputProps={{ min: 0, max: getMaxForField(getExamById(selectedExam), 'mcq', subject.name) ?? undefined, autoComplete: 'off' }}
                               disabled={(() => {
                                 const sname = String(subject.name || '').toLowerCase();
-                                return sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
+                                const isEng = sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
+                                if (isPrimaryClass) return false;
+                                return isEng;
                               })()}
                             />
                           </TableCell>
@@ -2959,7 +3004,7 @@ export default function ResultsPage() {
                     return (
                       <>
                         {wMax > 0 && <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>লিখিত</TableCell>}
-                        {mMax > 0 && <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>এমসিকিউ</TableCell>}
+                        {mMax > 0 && <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>{mcqLabel}</TableCell>}
                         {pMax > 0 && <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', textAlign: 'center' }}>প্র্যাকটিক্যাল</TableCell>}
                       </>
                     );
@@ -2982,7 +3027,6 @@ export default function ResultsPage() {
                       return String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true });
                     })
                     .map(s => {
-                      const name = `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() || s.user?.username;
                       const m = bulkMarks[s.id] || { written: '', mcq: '', practical: '' };
                       const examObj = getExamById(bulkForm.exam || selectedExam);
                       const clsObj = classes.find(c => c.id === parseInt(bulkForm.classroom));
@@ -2998,71 +3042,21 @@ export default function ResultsPage() {
                       const pMax = getMaxForField(examObj, 'practical', subjName, bulkForm.classroom) || 0;
 
                       return (
-                        <TableRow key={s.id} hover sx={{ bgcolor: isOptional ? 'rgba(76, 175, 80, 0.05)' : 'inherit' }}>
-                        <TableCell>{s.roll_number || '-'}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: isOptional ? 'bold' : 'normal' }}>
-                            {name} {isOptional && <Chip label="৪র্থ" size="small" color="success" sx={{ height: 18, fontSize: '0.6rem', ml: 0.5 }} />}
-                          </Typography>
-                        </TableCell>
-                        {isCA ? (
-                          <TableCell align="center">
-                            <TextField
-                              type="number" size="small" value={m.written}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => setBulkMark(s.id, 'written', e.target.value)}
-                              onKeyDown={(e) => handleKeyDown(e, s.id, 'written')}
-                              placeholder={isNineTen ? "100" : "50"}
-                              autoComplete="off"
-                              inputProps={{ 'data-student-id': s.id, 'data-field': 'written', style: { textAlign: 'center', width: '80px' }, autoComplete: 'off' }}
-                            />
-                          </TableCell>
-                        ) : (
-                          <>
-                            {wMax > 0 && (
-                              <TableCell align="center">
-                                <TextField
-                                  type="number" size="small" value={m.written}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => setBulkMark(s.id, 'written', e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, s.id, 'written')}
-                                  placeholder={String(wMax)}
-                                  autoComplete="off"
-                                  inputProps={{ 'data-student-id': s.id, 'data-field': 'written', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
-                                />
-                              </TableCell>
-                            )}
-                            {mMax > 0 && (
-                              <TableCell align="center">
-                                <TextField
-                                  type="number" size="small" value={m.mcq}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => setBulkMark(s.id, 'mcq', e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, s.id, 'mcq')}
-                                  placeholder={String(mMax)}
-                                  autoComplete="off"
-                                  inputProps={{ 'data-student-id': s.id, 'data-field': 'mcq', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
-                                />
-                              </TableCell>
-                            )}
-                            {pMax > 0 && (
-                              <TableCell align="center">
-                                <TextField
-                                  type="number" size="small" value={m.practical}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => setBulkMark(s.id, 'practical', e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, s.id, 'practical')}
-                                  placeholder={String(pMax)}
-                                  autoComplete="off"
-                                  inputProps={{ 'data-student-id': s.id, 'data-field': 'practical', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
-                                />
-                              </TableCell>
-                            )}
-                          </>
-                        )}
-                      </TableRow>
-                    );
-                  })
+                        <MemoizedBulkMarkRow
+                          key={s.id}
+                          student={s}
+                          mark={m}
+                          isOptional={isOptional}
+                          isCA={isCA}
+                          isNineTen={isNineTen}
+                          wMax={wMax}
+                          mMax={mMax}
+                          pMax={pMax}
+                          onSetMark={setBulkMark}
+                          onKeyDown={handleKeyDown}
+                        />
+                      );
+                    })
                 )}
               </TableBody>
             </Table>

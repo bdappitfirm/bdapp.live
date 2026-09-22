@@ -367,20 +367,9 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     pagination_class = StandardResultsSetPagination
 
-    # Check if birth_date exists in database once per app startup
-    _birth_date_db_exists = None
-    
     @classmethod
     def birth_date_db_exists(cls):
-        if cls._birth_date_db_exists is None:
-            try:
-                from django.db import connection
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'academics_studentprofile' AND column_name = 'birth_date'")
-                    cls._birth_date_db_exists = cursor.fetchone() is not None
-            except Exception:
-                cls._birth_date_db_exists = False
-        return cls._birth_date_db_exists
+        return True
 
     def perform_destroy(self, instance):
         """
@@ -462,21 +451,11 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                     sec_ids = [str(s) for s in secid_param if str(s).strip()]
 
                 digit_ids = [int(s) for s in sec_ids if s.isdigit()]
-                group_names = [s.lower() for s in sec_ids if not s.isdigit() and s.lower() in ['science', 'arts', 'commerce']]
+                group_names = [s.lower() for s in sec_ids if not s.isdigit() and s.lower() in ['science', 'arts', 'commerce', 'humanities']]
 
                 q_filter = Q()
                 if digit_ids:
-                    sections = Section.objects.filter(id__in=digit_ids)
-                    for section in sections:
-                        name = section.name.lower()
-                        if 'বিজ্ঞান' in name or 'science' in name:
-                            q_filter |= Q(section_id=section.id) | Q(student_group='science')
-                        elif 'মানবিক' in name or 'arts' in name:
-                            q_filter |= Q(section_id=section.id) | Q(student_group='arts')
-                        elif 'ব্যবসায় শিক্ষা' in name or 'commerce' in name or 'ব্যবসা' in name:
-                            q_filter |= Q(section_id=section.id) | Q(student_group='commerce')
-                        else:
-                            q_filter |= Q(section_id=section.id)
+                    q_filter |= Q(section_id__in=digit_ids)
 
                 if group_names:
                     q_filter |= Q(student_group__in=group_names)
@@ -485,7 +464,22 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                     queryset = queryset.filter(q_filter)
 
             if group:
-                queryset = queryset.filter(student_group=group)
+                group_str = str(group).lower().strip()
+                if group_str in ['arts', 'humanities', 'মানবিক']:
+                    queryset = queryset.filter(
+                        Q(student_group__in=['arts', 'humanities', 'মানবিক']) |
+                        (Q(student_group__isnull=True) | Q(student_group='')) & (Q(section__name__icontains='মানবিক') | Q(section__name__icontains='arts') | Q(section__name__icontains='humanities'))
+                    )
+                elif group_str in ['commerce', 'business', 'ব্যবসায়', 'ব্যবসায়']:
+                    queryset = queryset.filter(
+                        Q(student_group__in=['commerce', 'business', 'ব্যবসায়', 'ব্যবসায়']) |
+                        (Q(student_group__isnull=True) | Q(student_group='')) & (Q(section__name__icontains='ব্যবসায়') | Q(section__name__icontains='commerce') | Q(section__name__icontains='business'))
+                    )
+                elif group_str in ['science', 'বিজ্ঞান']:
+                    queryset = queryset.filter(
+                        Q(student_group__in=['science', 'বিজ্ঞান']) |
+                        (Q(student_group__isnull=True) | Q(student_group='')) & (Q(section__name__icontains='বিজ্ঞান') | Q(section__name__icontains='science'))
+                    )
 
             # Performance: Use a simpler ordering that index can handle if possible
             # Standard database indices work best on simple field ordering

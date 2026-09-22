@@ -6,10 +6,10 @@ import fallbackLogo from './fallback_logo.png';
 const toBn = (v) => String(v ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
 
 export default function SSCMarksheet({ studentData, results, overallResult, examination, school, forceLanguage }) {
-  const student = studentData?.student || studentData || {};
+  const student = useMemo(() => studentData?.student || studentData || {}, [studentData]);
   const user = student.user || {};
   const isBn = forceLanguage === 'bn';
-  const n = (v) => isBn ? toBn(v) : v;
+  const formatNum = (v) => isBn ? toBn(v) : v;
 
   const logoUrl = getMediaUrl(school?.logo || fallbackLogo);
 
@@ -43,19 +43,104 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
         return ['physical education', 'arts & crafts', 'work and life', 'শারীরিক', 'চারু', 'কর্ম ও জীবন'].some(k => ln.includes(k));
     };
 
+    const studentGroup = String(student.student_group || student.group || studentData?.group || '').toLowerCase();
+    const isSciGroup = studentGroup.includes('science') || studentGroup.includes('বিজ্ঞান');
+
+    const optId = String(student.optional_subject?.id || student.optional_subject || '');
+    const optName = String(student.optional_subject?.name || '').toLowerCase();
+
+    // Exclude Science electives for Non-Science students if no marks and not assigned on profile
+    const validResults = results.filter(r => {
+        const sname = String(r.subject?.name || r.subject_name || '').toLowerCase();
+        const sid = String(r.subject?.id || r.subject || '');
+        const tot = parseFloat(r.total_obtained) || 0;
+        const w = parseFloat(r.written_marks) || 0;
+        const m = parseFloat(r.mcq_marks) || 0;
+        const p = parseFloat(r.practical_marks) || 0;
+        const hasMarks = tot > 0 || w > 0 || m > 0 || p > 0;
+        const isAssigned = (optId && sid === optId) || (optName && (sname === optName || sname.includes(optName)));
+
+        if (!isSciGroup && !hasMarks && !isAssigned) {
+            const isHM = sname.includes('উচ্চতর') || sname.includes('higher');
+            const isPureScience = sname.includes('পদার্থ') || sname.includes('physics') || sname.includes('রসায়ন') || sname.includes('chemistry') || sname.includes('জীব') || sname.includes('biology');
+            if (isHM || isPureScience) return false;
+        }
+        return true;
+    });
+
     const isOptional = (r) => {
         const sname = String(r.subject?.name || r.subject_name || '').toLowerCase();
-        const optId = student.optional_subject?.id || student.optional_subject;
-        if (optId && String(optId) === String(r.subject?.id || r.subject)) return true;
-        return sname.includes('agriculture') || sname.includes('higher math') || sname.includes('ঐচ্ছিক') || sname.includes('কৃষি');
+        const sid = String(r.subject?.id || r.subject || '');
+
+        // 1. Explicitly assigned on student profile
+        if (optId && sid === optId) return true;
+        if (optName && (sname === optName || sname.includes(optName))) return true;
+
+        // 2. Marks check
+        const tot = parseFloat(r.total_obtained) || 0;
+        const w = parseFloat(r.written_marks) || 0;
+        const m = parseFloat(r.mcq_marks) || 0;
+        const p = parseFloat(r.practical_marks) || 0;
+        const hasMarks = tot > 0 || w > 0 || m > 0 || p > 0;
+
+        const isHM = sname.includes('উচ্চতর') || sname.includes('higher');
+        const isAgri = sname.includes('কৃষি') || sname.includes('agriculture') || sname.includes('গার্হস্থ্য') || sname.includes('home science');
+
+        if (isAgri) {
+            return hasMarks || !isSciGroup;
+        }
+        if (isHM) {
+            const isAssigned = (optId && sid === optId) || (optName && (sname === optName || sname.includes(optName)));
+            if (!isSciGroup && !isAssigned) return false;
+            return isSciGroup || hasMarks;
+        }
+
+        return sname.includes('ঐচ্ছিক') || sname.includes('fourth') || sname.includes('৪র্থ');
     };
 
+    let optCandidates = validResults.filter(r => !isCoCurricular(r.subject?.name || r.subject_name) && isOptional(r));
+    let mainList = validResults.filter(r => !isCoCurricular(r.subject?.name || r.subject_name) && !isOptional(r));
+
+    // Limit optional to at most one subject with actual marks or assigned
+    if (optCandidates.length > 0) {
+        let primary = optCandidates.find(r => {
+            const matchesId = optId && String(r.subject?.id || r.subject) === optId;
+            const matchesName = optName && (r.subject?.name || r.subject_name || '').toLowerCase().includes(optName);
+            if (!matchesId && !matchesName) return false;
+
+            const isHM = /higher|উচ্চতর/i.test(r.subject?.name || r.subject_name || '');
+            const hasMarks = !r.isActuallyAbsent && (parseFloat(r.total_obtained) > 0 || (parseFloat(r.written_marks)||0) > 0);
+            if (!isSciGroup && isHM && !hasMarks) return false;
+
+            return true;
+        });
+
+        if (!primary) {
+            const withMarks = optCandidates.filter(r => {
+                const tot = parseFloat(r.total_obtained) || 0;
+                const w = parseFloat(r.written_marks) || 0;
+                return tot > 0 || w > 0;
+            });
+            if (withMarks.length > 0) {
+                primary = withMarks[0];
+            }
+        }
+
+        if (primary) {
+            return {
+                main: mainList,
+                optional: [primary],
+                coCurricular: validResults.filter(r => isCoCurricular(r.subject?.name || r.subject_name))
+            };
+        }
+    }
+
     return {
-        main: results.filter(r => !isCoCurricular(r.subject?.name || r.subject_name) && !isOptional(r)),
-        optional: results.filter(r => !isCoCurricular(r.subject?.name || r.subject_name) && isOptional(r)),
-        coCurricular: results.filter(r => isCoCurricular(r.subject?.name || r.subject_name))
+        main: mainList,
+        optional: [],
+        coCurricular: validResults.filter(r => isCoCurricular(r.subject?.name || r.subject_name))
     };
-  }, [results, student]);
+  }, [results, student, studentData]);
 
   // GPA Calculations (Simplified for Display Matching)
   const { gpaWithoutOptional, gpaWithOptional } = useMemo(() => {
@@ -110,8 +195,8 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
         {/* Header Section */}
         <div className="transcript-header">
             <div className="serial-info">
-                <div style={{ fontSize: '11pt', fontWeight: 'bold' }}>Serial No. CB &nbsp; <span style={{ fontSize: '13pt' }}>{n(serialNo)}</span></div>
-                <div className="sub-serial" style={{ fontWeight: 'bold' }}>{school?.code || 'cbj17'}: {n(subSerialNo)}</div>
+                <div style={{ fontSize: '11pt', fontWeight: 'bold' }}>Serial No. CB &nbsp; <span style={{ fontSize: '13pt' }}>{formatNum(serialNo)}</span></div>
+                <div className="sub-serial" style={{ fontWeight: 'bold' }}>{school?.code || 'cbj17'}: {formatNum(subSerialNo)}</div>
             </div>
 
             <div className="board-info">
@@ -123,7 +208,7 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
                 </div>
 
                 <div className="exam-title">
-                    {String(examination?.name || 'Secondary School Certificate').toUpperCase()} EXAMINATION, {n(examination?.academic_year || '2024')}
+                    {String(examination?.name || 'Secondary School Certificate').toUpperCase()} EXAMINATION, {formatNum(examination?.academic_year || '2024')}
                 </div>
 
                 <div className="transcript-label">ACADEMIC TRANSCRIPT</div>
@@ -179,7 +264,7 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
                 <div style={{ display: 'flex', width: '65%', alignItems: 'baseline' }}>
                     <span className="detail-label" style={{ width: '110pt' }}>Name of Centre</span>
                     <span className="detail-colon">:</span>
-                    <span className="detail-value">({n(Math.floor(serialNo/10000))}) {centre}</span>
+                    <span className="detail-value">({formatNum(Math.floor(serialNo/10000))}) {centre}</span>
                 </div>
                 <div style={{ display: 'flex', width: '30%', alignItems: 'baseline', marginLeft: '10pt' }}>
                     <span className="detail-label" style={{ width: '40pt' }}>Type</span>
@@ -192,19 +277,19 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
                 <div style={{ display: 'flex', width: '45%', alignItems: 'baseline' }}>
                     <span className="detail-label" style={{ width: '110pt' }}>Roll No.</span>
                     <span className="detail-colon">:</span>
-                    <span className="detail-value bold-text">{n(rollNo)}</span>
+                    <span className="detail-value bold-text">{formatNum(rollNo)}</span>
                 </div>
                 <div style={{ display: 'flex', width: '50%', alignItems: 'baseline', marginLeft: '10pt' }}>
                     <span className="detail-label" style={{ width: '100pt' }}>Registration No.</span>
                     <span className="detail-colon">:</span>
-                    <span className="detail-value">{n(regNo)} / {n(session)}</span>
+                    <span className="detail-value">{formatNum(regNo)} / {formatNum(session)}</span>
                 </div>
             </div>
 
             <div className="detail-row">
                 <span className="detail-label">Date of Birth</span>
                 <span className="detail-colon">:</span>
-                <span className="detail-value">{n(dob)}</span>
+                <span className="detail-value">{formatNum(dob)}</span>
             </div>
         </div>
 
@@ -229,18 +314,18 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
                 <tbody>
                     {main.map((r, idx) => (
                         <tr key={idx}>
-                            <td align="center">{n(idx + 1)}</td>
+                            <td align="center">{formatNum(idx + 1)}</td>
                             <td>{r.subject?.name || r.subject_name}</td>
                             <td align="center">{r.grade}</td>
-                            <td align="center">{n(r.gpa)}</td>
+                            <td align="center">{formatNum(r.gpa)}</td>
                             {idx === 0 && (
                                 <td rowSpan={main.length} align="center" className="gpa-cell">
-                                    {n(gpaWithoutOptional)}
+                                    {formatNum(gpaWithoutOptional)}
                                 </td>
                             )}
                             {idx === 0 && (
                                 <td rowSpan={main.length} align="center" className="gpa-cell">
-                                    {n(gpaWithOptional)}
+                                    {formatNum(gpaWithOptional)}
                                 </td>
                             )}
                         </tr>
@@ -252,12 +337,12 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
                     </tr>
                     {optional.map((r, idx) => (
                         <tr key={`opt-${idx}`}>
-                            <td align="center">{n(main.length + idx + 1)}</td>
+                            <td align="center">{formatNum(main.length + idx + 1)}</td>
                             <td>{r.subject?.name || r.subject_name}</td>
                             <td align="center">{r.grade}</td>
-                            <td align="center">{n(r.gpa)}</td>
+                            <td align="center">{formatNum(r.gpa)}</td>
                             <td colSpan={2} align="center" className="bonus-gp">
-                                GP above 2<br/>{n(Math.max(0, parseFloat(r.gpa) - 2).toFixed(2))}
+                                GP above 2<br/>{formatNum(Math.max(0, parseFloat(r.gpa) - 2).toFixed(2))}
                             </td>
                         </tr>
                     ))}
@@ -272,7 +357,7 @@ export default function SSCMarksheet({ studentData, results, overallResult, exam
                         <tbody>
                             {coCurricular.map((r, idx) => (
                                 <tr key={`ca-${idx}`}>
-                                    <td width="10%" align="center">{n(idx + 1)}</td>
+                                    <td width="10%" align="center">{formatNum(idx + 1)}</td>
                                     <td width="70%">{r.subject?.name || r.subject_name}</td>
                                     <td width="20%" align="center">{r.grade}</td>
                                 </tr>

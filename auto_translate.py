@@ -28,7 +28,7 @@ def transliterate_bangla(text):
     # Mapping of Bangla characters to English phonetic equivalents
     mapping = {
         'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
-        'চ': 'ch', 'ছ': 's', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
+        'চ': 'ch', 'ছ': 's', 'জ': 'z', 'ঝ': 'jh', 'ঞ': 'n',
         'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
         'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
         'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'v', 'ম': 'm',
@@ -46,17 +46,23 @@ def transliterate_bangla(text):
         'মোস্তফা': 'Mostofa', 'মরিয়ম': 'Mariyam', 'ওমর': 'Omor', 'ফারুক': 'Faruk',
         'আক্তার': 'Akter', 'খাতুন': 'Khatun', 'বেগম': 'Begum', 'ইসলাম': 'Islam',
         'রহমান': 'Rahman', 'মো:': 'Md.', 'মোঃ': 'Md.', 'মোসাম্মৎ': 'Mst.', 'মোসা:': 'Mst.', 'মোসাঃ': 'Mst.',
-        'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
-        'আলম': 'Alom', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
+        'হৃদয়': 'Hridoy', 'লিটন': 'Liton', 'হোসেন': 'Hossain', 'হোসেন': 'Hossain', 'আশরাফুল': 'Ashraful',
+        'আলম': 'Alam', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
         'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
         'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
         'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful',
         'হক': 'Haque', 'মিলন': 'Milon', 'ইমদাদুল': 'Emdadul', 'এমদাদুল': 'Emdadul',
         'শেখ': 'Sheikh', 'খন্দকার': 'Khandaker', 'চৌধুরী': 'Chowdhury', 'আহমেদ': 'Ahmed',
         'মাহমুদ': 'Mahmud', 'হাসান': 'Hasan', 'হোসাইন': 'Hossain',
-        'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul',
+        'গাজী': 'Gazi', 'গাজি': 'Gazi', 'মিজী': 'Mizi', 'মিজি': 'Mizi', 'রবিউল': 'Robiul', 'মিজানুর': 'Mizanur',
         'পাটওয়ারী': 'Patwary', 'দক্ষিণ': 'Dakshin', 'প্রধানিয়া': 'Prodhania',
-        'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed'
+        'মাস্টার বাজার': 'Master Bazar', 'নাজমা': 'Nazma', 'বকাউল': 'Bakaul', 'জুবায়েদ': 'Jubayed',
+        'রায়': 'Roy', 'চন্দ্র': 'Chandra', 'প্রা': 'Pra', 'কর্দি': 'kardi',
+        'বাজার': 'Bazar', 'সূর্য': 'Surjo', 'খোকন': 'Khokan', 'রাজ্জাক': 'Razzak',
+        'রোজিনা': 'Rozina', 'মধ্য হামানকর্দি': 'Moddha Hamankardi', 'তপাদার': 'Tapader',
+        'আনোয়ারা': 'Anwara', 'হামানকর্দি': 'Hamankardi', 'দেলোয়ার': 'Delowar',
+        'চাঁদপুর': 'Chandpur', 'সদর': 'Sadar', 'শাহাতলী': 'Shahatali', 'শাহতলী': 'Shahatali', 'হামানকর্দ্দি': 'Hamankardi',
+        'কাকলী': 'Kakali', 'খানম': 'Khanom', 'চক্রবর্তী': 'Chakraborty', 'অপন': 'Apan'
     }
 
     # Handle common titles first
@@ -67,6 +73,14 @@ def transliterate_bangla(text):
     translated_words = []
 
     for word in words:
+        # Separate trailing punctuation for special_names check
+        match = re.match(r'^([\u0980-\u09FF]+)([,.]?)$', word)
+        if match:
+            base_word, punct = match.groups()
+            if base_word in special_names:
+                translated_words.append(special_names[base_word] + punct)
+                continue
+
         if word in special_names:
             translated_words.append(special_names[word])
             continue
@@ -86,11 +100,6 @@ def transliterate_bangla(text):
                         result += "o"
                     elif j == 0:
                         result += "a"
-                    else:
-                        # Only add 'a' if the previous character was NOT a vowel
-                        prev_char = word[j-1]
-                        if prev_char in mapping and not is_vowel(prev_char):
-                            result += "a"
 
         translated_words.append(result.capitalize())
 

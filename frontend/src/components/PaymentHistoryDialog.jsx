@@ -15,8 +15,7 @@ import {
   Typography,
   CircularProgress,
   Box,
-  IconButton,
-  Tooltip
+  IconButton
 } from '@mui/material';
 import { Close as CloseIcon, Receipt as ReceiptIcon } from '@mui/icons-material';
 import { format } from 'date-fns';

@@ -1,12 +1,9 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
-  CardHeader,
   Avatar,
   Badge,
   Dialog,
@@ -16,64 +13,21 @@ import {
   Button,
   Paper,
   TextField,
-  MenuItem,
   Stack,
   Grid,
-  Divider,
-  IconButton,
-  Tooltip as MuiTooltip
+  IconButton
 } from '@mui/material';
-import {
-  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line
-} from 'recharts';
 import PersonIcon from '@mui/icons-material/Person';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import CheckIcon from '@mui/icons-material/Check';
-import { isAuthenticated } from '../utils/auth';
 import SchoolIcon from '@mui/icons-material/School';
 import GroupIcon from '@mui/icons-material/Group';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
-import ClassIcon from '@mui/icons-material/Class';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import { useToast } from '../components/Toast';
-import { useNotifications } from '../context/NotificationContext';
-
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Navigation, Pagination } from 'swiper/modules';
-import 'swiper/css';
-import 'swiper/css/navigation';
-import 'swiper/css/pagination';
 
 import StatCard from '../components/dashboard/StatCard';
 import AttendanceChart from '../components/dashboard/AttendanceChart';
-import ClassDistributionChart from '../components/dashboard/ClassDistributionChart';
 import FeeCollectionChart from '../components/dashboard/FeeCollectionChart';
-import MasterMonitor from '../components/dashboard/MasterMonitor';
 import { getDashboardStats } from '../services/dashboardService';
-
-const banglaNumberMap = { 'প্রথম': 1, 'দ্বিতীয়': 2, 'দ্বিতীয়': 2, 'তৃতীয়': 3, 'তৃতীয়': 3, 'চতুর্থ': 4, 'পঞ্চম': 5, 'ষষ্ঠ': 6, 'সপ্তম': 7, 'অষ্টম': 8, 'নবম': 9, 'দশম': 10, 'একাদশ': 11, 'দ্বাদশ': 12, 'ছয়': 6, 'ছয়': 6 };
-const bnDigitMap = { '০': 0, '১': 1, '২': 2, '৩': 3, '৪': 4, '৫': 5, '৬': 6, '৭': 7, '৮': 8, '৯': 9 };
-const normalizeBnDigits = (s) => String(s || '').split('').map(ch => (ch in bnDigitMap ? String(bnDigitMap[ch]) : ch)).join('');
-const getClassOrder = (name) => {
-  const str = normalizeBnDigits(String(name || '')).trim();
-  for (const [bangla, num] of Object.entries(banglaNumberMap)) {
-    if (str.includes(bangla)) return num;
-  }
-  const match = str.match(/\d+/);
-  if (match) return parseInt(match[0], 10);
-  return 999;
-};
-
-const engToBnDigits = (s) => String(s ?? '');
-const bnMonth = (m) => ['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'][m] || '';
-const formatBnDateShort = (iso) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  const day = engToBnDigits(d.getDate());
-  return `${day} ${bnMonth(d.getMonth())}`;
-};
 
 const computeAdminStatsFallback = async (schoolId) => {
   const results = await Promise.allSettled([
@@ -121,7 +75,6 @@ const computeAdminStatsFallback = async (schoolId) => {
   const classMap = new Map();
   let tuition_due_total = 0;
   let exam_due_total = 0;
-  const seenMonthlyByStudentMonth = new Set();
   for (const a of assignments) {
     const currentMonthNo = new Date().getMonth() + 1;
     const aid = String(a.id || '');
@@ -151,65 +104,20 @@ const computeAdminStatsFallback = async (schoolId) => {
   return { fee_collection, fee_dues_summary: { tuition_due_total, exam_due_total, total_due: tuition_due_total + exam_due_total }, fee_dues_by_class: Array.from(classMap.entries()).map(([class_name, v]) => ({ class_name, ...v })), students_count: students.length, teachers_count: teachers.length, classes_count: classrooms.length };
 };
 
-const COLORS = ['#2196F3', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#3F51B5', '#009688', '#FFC107'];
-
 const RoleDashboard = ({ role: roleProp }) => {
   const { id, role: roleParam } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { notifications, markAsRead } = useNotifications();
   const role = roleProp || roleParam || '';
-  const [data, setData] = useState([]);
+  const [, setData] = useState([]);
   const [adminStats, setAdminStats] = useState(null);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState(null);
+  const [, setAdminLoading] = useState(false);
+  const [, setAdminError] = useState(null);
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthPassword, setReauthPassword] = useState('');
   const [reauthLoading, setReauthLoading] = useState(false);
-  const [reauthError, setReauthError] = useState('');
-  const [openModal, setOpenModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '', first_name: '', last_name: '', email: '', phone_number: '' });
-  const [notifOpen, setNotifOpen] = useState(false);
+  const [, setReauthError] = useState('');
   const [pendingPayments, setPendingPayments] = useState([]);
-  const [notifLoading, setNotifLoading] = useState(false);
-  const [studentEnrichCache, setStudentEnrichCache] = useState({});
-  const [duesAdjustment, setDuesAdjustment] = useState(0);
-  const [ccResource, setCcResource] = useState('students');
-  const [ccList, setCcList] = useState([]);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [ccLoading, setCcLoading] = useState(false);
-  const [ccError, setCcError] = useState(null);
-  const [ccQuery, setCcQuery] = useState('');
-  const [ccEditorOpen, setCcEditorOpen] = useState(false);
-  const [ccSelected, setCcSelected] = useState(null);
-  const [ccEditorJson, setCcEditorJson] = useState('');
-  const [actionType, setActionType] = useState('bulk_promote');
-  const [smsMessage, setSmsMessage] = useState('');
-  const [smsClassroom, setSmsClassroom] = useState('');
-  const [actionRunning, setActionRunning] = useState(false);
-  const [classroomOptions, setClassroomOptions] = useState([]);
-  const [feeWaiverPct, setFeeWaiverPct] = useState(0);
-  const [feeWaiverClassroom, setFeeWaiverClassroom] = useState('');
-  const [resultExamId, setResultExamId] = useState('');
-  const [attendanceResetClassroom, setAttendanceResetClassroom] = useState('');
-  const [attendanceResetDate, setAttendanceResetDate] = useState('');
-  const [feeAssignClassroom, setFeeAssignClassroom] = useState('');
-  const [feeAssignMonth, setFeeAssignMonth] = useState('');
-  const [feeAssignDueDate, setFeeAssignDueDate] = useState('');
-  const [examScheduleId, setExamScheduleId] = useState('');
-  const [parentTemplate, setParentTemplate] = useState('dues_reminder');
-  const [parentFilterClassroom, setParentFilterClassroom] = useState('');
-  const [parentTemplateText, setParentTemplateText] = useState('');
-  const [schedClassroom, setSchedClassroom] = useState('');
-  const [schedStartMonth, setSchedStartMonth] = useState('');
-  const [schedEndMonth, setSchedEndMonth] = useState('');
-  const [schedDueDay, setSchedDueDay] = useState('');
-  const [schedYear, setSchedYear] = useState(String(new Date().getFullYear()));
-
-  const loadAdjustment = useCallback(() => 0, []);
 
   const enrichAdminStats = useCallback(async (incoming, schoolId) => {
     try {
@@ -220,7 +128,7 @@ const RoleDashboard = ({ role: roleProp }) => {
     } catch (_) { return incoming || {}; }
   }, []);
 
-  const safeLoadAdminStats = useCallback(async (schoolId, timeoutMs = 45000) => {
+  const safeLoadAdminStats = useCallback(async (schoolId) => {
     try {
       setAdminLoading(true);
       setAdminError(null);
@@ -238,42 +146,16 @@ const RoleDashboard = ({ role: roleProp }) => {
 
   const fetchPendingPayments = useCallback(async () => {
     try {
-      setNotifLoading(true);
       const schoolQ = id ? `&school=${encodeURIComponent(id)}` : '';
       const resp = await api.get(`/api/fees/payments/?status=pending${schoolQ}`);
       const data = Array.isArray(resp.data) ? resp.data : (resp.data?.results || []);
       setPendingPayments(data.filter(p => String(p.status || p.payment_status).toLowerCase() === 'pending'));
     } catch (e) { setPendingPayments([]); }
-    finally { setNotifLoading(false); }
-  }, [id]);
-
-  const fetchCcList = useCallback(async () => {
-    try {
-      setCcLoading(true);
-      setCcError(null);
-      const sidQ = id ? `?school=${id}` : '';
-      const r = await api.get(`/api/academics/${ccResource}/${sidQ}`);
-      let list = Array.isArray(r.data) ? r.data : (r.data?.results || []);
-      if (ccQuery) {
-        const q = ccQuery.toLowerCase();
-        list = list.filter(it => JSON.stringify(it).toLowerCase().includes(q));
-      }
-      setCcList(list);
-    } catch (e) { setCcError('Load failed'); setCcList([]); }
-    finally { setCcLoading(false); }
-  }, [id, ccResource, ccQuery]);
-
-  const loadClassroomOptions = useCallback(async () => {
-    try {
-      const r = await api.get(`/api/academics/classrooms/?school=${id}`);
-      setClassroomOptions(Array.isArray(r.data) ? r.data : (r.data?.results || []));
-    } catch (_) {}
   }, [id]);
 
   useEffect(() => {
     if (!id || !role) return;
     if (role === 'admin') {
-      setDuesAdjustment(loadAdjustment(id));
       safeLoadAdminStats(id);
       fetchPendingPayments();
       return;
@@ -291,7 +173,7 @@ const RoleDashboard = ({ role: roleProp }) => {
       } catch (_) { setData([]); }
     };
     fetchRoleData();
-  }, [id, role, loadAdjustment, safeLoadAdminStats, fetchPendingPayments]);
+  }, [id, role, safeLoadAdminStats, fetchPendingPayments]);
 
   useEffect(() => {
     if (role !== 'admin' || !id) return;
@@ -314,27 +196,6 @@ const RoleDashboard = ({ role: roleProp }) => {
     finally { setReauthLoading(false); }
   };
 
-  const approvePayment = async (payment) => {
-    try {
-      await api.patch(`/api/fees/payments/${payment.id}/`, { payment_status: 'completed' });
-      toast.success('Payment approved');
-      fetchPendingPayments();
-    } catch (_) { toast.error('Approve failed'); }
-  };
-
-  const handleAddCommittee = async () => {
-    if (!form.username && !form.first_name) return;
-    setSaving(true);
-    try {
-      await api.post('/api/users/committees/', { school_id: id, ...form });
-      setAddOpen(false);
-      setForm({ username: '', password: '', first_name: '', last_name: '', email: '', phone_number: '' });
-      const res = await api.get(`/api/users/committees/?school=${id}`);
-      setData(Array.isArray(res.data) ? res.data : (res.data.results || []));
-    } catch (_) {}
-    finally { setSaving(false); }
-  };
-
   const roleIcon = () => {
     switch (role) {
       case 'admin': return <PersonIcon />;
@@ -355,8 +216,7 @@ const RoleDashboard = ({ role: roleProp }) => {
           </Stack>
           {role === 'admin' && (
             <Stack direction="row" spacing={1}>
-              <IconButton onClick={() => setNotifOpen(true)} color="inherit"><Badge color="error" badgeContent={pendingPayments.length}><NotificationsIcon /></Badge></IconButton>
-              <Button variant="contained" sx={{ bgcolor: 'rgba(255,255,255,0.2)' }} onClick={() => setHelpOpen(true)}>ব্যবহারবিধি</Button>
+              <IconButton color="inherit"><Badge color="error" badgeContent={pendingPayments.length}><NotificationsIcon /></Badge></IconButton>
               <Button variant="contained" sx={{ bgcolor: 'rgba(255,255,255,0.2)' }} onClick={() => navigate(`/school/${id}/settings`)}>Settings</Button>
             </Stack>
           )}

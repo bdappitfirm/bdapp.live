@@ -17,7 +17,6 @@ import {
 } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
 import StopIcon from '@mui/icons-material/Stop';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CloseIcon from '@mui/icons-material/Close';
@@ -146,20 +145,6 @@ export default function VoiceRecorder({ open, onClose, onSave }) {
       }, 1000);
       
       toast.info('Recording resumed');
-    }
-  };
-
-  const playAudio = () => {
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.play();
-      setIsPlaying(true);
-    }
-  };
-
-  const pauseAudio = () => {
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      setIsPlaying(false);
     }
   };
 

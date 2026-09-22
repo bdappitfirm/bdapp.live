@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Paper, Table, TableHead, TableRow, TableCell,
-  TableBody, TableContainer, Stack, Card, CardHeader, CardContent, Typography, Box
+  TableBody, TableContainer, Stack, Card, CardHeader, CardContent
 } from '@mui/material';
 
 const toBn = (val) => {
@@ -89,4 +89,4 @@ const ResultSummaryTable = ({ summaryRows, loading }) => {
   );
 };
 
-export default ResultSummaryTable;
+export default React.memo(ResultSummaryTable);

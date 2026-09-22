@@ -1,15 +1,14 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
-  AppBar, Toolbar, Typography, Drawer, List, ListItem,
+  AppBar, Toolbar, Typography, Drawer, List,
   ListItemButton, ListItemIcon, ListItemText, Box, Avatar,
   CssBaseline, Divider, Grid, Paper, Card, CardHeader,
   CardContent, CircularProgress, Stack, IconButton,
-  useMediaQuery, Autocomplete, TextField, Chip, Button,
-  MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
-  Menu, MenuItem as MuiMenuItem, Collapse, Fade
+  TextField, Chip, Button,
+  MenuItem, Dialog, DialogTitle, DialogActions,
+  Menu, MenuItem as MuiMenuItem, Collapse
 } from "@mui/material";
-import { useTheme } from '@mui/material/styles';
 
 // Icons
 import PersonIcon from "@mui/icons-material/Person";
@@ -31,18 +30,15 @@ import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import EventSeatIcon from "@mui/icons-material/EventSeat";
 import DescriptionIcon from "@mui/icons-material/Description";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
-import PrintIcon from "@mui/icons-material/Print";
 import MenuIcon from '@mui/icons-material/Menu';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import LockIcon from '@mui/icons-material/Lock';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 // Context & Services
 import { useAuth } from '../context/AuthContext';
-import { useAcademics } from '../context/AcademicsContext';
 import { setCurrentSchoolId, getDashboardStats } from '../services/dashboardService';
 import api from '../utils/api';
 import { getMediaUrl } from '../utils/media';
@@ -61,8 +57,6 @@ const SchoolDashboard = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const theme = useTheme();
-  const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
   const { user, logout, loading: authLoading } = useAuth();
 
   const isMainDashboard = location.pathname === `/school/${id}` || location.pathname === `/school/${id}/`;
@@ -71,10 +65,8 @@ const SchoolDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [schoolsList, setSchoolsList] = useState([]);
+  const [, setSchoolsList] = useState([]);
   const [openSubmenus, setOpenSubmenus] = useState({});
-  const [activeCategory, setActiveCategory] = useState(null); // ক্যাটাগরি ট্র্যাকিংয়ের জন্য
-  const [showAll, setShowAll] = useState(false); // মেনু কন্ট্রোল করার জন্য
 
   // Auth & Permissions
   const role = (user?.role || user?.profile?.effective_role || user?.profile?.role || '').toLowerCase();
@@ -123,6 +115,7 @@ const SchoolDashboard = () => {
     { label: 'সিট বন্টন', icon: <EventSeatIcon />, key: 'seat-allocation' },
     { label: 'এসএমএস', icon: <SmsIcon />, key: 'sms' },
     { label: 'কমিটি', icon: <GroupIcon />, key: 'committee' },
+    { label: 'শিক্ষক পে-রোল (বেতন)', icon: <PaymentIcon />, key: 'payroll' },
     { label: 'আইডি লিস্ট', icon: <LockIcon />, key: 'credentials' },
     { label: 'এডমিন', icon: <AccountBalanceIcon />, key: 'admin' },
     { label: 'স্কুল সেটিংস', icon: <SchoolIcon />, key: 'settings' },
@@ -131,7 +124,7 @@ const SchoolDashboard = () => {
     { label: 'সফটওয়ার এ্যাসিসটেন্ট', icon: <SupportAgentIcon />, key: 'assistant' },
     { label: 'সাপোর্ট লাইভ', icon: <SupportAgentIcon />, key: 'support-live' },
     { label: 'প্রফাইল', icon: <AccountCircleIcon />, key: 'profile' },
-  ], [id]);
+  ], []);
 
   const filteredMenuItems = useMemo(() => menuItems.filter(item => {
     if (item.key === 'billing') {
@@ -151,7 +144,6 @@ const SchoolDashboard = () => {
   useEffect(() => {
     // Always close drawer when location changes
     setMobileOpen(false);
-    setActiveCategory(null);
   }, [location.pathname]);
 
   const [anchorEl, setAnchorEl] = useState(null);
@@ -164,13 +156,6 @@ const SchoolDashboard = () => {
   
   const [adsOpen, setAdsOpen] = useState(false);
   const [adsSlots, setAdsSlots] = useState([]);
-  const [adText, setAdText] = useState('');
-  const [adLink, setAdLink] = useState('');
-  const [adMediaType, setAdMediaType] = useState('image');
-  const [adMediaDataUrl, setAdMediaDataUrl] = useState('');
-  const [adMediaFile, setAdMediaFile] = useState(null);
-
-  const currentSchoolIdRef = useRef(id);
 
   const loadInitialData = useCallback(async () => {
     if (!id || authLoading) return;
@@ -203,7 +188,7 @@ const SchoolDashboard = () => {
       setStats(statsRes);
     } catch (err) {
       console.error("Dashboard error:", err);
-      if (!cachedStats && !stats) {
+      if (!cachedStats) {
          setError("ইন্টারনেট সংযোগ নেই এবং কোনো ক্যাশ করা ডাটা পাওয়া যায়নি।");
       }
     } finally {
@@ -274,44 +259,6 @@ const SchoolDashboard = () => {
   useEffect(() => {
     loadAdsFromApi(id);
   }, [id, loadAdsFromApi]);
-
-  const handleAdsFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAdMediaFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setAdMediaDataUrl(reader.result);
-    reader.readAsDataURL(file);
-  };
-
-  const saveAds = async () => {
-    try {
-      const form = new FormData();
-      form.append('school', id);
-      form.append('text', adText);
-      form.append('link', adLink);
-      form.append('type', adMediaType);
-      if (adMediaFile) form.append('media', adMediaFile);
-      else if (adMediaDataUrl) form.append('media_data_url', adMediaDataUrl);
-      await api.post(`/api/ads/`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      await loadAdsFromApi(id);
-      setAdsOpen(false);
-      setAdText(''); setAdLink(''); setAdMediaDataUrl(''); setAdMediaFile(null);
-    } catch (err) {
-      console.error("Error saving ad:", err);
-    }
-  };
-
-  const removeAd = async (idx) => {
-    const ad = adsSlots[idx];
-    if (!ad?.id) return;
-    try {
-      await api.delete(`/api/ads/${ad.id}/`);
-      await loadAdsFromApi(id);
-    } catch (err) {
-      console.error("Error removing ad:", err);
-    }
-  };
 
   const generateSummary = useCallback(async () => {
     if (!id) return;

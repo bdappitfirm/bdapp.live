@@ -30,17 +30,28 @@ const smartOfflineFallback = async (config) => {
       return { results: students, count: students.length };
     }
 
-    // 2. Results list with filters
+    // 2. Attendance records list with filters
+    if (url.includes('/api/attendance/records/')) {
+      const { classroom, section, date } = params;
+      let records = await db.attendance.toArray();
+      if (date) records = records.filter(r => String(r.date) === String(date));
+      if (classroom) records = records.filter(r => String(r.classroom_id || r.classroom?.id || r.classroom) === String(classroom));
+      if (section) records = records.filter(r => String(r.section_id || r.section?.id || r.section) === String(section));
+      return { results: records, count: records.length };
+    }
+
+    // 3. Results list with filters
     if (url.includes('/api/results/results/')) {
-      const { examination, student, subject } = params;
+      const { examination, exam_type, student, subject } = params;
       let results = await db.results.toArray();
       if (examination) results = results.filter(r => String(r.examination_id || r.examination?.id || r.examination) === String(examination));
+      if (exam_type) results = results.filter(r => String(r.examination?.exam_type || r.exam_type || '') === String(exam_type));
       if (student) results = results.filter(r => String(r.student_id || r.student?.id || r.student) === String(student));
       if (subject) results = results.filter(r => String(r.subject_id || r.subject?.id || r.subject) === String(subject));
       return { results, count: results.length };
     }
 
-    // 3. Metadata tables
+    // 4. Metadata tables & listings
     const tableMap = {
       '/api/academics/classrooms/': 'classrooms',
       '/api/academics/sections/': 'sections',
@@ -54,12 +65,17 @@ const smartOfflineFallback = async (config) => {
     for (const [path, table] of Object.entries(tableMap)) {
       if (url.includes(path)) {
         let data = await db[table].toArray();
-        // Simple filtering for sections/subjects by classroom
         if (params.classroom && (table === 'sections' || table === 'subjects' || table === 'examinations')) {
           data = data.filter(item => String(item.classroom_id || item.classroom?.id || item.classroom) === String(params.classroom));
         }
         return Array.isArray(data) ? { results: data, count: data.length } : data;
       }
+    }
+
+    // 5. Generic Cache Fallback for any endpoint saved by SyncManager
+    const cachedEntry = await db.genericCache.get(url);
+    if (cachedEntry && cachedEntry.data) {
+      return cachedEntry.data;
     }
 
     return null;
@@ -127,21 +143,26 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   async (response) => {
     const method = response.config.method?.toLowerCase();
-    if (method === 'get' && !response.config._skipCache) {
-      const cacheKey = getCacheKey(response.config);
-      try {
-        // Only cache valid non-empty data
-        if (response.data && (typeof response.data !== 'object' || Object.keys(response.data).length > 0)) {
-          await cacheApiResponse(cacheKey, response.data);
+    if (method === 'get') {
+      if (response.config.url?.includes('/api/results/')) {
+        response.config._skipCache = true;
+      }
+      if (!response.config._skipCache) {
+        const cacheKey = getCacheKey(response.config);
+        try {
+          // Only cache valid non-empty data
+          if (response.data && (typeof response.data !== 'object' || Object.keys(response.data).length > 0)) {
+            await cacheApiResponse(cacheKey, response.data);
+          }
+        } catch (e) {
+          console.warn('Cache write failed:', e);
         }
-      } catch (e) {
-        console.warn('Cache write failed:', e);
       }
     } else if (['post', 'put', 'patch', 'delete'].includes(method)) {
       // Clear cache on mutations to avoid stale data,
-      // EXCEPT for known "Read-only" POST requests like translation
+      // EXCEPT for known "Read-only" POST requests or attendance/results bulk save
       const url = response.config.url || '';
-      const isSafePost = url.includes('/translate_card/') || url.includes('/export_csv/') || url.includes('/search/');
+      const isSafePost = url.includes('/translate_card/') || url.includes('/export_csv/') || url.includes('/search/') || url.includes('/api/attendance/');
 
       if (!isSafePost) {
         try {
@@ -165,7 +186,11 @@ api.interceptors.response.use(
 
     // 1. If GET failed, try to use cached data as fallback
     // Don't fallback for auth errors (401) to prevent showing stale private data
-    if (originalRequest.method?.toLowerCase() === 'get' && !originalRequest._skipCache && !isAuthError) {
+    if (originalRequest.method?.toLowerCase() === 'get' && !isAuthError) {
+      if (originalRequest.url?.includes('/api/results/')) {
+        originalRequest._skipCache = true;
+      }
+      if (!originalRequest._skipCache) {
       const cacheKey = getCacheKey(originalRequest);
       try {
         // Try exact URL match first
@@ -198,6 +223,7 @@ api.interceptors.response.use(
         }
       } catch (e) {
         console.warn('Fallback cache read failed:', e);
+      }
       }
     }
 

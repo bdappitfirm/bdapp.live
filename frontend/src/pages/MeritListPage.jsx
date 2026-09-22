@@ -73,6 +73,12 @@ const normalizeSubjKey = (n) => {
     if (low.includes('higher') || low.includes('উচ্চতর')) return 'higher';
     if (low.includes('math') || low.includes('গণিত') || low.includes('গনিত')) return 'math';
     if (low.includes('history') || low.includes('ইতিহাস') || low.includes('সভ্যতা')) return 'history';
+
+    // Combined Science & BGS subject check (e.g. Science/BGS or বিজ্ঞান/বিজিএস)
+    if (low.includes('/') && (low.includes('science') || low.includes('বিজ্ঞান')) && (low.includes('bgs') || low.includes('বাংলাদেশ') || low.includes('বিজিএস'))) {
+        return 'science_bgs';
+    }
+
     if (low.includes('bgs') || (low.includes('বাংলাদেশ') && (low.includes('পরিচয়') || low.includes('পরিচয়') || low.includes('বিজিএস'))) || (low.includes('বাঃ') && low.includes('পরিচয়')) || low.includes('global studies')) return 'bgs';
 
     if ((low.includes('bangla') || low.includes('বাংলা')) && !low.includes('বাংলাদেশ') && !low.includes('bangladesh')) {
@@ -131,11 +137,18 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
     checkPaper('bangla').forEach(s => subjects.add(s));
     checkPaper('english').forEach(s => subjects.add(s));
     if (isNT) {
-        if (isScienceGroup(g)) { ['physics', 'chemistry', 'biology', 'bgs'].forEach(s => subjects.add(s)); }
-        else if (isCommerceGroup(g)) { ['accounting', 'finance', 'business', 'science'].forEach(s => subjects.add(s)); }
-        else if (isHumanitiesGroup(g)) {
-            ['history', 'civics', 'science'].forEach(s => subjects.add(s));
-            if (classSubjs.has('economics')) subjects.add('economics'); else subjects.add('geography');
+        if (isScienceGroup(g)) {
+            ['physics', 'chemistry', 'biology', 'bgs'].forEach(s => subjects.add(s));
+        } else {
+            subjects.add('science');
+            if (isCommerceGroup(g) || classSubjs.has('accounting') || classSubjs.has('finance') || classSubjs.has('business')) {
+                ['accounting', 'finance', 'business'].forEach(s => subjects.add(s));
+            }
+            if (isHumanitiesGroup(g) || classSubjs.has('history') || classSubjs.has('geography') || classSubjs.has('economics') || classSubjs.has('civics')) {
+                ['history', 'geography'].forEach(s => subjects.add(s));
+                if (classSubjs.has('economics')) subjects.add('economics');
+                if (classSubjs.has('civics')) subjects.add('civics');
+            }
         }
     } else { ['science', 'bgs'].forEach(s => subjects.add(s)); }
     return subjects;
@@ -160,27 +173,70 @@ const translateSub = (n) => {
     if (low.includes('physics')) return 'পদার্থ';
     if (low.includes('chemistry')) return 'রসায়ন';
     if (low.includes('biology')) return 'জীববিজ্ঞান';
+    if (low.includes('accounting') || low.includes('হিসাব')) return 'হিসাববিজ্ঞান';
+    if (low.includes('finance') || low.includes('ফিন্যান্স')) return 'ফিন্যান্স ও ব্যাংকিং';
+    if (low.includes('business') || low.includes('ব্যবসায়') || low.includes('ব্যবসায়') || low.includes('entrepreneurship') || low.includes('উদ্যোগ')) return 'ব্যবসায় উদ্যোগ';
+    if (low.includes('geography') || low.includes('ভূগোল')) return 'ভূগোল ও পরিবেশ';
+    if (low.includes('history') || low.includes('ইতিহাস')) return 'ইতিহাস';
+    if (low.includes('civics') || low.includes('পৌরনীতি')) return 'পৌরনীতি ও নাগরিকতা';
+    if (low.includes('economics') || low.includes('অর্থনীতি')) return 'অর্থনীতি';
+    if (low.includes('agriculture') || low.includes('কৃষি') || low.includes('home') || low.includes('গার্হস্থ্য')) return 'কৃষি/গার্হস্থ্য';
     return n;
 };
 
-const inferGroup = (resList, isNT) => {
+const getSubjectName = (r, subjectsList = []) => {
+    if (r.subject_name) return r.subject_name;
+    if (r.subject?.name) return r.subject.name;
+    if (r.subject_detail?.name) return r.subject_detail.name;
+    if (r.subject != null || r.subject_id != null) {
+        const sid = String(r.subject?.id || r.subject || r.subject_id || '');
+        const found = subjectsList.find(s => String(s.id) === sid);
+        if (found) return found.name;
+    }
+    return '';
+};
+
+const inferGroup = (resList, isNT, subjectsList = []) => {
     if (!isNT || !resList || resList.length === 0) return '';
     const count = (regex) => resList.filter(r => {
+        const name = getSubjectName(r, subjectsList);
         const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0 || parseFloat(r.total_obtained) > 0);
-        return hasMarks && regex.test(String(r.subject?.name || r.subject_name || '').toLowerCase());
+        return hasMarks && regex.test(String(name).toLowerCase());
     }).length;
-    const sciCount = count(/physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i);
+    const sciCount = count(/physics|chemistry|biology|পদার্থ|রসায়ন|রসায়ন|জীব/i);
     const comCount = count(/accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স|ব্যবসায়/i);
     const humCount = count(/history|geography|civics|ইতিহাস|ভূগোল|পৌরনীতি|economics|অর্থনীতি/i);
     const takesGeneralScience = resList.some(r => {
-        const name = (r.subject?.name || r.subject_name || '').toLowerCase();
-        const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0);
+        const name = getSubjectName(r, subjectsList).toLowerCase();
+        const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0 || parseFloat(r.total_obtained) > 0);
         return hasMarks && (name === 'science' || name === 'বিজ্ঞান' || name === 'general science' || name === 'সাধারণ বিজ্ঞান');
     });
-    if (takesGeneralScience && sciCount < 2) { if (comCount > humCount) return 'commerce'; return 'humanities'; }
-    if (sciCount > 0 && sciCount >= comCount && sciCount >= humCount) return 'science';
-    if (comCount > 0 && comCount >= humCount) return 'commerce';
-    if (humCount > 0) return 'humanities';
+    if (takesGeneralScience && sciCount < 2) {
+        if (comCount > humCount) return 'commerce';
+        if (humCount > comCount) return 'humanities';
+        if (comCount > 0) return 'commerce';
+        if (humCount > 0) return 'humanities';
+    }
+    if (sciCount > 0 && sciCount > comCount && sciCount > humCount) return 'science';
+    if (comCount > 0 && comCount >= humCount && comCount >= sciCount) return 'commerce';
+    if (humCount > 0 && humCount >= comCount && humCount >= sciCount) return 'humanities';
+    return '';
+};
+
+const inferClassGroupFromAllResults = (allRes, isNT, subjectsList = []) => {
+    if (!isNT || !allRes || allRes.length === 0) return '';
+    let com = 0, hum = 0, sci = 0;
+    allRes.forEach(r => {
+        const name = String(getSubjectName(r, subjectsList)).toLowerCase();
+        const hasMarks = (parseFloat(r.written_marks) > 0 || parseFloat(r.mcq_marks) > 0 || parseFloat(r.practical_marks) > 0 || parseFloat(r.total_obtained) > 0);
+        if (!hasMarks) return;
+        if (/accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স|ব্যবসায়/i.test(name)) com++;
+        else if (/history|geography|civics|economics|ইতিহাস|ভূগোল|পৌরনীতি|অর্থনীতি/i.test(name)) hum++;
+        else if (/physics|chemistry|biology|পদার্থ|রসায়ন|রসায়ন|জীব/i.test(name)) sci++;
+    });
+    if (com > sci && com >= hum && com > 0) return 'commerce';
+    if (hum > sci && hum >= com && hum > 0) return 'humanities';
+    if (sci > com && sci > hum && sci > 0) return 'science';
     return '';
 };
 
@@ -190,11 +246,28 @@ const parseRoll = (r) => {
   return isNaN(n) ? 999999 : n;
 };
 
+const normalizeExamType = (type, name = '') => {
+  const t = (type || '').toLowerCase().trim();
+  const n = (name || '').toLowerCase().trim();
+  const combined = `${t} ${n}`;
+  if (/pre[-_\s]?test|প্রাক[-_\s]?নির্বাচনী/i.test(combined)) return 'pre_test';
+  if (/half[-_\s]?yearly|semi|mid|অর্ধ[-_\s]?বার্ষিক/i.test(combined)) return 'half_yearly';
+  if (/annual|final|বার্ষিক/i.test(combined)) return 'annual';
+  if (/test|নির্বাচনী|টেস্ট/i.test(combined)) return 'test';
+  if (/model|মডেল/i.test(combined)) return 'model';
+  if (/first[-_\s]?term|প্রথম[-_\s]?সাময়িক/i.test(combined)) return 'first_term';
+  if (/terminal|টার্মিনাল/i.test(combined)) return 'terminal';
+  if (['half_yearly', 'pre_test', 'annual', 'test', 'model', 'first_term', 'terminal'].includes(t)) {
+    return t;
+  }
+  return t || 'other';
+};
+
 const MeritListPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { classrooms, refreshClassrooms } = useAcademics();
+  const { classrooms, subjects: contextSubjects, refreshClassrooms } = useAcademics();
   const { school: schoolInfo } = useSchool();
 
   const [sections, setSections] = useState([]);
@@ -204,6 +277,9 @@ const MeritListPage = () => {
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedExam, setSelectedExam] = useState(() => {
+    return initialUrl.get('exam') || initialUrl.get('examination') || 'half_yearly';
+  });
   const [selectedYear, setSelectedYear] = useState(() => {
     return parseInt(initialUrl.get('year')) || new Date().getFullYear();
   });
@@ -246,7 +322,6 @@ const MeritListPage = () => {
   const [students, setStudents] = useState([]);
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
 
   const isMounted = useRef(true);
   const lastFetched = useRef("");
@@ -293,30 +368,27 @@ const MeritListPage = () => {
     }
   }, [navigate]);
 
-  const fetchStudentsController = useRef(null);
+  const fetchResultsController = useRef(null);
 
-  useEffect(() => {
-    if (!id || !selectedClass) {
-        setStudents([]);
-        setSections([]);
-        return;
+  const isNT = useMemo(() => {
+    const cls = classrooms.find(c => String(c.id) === String(selectedClass));
+    if (!cls) return false;
+    const text = String(cls.name || '').toLowerCase();
+    return /নবম|দশম|ssc|nine|ten|\bix\b|\bx\b|নাইন|টেন|৯|১০|\b9\b|\b10\b/i.test(text);
+  }, [selectedClass, classrooms]);
+
+  const effectiveGroup = useMemo(() => {
+    if (!isNT) return '';
+    if (selectedGroup) return selectedGroup.toLowerCase();
+    if (selectedSection) {
+        const secObj = sections.find(s => String(s.id) === String(selectedSection));
+        const secName = String(secObj?.name || '').toLowerCase();
+        if (secName.includes('science') || secName.includes('বিজ্ঞান')) return 'science';
+        if (secName.includes('commerce') || secName.includes('business') || secName.includes('ব্যবসায়') || secName.includes('ব্যবসায়')) return 'commerce';
+        if (secName.includes('arts') || secName.includes('humanities') || secName.includes('মানবিক')) return 'humanities';
     }
-
-    if (fetchStudentsController.current) fetchStudentsController.current.abort();
-    fetchStudentsController.current = new AbortController();
-
-    scopedGet('/api/academics/sections/', id, { classroom: selectedClass }).then(res => {
-        if (isMounted.current) setSections(Array.isArray(res.data) ? res.data : (res.data?.results || []));
-    });
-
-    scopedGet('/api/academics/students/', id, {
-        classroom: selectedClass,
-        section: selectedSection,
-        page_size: 500
-    }).then(res => {
-        if (isMounted.current) setStudents(res.data.results || res.data || []);
-    });
-  }, [id, selectedClass, selectedSection]);
+    return '';
+  }, [isNT, selectedGroup, selectedSection, sections]);
 
   const studentListFiltered = useMemo(() => {
     return students.filter(s => {
@@ -326,55 +398,153 @@ const MeritListPage = () => {
         const isTC = fullName.includes('TC') || fn.includes('TC') || ln.includes('TC');
         const hasNoInfo = !fn && !ln && !s.roll_number;
 
-        if (selectedSection && String(s.section?.id || s.section) !== String(selectedSection)) return false;
+        if (selectedSection) {
+            const stuSecId = String(s.section?.id || s.section || s.section_id || '');
+            if (stuSecId !== String(selectedSection)) return false;
+        }
+
+        if (isNT && effectiveGroup) {
+            const targetG = effectiveGroup.toLowerCase();
+            const stuG = String(s.student_group || s.group || '').toLowerCase();
+            const secObj = sections.find(sec => String(sec.id) === String(s.section?.id || s.section || s.section_id));
+            const secName = String(secObj?.name || s.section?.name || '').toLowerCase();
+
+            let matchesGroup = false;
+            if (targetG === 'science') {
+                matchesGroup = stuG.includes('science') || stuG.includes('বিজ্ঞান') || secName.includes('science') || secName.includes('বিজ্ঞান');
+            } else if (targetG === 'commerce') {
+                matchesGroup = stuG.includes('commerce') || stuG.includes('business') || stuG.includes('ব্যবসায়') || stuG.includes('ব্যবসায়') || secName.includes('commerce') || secName.includes('business') || secName.includes('ব্যবসায়') || secName.includes('ব্যবসায়');
+            } else if (targetG === 'humanities' || targetG === 'arts') {
+                matchesGroup = stuG.includes('humanities') || stuG.includes('arts') || stuG.includes('মানবিক') || secName.includes('humanities') || secName.includes('arts') || secName.includes('মানবিক');
+            }
+
+            if (!matchesGroup) return false;
+        }
+
         return !isTC && !hasNoInfo;
     }).sort((a, b) => parseRoll(a.roll_number) - parseRoll(b.roll_number));
-  }, [students, selectedSection]);
+  }, [students, selectedSection, effectiveGroup, isNT, sections]);
 
-  const fetchResultsController = useRef(null);
-
-  // AUTO-FETCH logic like ClassResultsPage
   useEffect(() => {
-    const fetchKey = `${id}-${selectedClass}-${selectedSection}-${selectedGroup}-${selectedYear}-${studentListFiltered.length}`;
-    if (fetchKey === lastFetched.current || !id || !selectedClass || studentListFiltered.length === 0) {
-        if (!selectedClass) setRankings([]);
-        return;
-    }
+    if (!id || !selectedClass) return;
 
+    const fetchKey = `${id}-${selectedClass}-${selectedSection}-${selectedGroup}-${effectiveGroup}-${selectedExam}-${selectedYear}`;
     lastFetched.current = fetchKey;
     if (fetchResultsController.current) fetchResultsController.current.abort();
     fetchResultsController.current = new AbortController();
 
-    setLoading(true); setRankings([]); setErrorMessage('');
+    setLoading(true); setRankings([]);
 
     (async () => {
         try {
-            // Fetch Raw Results for Browser Calculation
-            let allResults = [], page = 1, hasNext = true;
-            while (hasNext && page <= 25) {
-                const res = await scopedGet('/api/results/results/', id, {
-                    classroom: selectedClass,
-                    section: selectedSection,
-                    year: selectedYear,
-                    page,
-                    page_size: 500
-                });
-                if (!isMounted.current) return;
-                const data = res.data;
-                allResults = allResults.concat(Array.isArray(data) ? data : (data.results || []));
-                if (data.next) page++; else hasNext = false;
+            // 1. Fetch Sections
+            const secRes = await scopedGet('/api/academics/sections/', id, { classroom: selectedClass });
+            if (!isMounted.current) return;
+            const fetchedSections = Array.isArray(secRes.data) ? secRes.data : (secRes.data?.results || []);
+            setSections(fetchedSections);
+
+            // Determine effective group dynamically inside async fetch
+            let activeGroup = effectiveGroup;
+            if (!activeGroup && isNT && selectedSection) {
+                const secObj = fetchedSections.find(s => String(s.id) === String(selectedSection));
+                const secName = String(secObj?.name || '').toLowerCase();
+                if (secName.includes('science') || secName.includes('বিজ্ঞান')) activeGroup = 'science';
+                else if (secName.includes('commerce') || secName.includes('business') || secName.includes('ব্যবসায়') || secName.includes('ব্যবসায়')) activeGroup = 'commerce';
+                else if (secName.includes('arts') || secName.includes('humanities') || secName.includes('মানবিক')) activeGroup = 'humanities';
+            }
+
+            // 2. Fetch Students
+            const stuRes = await scopedGet('/api/academics/students/', id, {
+                classroom: selectedClass,
+                section: selectedSection,
+                group: activeGroup,
+                page_size: 500
+            });
+            if (!isMounted.current) return;
+            const fetchedStudents = Array.isArray(stuRes.data) ? stuRes.data : (stuRes.data?.results || []);
+            setStudents(fetchedStudents);
+
+            const activeStudents = fetchedStudents.filter(s => {
+                const fn = (s.user?.first_name || '').toUpperCase();
+                const ln = (s.user?.last_name || '').toUpperCase();
+                const fullName = (fn + ' ' + ln).trim();
+                const isTC = fullName.includes('TC') || fn.includes('TC') || ln.includes('TC');
+                const hasNoInfo = !fn && !ln && !s.roll_number;
+
+                if (selectedSection) {
+                    const stuSecId = String(s.section?.id || s.section || s.section_id || '');
+                    if (stuSecId !== String(selectedSection)) return false;
+                }
+
+                if (isNT && activeGroup) {
+                    const targetG = activeGroup.toLowerCase();
+                    const stuG = String(s.student_group || s.group || '').toLowerCase();
+                    const secObj = fetchedSections.find(sec => String(sec.id) === String(s.section?.id || s.section || s.section_id));
+                    const secName = String(secObj?.name || s.section?.name || '').toLowerCase();
+
+                    let matchesGroup = false;
+                    if (targetG === 'science') {
+                        matchesGroup = stuG.includes('science') || stuG.includes('বিজ্ঞান') || secName.includes('science') || secName.includes('বিজ্ঞান');
+                    } else if (targetG === 'commerce') {
+                        matchesGroup = stuG.includes('commerce') || stuG.includes('business') || stuG.includes('ব্যবসায়') || stuG.includes('ব্যবসায়') || secName.includes('commerce') || secName.includes('business') || secName.includes('ব্যবসায়') || secName.includes('ব্যবসায়');
+                    } else if (targetG === 'humanities' || targetG === 'arts') {
+                        matchesGroup = stuG.includes('humanities') || stuG.includes('arts') || stuG.includes('মানবিক') || secName.includes('humanities') || secName.includes('arts') || secName.includes('মানবিক');
+                    }
+
+                    if (!matchesGroup) return false;
+                }
+
+                return !isTC && !hasNoInfo;
+            }).sort((a, b) => parseRoll(a.roll_number) - parseRoll(b.roll_number));
+
+            if (activeStudents.length === 0) {
+                setRankings([]);
+                setLoading(false);
+                return;
+            }
+
+            // 3. Fetch Examinations & Results strictly by examination ID with fallback to exam_type
+            const examRes = await scopedGet('/api/results/examinations/', id, { ...(selectedClass ? { classroom: selectedClass } : {}), page_size: 100 }).catch(() => ({ data: [] }));
+            const examList = Array.isArray(examRes.data) ? examRes.data : (Array.isArray(examRes.data?.results) ? examRes.data.results : []);
+            const matchingExams = examList.filter(ex => {
+                const clsId = String(typeof ex.classroom === 'object' ? (ex.classroom?.id || ex.classroom?.classroom_id || '') : (ex.classroom || ex.classroom_id || ''));
+                return (!selectedClass || clsId === String(selectedClass)) && normalizeExamType(ex.exam_type, ex.name) === normalizeExamType(selectedExam);
+            });
+            const examIds = matchingExams.map(ex => ex.id);
+
+            let allResults = [];
+            const targetExamIds = examIds.length > 0 ? examIds : [null];
+            for (const eId of targetExamIds) {
+                let page = 1, hasNext = true;
+                while (hasNext && page <= 25) {
+                    const params = {
+                        classroom: selectedClass || undefined,
+                        section: selectedSection || undefined,
+                        group: activeGroup,
+                        year: selectedYear,
+                        page,
+                        page_size: 500
+                    };
+                    if (eId) params.examination = eId;
+                    else params.exam_type = selectedExam;
+
+                    const res = await scopedGet('/api/results/results/', id, params).catch(() => ({ data: [] }));
+                    if (!isMounted.current) return;
+                    const data = res.data;
+                    const arr = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
+                    allResults = allResults.concat(arr);
+                    if (data.next) page++; else hasNext = false;
+                }
             }
 
             if (!isMounted.current) return;
 
-            const clsObj = classrooms.find(c => String(c.id) === String(selectedClass));
-            const isNT = clsObj ? /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10|৯ম|১০ম/i.test(clsObj.name.toLowerCase()) : false;
-
             const currentGroupFromURL = (() => {
-                const text = (String(clsObj?.name || '')).toLowerCase();
-                if (text.includes('science') || text.includes('বিজ্ঞান')) return 'Science';
-                if (text.includes('commerce') || text.includes('business') || text.includes('ব্যবসায়')) return 'Commerce';
+                const secObj = sections.find(sec => String(sec.id) === String(selectedSection));
+                const text = (String(secObj?.name || '') + ' ' + String(selectedGroup || '')).toLowerCase();
+                if (text.includes('commerce') || text.includes('business') || text.includes('ব্যবসায়') || text.includes('ব্যবসায়')) return 'Commerce';
                 if (text.includes('arts') || text.includes('humanities') || text.includes('মানবিক')) return 'Humanities';
+                if (text.includes('science') || text.includes('বিজ্ঞান')) return 'Science';
                 return '';
             })();
 
@@ -388,7 +558,7 @@ const MeritListPage = () => {
             const sumStr = (s) => String(s || '').split('+').reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
 
             const finalData = [];
-            for (const s of studentListFiltered) {
+            for (const s of activeStudents) {
                 const stuRes = allResultsSorted.filter(r => String(r.student?.id || r.student) === String(s.id));
 
                 // Religion check
@@ -447,16 +617,16 @@ const MeritListPage = () => {
 
                 const getGroupFromContext = () => {
                     const secObj = sections.find(sec => String(sec.id) === String(s?.section?.id || s?.section));
-                    const text = (String(clsObj?.name || '') + ' ' + String(secObj?.name || '')).toLowerCase();
-                    if (text.includes('science') || text.includes('বিজ্ঞান')) return 'science';
+                    const text = String(secObj?.name || '').toLowerCase();
                     if (text.includes('commerce') || text.includes('business') || text.includes('ব্যবসায়') || text.includes('ব্যবসায়')) return 'commerce';
                     if (text.includes('humanities') || text.includes('arts') || text.includes('মানবিক')) return 'humanities';
+                    if (text.includes('science') || text.includes('বিজ্ঞান')) return 'science';
                     return '';
                 };
 
                 let classLevelGroup = '';
                 const groupCounts = { science: 0, commerce: 0, humanities: 0 };
-                studentListFiltered.forEach(st => {
+                activeStudents.forEach(st => {
                     const g = (st?.student_group || st?.group || '').toLowerCase();
                     if (g.includes('science')) groupCounts.science++;
                     else if (g.includes('commerce') || g.includes('business')) groupCounts.commerce++;
@@ -466,7 +636,18 @@ const MeritListPage = () => {
                 else if (groupCounts.commerce >= groupCounts.humanities && groupCounts.commerce > 0) classLevelGroup = 'commerce';
                 else if (groupCounts.humanities > 0) classLevelGroup = 'humanities';
 
-                const group = (s?.student_group || s?.group || inferGroup(resList, isNT) || getGroupFromContext() || classLevelGroup || currentGroupFromURL || (selectedGroup || '')).toLowerCase();
+                const classGroupFromAllResults = inferClassGroupFromAllResults(allResults, isNT, contextSubjects);
+                const sectionGroup = getGroupFromContext();
+                const group = (
+                    s?.student_group ||
+                    s?.group ||
+                    sectionGroup ||
+                    currentGroupFromURL ||
+                    (selectedGroup || '') ||
+                    inferGroup(resList, isNT, contextSubjects) ||
+                    classGroupFromAllResults ||
+                    classLevelGroup
+                ).toLowerCase();
                 const expectedKeys = getExpectedSubjects(group, isNT, classSubjects);
 
                 let score = 0, fails = 0, failedList = [], hasAnyMarks = false, totalPoints = 0, subCount = 0;
@@ -497,8 +678,20 @@ const MeritListPage = () => {
                     showAgri = isNT && (agriTotal > hmTotal && agriTotal > 0);
                 }
 
-                const allKeys = new Set([...expectedKeys, 'higher', 'agriculture', 'civics', 'economics']);
+                const isCommOrHum = group.includes('commerce') || group.includes('business') || group.includes('ব্যবসায়') || group.includes('arts') || group.includes('humanities') || group.includes('মানবিক');
+                if (isCommOrHum) {
+                    const isHMAssigned = (assignedOptId && hmList.some(r => String(r.subject?.id || r.subject) === assignedOptId)) || (assignedOptName && assignedOptName.includes('higher'));
+                    if (!isHMAssigned) showHM = false;
+                }
+
+                const studentKeys = new Set();
+                resList.forEach(r => {
+                    const k = r.standard_key || normalizeSubjKey(r.subject?.name || r.subject_name || '');
+                    if (k) studentKeys.add(k);
+                });
+                const allKeys = new Set([...expectedKeys, ...studentKeys, 'higher', 'agriculture', 'civics', 'economics', 'geography', 'science', 'bgs', 'science_bgs']);
                 let electiveCounted = false;
+                const processedResultIds = new Set();
 
                 allKeys.forEach(key => {
                     let papers = virtualMap.get(key) || [];
@@ -519,7 +712,7 @@ const MeritListPage = () => {
 
                     // Surgical Fallback for combined subjects (e.g. Science/BGS, Physics/Geography/Accounting)
                     if (papers.length === 0) {
-                        for (let [vKey, vPapers] of virtualMap.entries()) {
+                        for (let [, vPapers] of virtualMap.entries()) {
                             if (vPapers.length > 0) {
                                 const vName = String(vPapers[0].subject_name || vPapers[0].subject?.name || '').toLowerCase();
                                 if (vName.includes('/') && vName.includes(key)) {
@@ -542,24 +735,42 @@ const MeritListPage = () => {
                                            (isHumanitiesGroup(group) && humPool.includes(key));
 
                     if (isNT && isHumanitiesGroup(group)) {
-                        if ((key === 'civics' || key === 'economics') && papers.length > 0 && !electiveCounted) { isMandatory = true; electiveCounted = true; }
-                        else if (key === 'civics' && !electiveCounted && !virtualMap.has('economics')) { isMandatory = true; electiveCounted = true; }
-                    }
-
-                    if (isMandatory || belongsToGroup) {
-                        if (!isRel || (isRel && !takenRelId) || (isRel && papers.length > 0)) subCount++;
+                        if (key === 'civics' || key === 'economics') {
+                            if (papers.length > 0 && !electiveCounted) {
+                                isMandatory = true;
+                                electiveCounted = true;
+                            } else if (key === 'civics' && virtualMap.has('economics')) {
+                                isMandatory = false;
+                            } else if (key === 'economics' && virtualMap.has('civics')) {
+                                isMandatory = false;
+                            } else if (key === 'civics' && !electiveCounted && !virtualMap.has('economics')) {
+                                isMandatory = true;
+                                electiveCounted = true;
+                            } else {
+                                isMandatory = false;
+                            }
+                        }
                     }
 
                     if (papers.length === 0) {
                         if (isMandatory) {
                             if (isRel && takenRelId) return;
                             if (isNT) {
-                                if (group.includes('science')) { if (key === 'science') return; }
+                                const hasCombined = virtualMap.size > 0 && Array.from(virtualMap.values()).some(vPapers =>
+                                    vPapers.some(r => {
+                                        const vName = String(r.subject_name || r.subject?.name || '').toLowerCase();
+                                        return vName.includes('/') && vName.includes(key);
+                                    })
+                                );
+                                if (hasCombined) return;
+
+                                const takesSciGroup = virtualMap.has('physics') || virtualMap.has('chemistry') || virtualMap.has('biology');
+                                if (isScienceGroup(group) && takesSciGroup) { if (key === 'science') return; }
                                 else {
                                     if (['physics', 'chemistry', 'biology'].includes(key)) return;
-                                    if (/bgs|বাংলাদেশ|science|বিজ্ঞান/i.test(key)) {
-                                        const hasAnyRecord = resList.some(r => normalizeSubjKey(r.subject?.name || r.subject_name) === normalizeSubjKey(key));
-                                        if (!hasAnyRecord) return;
+                                    if (key === 'bgs') {
+                                        const classHasBgs = allResults.some(r => normalizeSubjKey(r.subject?.name || r.subject_name) === 'bgs');
+                                        if (!classHasBgs) return;
                                     }
                                 }
                             }
@@ -569,7 +780,14 @@ const MeritListPage = () => {
                     }
 
                     let tW=0, tM=0, tP=0, tO=0, tPossible=0, cqM=0, mcqM=0, prM=0, pPresent=false;
+                    let hasUnprocessedPaper = false;
+
                     papers.forEach(r => {
+                        const rid = String(r.id || r.subject?.id || r.subject || r.subject_name);
+                        if (processedResultIds.has(rid)) return;
+                        processedResultIds.add(rid);
+                        hasUnprocessedPaper = true;
+
                         const hasActualMarks = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null);
                         if (hasActualMarks || r.total_obtained > 0) { hasAnyMarks = true; pPresent = true; }
                         const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT, group);
@@ -577,6 +795,12 @@ const MeritListPage = () => {
                         tW += r.sumW; tM += r.sumM; tP += r.sumP; tO += Math.min(r.total_obtained, pMax);
                         tPossible += pMax; cqM += spec.cq; mcqM += spec.mcq; prM += spec.pr;
                     });
+
+                    if (!hasUnprocessedPaper) return;
+
+                    if (isMandatory || belongsToGroup) {
+                        if (!isRel || (isRel && !takenRelId) || (isRel && papers.length > 0)) subCount++;
+                    }
                     if (isNT && (key === 'bangla' || key === 'english')) tPossible = Math.max(tPossible, 200);
 
                     const cqPass = cqM === 0 || tW >= Math.round(cqM * 0.33 - 0.5);
@@ -598,7 +822,6 @@ const MeritListPage = () => {
                         if (tO > threshold) score += (tO - threshold);
                         totalPoints += Math.max(0, gp - 2.0);
                     } else if (isMandatory || belongsToGroup) {
-                        if (isNT && (key === 'bgs' || key === 'science') && !group.includes('science')) { if (!pPresent) return; }
                         if (isRel && takenRelId && !papers.some(r => String(r.subject?.id || r.subject) === String(takenRelId))) return;
                         score += tO; totalPoints += gp;
                         if (isMandatory && !isSubjectPassed) {
@@ -637,10 +860,13 @@ const MeritListPage = () => {
             bySection.forEach(list => {
                 list.sort((a, b) => {
                     if (a.isAbsent !== b.isAbsent) return a.isAbsent ? 1 : -1;
+                    const aPassed = (a.fails === 0);
+                    const bPassed = (b.fails === 0);
+                    if (aPassed !== bPassed) return aPassed ? -1 : 1;
                     if (a.fails !== b.fails) return a.fails - b.fails;
                     if (Math.abs(b.points - a.points) > 0.0001) return b.points - a.points;
                     if (Math.abs(b.rawScore - a.rawScore) > 0.01) return b.rawScore - a.rawScore;
-                    return a.roll - b.roll;
+                    return (Number(a.roll) || 0) - (Number(b.roll) || 0);
                 });
                 list.forEach((it, i) => { it.browserRank = i + 1; ranked.push(it); });
             });
@@ -657,15 +883,26 @@ const MeritListPage = () => {
             }
         } catch (e) {
             console.error(e);
-            if (isMounted.current) setErrorMessage('ডাটা লোড করতে সমস্যা হয়েছে।');
         } finally {
             if (isMounted.current) setLoading(false);
         }
     })();
-  }, [id, selectedClass, selectedSection, selectedGroup, selectedYear, studentListFiltered, classrooms]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, selectedClass, selectedSection, selectedGroup, selectedExam, selectedYear, studentListFiltered.length, isNT]);
 
   const currentClassLabel = classrooms.find(c => String(c.id) === String(selectedClass))?.name || '---';
   const currentSectionLabel = sections.find(s => String(s.id) === String(selectedSection))?.name || 'সব শাখা';
+
+  const currentExamLabel = useMemo(() => {
+    if (selectedExam === 'half_yearly') return 'অর্ধ-বার্ষিক পরীক্ষা';
+    if (selectedExam === 'annual') return 'বার্ষিক পরীক্ষা';
+    if (selectedExam === 'pre_test') return 'প্রাক-নির্বাচনী পরীক্ষা';
+    if (selectedExam === 'test') return 'নির্বাচনী (টেস্ট) পরীক্ষা';
+    if (selectedExam === 'model') return 'মডেল টেস্ট পরীক্ষা';
+    if (selectedExam === 'first_term') return 'প্রথম সাময়িক পরীক্ষা';
+    if (selectedExam === 'terminal') return 'টার্মিনাল পরীক্ষা';
+    return 'সকল পরীক্ষা';
+  }, [selectedExam]);
 
   return (
     <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: '100vh' }} className="merit-list-root">
@@ -676,7 +913,7 @@ const MeritListPage = () => {
 
       <Paper className="no-print" sx={{ p: 2, mb: 3, borderTop: '4px solid #2e7d32' }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={3}><FormControl fullWidth><InputLabel>শ্রেণি</InputLabel><Select value={selectedClass} onChange={e => {
+          <Grid item xs={12} md={2.5}><FormControl fullWidth><InputLabel>শ্রেণি</InputLabel><Select value={selectedClass} onChange={e => {
               const val = e.target.value;
               updateUrl({ classroom: val, section: '', group: '' });
           }} sx={{ height: '56px' }}>{classrooms.map(c => <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>)}</Select></FormControl></Grid>
@@ -684,6 +921,25 @@ const MeritListPage = () => {
               const val = e.target.value;
               updateUrl({ section: val });
           }} sx={{ height: '56px' }} disabled={!selectedClass}><MenuItem value="">সব শাখা</MenuItem>{sections.map(s => <MenuItem key={s.id} value={String(s.id)}>{s.name}</MenuItem>)}</Select></FormControl></Grid>
+
+          <Grid item xs={12} md={2.5}>
+            <FormControl fullWidth>
+              <InputLabel>পরীক্ষা</InputLabel>
+              <Select value={selectedExam} onChange={e => {
+                const val = e.target.value;
+                setSelectedExam(val);
+                updateUrl({ exam: val });
+              }} sx={{ height: '56px' }}>
+                <MenuItem value="half_yearly">অর্ধ-বার্ষিক</MenuItem>
+                <MenuItem value="annual">বার্ষিক</MenuItem>
+                <MenuItem value="pre_test">প্রাক-নির্বাচনী</MenuItem>
+                <MenuItem value="test">নির্বাচনী / টেস্ট</MenuItem>
+                <MenuItem value="model">মডেল টেস্ট</MenuItem>
+                <MenuItem value="first_term">প্রথম সাময়িক</MenuItem>
+                <MenuItem value="terminal">টার্মিনাল</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
 
           {(() => {
               const cls = classrooms.find(c => String(c.id) === String(selectedClass));
@@ -713,14 +969,13 @@ const MeritListPage = () => {
               const val = e.target.value;
               updateUrl({ year: val });
           }} sx={{ height: '56px' }}>{[2024, 2025, 2026].map(y => <MenuItem key={y} value={String(y)}>{y}</MenuItem>)}</Select></FormControl></Grid>
-          <Grid item xs={12} md={3}><Box sx={{ textAlign: 'center', p: 1, bgcolor: '#e8f5e9', borderRadius: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>ক্লাস রেজাল্টস থেকে রিয়েল-টাইম সিঙ্ক সক্রিয়</Typography></Box></Grid>
         </Grid>
       </Paper>
 
       <Box className="print-only" sx={{ display: 'none', textAlign: 'center', mb: 3, borderBottom: '2px solid black', pb: 2, "@media print": { display: 'block' } }}>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mb: 1 }}>{schoolInfo?.logo && <img src={getMediaUrl(schoolInfo.logo)} alt="Logo" style={{ height: '80px' }} />}<Box><Typography variant="h5" sx={{ fontWeight: 800, fontSize: '1.6rem' }}>{schoolInfo?.name}</Typography><Typography variant="body1" sx={{ fontSize: '1.0rem' }}>{schoolInfo?.address || ''}</Typography></Box></Box>
           <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, textDecoration: 'underline' }}>মেধাতালিকা (Merit List)</Typography>
-          <Typography variant="h6">শ্রেণি: {currentClassLabel} | শাখা: {currentSectionLabel} | বছর: {selectedYear}</Typography>
+          <Typography variant="h6">শ্রেণি: {currentClassLabel} | শাখা: {currentSectionLabel} | পরীক্ষা: {currentExamLabel} | বছর: {selectedYear}</Typography>
       </Box>
 
       {loading ? <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress color="success" /><Typography sx={{ mt: 2, fontWeight: 'bold' }}>তথ্য প্রস্তুত করা হচ্ছে...</Typography></Box> : rankings.length > 0 ? (

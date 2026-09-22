@@ -189,7 +189,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         classroom_id = self.request.query_params.get('classroom')
         if classroom_id:
-            qs = qs.filter(examination__classroom_id=classroom_id)
+            qs = qs.filter(Q(examination__classroom_id=classroom_id) | Q(student__classroom_id=classroom_id))
 
         subject_id = self.request.query_params.get('subject')
         if subject_id:

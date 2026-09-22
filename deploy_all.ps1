@@ -174,20 +174,33 @@ if (-not $success) {
 }
 
 Write-Host "Running Deployment on VPS (Extraction + nginx config + migrations)..." -ForegroundColor Cyan
-$remoteCmd = "cd /root; " +
-             "tar -xf backend_minimal.tar -C /var/www/bdapp/ 2>/dev/null; " +
-             "rm -rf /var/www/bdapp/frontend/build; " +
-             "mkdir -p /var/www/bdapp/frontend/build; " +
-             "tar -xzf frontend.tar.gz -C /var/www/bdapp/frontend/build --strip-components=1 2>/dev/null; " +
+
+$extractFrontend = ""
+if (-not $NoFrontend) {
+    $extractFrontend = "rm -rf /var/www/bdapp/frontend/build; " +
+                       "mkdir -p /var/www/bdapp/frontend/build; " +
+                       "tar -xzf frontend.tar.gz -C /var/www/bdapp/frontend/build --strip-components=1; "
+}
+
+$remoteCmd = "set -e; cd /root; " +
+             "tar -xf backend_minimal.tar -C /var/www/bdapp/; " +
+             $extractFrontend +
              "cp fix_all.sh /var/www/bdapp/fix_all.sh; " +
              "chmod +x /var/www/bdapp/fix_all.sh; " +
-             "cp nginx_setup.sh /var/www/bdapp/nginx_setup.sh 2>/dev/null; " +
-             "chmod +x /var/www/bdapp/nginx_setup.sh 2>/dev/null; " +
-             "bash /var/www/bdapp/nginx_setup.sh; " +
+             "if [ -f nginx_setup.sh ]; then cp nginx_setup.sh /var/www/bdapp/nginx_setup.sh; chmod +x /var/www/bdapp/nginx_setup.sh; bash /var/www/bdapp/nginx_setup.sh; fi; " +
              "bash /var/www/bdapp/fix_all.sh; " +
              "rm -f /root/backend_minimal.tar /root/frontend.tar.gz /root/fix_all.sh /root/nginx_setup.sh 2>/dev/null"
 
 ssh -t "${USER}@${VPS_IP}" "$remoteCmd"
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" -ForegroundColor Red
+    Write-Host "  DEPLOYMENT FAILED ON VPS!" -ForegroundColor Red
+    Write-Host "  Check the error messages above." -ForegroundColor Red
+    Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "Cleaning up local temporary files..." -ForegroundColor Gray
 if (Test-Path "backend_minimal.tar") { Remove-Item "backend_minimal.tar" -Force }

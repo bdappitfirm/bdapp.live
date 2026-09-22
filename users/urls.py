@@ -38,6 +38,8 @@ from .views import (
     SupportCallEndView,
     SupportCallPingView,
     ActivityLogViewSet,
+    SalaryStructureViewSet,
+    PayrollRecordViewSet,
 )
 
 router = DefaultRouter()
@@ -47,6 +49,8 @@ router.register(r'committees', CommitteeProfileViewSet, basename='committees')
 router.register(r'teachers', TeacherProfileViewSet, basename='teachers')
 router.register(r'tasks', TaskViewSet, basename='tasks')
 router.register(r'activities', ActivityLogViewSet, basename='activities')
+router.register(r'payroll/structures', SalaryStructureViewSet, basename='salary-structures')
+router.register(r'payroll/records', PayrollRecordViewSet, basename='payroll-records')
 
 # Expose Groups CRUD
 class GroupSerializer(ModelSerializer):

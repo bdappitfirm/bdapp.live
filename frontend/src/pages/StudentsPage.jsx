@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/api';
-import { getCachedApiResponse } from '../utils/offlineDb';
 import { useAcademics } from '../context/AcademicsContext';
 import {
   Box, Typography, Grid, TextField, Button,
@@ -40,6 +39,7 @@ export default function StudentsPage() {
   const [sliceStudents, setSliceStudents] = useState(null);
   const [sliceLoading, setSliceLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+  const searchDebounceRef = useRef(null);
 
   const guidanceSteps = useMemo(() => [
     { selector: '#class-select-card-0', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
@@ -77,11 +77,15 @@ export default function StudentsPage() {
     const params = new URLSearchParams(location.search);
     const cls = params.get('classroom');
     const sec = params.get('section');
-    const searchQ = params.get('q');
+    const searchQ = params.get('q') || '';
 
     setSelectedClass(cls ? Number(cls) : null);
     setSelectedSection(sec === 'UNASSIGNED' || sec === 'ALL' ? sec : (sec ? Number(sec) : null));
-    setQ(searchQ || '');
+
+    // Only update local search state if it differs from URL AND we're not currently debouncing a type-in
+    if (!searchDebounceRef.current) {
+        setQ(searchQ);
+    }
   }, [location.search]);
 
   const updateUrl = useCallback((cls, sec, searchQ) => {
@@ -315,7 +319,17 @@ export default function StudentsPage() {
                 id="student-search-input"
                 placeholder="নাম বা রোল দিয়ে খুঁজুন..."
                 size="small" value={q}
-                onChange={(e) => updateUrl(selectedClass, selectedSection, e.target.value)}
+                onChange={(e) => {
+                    const val = e.target.value;
+                    setQ(val);
+                    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                    searchDebounceRef.current = setTimeout(() => {
+                        updateUrl(selectedClass, selectedSection, val);
+                        // We keep the ref for a bit longer to ensure the URL sync effect
+                        // doesn't catch an old URL value during the transition.
+                        setTimeout(() => { searchDebounceRef.current = null; }, 200);
+                    }, 300);
+                }}
                 sx={{ width: { xs: '100%', sm: 300 }, bgcolor: 'white' }}
             />
           </Stack>

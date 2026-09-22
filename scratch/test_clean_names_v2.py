@@ -5,8 +5,8 @@ def normalize_bangla_base(word):
     if not word:
         return ''
     n = unicodedata.normalize('NFKC', str(word)).lower().strip()
-    # Remove vowel signs (kar)
-    n = re.sub(r'[\u09be-\u09c4\u09c7-\u09d7\u09bc]', '', n)
+    # Remove all Bangla diacritics, vowel signs, candrabindu, anusvara, visarga, halant
+    n = re.sub(r'[\u0981-\u0983\u09bc-\u09d7]', '', n)
     return n
 
 def clean_student_name(fn, ln=''):
@@ -31,6 +31,6 @@ def clean_student_name(fn, ln=''):
 
     return ' '.join(result)
 
-print(clean_student_name("নুসরাত জাহান জুই জুঁই"))
-print(clean_student_name("আইনুন নিশাত শাইফা সাইফা"))
-print(clean_student_name("সুস্মিতা চক্রবর্তী চক্রবতী"))
+print("1:", clean_student_name("নুসরাত জাহান জুই জুঁই"))
+print("2:", clean_student_name("আইনুন নিশাত শাইফা সাইফা"))
+print("3:", clean_student_name("সুস্মিতা চক্রবর্তী চক্রবতী"))

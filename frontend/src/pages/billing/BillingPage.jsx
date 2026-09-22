@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api from '../../utils/api';
 import {
   Box, Typography, Paper, TextField, Button, Grid, Table,
   TableHead, TableBody, TableRow, TableCell, Divider, Stack,
-  Autocomplete, CircularProgress
+  Autocomplete
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -15,7 +15,6 @@ import { useToast } from '../../components/Toast';
 
 export default function BillingPage() {
   const { id } = useParams(); // Should be 6 for BDapp IT Firm
-  const navigate = useNavigate();
   const toast = useToast();
   const printRef = useRef();
 
@@ -27,7 +26,7 @@ export default function BillingPage() {
   const [commission, setCommission] = useState(0);
   const [previouslyPaid, setPreviouslyPaid] = useState(0);
   const [billDate, setBillDate] = useState(dayjs().format('YYYY-MM-DD'));
-  const [billNo, setBillDateNo] = useState(`INV-${dayjs().format('YYYY')}-SR-${Math.floor(Math.random() * 900) + 100}`);
+  const [billNo] = useState(`INV-${dayjs().format('YYYY')}-SR-${Math.floor(Math.random() * 900) + 100}`);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -85,8 +84,6 @@ export default function BillingPage() {
       setLoading(false);
     }
   };
-
-  const toBn = (n) => String(n).replace(/\d/g, d => "০১২৩৪৫৬৭৮৯"[d]);
 
   const totalAmount = studentCount * ratePerStudent;
   const commissionAmount = (totalAmount * commission) / 100;

@@ -17,7 +17,6 @@ import {
   DialogActions,
   MenuItem,
   TextField,
-  Chip,
   Paper,
   IconButton,
   CircularProgress
@@ -47,16 +46,6 @@ const VirtualClassPage = () => {
   // Live Class State
   const [currentClass, setCurrentClass] = useState(null);
 
-  const fetchUser = useCallback(async () => {
-    try {
-      const res = await api.get('/api/users/me/');
-      // res.data will be { user: { ... }, profile: { role: ... } }
-      setUser(res.data);
-    } catch (err) {
-      console.error('Failed to fetch profile:', err);
-    }
-  }, []);
-
   const fetchActiveClasses = useCallback(async () => {
     try {
       const res = await api.get(`/api/academics/virtual-classes/?school=${schoolId}&active=true`);
@@ -82,7 +71,7 @@ const VirtualClassPage = () => {
     } catch (err) {
       console.error('Failed to fetch assignments:', err);
     }
-  }, [schoolId]); // user removed from dependencies to avoid infinite loop
+  }, [schoolId, user]);
 
   useEffect(() => {
     if (!isAuthenticated()) {

@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Box, Typography, Paper, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  CircularProgress, Grid, Alert, Card, CardContent, Divider, FormControl, InputLabel, Select, MenuItem,
-  Checkbox, ListItemText, OutlinedInput, Chip, FormControlLabel, Stack, Avatar
+  CircularProgress, Grid, Alert, Card, CardContent, FormControl, InputLabel, Select, MenuItem,
+  Checkbox, ListItemText, OutlinedInput, Stack, Avatar
 } from '@mui/material';
 
 import api from '../utils/api';
 import { normalizeNumberInput } from '../utils/helpers';
-import { getMediaUrl, resolveSchoolLogo } from '../utils/media';
+import { getMediaUrl } from '../utils/media';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import { jsPDF } from 'jspdf';
@@ -28,7 +28,7 @@ const SeatAllocationPage = () => {
   const [seatPlans, setSeatPlans] = useState([]);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
-  const [examSlots, setExamSlots] = useState([]);
+  const [, setExamSlots] = useState([]);
 
   const toBnDigits = (num) => {
     const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
@@ -287,7 +287,6 @@ const SeatAllocationPage = () => {
   };
 
   const examName = exams.find(e => String(e.id) === String(selectedExam))?.name || 'সিট প্ল্যান';
-  const schoolLogo = resolveSchoolLogo(school);
   const principalSig = getMediaUrl(school?.principal_signature);
   const schoolSeal = getMediaUrl(school?.school_seal);
 

@@ -214,4 +214,4 @@ const AttendanceChart = ({ attendanceData }) => {
   );
 };
 
-export default AttendanceChart;
+export default React.memo(AttendanceChart);

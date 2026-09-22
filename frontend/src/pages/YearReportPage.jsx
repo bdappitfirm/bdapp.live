@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Box, Paper, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextField, Chip, TableContainer, Table, TableHead, TableRow, TableCell, TableBody, Stack, CircularProgress, Alert, Button } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -11,7 +11,6 @@ import InputGuidance from '../components/InputGuidance';
 
 export default function YearReportPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
   const { classrooms: contextClassrooms, sections: contextSections, refreshAll } = useAcademics();
   const [selectedClass, setSelectedClass] = useState('');
@@ -83,7 +82,7 @@ export default function YearReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, selectedClass, selectedSection, selectedYear]); // Removed toast from dependencies
+  }, [id, selectedClass, selectedSection, selectedYear, toast]);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);

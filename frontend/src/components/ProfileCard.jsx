@@ -13,7 +13,6 @@ import {
   IconButton,
   Chip,
   Box,
-  Fade,
   Zoom,
   Dialog,
   DialogTitle,
@@ -1122,7 +1121,7 @@ export default function ProfileCard({
                   <TextField
                     id="edit-first-name"
                     name="first_name"
-                    label="নাম (First Name)"
+                    label="নাম (Name) *"
                     value={formData.first_name}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -1142,7 +1141,7 @@ export default function ProfileCard({
                   <TextField
                     id="edit-first-name-en"
                     name="first_name_en"
-                    label="First Name (English)"
+                    label="নাম (ইংরেজিতে)"
                     value={formData.first_name_en}
                     onChange={(e) => setFormData({ ...formData, first_name_en: e.target.value })}
                     fullWidth

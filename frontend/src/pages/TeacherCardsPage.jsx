@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Box,
@@ -20,11 +20,7 @@ export default function TeacherCardsPage() {
   const [loading, setLoading] = useState(true);
   const [teachers, setTeachers] = useState([]);
 
-  useEffect(() => {
-    loadTeachers();
-  }, [id]);
-
-  const loadTeachers = async () => {
+  const loadTeachers = useCallback(async () => {
     if (!id) return;
     
     setLoading(true);
@@ -96,11 +92,14 @@ export default function TeacherCardsPage() {
     } catch (error) {
       console.error('Failed to load teachers:', error);
       toast.error('Failed to load teachers');
-      toast.error('Failed to load teachers');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, toast]);
+
+  useEffect(() => {
+    loadTeachers();
+  }, [id, loadTeachers]);
 
   return (
     <Container maxWidth="lg">

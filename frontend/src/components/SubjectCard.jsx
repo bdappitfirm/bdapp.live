@@ -100,7 +100,7 @@ export default function SubjectCard({
       console.error('Failed to load sections:', err);
       setSections([]);
     }
-  }, []);
+  }, [schoolId]);
 
   // Pre-fill selection when dialog opens if classroomId/sectionId are provided
   useEffect(() => {

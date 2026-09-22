@@ -1,13 +1,12 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
-import { 
-  Box, 
-  Typography, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
+import {
+  Box,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
   TableRow,
   Paper,
   Stack,
@@ -19,7 +18,6 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 const FeeCollectionChart = ({ feeData, feeDuesSummary, feeDuesByClass }) => {
-  const { id } = useParams();
   // Format data for display
   const formattedData = feeData?.map(item => ({
     date: new Date(item.date).toLocaleDateString('bn-BD', { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -264,4 +262,4 @@ const FeeCollectionChart = ({ feeData, feeDuesSummary, feeDuesByClass }) => {
   );
 };
 
-export default FeeCollectionChart;
+export default React.memo(FeeCollectionChart);

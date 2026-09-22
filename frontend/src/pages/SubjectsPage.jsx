@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import DeleteIcon from "@mui/icons-material/Delete";
 import { useParams, useNavigate } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import api from '../utils/api';
@@ -14,7 +13,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton,
   Paper,
   InputAdornment,
   Alert,
@@ -35,53 +33,13 @@ import {
 } from '@mui/icons-material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import CloseIcon from '@mui/icons-material/Close';
 import BookIcon from '@mui/icons-material/Book';
 import ClassIcon from '@mui/icons-material/Class';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import EmptyState from '../components/EmptyState';
 import SubjectCard from '../components/SubjectCard';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import { sortClassrooms } from '../utils/classroomUtils';
-
-const banglaNumberMap = {
-  'প্লে': -3,
-  'Play': -3,
-  'play': -3,
-  'নার্সারি': -2,
-  'Nursery': -2,
-  'nursery': -2,
-  'কেজি': -1,
-  'KG': -1,
-  'kg': -1,
-  'কে.জি': -1,
-  'কে.জি.': -1,
-  '১ম': 1,
-  '২য়': 2,
-  '৩য়': 3,
-  '৪র্থ': 4,
-  '৫ম': 5,
-  '৬ষ্ঠ': 6,
-  '৭ম': 7,
-  '৮ম': 8,
-  '৯ম': 9,
-  '১০ম': 10,
-  'প্রথম': 1,
-  'দ্বিতীয়': 2,
-  'দ্বিতীয়': 2,
-  'তৃতীয়': 3,
-  'তৃতীয়': 3,
-  'চতুর্থ': 4,
-  'পঞ্চম': 5,
-  'ষষ্ঠ': 6,
-  'সপ্তম': 7,
-  'অষ্টম': 8,
-  'নবম': 9,
-  'দশম': 10,
-  'একাদশ': 11,
-  'দ্বাদশ': 12
-};
 
 const subjectOrderMap = {
   'বাংলা-১ম': 1, 'বাংলা ১ম': 1, 'Bangla 1st': 1,
@@ -103,19 +61,6 @@ const getSubjectOrder = (name) => {
   return 999;
 };
 
-const getClassOrder = (className) => {
-  const lowerName = String(className || '').toLowerCase();
-  if (lowerName.includes('play') || lowerName.includes('প্লে')) return -3;
-  if (lowerName.includes('nursery') || lowerName.includes('নার্সারি') || lowerName.includes('শিশু')) return -2;
-  if (lowerName.includes('kg') || lowerName.includes('কেজি') || lowerName.includes('কে.জি')) return -1;
-  for (const [bangla, num] of Object.entries(banglaNumberMap)) {
-    if (String(className || '').includes(bangla)) return num;
-  }
-  const match = String(className || '').match(/\d+/);
-  if (match) return parseInt(match[0]);
-  return 999;
-};
-
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
@@ -134,7 +79,6 @@ export default function SubjectsPage() {
   const [sections, setSections] = useState([]);
   const [classSections, setClassSections] = useState([]);
   const [classSubjects, setClassSubjects] = useState([]);
-  const [classSubjectsLoading, setClassSubjectsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -153,15 +97,25 @@ export default function SubjectsPage() {
   const loadSubjects = useCallback(async (quiet = true) => {
     setLoading(true);
     try {
-      const subjectRes = await api.get(`/api/academics/subjects/?school=${id}`);
+      const [subjectRes, classRes, secRes, teacherRes] = await Promise.all([
+        api.get(`/api/academics/subjects/?school=${id}`),
+        api.get(`/api/academics/classrooms/?school=${id}`),
+        api.get(`/api/academics/sections/?school=${id}`),
+        api.get(`/api/users/teachers/?school=${id}`)
+      ]);
+
       const subjectsData = Array.isArray(subjectRes.data) ? subjectRes.data : subjectRes.data.results || [];
       setSubjects(subjectsData);
 
-      const classRes = await api.get(`/api/academics/classrooms/?school=${id}`);
       const classesData = Array.isArray(classRes.data) ? classRes.data : classRes.data.results || [];
-      
       const sortedClasses = sortClassrooms(classesData);
       setClassrooms(sortedClasses);
+
+      const sectionsData = Array.isArray(secRes.data) ? secRes.data : secRes.data.results || [];
+      setSections(sectionsData);
+
+      const teachersData = Array.isArray(teacherRes.data) ? teacherRes.data : teacherRes.data.results || [];
+      setTeachers(teachersData);
 
       const summary = sortedClasses.map(classroom => {
         const classSubjs = subjectsData.filter(s => {
@@ -170,7 +124,7 @@ export default function SubjectsPage() {
           // Include if classroom linked directly
           if (cls.includes(classroom.id)) return true;
           // Include if any linked section belongs to this classroom
-          const belongsToClass = sections.some(sec => sids.includes(sec.id) && (sec.classroom?.id === classroom.id || sec.classroom_id === classroom.id));
+          const belongsToClass = sectionsData.some(sec => sids.includes(sec.id) && (sec.classroom?.id === classroom.id || sec.classroom_id === classroom.id));
           return belongsToClass;
         });
         return {
@@ -193,26 +147,6 @@ export default function SubjectsPage() {
     }
   }, [id, toast]);
 
-  const loadTeachers = useCallback(async () => {
-    try {
-      const res = await api.get(`/api/users/teachers/?school=${id}`);
-      const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-      setTeachers(data);
-    } catch (err) {
-      console.error('Failed to load teachers:', err);
-    }
-  }, [id]);
-
-  const loadSections = useCallback(async () => {
-    try {
-      const res = await api.get(`/api/academics/sections/?school=${id}`);
-      const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-      setSections(data);
-    } catch (err) {
-      console.error('Failed to load sections:', err);
-    }
-  }, [id]);
-
   const loadClassSections = useCallback(async (classroomId) => {
     try {
       const res = await api.get(`/api/academics/sections/?classroom=${classroomId}&school=${id}`);
@@ -222,12 +156,11 @@ export default function SubjectsPage() {
       console.error('Failed to load sections:', err);
       setClassSections([]);
     }
-  }, []);
+  }, [id]);
 
   const loadClassSubjects = useCallback(async (classroomId, sectionId = null) => {
     if (!classroomId) return;
     try {
-      setClassSubjectsLoading(true);
       let url = `/api/academics/classrooms/${classroomId}/subjects/?school=${id}`;
       if (sectionId) {
         url += `&section=${sectionId}`;
@@ -238,16 +171,12 @@ export default function SubjectsPage() {
     } catch (err) {
       console.error('Failed to load class subjects:', err);
       setClassSubjects([]);
-    } finally {
-      setClassSubjectsLoading(false);
     }
-  }, []);
+  }, [id]);
 
   useEffect(() => {
     loadSubjects(true);
-    loadTeachers();
-    loadSections();
-  }, [loadSubjects, loadTeachers, loadSections]);
+  }, [loadSubjects]);
 
   const handleClassSelect = (classroom) => {
     setSelectedClass(classroom);
@@ -323,7 +252,7 @@ export default function SubjectsPage() {
         sections: formData.sections.map(s => s.id)
       };
       
-      const res = await api.post(`/api/academics/subjects/?school=${id}`, payload);
+      await api.post(`/api/academics/subjects/?school=${id}`, payload);
       toast.success('বিষয় সফলভাবে যোগ করা হয়েছে!');
       setDialogOpen(false);
       loadSubjects();
@@ -410,7 +339,7 @@ export default function SubjectsPage() {
         if (orderA !== orderB) return orderA - orderB;
         return a.id - b.id;
       });
-  }, [baseList, isClassScoped, searchQuery, selectedClass]);
+  }, [baseList, isClassScoped, searchQuery, selectedClass, showAllSubjects]);
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', overflow: 'hidden' }}>

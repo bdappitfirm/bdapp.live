@@ -1,6 +1,6 @@
 // src/App.jsx
 import React, { Suspense, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { ToastProvider } from './components/Toast';
 import { SchoolProvider } from './context/SchoolContext';
 import { AcademicsProvider } from './context/AcademicsContext';
@@ -8,7 +8,6 @@ import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
-import { isAuthenticated } from './utils/auth';
 import { CircularProgress, Box, Typography } from '@mui/material';
 import SyncManager from './components/SyncManager';
 import {
@@ -163,6 +162,8 @@ const SeatAllocationPage = React.lazy(() => import('./pages/SeatAllocationPage.j
 const WhatsAppSettings = React.lazy(() => import('./pages/WhatsAppSettings.jsx'));
 const BillingPage = React.lazy(() => import('./pages/billing/BillingPage.jsx'));
 const BanbeisPage = React.lazy(() => import('./pages/BanbeisPage.jsx'));
+const PayrollPage = React.lazy(() => import('./pages/PayrollPage.jsx'));
+const PayslipGenerator = React.lazy(() => import('./pages/PayslipGenerator.jsx'));
 
 const PathTracker = () => {
   const location = useLocation();
@@ -314,6 +315,8 @@ function App() {
           <Route path="assistant" element={<ProtectedRoute><SoftwareAssistant /></ProtectedRoute>} />
           <Route path="support-live" element={<ProtectedRoute><SupportLivePage /></ProtectedRoute>} />
           <Route path="sms" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SMSPage /></ProtectedRoute>} />
+          <Route path="payroll" element={<ProtectedRoute allowedRoles={['admin']}><PayrollPage /></ProtectedRoute>} />
+          <Route path="payslip/:recordId" element={<ProtectedRoute allowedRoles={['admin','teacher']}><PayslipGenerator /></ProtectedRoute>} />
           <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="admin" element={<ProtectedRoute allowedRoles={['admin']}><RoleDashboard role="admin" /></ProtectedRoute>} />
           <Route path="settings" element={<ProtectedRoute allowedRoles={['admin']}><SchoolSettings /></ProtectedRoute>} />

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Box, Typography, Card, Avatar, CardMedia, Button,
+  Box, Typography, Card, Avatar, CardMedia,
   Stack, useMediaQuery
 } from "@mui/material";
 import { useTheme } from '@mui/material/styles';

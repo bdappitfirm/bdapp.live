@@ -28,14 +28,18 @@ server {
     # So files live at /var/www/bdapp/staticfiles/
     location /static/ {
         alias /var/www/bdapp/staticfiles/;
-        expires 7d;
-        add_header Cache-Control "public";
+        expires 0;
+        add_header Cache-Control "no-cache, no-store, must-revalidate, max-age=0";
+        add_header Expires "0";
+        add_header Pragma "no-cache";
     }
 
     location /backend-static/ {
         alias /var/www/bdapp/staticfiles/;
-        expires 7d;
-        add_header Cache-Control "public";
+        expires 0;
+        add_header Cache-Control "no-cache, no-store, must-revalidate, max-age=0";
+        add_header Expires "0";
+        add_header Pragma "no-cache";
     }
 
     location /media/ {

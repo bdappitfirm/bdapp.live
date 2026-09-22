@@ -58,7 +58,7 @@ const SignupPage = () => {
         role: form.role,
         school: form.school ? parseInt(form.school, 10) : undefined,
       };
-      const res = await api.post('/api/users/register/', payload);
+      await api.post('/api/users/register/', payload);
       setSuccess('Account created successfully. You can now log in.');
       setTimeout(() => {
         navigate(`/login?next=${encodeURIComponent(next)}`);

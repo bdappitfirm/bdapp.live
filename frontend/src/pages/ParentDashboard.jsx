@@ -28,13 +28,11 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  MenuItem,
   AppBar,
   Toolbar,
   Container
 } from '@mui/material';
 import {
-  Person as PersonIcon,
   Assessment as AssessmentIcon,
   CalendarMonth as CalendarIcon,
   Download as DownloadIcon,
@@ -54,9 +52,6 @@ import 'dayjs/locale/bn';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { styled } from '@mui/material/styles';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { getMediaUrl, resolveStudentPhoto } from '../utils/media';
 
 const toBnDigits = (s) => String(s).replace(/[0-9]/g, (d) => '০১২৩৪৫৬৭৮৯'[Number(d)]);
@@ -113,7 +108,6 @@ const ParentDashboard = () => {
   const toast = useToast();
   const { addNotification } = useNotifications();
   const reportRef = useRef();
-  const reportsRef = useRef(null);
   const { user, isAuthenticated } = useAuth();
 
   // State
@@ -478,7 +472,7 @@ const ParentDashboard = () => {
   };
 
   const getGradeColor = (marks, total) => {
-    const percentage = (marks / total) * 100;
+    const percentage = total > 0 ? (marks / total) * 100 : 0;
     if (percentage >= 80) return 'success';
     if (percentage >= 60) return 'warning';
     return 'error';

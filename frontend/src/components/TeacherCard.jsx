@@ -9,14 +9,11 @@ import {
   Typography, 
   Box, 
   Stack,
-  Chip,
-  IconButton,
-  Tooltip
+  Chip
 } from '@mui/material';
 import PhoneIcon from '@mui/icons-material/Phone';
 import EmailIcon from '@mui/icons-material/Email';
 import SchoolIcon from '@mui/icons-material/School';
-import PersonIcon from '@mui/icons-material/Person';
 import PhotoUpload from './PhotoUpload';
 import api from '../utils/api';
 import { useToast } from './Toast';
@@ -64,15 +61,6 @@ const getGroupedAssignmentsHelper = (teacherObj) => {
   return Object.entries(grouped).map(([subject, classes]) => ({ subject, classes: Array.from(classes).sort().join(', ') }));
 };
 
-const getClassRangeHelper = (classList) => {
-  if (!classList || classList.length === 0) return '';
-  const sorted = [...classList].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  const names = sorted.map(c => c.name);
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} - ${names[1]}`;
-  return `${names[0]} - ${names[names.length - 1]}`;
-};
-
 export default function TeacherCard({ teacher, onPhotoUploaded, onEdit, onDelete }) {
   const toast = useToast();
   const navigate = useNavigate();
@@ -98,12 +86,6 @@ export default function TeacherCard({ teacher, onPhotoUploaded, onEdit, onDelete
   const subjects = useMemo(() => getSubjectsHelper(teacher), [teacher]);
   const subjectList = useMemo(() => subjects.length > 0 ? subjects.map(s => s.name).join(', ') : 'No subjects', [subjects]);
   const groupedAssignments = useMemo(() => getGroupedAssignmentsHelper(teacher), [teacher]);
-  const classes = useMemo(() => {
-    if (teacher.classes && Array.isArray(teacher.classes)) return teacher.classes;
-    if (teacher.assignments && Array.isArray(teacher.assignments)) return teacher.assignments.map(a => a.classroom).filter(Boolean);
-    return [];
-  }, [teacher]);
-  const classRange = useMemo(() => getClassRangeHelper(classes), [classes]);
   const mobileNumber = teacher.mobile_number || teacher.phone_number || (teacher.user ? teacher.user.phone_number || teacher.user.mobile_number : null) || 'Not available';
   const email = teacher.email || (teacher.user ? teacher.user.email : null) || '';
   const qualification = teacher.educational_qualification || (teacher.user ? teacher.user.educational_qualification : null) || '';

@@ -50,21 +50,6 @@ export const AcademicsProvider = ({ children }) => {
   const refreshClassrooms = useCallback(async (schoolId, force = false) => {
     const sId = schoolId || schoolIdRef.current;
     if (!sId) return;
-    
-    // DISABLE generic cache for now as it lacks school_id filtering and causes cross-school data leakage
-    /*
-    if (!force) {
-      try {
-        const cached = await getCachedData('classrooms');
-        if (cached && cached.length > 0) {
-          setClassrooms(cached);
-          return cached;
-        }
-      } catch (e) {
-        console.warn('Failed to load cached classrooms:', e);
-      }
-    }
-    */
 
     try {
       const response = await scopedGet('/api/academics/classrooms/', sId, {}, { timeout: 30000 });
@@ -74,9 +59,13 @@ export const AcademicsProvider = ({ children }) => {
       if (sorted.length > 0) await cacheData('classrooms', sorted);
       return sorted;
     } catch (error) {
-      console.error('Error fetching classrooms:', error);
-      // const cached = await getCachedData('classrooms');
-      // if (cached && cached.length > 0) setClassrooms(cached);
+      console.warn('Network error fetching classrooms, falling back to local DB:', error);
+      const cached = await getCachedData('classrooms');
+      if (cached && cached.length > 0) {
+        const sorted = sortClassrooms(cached);
+        setClassrooms(sorted);
+        return sorted;
+      }
     }
   }, []);
 
@@ -84,20 +73,6 @@ export const AcademicsProvider = ({ children }) => {
   const refreshSections = useCallback(async (schoolId, force = false) => {
     const sId = schoolId || schoolIdRef.current;
     if (!sId) return;
-    
-    /*
-    if (!force) {
-      try {
-        const cached = await getCachedData('sections');
-        if (cached && cached.length > 0) {
-          setSections(cached);
-          return cached;
-        }
-      } catch (e) {
-        console.warn('Failed to load cached sections:', e);
-      }
-    }
-    */
 
     try {
       const response = await scopedGet('/api/academics/sections/', sId, {}, { timeout: 15000 });
@@ -106,9 +81,12 @@ export const AcademicsProvider = ({ children }) => {
       if (data.length > 0) await cacheData('sections', data);
       return data;
     } catch (error) {
-      console.error('Error fetching sections:', error);
-      // const cached = await getCachedData('sections');
-      // if (cached && cached.length > 0) setSections(cached);
+      console.warn('Network error fetching sections, falling back to local DB:', error);
+      const cached = await getCachedData('sections');
+      if (cached && cached.length > 0) {
+        setSections(cached);
+        return cached;
+      }
     }
   }, []);
 
@@ -139,14 +117,31 @@ export const AcademicsProvider = ({ children }) => {
         const res = await scopedGet('/api/academics/students/', sId, { page, page_size: pageSize }, { timeout: 60000 });
         const data = res.data;
         const arr = Array.isArray(data) ? data : (data?.results || []);
+
+        // Update local state early if we have some data
+        if (arr.length > 0) {
+          const isFirstPage = page === 1;
+          setStudents(prev => {
+            const combined = isFirstPage ? arr : [...prev, ...arr];
+            const seen = new Set();
+            return combined.filter(s => {
+              if (seen.has(s.id)) return false;
+              seen.add(s.id);
+              return true;
+            });
+          });
+        }
+
         allStudents = [...allStudents, ...arr];
         hasNext = Boolean(data?.next);
         page++;
         if (!arr.length) break;
       }
 
-      setStudents(allStudents);
-      if (allStudents.length > 0) await cacheData('students', allStudents);
+      if (allStudents.length > 0) {
+        setStudents(allStudents);
+        await cacheData('students', allStudents);
+      }
       return allStudents;
     } catch (error) {
       console.error('Error fetching students:', error);
@@ -194,8 +189,9 @@ export const AcademicsProvider = ({ children }) => {
     const sId = String(schoolId);
     if (isRefreshingRef.current) return;
 
+    const prevSchoolId = schoolIdRef.current;
     // IMPORTANT: Clear old data if switching school
-    if (currentSchoolId && String(currentSchoolId) !== sId) {
+    if (prevSchoolId && String(prevSchoolId) !== sId) {
         setClassrooms([]);
         setSections([]);
         setStudents([]);
@@ -204,7 +200,7 @@ export const AcademicsProvider = ({ children }) => {
     }
 
     // If not forced and we have data for the current school, skip
-    if (!force && students.length > 0 && String(currentSchoolId) === sId) {
+    if (!force && studentsCountRef.current > 0 && String(prevSchoolId) === sId) {
       return;
     }
 
@@ -276,6 +272,7 @@ export const AcademicsProvider = ({ children }) => {
     sections,
     students,
     subjects,
+    loading,
     currentSchoolId,
     refreshClassrooms,
     refreshSections,
@@ -290,7 +287,7 @@ export const AcademicsProvider = ({ children }) => {
     setSections,
     setStudents,
     setSubjects
-  }), [classrooms, sections, students, subjects, currentSchoolId, refreshClassrooms, refreshSections, refreshStudents, refreshSubjects, refreshAll, clearData, fetchStudentsScoped, updateStudentInContext, getStudentCountForSection]);
+  }), [classrooms, sections, students, subjects, loading, currentSchoolId, refreshClassrooms, refreshSections, refreshStudents, refreshSubjects, refreshAll, clearData, fetchStudentsScoped, updateStudentInContext, getStudentCountForSection]);
 
   return (
     <AcademicsContext.Provider value={value}>

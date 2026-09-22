@@ -43,4 +43,4 @@ const StatCardsSection = ({ stats, isTeacher, isSuperUser, role }) => {
   );
 };
 
-export default StatCardsSection;
+export default React.memo(StatCardsSection);

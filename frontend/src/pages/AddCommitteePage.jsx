@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import api from '../utils/api';
-import { Box, Paper, Typography, TextField, Stack, Button, Alert, Chip } from '@mui/material';
+import { Box, Paper, Typography, TextField, Stack, Button, Alert } from '@mui/material';
 import PhotoUpload from '../components/PhotoUpload';
 import { useToast } from '../components/Toast';
 import { transliterateBangla } from '../utils/helpers';
@@ -99,8 +99,6 @@ export default function AddCommitteePage() {
       setSaving(false);
     }
   };
-
-  const applySuggestion = (sug) => setForm(prev => ({ ...prev, username: sug }));
 
   return (
     <Box sx={{ p: 3 }}>

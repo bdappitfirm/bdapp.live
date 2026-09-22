@@ -117,14 +117,44 @@ class Result(models.Model):
         ]
     
     def save(self, *args, **kwargs):
-        # Handle None marks as 0 for calculations
-        wm = self.written_marks if self.written_marks is not None else Decimal('0')
-        mm = self.mcq_marks if self.mcq_marks is not None else Decimal('0')
-        pm = self.practical_marks if self.practical_marks is not None else Decimal('0')
+        def to_dec(val):
+            if val is None or str(val).strip() == '':
+                return Decimal('0')
+            try:
+                return Decimal(str(val))
+            except Exception:
+                return Decimal('0')
+
+        wm = to_dec(self.written_marks)
+        mm = to_dec(self.mcq_marks)
+        pm = to_dec(self.practical_marks)
 
         self.total_obtained = wm + mm + pm
         
         group = _class_group(getattr(self.examination.classroom, "name", None))
+
+        if group == 'primary':
+            wm_max = 50 if any(w in (self.subject.name or '').lower() for w in ['অংকন', 'drawing', 'চিত্রাংকন']) else 100
+            pass_threshold = Decimal(str(round(float(wm_max) * 0.33)))
+            self.is_passed = wm >= pass_threshold
+            percentage = (float(wm) / float(wm_max)) * 100 if wm_max > 0 else 0
+
+            if percentage >= 80: self.grade = 'A+'; self.gpa = Decimal('5.00')
+            elif percentage >= 70: self.grade = 'A'; self.gpa = Decimal('4.00')
+            elif percentage >= 60: self.grade = 'A-'; self.gpa = Decimal('3.50')
+            elif percentage >= 50: self.grade = 'B'; self.gpa = Decimal('3.00')
+            elif percentage >= 40: self.grade = 'C'; self.gpa = Decimal('2.00')
+            elif percentage >= 33: self.grade = 'D'; self.gpa = Decimal('1.00')
+            else: self.grade = 'F'; self.gpa = Decimal('0.00')
+
+            if not self.is_passed:
+                self.grade = 'F'
+                self.gpa = Decimal('0.00')
+
+            self.total_obtained = wm + mm + pm
+            super().save(*args, **kwargs)
+            return
+
         # Resolve student_group for combined slash subject names (9-10) to pick correct maxima
         _sg = None
         try:

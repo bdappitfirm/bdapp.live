@@ -131,27 +131,31 @@ class StudentProfile(models.Model):
         if self.school_id and names_changed and not getattr(self, '_skip_parent_sync', False):
             def get_or_create_parent_user(name, role_suffix, gender):
                 if not name or not str(name).strip(): return None
-                name_clean = ''.join(c for c in str(name).strip() if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
-                phone = getattr(self.user, 'phone_number', None)
-                phone_clean = re.sub(r'\D', '', str(phone)) if phone else None
+                try:
+                    name_clean = ''.join(c for c in str(name).strip() if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+                    phone = getattr(self.user, 'phone_number', None)
+                    phone_clean = re.sub(r'\D', '', str(phone)) if phone else None
 
-                parent_user = None
-                if phone_clean and len(phone_clean) >= 10:
-                    parent_user = User.objects.filter(models.Q(phone_number__endswith=phone_clean[-10:]) | models.Q(username__endswith=phone_clean[-10:])).filter(profile__school_id=self.school_id, profile__role='parent', username__icontains=role_suffix).first()
+                    parent_user = None
+                    if phone_clean and len(phone_clean) >= 10:
+                        parent_user = User.objects.filter(models.Q(phone_number__endswith=phone_clean[-10:]) | models.Q(username__endswith=phone_clean[-10:])).filter(profile__school_id=self.school_id, profile__role='parent', username__icontains=role_suffix).first()
 
-                if not parent_user:
-                    name_slug = re.sub(r'[^a-z0-9]', '', name_clean.lower().replace(' ', '')) or "p" + hashlib.md5(name_clean.encode()).hexdigest()[:8]
-                    unique_username = f"p_{self.school_id}_{name_slug}_{role_suffix}"
-                    final_username = unique_username
-                    if User.objects.filter(username__iexact=final_username).exists():
-                         final_username = f"{unique_username}_{hashlib.md5(str(timezone.now()).encode()).hexdigest()[:4]}"
-                    parent_user = User(username=final_username, first_name=name_clean.split()[0], last_name=' '.join(name_clean.split()[1:]), phone_number=phone)
-                    parent_user.set_unusable_password()
-                    parent_user.save()
+                    if not parent_user:
+                        name_slug = re.sub(r'[^a-z0-9]', '', name_clean.lower().replace(' ', ''))[:30] or "p" + hashlib.md5(name_clean.encode()).hexdigest()[:8]
+                        unique_username = f"p_{self.school_id}_{name_slug}_{role_suffix}"[:140]
+                        final_username = unique_username
+                        if User.objects.filter(username__iexact=final_username).exists():
+                            final_username = f"{unique_username}_{hashlib.md5(str(timezone.now()).encode()).hexdigest()[:4]}"[:150]
+                        parent_user = User(username=final_username, first_name=name_clean.split()[0][:150], last_name=' '.join(name_clean.split()[1:])[:150], phone_number=phone)
+                        parent_user.set_unusable_password()
+                        parent_user.save()
 
-                from users.models import Profile
-                Profile.objects.update_or_create(user=parent_user, defaults={'school_id': self.school_id, 'role': 'parent', 'gender': gender})
-                return parent_user
+                    from users.models import Profile
+                    Profile.objects.update_or_create(user=parent_user, defaults={'school_id': self.school_id, 'role': 'parent', 'gender': gender})
+                    return parent_user
+                except Exception as pe:
+                    print("Parent user sync error:", pe)
+                    return None
 
             if self.father_name: self.father = get_or_create_parent_user(self.father_name, 'father', 'male')
             if self.mother_name: self.mother = get_or_create_parent_user(self.mother_name, 'mother', 'female')

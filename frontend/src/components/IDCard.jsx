@@ -69,14 +69,6 @@ const getNumericSection = (sectionName) => {
   return '01';
 };
 
-// Helper function to process photo URL
-const processPhotoUrl = (url) => {
-  if (!url) return '';
-  if (url.startsWith('http')) return url;
-  const base = String((api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : ''))).replace(/\/+$/,'');
-  return `${base}${url.startsWith('/') ? url : '/' + url}`;
-};
-
 export default function IDCard({ type = 'student', data, school, classrooms = [], sections = [], overridePhone, signatureUrl: propSignatureUrl }) {
   // Resolve classroom object
   const getClassroom = () => {
@@ -294,9 +286,6 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
   // Generate QR code data - simpler format for easier scanning
   // Using a simpler format than JSON to make QR smaller and more reliable
   const qrData = `STU|${data.id}|${customIdNumber}|${encodeURIComponent(name)}|${school?.ein || school?.id}`;
-
-  const CARD_WIDTH = 250;
-  const CARD_HEIGHT = 386;
 
   return (
     <Box className="id-card-wrapper" sx={{ position: 'relative' }}>

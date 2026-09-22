@@ -21,7 +21,6 @@ import {
   Stack
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../utils/api';
 import { scopedGet } from '../utils/schoolApi';
 import { useSchool } from '../context/SchoolContext';
 import PrintIcon from '@mui/icons-material/Print';
@@ -38,12 +37,53 @@ const EXAM_TYPE_LABELS = {
   'final': 'চূড়ান্ত পরীক্ষা'
 };
 
+const normalizeName = (s) => String(s || '').replace(/\u200c|\u200d/g, '').replace(/\s*\(.*?\)\s*/g, '').replace(/\s+/g, ' ').trim();
+
+const canonicalSubjectName = (s) => {
+  const n = normalizeName(s).toLowerCase();
+  if (!n) return '';
+  if (/(বাংলা|bangla|bengali).*(১ম|1st|first|i\b)/.test(n)) return 'bangla_1st';
+  if (/(বাংলা|bangla|bengali).*(২য়|২য়|2nd|second|ii\b)/.test(n)) return 'bangla_2nd';
+  if (/(english|ইংরেজি|ইংরেজী).*(১ম|1st|first|i\b)/.test(n)) return 'english_1st';
+  if (/(english|ইংরেজি|ইংরেজী).*(২য়|২য়|2nd|second|ii\b)/.test(n)) return 'english_2nd';
+  if (/(গণিত|গনিত|mathematics|math|general math)/.test(n)) return 'math';
+  if (/(ict|আইসিটি|তথ্য\s*ও\s*(যোগাযোগ|যোগযোগ)\s*প্রযুক্তি)/i.test(n)) return 'ict';
+  if (/(বাংলাদেশ\s*ও\s*বিশ্বপরিচয়|বাংলাদেশ\s*ও\s*বিশ্বপরিয়|bangladesh\s*and\s*global\s*studies|bgs)/i.test(n)) return 'bgs';
+  if (/(বিজ্ঞান|science)/i.test(n)) return 'science';
+  if (/(ধর্ম|religion|islam|hindu|buddhist|christian)/i.test(n)) return 'religion';
+  if (/(কৃষি|agriculture)/i.test(n)) return 'agriculture';
+  if (/(শারীরিক|physical)/i.test(n)) return 'physical_education';
+  if (/(ব্যবসায়|business)/i.test(n)) return 'business_studies';
+  if (/(পৌরনীতি|civics)/i.test(n)) return 'civics';
+  if (/(অর্থনীতি|economics)/i.test(n)) return 'economics';
+  if (/(ভূগোল|geography)/i.test(n)) return 'geography';
+  if (/(ইতিহাস|history)/i.test(n)) return 'history';
+  if (/(পদার্থ|physics)/i.test(n)) return 'physics';
+  if (/(রসায়ন|রসায়ন|chemistry)/i.test(n)) return 'chemistry';
+  if (/(জীববিজ্ঞান|biology)/i.test(n)) return 'biology';
+  if (/(উচ্চতর\s*গণিত|উচ্চতর\s*গনিত|higher\s*math)/i.test(n)) return 'higher_math';
+  if (/(হিসাব\s*বিজ্ঞান|accounting)/i.test(n)) return 'accounting';
+  if (/(ফিন্যান্স|finance)/i.test(n)) return 'finance';
+  return n;
+};
+
+const labelForCanonical = (can) => {
+  const dict = {
+    'bangla_1st': 'বাংলা ১ম', 'bangla_2nd': 'বাংলা ২য়', 'bangla': 'বাংলা', 'bangla_combined': 'বাংলা ১+২',
+    'english_1st': 'ইংরেজি ১ম', 'english_2nd': 'ইংরেজি ২য়', 'english': 'ইংরেজি', 'english_combined': 'ইংরেজি ১+২',
+    'math': 'গণিত', 'ict': 'আইসিটি', 'bgs': 'বিজিএস', 'science': 'বিজ্ঞান', 'religion': 'ধর্ম', 'agriculture': 'কৃষি',
+    'physical_education': 'শারীরিক শিক্ষা', 'business_entrepreneurship': 'ব্যবসায় উদ্যোগ', 'business_studies': 'ব্যবসায় শিক্ষা',
+    'civics': 'পৌরনীতি', 'economics': 'অর্থনীতি', 'geography': 'ভূগোল', 'history': 'ইতিহাস', 'physics': 'পদার্থ',
+    'chemistry': 'রসায়ন', 'biology': 'জীববিজ্ঞান', 'higher_math': 'উচ্চতর গণিত', 'accounting': 'হিসাব বিজ্ঞান', 'finance': 'ফিন্যান্স'
+  };
+  return dict[can] || can;
+};
+
 const RankListPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { schoolId: contextSchoolId } = useSchool();
   const schoolId = contextSchoolId || id;
-  const tableRef = useRef(null);
   const printRef = useRef(null);
 
   const [examinations, setExaminations] = useState([]);
@@ -58,7 +98,6 @@ const RankListPage = () => {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [resultsByStudent, setResultsByStudent] = useState(new Map());
-  const [sortBy, setSortBy] = useState('current');
   const [activeStep, setActiveStep] = useState(0);
 
   const guidanceSteps = [
@@ -78,7 +117,7 @@ const RankListPage = () => {
   useEffect(() => {
     document.title = "Rank List (মেধাক্রম)";
     if (!schoolId) return;
-    scopedGet('/api/results/examinations/', schoolId)
+    scopedGet('/api/results/examinations/', schoolId, { page_size: 100 })
       .then(res => {
         const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
         setExaminations(data);
@@ -258,15 +297,21 @@ const RankListPage = () => {
             for (const sectionItems of bySection.values()) {
                 // 2. Sort within section
                 sectionItems.sort((a, b) => {
-                    // Priority 1: Failed Subjects Count (Ascending)
-                    if (a.failed_subjects_count !== b.failed_subjects_count) {
-                        return a.failed_subjects_count - b.failed_subjects_count;
+                    if (a.is_absent !== b.is_absent) return a.is_absent ? 1 : -1;
+                    const aPassed = (a.failed_subjects_count === 0);
+                    const bPassed = (b.failed_subjects_count === 0);
+                    if (aPassed !== bPassed) return aPassed ? -1 : 1;
+
+                    if (aPassed && bPassed) {
+                        if (Math.abs((b.cgpa || 0) - (a.cgpa || 0)) > 0.0001) return (b.cgpa || 0) - (a.cgpa || 0);
+                        if (Math.abs((b.total_marks_obtained || 0) - (a.total_marks_obtained || 0)) > 0.01) return (b.total_marks_obtained || 0) - (a.total_marks_obtained || 0);
+                        const ar = parseInt(String(a.student?.roll_number || '').replace(/\D/g, ''), 10) || 0;
+                        const br = parseInt(String(b.student?.roll_number || '').replace(/\D/g, ''), 10) || 0;
+                        return ar - br;
                     }
-                    // Priority 2: Total Marks Obtained (Descending)
-                    if (b.total_marks_obtained !== a.total_marks_obtained) {
-                        return b.total_marks_obtained - a.total_marks_obtained;
-                    }
-                    // Priority 3: Original Roll (Ascending)
+
+                    if (a.failed_subjects_count !== b.failed_subjects_count) return a.failed_subjects_count - b.failed_subjects_count;
+                    if (Math.abs((b.total_marks_obtained || 0) - (a.total_marks_obtained || 0)) > 0.01) return (b.total_marks_obtained || 0) - (a.total_marks_obtained || 0);
                     const ar = parseInt(String(a.student?.roll_number || '').replace(/\D/g, ''), 10) || 0;
                     const br = parseInt(String(b.student?.roll_number || '').replace(/\D/g, ''), 10) || 0;
                     return ar - br;
@@ -294,48 +339,6 @@ const RankListPage = () => {
             setLoading(false);
         }
     })();
-  };
-
-  const normalizeName = (s) => String(s || '').replace(/\u200c|\u200d/g, '').replace(/\s*\(.*?\)\s*/g, '').replace(/\s+/g, ' ').trim();
-
-  const canonicalSubjectName = (s) => {
-    const n = normalizeName(s).toLowerCase();
-    if (!n) return '';
-    if (/(বাংলা|bangla|bengali).*(১ম|1st|first|i\b)/.test(n)) return 'bangla_1st';
-    if (/(বাংলা|bangla|bengali).*(২য়|২য়|2nd|second|ii\b)/.test(n)) return 'bangla_2nd';
-    if (/(english|ইংরেজি|ইংরেজী).*(১ম|1st|first|i\b)/.test(n)) return 'english_1st';
-    if (/(english|ইংরেজি|ইংরেজী).*(২য়|২য়|2nd|second|ii\b)/.test(n)) return 'english_2nd';
-    if (/(গণিত|গনিত|mathematics|math|general math)/.test(n)) return 'math';
-    if (/(ict|আইসিটি|তথ্য\s*ও\s*(যোগাযোগ|যোগযোগ)\s*প্রযুক্তি)/i.test(n)) return 'ict';
-    if (/(বাংলাদেশ\s*ও\s*বিশ্বপরিচয়|বাংলাদেশ\s*ও\s*বিশ্বপরিয়|bangladesh\s*and\s*global\s*studies|bgs)/i.test(n)) return 'bgs';
-    if (/(বিজ্ঞান|science)/i.test(n)) return 'science';
-    if (/(ধর্ম|religion|islam|hindu|buddhist|christian)/i.test(n)) return 'religion';
-    if (/(কৃষি|agriculture)/i.test(n)) return 'agriculture';
-    if (/(শারীরিক|physical)/i.test(n)) return 'physical_education';
-    if (/(ব্যবসায়|business)/i.test(n)) return 'business_studies';
-    if (/(পৌরনীতি|civics)/i.test(n)) return 'civics';
-    if (/(অর্থনীতি|economics)/i.test(n)) return 'economics';
-    if (/(ভূগোল|geography)/i.test(n)) return 'geography';
-    if (/(ইতিহাস|history)/i.test(n)) return 'history';
-    if (/(পদার্থ|physics)/i.test(n)) return 'physics';
-    if (/(রসায়ন|রসায়ন|chemistry)/i.test(n)) return 'chemistry';
-    if (/(জীববিজ্ঞান|biology)/i.test(n)) return 'biology';
-    if (/(উচ্চতর\s*গণিত|উচ্চতর\s*গনিত|higher\s*math)/i.test(n)) return 'higher_math';
-    if (/(হিসাব\s*বিজ্ঞান|accounting)/i.test(n)) return 'accounting';
-    if (/(ফিন্যান্স|finance)/i.test(n)) return 'finance';
-    return n;
-  };
-
-  const labelForCanonical = (can) => {
-    const dict = {
-      'bangla_1st': 'বাংলা ১ম', 'bangla_2nd': 'বাংলা ২য়', 'bangla': 'বাংলা', 'bangla_combined': 'বাংলা ১+২',
-      'english_1st': 'ইংরেজি ১ম', 'english_2nd': 'ইংরেজি ২য়', 'english': 'ইংরেজি', 'english_combined': 'ইংরেজি ১+২',
-      'math': 'গণিত', 'ict': 'আইসিটি', 'bgs': 'বিজিএস', 'science': 'বিজ্ঞান', 'religion': 'ধর্ম', 'agriculture': 'কৃষি',
-      'physical_education': 'শারীরিক শিক্ষা', 'business_entrepreneurship': 'ব্যবসায় উদ্যোগ', 'business_studies': 'ব্যবসায় শিক্ষা',
-      'civics': 'পৌরনীতি', 'economics': 'অর্থনীতি', 'geography': 'ভূগোল', 'history': 'ইতিহাস', 'physics': 'পদার্থ',
-      'chemistry': 'রসায়ন', 'biology': 'জীববিজ্ঞান', 'higher_math': 'উচ্চতর গণিত', 'accounting': 'হিসাব বিজ্ঞান', 'finance': 'ফিন্যান্স'
-    };
-    return dict[can] || can;
   };
 
   const isNineTen = React.useMemo(() => {

@@ -19,15 +19,11 @@ import {
   IconButton,
   Paper,
   Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Tooltip,
   InputAdornment,
   Alert,
   Fade,
-  Zoom,
-  Badge
+  Zoom
 } from '@mui/material';
 import ProtectedButton from '../components/ProtectedButton';
 import AddIcon from '@mui/icons-material/Add';
@@ -38,12 +34,12 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import CloseIcon from '@mui/icons-material/Close';
 import SchoolIcon from '@mui/icons-material/School';
 import ClassIcon from '@mui/icons-material/Class';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PeopleIcon from '@mui/icons-material/People';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EmptyState from '../components/EmptyState';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
+import { getClassOrder } from '../utils/classroomUtils';
 
 export default function ClassroomsPage() {
   const { id } = useParams();
@@ -54,9 +50,7 @@ export default function ClassroomsPage() {
     sections, 
     students, 
     loading, 
-    refreshClassrooms, 
-    refreshSections, 
-    refreshAll 
+    refreshAll
   } = useAcademics();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,7 +82,7 @@ export default function ClassroomsPage() {
       refreshAll(id, false);
       setInitialLoadComplete(true);
     }
-  }, [id]); // Strictly only on ID change
+  }, [id, initialLoadComplete, refreshAll]); // Strictly only on ID change
 
   // Debug log and set initial load complete
   useEffect(() => {
@@ -146,7 +140,7 @@ export default function ClassroomsPage() {
     try {
       if (editMode && selectedItem) {
         // Ensure we have the selectedItem and its ID before updating
-        const response = await api.put(`/api/academics/classrooms/${selectedItem.id}/`, {
+        await api.put(`/api/academics/classrooms/${selectedItem.id}/`, {
           ...formData,      // Apply updates
           school_id: id     // Ensure school ID is included
         });
@@ -297,73 +291,6 @@ export default function ClassroomsPage() {
       const stClassId = st.classroom?.id ?? st.classroom;
       return String(stClassId) === String(classroomId) ? count + 1 : count;
     }, 0);
-  };
-
-  // Bangla number words mapping for sorting
-  const banglaNumberMap = {
-    'প্লে': -3,
-    'Play': -3,
-    'play': -3,
-    'নার্সারি': -2,
-    'Nursery': -2,
-    'nursery': -2,
-    'কেজি': -1,
-    'KG': -1,
-    'kg': -1,
-    'কে.জি': -1,
-    'কে.জি.': -1,
-    '১ম': 1,
-    '২য়': 2,
-    '৩য়': 3,
-    '৪র্থ': 4,
-    '৫ম': 5,
-    '৬ষ্ঠ': 6,
-    '৭ম': 7,
-    '৮ম': 8,
-    '৯ম': 9,
-    '১০ম': 10,
-    'প্রথম': 1,
-    'দ্বিতীয়': 2,
-    'দ্বিতীয়': 2,
-    'তৃতীয়': 3,
-    'তৃতীয়': 3,
-    'চতুর্থ': 4,
-    'পঞ্চম': 5,
-    'ষষ্ঠ': 6,
-    'সপ্তম': 7,
-    'অষ্টম': 8,
-    'নবম': 9,
-    'দশম': 10,
-    'এসএসসি': 10.5,
-    'এস.এস.সি': 10.5,
-    'একাদশ': 11,
-    'দ্বাদশ': 12
-  };
-
-  const getClassOrder = (className) => {
-    if (!className) return 999;
-    const lowerName = String(className).toLowerCase();
-    
-    // Check for specific keywords first (Play, Nursery, KG)
-    if (lowerName.includes('play') || lowerName.includes('প্লে')) return -3;
-    if (lowerName.includes('nursery') || lowerName.includes('নার্সারি') || lowerName.includes('শিশু')) return -2;
-    if (lowerName.includes('kg') || lowerName.includes('কেজি') || lowerName.includes('কে.জি')) return -1;
-    
-    // Check for Bangla numbers
-    for (const [bangla, num] of Object.entries(banglaNumberMap)) {
-      if (String(className).includes(bangla)) {
-        return num;
-      }
-    }
-    
-    // Check for English numbers (Class 6, Class 7, etc.)
-    const match = String(className).match(/\d+/);
-    if (match) {
-      return parseInt(match[0]);
-    }
-    
-    // Default: return a high number so it goes to the end
-    return 999;
   };
 
   const filtered = useMemo(() => {

@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 import unicodedata
 from schools.models import School
-from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, ActivityLog
+from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, ActivityLog, SalaryStructure, PayrollRecord
 from academics.models import StudentProfile, ClassRoom, Section, Subject
 
 User = get_user_model()
@@ -232,6 +232,26 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id']
 
+    def to_internal_value(self, data):
+        if hasattr(data, 'dict') and callable(getattr(data, 'dict')):
+            mutable_data = data.dict()
+        elif hasattr(data, 'copy') and callable(getattr(data, 'copy')):
+            mutable_data = data.copy()
+        else:
+            mutable_data = dict(data)
+
+        empty_to_none_fields = [
+            'joining_date', 'birth_date', 'assigned_subject',
+            'class_teacher_classroom', 'class_teacher_section',
+            'school', 'school_id', 'blood_group', 'gender',
+            'income', 'user', 'user_id'
+        ]
+        for field in empty_to_none_fields:
+            if field in mutable_data and (mutable_data[field] == '' or mutable_data[field] is None or str(mutable_data[field]).strip() == ''):
+                mutable_data[field] = None
+
+        return super().to_internal_value(mutable_data)
+
     def _ensure_user(self, validated_data):
         user = validated_data.get('user')
         username = validated_data.get('username')
@@ -247,10 +267,11 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             return user
         # auto-generate if missing
         if not username:
-            # Normalize name pieces to build a safe base
-            first_name = unicodedata.normalize('NFKC', (first_name or '').strip())
-            last_name = unicodedata.normalize('NFKC', (last_name or '').strip())
-            base = (first_name or 'user').lower().replace(' ', '') or 'user'
+            import re
+            fn_en = (first_name_en or '').strip()
+            fn_bn = (first_name or '').strip()
+            raw_base = fn_en or re.sub(r'[^a-zA-Z0-9]', '', fn_bn) or 'user'
+            base = re.sub(r'[^a-z0-9]', '', raw_base.lower()) or 'user'
             suffix = str(User.objects.count() + 1)
             username = f"{base}{suffix}"
             orig = username
@@ -259,8 +280,8 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
                 idx += 1
                 username = f"{orig}{idx}"
         else:
-            # Normalize provided username
-            username = unicodedata.normalize('NFKC', username).strip()
+            import re
+            username = re.sub(r'[^a-zA-Z0-9_@+.-]', '', str(username)).strip() or f"user{User.objects.count() + 1}"
         # Final guard before create
         if User.objects.filter(username=username).exists() or User.objects.filter(username__iexact=username).exists():
             raise serializers.ValidationError({'username': 'This username is already taken.'})
@@ -579,3 +600,50 @@ class AssistantMemorySerializer(serializers.ModelSerializer):
         model = AssistantMemory
         fields = ['id', 'school', 'key', 'data', 'updated_at']
         read_only_fields = ['id', 'updated_at']
+
+
+class SalaryStructureSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.SerializerMethodField()
+    gross_salary = serializers.ReadOnlyField(source='get_gross_salary')
+    net_salary = serializers.ReadOnlyField(source='get_net_salary')
+
+    class Meta:
+        model = SalaryStructure
+        fields = [
+            'id', 'school', 'teacher', 'teacher_name', 'basic_salary', 'house_rent',
+            'medical_allowance', 'transport_allowance', 'other_allowance',
+            'provident_fund', 'tax_deduction', 'gross_salary', 'net_salary',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_teacher_name(self, obj):
+        u = obj.teacher
+        name = f"{u.first_name} {u.last_name}".strip()
+        return name or u.username
+
+
+class PayrollRecordSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.SerializerMethodField()
+    teacher_designation = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PayrollRecord
+        fields = [
+            'id', 'school', 'teacher', 'teacher_name', 'teacher_designation',
+            'month', 'year', 'basic_salary', 'allowances', 'bonus', 'arrear',
+            'deductions', 'gross_salary', 'net_salary', 'status',
+            'payment_method', 'payment_date', 'payment_reference', 'note',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_teacher_name(self, obj):
+        u = obj.teacher
+        name = f"{u.first_name} {u.last_name}".strip()
+        return name or u.username
+
+    def get_teacher_designation(self, obj):
+        prof = getattr(obj.teacher, 'profile', None)
+        return prof.designation if prof else ''
+

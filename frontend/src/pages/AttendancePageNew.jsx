@@ -18,7 +18,7 @@ import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { useSchool } from '../context/SchoolContext';
 import dayjs from 'dayjs';
-import { queueRequest, db, getCachedApiResponse } from '../utils/offlineDb';
+import { db } from '../utils/offlineDb';
 import { getMediaUrl } from '../utils/media';
 import InputGuidance from '../components/InputGuidance';
 
@@ -54,6 +54,24 @@ const playBeep = (freq = 800, duration = 200) => {
         console.warn('Audio feedback failed:', e);
     }
 };
+
+// MEMOIZED ROW FOR INSTANT SMOOTH TOGGLE ON MOBILE
+const MemoizedStudentAttendanceRow = React.memo(({ student, isPresent, onToggle }) => {
+  const name = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || '-';
+  return (
+    <TableRow sx={{ bgcolor: isPresent ? '#e8f5e9' : 'inherit', transition: 'background 0.15s ease' }}>
+      <TableCell sx={{ fontWeight: isPresent ? 'bold' : 'normal', py: 1 }}>{student.roll_number || '-'}</TableCell>
+      <TableCell sx={{ py: 1 }}>{name}</TableCell>
+      <TableCell align="center" sx={{ py: 1 }}>
+        <Checkbox
+          checked={isPresent}
+          color="success"
+          onChange={() => onToggle(student.id)}
+        />
+      </TableCell>
+    </TableRow>
+  );
+});
 
 export default function AttendancePageNew() {
   const { id } = useParams(); // school ID
@@ -209,6 +227,11 @@ export default function AttendancePageNew() {
 
       const rawStudents = Array.isArray(studentRes.data) ? studentRes.data : (studentRes.data?.results || []);
 
+      // Cache students locally
+      if (rawStudents.length > 0) {
+        try { await db.students.bulkPut(rawStudents); } catch (e) {}
+      }
+
       // 2. Fetch Attendance Records for the selected date
       let records = [];
       try {
@@ -222,10 +245,26 @@ export default function AttendancePageNew() {
             }
         });
         records = Array.isArray(attendanceRes.data) ? attendanceRes.data : (attendanceRes.data?.results || []);
+
+        if (records.length > 0) {
+          try {
+            const cacheRecords = records.map(r => ({
+              id: r.id || `${r.student}_${r.date}`,
+              student: r.student,
+              date: r.date,
+              present: r.present,
+              classroom_id: selectedClassroom,
+              section_id: selectedSection
+            }));
+            await db.attendance.bulkPut(cacheRecords);
+          } catch (e) {}
+        }
       } catch (attErr) {
-        console.error('Attendance records fetch failed. Status:', attErr.response?.status);
-        console.error('Error Response Data:', attErr.response?.data);
-        toast.error('হাজিরা রেকর্ড লোড করা যায়নি: ' + (attErr.response?.data?.detail || attErr.message || 'Server Error'));
+        console.warn('Attendance records network fetch failed, using local DB:', attErr);
+        try {
+          const cachedRecords = await db.attendance.toArray();
+          records = cachedRecords.filter(r => String(r.date) === String(date));
+        } catch (cErr) {}
       }
 
       const attMap = {};
@@ -269,12 +308,56 @@ export default function AttendancePageNew() {
       setStudents(sortedStudents);
       setAttendance(initialAtt);
     } catch (err) {
-        console.error('Load students failed:', err);
+        console.warn('Network load students failed, trying offline fallback:', err);
+        try {
+          let cachedStudents = await db.students.toArray();
+          if (selectedClassroom) {
+            cachedStudents = cachedStudents.filter(s => String(s.classroom_id || s.classroom?.id || s.classroom) === String(selectedClassroom));
+          }
+          if (selectedSection) {
+            cachedStudents = cachedStudents.filter(s => String(s.section_id || s.section?.id || s.section) === String(selectedSection));
+          }
+          let cachedAttendance = await db.attendance.toArray();
+          cachedAttendance = cachedAttendance.filter(r => String(r.date) === String(date));
+          const attMap = {};
+          cachedAttendance.forEach(r => { if (r.student) attMap[r.student] = r.present; });
+
+          // Also merge syncQueue
+          const allQueued = await db.syncQueue.toArray();
+          allQueued.forEach(item => {
+            if (item.url.includes('/api/attendance/records/bulk_save/') && item.body?.records) {
+              item.body.records.forEach(rec => {
+                if (rec.date === date && rec.student) attMap[rec.student] = rec.present;
+              });
+            }
+          });
+
+          if (cachedStudents.length > 0) {
+            const initialAtt = {};
+            cachedStudents.forEach(s => { initialAtt[s.id] = attMap[s.id] || false; });
+            const sortedStudents = [...cachedStudents].sort((a, b) => {
+              const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+              const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+              if (!isNaN(ar) && !isNaN(br) && ar !== br) return ar - br;
+              return String(a?.roll_number || '').localeCompare(String(b?.roll_number || ''), undefined, { numeric: true });
+            });
+            setStudents(sortedStudents);
+            setAttendance(initialAtt);
+            toast.info('অফলাইন মোড: ক্যাশ থেকে স্টুডেন্ট ও হাজিরা লোড হয়েছে');
+            return;
+          }
+        } catch (offlineErr) {
+          console.error('Offline fallback failed:', offlineErr);
+        }
         toast.error('শিক্ষার্থী তালিকা লোড করা যায়নি');
     } finally {
         setLoading(false);
     }
   }, [id, selectedClassroom, selectedSection, date, toast]);
+
+  const toggleAttendance = useCallback((studentId) => {
+    setAttendance(prev => ({ ...prev, [studentId]: !prev[studentId] }));
+  }, []);
 
   useEffect(() => { loadStudents(); }, [loadStudents]);
 
@@ -367,7 +450,6 @@ export default function AttendancePageNew() {
       const startScanner = async () => {
         try {
           await new Promise(resolve => setTimeout(resolve, 500));
-          const devices = await Html5Qrcode.getCameras().catch(() => []);
           html5QrCode = new Html5Qrcode("qr-reader");
           qrScannerRef.current = html5QrCode;
           const config = { fps: 25, qrbox: { width: 300, height: 300 }, aspectRatio: 1.0 };
@@ -421,10 +503,26 @@ export default function AttendancePageNew() {
         session: dayjs(date).format('YYYY')
       }));
 
+      // 1. Immediately cache into IndexedDB locally for offline safety
+      try {
+        const cacheRecords = records.map(r => ({
+          id: `${r.student}_${r.date}`,
+          student: r.student,
+          date: r.date,
+          present: r.present,
+          classroom_id: selectedClassroom,
+          section_id: selectedSection
+        }));
+        await db.attendance.bulkPut(cacheRecords);
+      } catch (cacheErr) {
+        console.warn('Failed to store attendance locally:', cacheErr);
+      }
+
+      // 2. Post to backend (or syncQueue if offline)
       const response = await scopedPost('/api/attendance/records/bulk_save/', id, { records });
 
       if (response.data?.offline) {
-        toast.success('অফলাইন মোড: হাজিরা সংরক্ষিত হয়েছে এবং অনলাইনে ফিরলে সিঙ্ক হবে।');
+        toast.success('অফলাইন মোড: হাজিরা সংরক্ষিত হয়েছে এবং অনলাইনে ফিরলে স্বয়ংক্রিয় সিঙ্ক হবে।');
       } else {
         toast.success('সফলভাবে সংরক্ষিত হয়েছে');
       }
@@ -519,17 +617,12 @@ export default function AttendancePageNew() {
                 </TableHead>
                 <TableBody>
                     {students.map(s => (
-                    <TableRow key={s.id} sx={{ bgcolor: attendance[s.id] ? '#e8f5e9' : 'inherit', transition: 'background 0.3s' }}>
-                        <TableCell sx={{ fontWeight: attendance[s.id] ? 'bold' : 'normal' }}>{s.roll_number}</TableCell>
-                        <TableCell>{s.user?.first_name} {s.user?.last_name}</TableCell>
-                        <TableCell align="center">
-                            <Checkbox
-                                checked={!!attendance[s.id]}
-                                color="success"
-                                onChange={() => setAttendance(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
-                            />
-                        </TableCell>
-                    </TableRow>
+                      <MemoizedStudentAttendanceRow
+                        key={s.id}
+                        student={s}
+                        isPresent={!!attendance[s.id]}
+                        onToggle={toggleAttendance}
+                      />
                     ))}
                 </TableBody>
                 </Table>

@@ -1,4 +1,3 @@
-
 const banglaNumberMap = {
   'প্লে': -3, 'Play': -3, 'play': -3,
   'নার্সারি': -2, 'Nursery': -2, 'nursery': -2, 'শিশু': -2,
@@ -26,4 +25,9 @@ export const getClassOrder = (className) => {
 export const sortClassrooms = (classrooms) => {
   if (!Array.isArray(classrooms)) return [];
   return [...classrooms].sort((a, b) => getClassOrder(a.name) - getClassOrder(b.name));
+};
+
+export const isSecondaryOrHigherClass = (className) => {
+  if (!className) return false;
+  return /নবম|দশম|একাদশ|দ্বাদশ|এসএসসি|এইচএসসি|দাখিল|আলিম|এস[\s.]*?এস[\s.]*?সি|এইচ[\s.]*?এইচ[\s.]*?সি|পরীক্ষার্থী|\b(nine|ten|eleven|twelve|ssc|hsc|dakhil|alim|ix|x|xi|xii|9|10|11|12)\b/i.test(String(className)) || /s\.?\s*?s\.?\s*?c/i.test(String(className));
 };

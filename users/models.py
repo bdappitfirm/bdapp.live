@@ -310,3 +310,64 @@ class SupportCall(models.Model):
             models.Index(fields=['status', 'created_at'], name='users_supcall_stat_cre_idx'),
             models.Index(fields=['requester', 'status'], name='users_supcall_req_stat_idx'),
         ]
+
+
+class SalaryStructure(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='salary_structures')
+    teacher = models.OneToOneField(User, on_delete=models.CASCADE, related_name='salary_structure')
+    basic_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    house_rent = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    medical_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    transport_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    other_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    provident_fund = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_deduction = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def get_gross_salary(self):
+        return (self.basic_salary + self.house_rent + self.medical_allowance +
+                self.transport_allowance + self.other_allowance)
+
+    def get_total_deductions(self):
+        return self.provident_fund + self.tax_deduction
+
+    def get_net_salary(self):
+        return self.get_gross_salary() - self.get_total_deductions()
+
+    def __str__(self):
+        return f"{self.teacher.username} - Gross: {self.get_gross_salary()}"
+
+
+class PayrollRecord(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('paid', 'Paid'),
+    ]
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='payroll_records')
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payroll_records')
+    month = models.PositiveIntegerField()
+    year = models.PositiveIntegerField()
+    basic_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    allowances = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    arrear = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    gross_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    net_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    payment_method = models.CharField(max_length=50, blank=True, default='cash')
+    payment_date = models.DateField(null=True, blank=True)
+    payment_reference = models.CharField(max_length=100, blank=True, default='')
+    note = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'teacher', 'month', 'year')
+
+    def __str__(self):
+        return f"{self.teacher.username} - {self.month}/{self.year} ({self.status})"
+

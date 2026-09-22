@@ -271,7 +271,7 @@ export default function ParentsPage() {
     if (!focusParent) return base;
     const fp = String(focusParent);
     return [...base].sort((a, b) => (String(a.user?.id || a.id || '') === fp ? -1 : 0) + (String(b.user?.id || b.id || '') === fp ? 1 : 0));
-  }, [filtered, selectedClassroom, focusParent, getMinRollForParent]);
+  }, [filtered, focusParent, getMinRollForParent]);
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', overflow: 'hidden' }}>

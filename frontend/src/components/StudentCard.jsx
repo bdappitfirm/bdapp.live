@@ -27,25 +27,6 @@ export default function StudentCard({ student, onUploaded, onEdit, onDelete, onC
 
   const className = student.classroom?.name || '';
   const sectionName = student.section?.name || '';
-  const guardianName = useMemo(() => {
-    // 1. Primary: Use explicit guardian_name field (string) saved in the profile
-    // This ensures we show exactly what was typed during edit
-    if (student.guardian_name) return student.guardian_name;
-
-    // 2. Fallback: Try linked guardian object from student profile
-    const g = student.guardian;
-    if (g) {
-      const fn = g.first_name || g.user?.first_name || '';
-      const ln = g.last_name || g.user?.last_name || '';
-      const fullName = `${fn} ${ln}`.trim();
-      if (fullName) return fullName;
-      const un = g.username || g.user?.username || '';
-      if (un) return un;
-    }
-
-    // 3. Additional fallbacks for other possible field names
-    return student.parent_name || student.father_name || student.mother_name || '';
-  }, [student]);
 
   const rawPhoto = student.user?.thumbnail_url || student.user?.photo_url || student.user?.photo || student.user?.profile_picture || student.photo_url || student.photo || null;
   const photoUrl = getMediaUrl(rawPhoto);

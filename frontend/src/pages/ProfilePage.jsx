@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import api from '../utils/api';
 import {
   Box,
@@ -14,7 +14,6 @@ import {
   Chip,
   Card,
   CardContent,
-  Avatar,
   IconButton,
   Tooltip
 } from '@mui/material';
@@ -32,7 +31,6 @@ import { CardSkeleton } from '../components/LoadingSkeleton';
 
 export default function ProfilePage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
   
   const [loading, setLoading] = useState(true);
@@ -161,7 +159,7 @@ export default function ProfilePage() {
     if (!id) return;
     loadProfile();
     loadOptions();
-  }, [id]); // Only load when ID changes
+  }, [id, loadOptions, loadProfile]); // Only load when ID changes
 
   const handlePhotoChange = async (file) => {
     if (!file) {
@@ -551,339 +549,364 @@ export default function ProfilePage() {
         {/* Details Section */}
         <Grid size={{ xs: 12, md: 8 }}>
           <Paper sx={{ p: 3, borderRadius: 3, boxShadow: 3 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 'bold' }}>Personal Information</Typography>
-                <Typography variant="body2" color="text.secondary">Update your personal details</Typography>
-              </Box>
-              {!editing && (
-                <Button 
-                  variant="contained" 
-                  startIcon={<EditIcon />}
-                  onClick={() => {
-                    setEditing(true);
-                  }}
-                  sx={{ borderRadius: 2 }}
-                >
-                  Edit Profile
-                </Button>
-              )}
-            </Stack>
-
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="First Name"
-                  name="first_name"
-                  value={formData.first_name}
-                  onChange={handleInputChange}
-                  fullWidth
-                  disabled={!editing}
-                  error={!!formErrors.first_name}
-                  helperText={formErrors.first_name || ''}
-                />
-              </Grid>
-              {editing && (
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="First Name (English)"
-                    name="first_name_en"
-                    value={formData.first_name_en}
-                    onChange={handleInputChange}
-                    fullWidth
-                  />
-                </Grid>
-              )}
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  fullWidth
-                  disabled={!editing}
-                  error={!!formErrors.email}
-                  helperText={formErrors.email || ''}
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Phone Number"
-                  name="phone_number"
-                  value={formData.phone_number}
-                  onChange={handleInputChange}
-                  placeholder="+8801712345678"
-                  helperText={formErrors.phone_number || 'Include country code (e.g., +880)'}
-                  error={!!formErrors.phone_number}
-                  fullWidth
-                  disabled={!editing}
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Username (Login ID)"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleInputChange}
-                  fullWidth
-                  disabled={!editing}
-                  error={!!formErrors.username}
-                  helperText={formErrors.username || ''}
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Designation"
-                  name="designation"
-                  value={formData.designation}
-                  onChange={handleInputChange}
-                  fullWidth
-                  disabled={!editing}
-                />
-              </Grid>
-              {editing && (
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Designation (English)"
-                    name="designation_en"
-                    value={formData.designation_en}
-                    onChange={handleInputChange}
-                    fullWidth
-                  />
-                </Grid>
-              )}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Educational Qualification"
-                  name="educational_qualification"
-                  value={formData.educational_qualification}
-                  onChange={handleInputChange}
-                  fullWidth
-                  disabled={!editing}
-                />
-              </Grid>
-
-              {/* Editable selects when in editing mode */}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="School"
-                  name="school"
-                  value={formData.school}
-                  onChange={(e) => {
-                    handleInputChange(e);
-                    // when school changes, clear class/section options and reload classes
-                    setClasses([]);
-                    setSections([]);
-                    const sid = e.target.value;
-                    if (sid) {
-                      api.get(`/api/academics/classrooms/?school=${sid}`).then(res => {
-                        setClasses(res.data || []);
-                      }).catch(() => setClasses([]));
-                    }
-                  }}
-                  disabled={!editing}
-                  fullWidth
-                  helperText={formErrors.school || ''}
-                  SelectProps={{ native: false }}
-                >
-                  <MenuItem value="">Select School</MenuItem>
-                  {schools.map(s => (
-                    <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Class"
-                  name="classroom"
-                  value={formData.classroom}
-                  onChange={(e) => {
-                    handleInputChange(e);
-                    const cid = e.target.value;
-                    if (!cid) { setSections([]); return; }
-                    api.get(`/api/academics/sections/?classroom=${cid}`).then(res => setSections(res.data || [])).catch(() => setSections([]));
-                  }}
-                  disabled={!editing || !formData.school}
-                  fullWidth
-                  helperText={formErrors.classroom || ''}
-                  SelectProps={{ native: false }}
-                >
-                  <MenuItem value="">Select Class</MenuItem>
-                  {classes.map(c => (
-                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Section"
-                  name="section"
-                  value={formData.section}
-                  onChange={handleInputChange}
-                  disabled={!editing || !formData.classroom}
-                  fullWidth
-                  helperText={formErrors.section || ''}
-                >
-                  <MenuItem value="">No Section</MenuItem>
-                  {sections.map(sec => (
-                    <MenuItem key={sec.id} value={sec.id}>{sec.name}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  select
-                  label="Gender"
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleInputChange}
-                  fullWidth
-                  disabled={!editing}
-                >
-                  <MenuItem value="">Select Gender</MenuItem>
-                  <MenuItem value="male">Male</MenuItem>
-                  <MenuItem value="female">Female</MenuItem>
-                  <MenuItem value="other">Other</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Category"
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  disabled={!editing}
-                  fullWidth
-                  helperText={formErrors.category || 'Optional'}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Assigned Subject"
-                  name="assigned_subject"
-                  value={formData.assigned_subject}
-                  onChange={handleInputChange}
-                  disabled={!editing}
-                  fullWidth
-                  placeholder="e.g. Mathematics"
-                />
-              </Grid>
-            </Grid>
-
-            {profile?.role === 'student' && (() => {
-              const selectedClassObj = classes.find(c => String(c.id) === String(formData.classroom));
-              const showSSC = selectedClassObj ? /নবম|দশম|এসএসসি|এস[\s.]*?এস[\s.]*?সি|[৯১০]ম|পরীক্ষার্থী|\b(nine|ten|ssc|ix|x|9|10)\b/i.test(selectedClassObj.name) : false;
-              return showSSC;
-            })() && (
-              <Box sx={{ mt: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>
-                  SSC Information (For Certificate)
-                </Typography>
-                <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Board Name"
-                      name="ssc_board"
-                      value={formData.ssc_board}
-                      onChange={handleInputChange}
-                      disabled={!editing}
-                      fullWidth
-                      placeholder="e.g. Dhaka"
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Roll No."
-                      name="ssc_roll"
-                      value={formData.ssc_roll}
-                      onChange={handleInputChange}
-                      disabled={!editing}
-                      fullWidth
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Registration No."
-                      name="ssc_registration"
-                      value={formData.ssc_registration}
-                      onChange={handleInputChange}
-                      disabled={!editing}
-                      fullWidth
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Session"
-                      name="ssc_session"
-                      value={formData.ssc_session}
-                      onChange={handleInputChange}
-                      disabled={!editing}
-                      fullWidth
-                      placeholder="e.g. 2021-22"
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="GPA"
-                      name="ssc_gpa"
-                      value={formData.ssc_gpa}
-                      onChange={handleInputChange}
-                      disabled={!editing}
-                      fullWidth
-                      placeholder="e.g. 5.00"
-                    />
-                  </Grid>
-                </Grid>
-              </Box>
-            )}
-
-            {editing && (
-              <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<SaveIcon />}
-                  onClick={handleSave}
-                >
-                  Save Changes
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() => {
-                    setEditing(false);
-                    setFormData({
-                      username: user.username || '',
-                      first_name: user.first_name || '',
-                      last_name: user.last_name || '',
-                      email: user.email || '',
-                      phone_number: user.phone_number || '',
-                      school: profile?.school?.id || '',
-                      classroom: profile?.classroom?.id || '',
-                      section: profile?.section?.id || '',
-                      gender: profile?.gender || '',
-                      category: profile?.category || '',
-                      designation: profile?.designation || '',
-                      educational_qualification: profile?.educational_qualification || '',
-                      ssc_board: studentProfile?.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla',
-                      ssc_roll: studentProfile?.ssc_roll || '',
-                      ssc_registration: studentProfile?.ssc_registration || '',
-                      ssc_session: studentProfile?.ssc_session || '',
-                      ssc_gpa: studentProfile?.ssc_gpa || ''
-                    });
-                    setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });
-                  }}
-                >
-                  Cancel
-                </Button>
+            <form autoComplete="off">
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+                <Box>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>Personal Information</Typography>
+                  <Typography variant="body2" color="text.secondary">Update your personal details</Typography>
+                </Box>
+                {!editing && (
+                  <Button
+                    variant="contained"
+                    startIcon={<EditIcon />}
+                    onClick={() => {
+                      setEditing(true);
+                    }}
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Edit Profile
+                  </Button>
+                )}
               </Stack>
-            )}
+
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="First Name"
+                    name="first_name"
+                    value={formData.first_name}
+                    onChange={handleInputChange}
+                    fullWidth
+                    disabled={!editing}
+                    error={!!formErrors.first_name}
+                    helperText={formErrors.first_name || ''}
+                    autoComplete="off"
+                    inputProps={{ autoComplete: 'one-time-code' }}
+                  />
+                </Grid>
+                {editing && (
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="First Name (English)"
+                      name="first_name_en"
+                      value={formData.first_name_en}
+                      onChange={handleInputChange}
+                      fullWidth
+                      autoComplete="off"
+                      inputProps={{ autoComplete: 'one-time-code' }}
+                    />
+                  </Grid>
+                )}
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Email"
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    fullWidth
+                    disabled={!editing}
+                    error={!!formErrors.email}
+                    helperText={formErrors.email || ''}
+                    autoComplete="off"
+                    inputProps={{ autoComplete: 'one-time-code' }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Phone Number"
+                    name="phone_number"
+                    value={formData.phone_number}
+                    onChange={handleInputChange}
+                    placeholder="+8801712345678"
+                    helperText={formErrors.phone_number || 'Include country code (e.g., +880)'}
+                    error={!!formErrors.phone_number}
+                    fullWidth
+                    disabled={!editing}
+                    autoComplete="off"
+                    inputProps={{ autoComplete: 'one-time-code' }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Username (Login ID)"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleInputChange}
+                    fullWidth
+                    disabled={!editing}
+                    error={!!formErrors.username}
+                    helperText={formErrors.username || ''}
+                    autoComplete="off"
+                    inputProps={{ autoComplete: 'one-time-code' }}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Designation"
+                    name="designation"
+                    value={formData.designation}
+                    onChange={handleInputChange}
+                    fullWidth
+                    disabled={!editing}
+                    autoComplete="off"
+                    inputProps={{ autoComplete: 'one-time-code' }}
+                  />
+                </Grid>
+                {editing && (
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Designation (English)"
+                      name="designation_en"
+                      value={formData.designation_en}
+                      onChange={handleInputChange}
+                      fullWidth
+                      autoComplete="off"
+                      inputProps={{ autoComplete: 'one-time-code' }}
+                    />
+                  </Grid>
+                )}
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Educational Qualification"
+                    name="educational_qualification"
+                    value={formData.educational_qualification}
+                    onChange={handleInputChange}
+                    fullWidth
+                    disabled={!editing}
+                    autoComplete="off"
+                    inputProps={{ autoComplete: 'one-time-code' }}
+                  />
+                </Grid>
+
+                {/* Editable selects when in editing mode */}
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    select
+                    label="School"
+                    name="school"
+                    value={formData.school}
+                    onChange={(e) => {
+                      handleInputChange(e);
+                      // when school changes, clear class/section options and reload classes
+                      setClasses([]);
+                      setSections([]);
+                      const sid = e.target.value;
+                      if (sid) {
+                        api.get(`/api/academics/classrooms/?school=${sid}`).then(res => {
+                          setClasses(res.data || []);
+                        }).catch(() => setClasses([]));
+                      }
+                    }}
+                    disabled={!editing}
+                    fullWidth
+                    helperText={formErrors.school || ''}
+                    SelectProps={{ native: false }}
+                  >
+                    <MenuItem value="">Select School</MenuItem>
+                    {schools.map(s => (
+                      <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    select
+                    label="Class"
+                    name="classroom"
+                    value={formData.classroom}
+                    onChange={(e) => {
+                      handleInputChange(e);
+                      const cid = e.target.value;
+                      if (!cid) { setSections([]); return; }
+                      api.get(`/api/academics/sections/?classroom=${cid}`).then(res => setSections(res.data || [])).catch(() => setSections([]));
+                    }}
+                    disabled={!editing || !formData.school}
+                    fullWidth
+                    helperText={formErrors.classroom || ''}
+                    SelectProps={{ native: false }}
+                  >
+                    <MenuItem value="">Select Class</MenuItem>
+                    {classes.map(c => (
+                      <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    select
+                    label="Section"
+                    name="section"
+                    value={formData.section}
+                    onChange={handleInputChange}
+                    disabled={!editing || !formData.classroom}
+                    fullWidth
+                    helperText={formErrors.section || ''}
+                  >
+                    <MenuItem value="">No Section</MenuItem>
+                    {sections.map(sec => (
+                      <MenuItem key={sec.id} value={sec.id}>{sec.name}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    select
+                    label="Gender"
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleInputChange}
+                    fullWidth
+                    disabled={!editing}
+                  >
+                    <MenuItem value="">Select Gender</MenuItem>
+                    <MenuItem value="male">Male</MenuItem>
+                    <MenuItem value="female">Female</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Category"
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    disabled={!editing}
+                    fullWidth
+                    helperText={formErrors.category || 'Optional'}
+                    autoComplete="off"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Assigned Subject"
+                    name="assigned_subject"
+                    value={formData.assigned_subject}
+                    onChange={handleInputChange}
+                    disabled={!editing}
+                    fullWidth
+                    placeholder="e.g. Mathematics"
+                    autoComplete="off"
+                  />
+                </Grid>
+              </Grid>
+
+              {profile?.role === 'student' && (() => {
+                const selectedClassObj = classes.find(c => String(c.id) === String(formData.classroom));
+                const showSSC = selectedClassObj ? /নবম|দশম|এসএসসি|এস[\s.]*?এস[\s.]*?সি|[৯১০]ম|পরীক্ষার্থী|\b(nine|ten|ssc|ix|x|9|10)\b/i.test(selectedClassObj.name) : false;
+                return showSSC;
+              })() && (
+                <Box sx={{ mt: 4 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>
+                    SSC Information (For Certificate)
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Board Name"
+                        name="ssc_board"
+                        value={formData.ssc_board}
+                        onChange={handleInputChange}
+                        disabled={!editing}
+                        fullWidth
+                        placeholder="e.g. Dhaka"
+                        autoComplete="off"
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Roll No."
+                        name="ssc_roll"
+                        value={formData.ssc_roll}
+                        onChange={handleInputChange}
+                        disabled={!editing}
+                        fullWidth
+                        autoComplete="off"
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Registration No."
+                        name="ssc_registration"
+                        value={formData.ssc_registration}
+                        onChange={handleInputChange}
+                        disabled={!editing}
+                        fullWidth
+                        autoComplete="off"
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Session"
+                        name="ssc_session"
+                        value={formData.ssc_session}
+                        onChange={handleInputChange}
+                        disabled={!editing}
+                        fullWidth
+                        placeholder="e.g. 2021-22"
+                        autoComplete="off"
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="GPA"
+                        name="ssc_gpa"
+                        value={formData.ssc_gpa}
+                        onChange={handleInputChange}
+                        disabled={!editing}
+                        fullWidth
+                        placeholder="e.g. 5.00"
+                        autoComplete="off"
+                      />
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {editing && (
+                <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSave}
+                  >
+                    Save Changes
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      setEditing(false);
+                      setFormData({
+                        username: user.username || '',
+                        first_name: user.first_name || '',
+                        last_name: user.last_name || '',
+                        email: user.email || '',
+                        phone_number: user.phone_number || '',
+                        school: profile?.school?.id || '',
+                        classroom: profile?.classroom?.id || '',
+                        section: profile?.section?.id || '',
+                        gender: profile?.gender || '',
+                        category: profile?.category || '',
+                        designation: profile?.designation || '',
+                        educational_qualification: profile?.educational_qualification || '',
+                        ssc_board: studentProfile?.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla',
+                        ssc_roll: studentProfile?.ssc_roll || '',
+                        ssc_registration: studentProfile?.ssc_registration || '',
+                        ssc_session: studentProfile?.ssc_session || '',
+                        ssc_gpa: studentProfile?.ssc_gpa || ''
+                      });
+                      setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </Stack>
+              )}
+            </form>
           </Paper>
         </Grid>
         {/* Password change section */}

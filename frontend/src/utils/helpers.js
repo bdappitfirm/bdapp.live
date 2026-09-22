@@ -209,7 +209,7 @@ export const transliterateBangla = (text) => {
     'আলম': 'Alam', 'কিরন': 'Kiron', 'মজুমদার': 'Mojumdar', 'সর্দার': 'Sardar',
     'ইউসুফ': 'Yousuf', 'ফরহাদ': 'Farhad', 'ফখরুল': 'Fakhrul', 'মিয়া': 'Mia',
     'মিয়াজ': 'Miaj', 'ছায়মা': 'Sayma', 'কর্মকার': 'Karmokar', 'কাজল': 'Kajol',
-    'সিয়াম': 'Siam', 'আশরাফুল': 'Ashraful', 'আশ্ররাফুল': 'Ashraful',
+    'সিয়াম': 'Siam', 'আশ্ররাফুল': 'Ashraful',
     'হক': 'Haque', 'মিলন': 'Milon', 'ইমদাদুল': 'Emdadul', 'এমদাদুল': 'Emdadul',
     'শেখ': 'Sheikh', 'খন্দকার': 'Khandaker', 'চৌধুরী': 'Chowdhury', 'আহমেদ': 'Ahmed',
     'মাহমুদ': 'Mahmud', 'হাসান': 'Hasan', 'হোসাইন': 'Hossain',

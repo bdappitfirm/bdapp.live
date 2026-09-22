@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -21,12 +21,12 @@ import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import SaveIcon from '@mui/icons-material/Save';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
-import api from '../utils/api';
 import { scopedGet, scopedPost } from '../utils/schoolApi';
 import { db } from '../utils/offlineDb';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
 import { getCleanDisplayName } from '../utils/helpers';
+import { getClassOrder } from '../utils/classroomUtils';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import dayjs from 'dayjs';
@@ -48,20 +48,6 @@ const StudentRow = memo(({ voter, handleManualChange }) => {
     );
 });
 
-const getClassOrder = (className) => {
-  const name = String(className || '').toLowerCase();
-  if (name.includes('ষষ্ঠ') || name.includes('six')) return 6;
-  if (name.includes('সপ্তম') || name.includes('seven')) return 7;
-  if (name.includes('অষ্টম') || name.includes('eight')) return 8;
-  if (name.includes('নবম') || name.includes('nine')) return 9;
-  if (name.includes('দশম') || name.includes('ten')) return 10; // Keep class 10
-  if (name.includes('একাদশ') || name.includes('eleven')) return 11;
-  if (name.includes('দ্বাদশ') || name.includes('twelve')) return 12;
-
-  const m = name.match(/\d+/);
-  return m ? parseInt(m[0], 10) : 999;
-};
-
 // Helper to check if student is SSC examinee
 const isSSCExaminee = (className) => {
   const name = String(className || '').toLowerCase();
@@ -78,7 +64,6 @@ const getSectionOrder = (sectionName) => {
 
 export default function VoterListPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
   const { school: schoolInfo } = useSchool();
 
@@ -229,7 +214,7 @@ export default function VoterListPage() {
       console.error("Auto-save failed", err);
       setAutoSaveStatus('idle');
     }
-  }, []);
+  }, [id]);
 
   const handleManualChange = useCallback((studentId, field, value) => {
     setVoters(prev => prev.map(v => v.id === studentId ? { ...v, [field]: value } : v));
@@ -370,14 +355,14 @@ export default function VoterListPage() {
                   <TableCell colSpan={8} sx={{ border: 'none !important', p: 0 }} />
                 </TableRow>
                 <TableRow sx={{ bgcolor: 'primary.main' }}>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '80px' }}>ভোটার নং</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '160px' }}>ভোটারের নাম</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', minWidth: '200px' }}>শিক্ষার্থীর নাম</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '70px' }}>শ্রেণি</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '110px' }}>ভোটার নং</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '155px' }}>ভোটারের নাম</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', minWidth: '195px' }}>শিক্ষার্থীর নাম</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '65px' }}>শ্রেণি</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '70px' }}>সেকশন</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '60px' }}>রোল</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '110px' }}>মোবাইল</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '140px' }}>মন্তব্য</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '55px' }}>রোল</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '105px' }}>মোবাইল</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '135px' }}>মন্তব্য</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>

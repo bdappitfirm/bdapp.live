@@ -161,6 +161,7 @@
 .detail-label {
     width: 110pt;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .detail-colon {
@@ -172,6 +173,9 @@
     flex-grow: 1;
     border-bottom: 1px dotted #000;
     padding-left: 5pt;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .italic-bold {

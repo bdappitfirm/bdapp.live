@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import Sum, F, Count, Q
 from django.db.models.functions import TruncDate
-from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, SupportCall, ActivityLog
+from .models import Profile, AdminProfile, ParentProfile, CommitteeProfile, Task, AssistantLog, AssistantMemory, SupportCall, ActivityLog, SalaryStructure, PayrollRecord
 from .serializers import (
     UserSerializer,
     ProfileSerializer,
@@ -23,6 +23,8 @@ from .serializers import (
     TeacherProfileSerializer,
     TaskSerializer,
     ActivityLogSerializer,
+    SalaryStructureSerializer,
+    PayrollRecordSerializer,
 )
 from .sms_service import send_sms, send_bulk_sms, SMSTemplates
 from django.core.files.storage import default_storage
@@ -364,3 +366,119 @@ class SupportCallRejectView(APIView): pass
 class SupportCallCancelView(APIView): pass
 class SupportCallEndView(APIView): pass
 class SupportCallPingView(APIView): pass
+
+
+class SalaryStructureViewSet(viewsets.ModelViewSet):
+    queryset = SalaryStructure.objects.all()
+    serializer_class = SalaryStructureSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if sid and str(sid).isdigit():
+            return SalaryStructure.objects.filter(school_id=sid)
+        user_school_id = get_user_school_id(self.request.user, self.request)
+        if user_school_id:
+            return SalaryStructure.objects.filter(school_id=user_school_id)
+        return SalaryStructure.objects.none()
+
+
+class PayrollRecordViewSet(viewsets.ModelViewSet):
+    queryset = PayrollRecord.objects.all()
+    serializer_class = PayrollRecordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = PayrollRecord.objects.all()
+        sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if sid and str(sid).isdigit():
+            qs = qs.filter(school_id=sid)
+        else:
+            user_school_id = get_user_school_id(self.request.user, self.request)
+            if user_school_id:
+                qs = qs.filter(school_id=user_school_id)
+            else:
+                return PayrollRecord.objects.none()
+
+        month = self.request.query_params.get('month')
+        year = self.request.query_params.get('year')
+        status_filter = self.request.query_params.get('status')
+
+        if month: qs = qs.filter(month=month)
+        if year: qs = qs.filter(year=year)
+        if status_filter: qs = qs.filter(status=status_filter)
+
+        return qs.order_by('-year', '-month', 'teacher__first_name')
+
+    @action(detail=False, methods=['post'])
+    def generate_monthly(self, request):
+        from decimal import Decimal
+        school_id = request.data.get('school') or request.data.get('school_id')
+        month = request.data.get('month')
+        year = request.data.get('year')
+
+        if not school_id or not month or not year:
+            return Response({"error": "school, month, and year are required"}, status=400)
+
+        teacher_profiles = Profile.objects.filter(school_id=school_id, role__in=['teacher', 'admin']).select_related('user')
+
+        created_count = 0
+        updated_count = 0
+
+        for prof in teacher_profiles:
+            teacher_user = prof.user
+            struct = SalaryStructure.objects.filter(school_id=school_id, teacher=teacher_user).first()
+
+            basic = struct.basic_salary if struct else Decimal('0.00')
+            allowances = struct.get_gross_salary() - basic if struct else Decimal('0.00')
+            deductions = struct.get_total_deductions() if struct else Decimal('0.00')
+            gross = struct.get_gross_salary() if struct else Decimal('0.00')
+            net = struct.get_net_salary() if struct else Decimal('0.00')
+
+            record, created = PayrollRecord.objects.update_or_create(
+                school_id=school_id,
+                teacher=teacher_user,
+                month=month,
+                year=year,
+                defaults={
+                    'basic_salary': basic,
+                    'allowances': allowances,
+                    'deductions': deductions,
+                    'gross_salary': gross,
+                    'net_salary': net,
+                    'status': 'pending'
+                }
+            )
+            if created: created_count += 1
+            else: updated_count += 1
+
+        return Response({
+            "message": f"Generated payroll for {month}/{year}",
+            "created": created_count,
+            "updated": updated_count
+        })
+
+    @action(detail=True, methods=['post'])
+    def pay_salary(self, request, pk=None):
+        from django.utils import timezone
+        record = self.get_object()
+        if record.status == 'paid':
+            return Response({"error": "This salary is already paid"}, status=400)
+
+        payment_method = request.data.get('payment_method', 'cash')
+        payment_reference = request.data.get('payment_reference', '')
+        note = request.data.get('note', '')
+        payment_date = request.data.get('payment_date') or timezone.now().date()
+
+        record.status = 'paid'
+        record.payment_method = payment_method
+        record.payment_reference = payment_reference
+        record.note = note
+        record.payment_date = payment_date
+        record.save()
+
+        return Response({
+            "message": "Salary marked as paid",
+            "record": PayrollRecordSerializer(record).data
+        })
+

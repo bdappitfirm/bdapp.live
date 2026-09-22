@@ -98,6 +98,7 @@ if DEBUG and DEBUG_TOOLBAR_AVAILABLE:
 # ============================
 
 MIDDLEWARE = [
+    'backend.middleware.GlobalExceptionHandlerMiddleware', # Added global exception handler at top
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -107,7 +108,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'schools.middleware.TenantMiddleware',
-    'backend.middleware.GlobalExceptionHandlerMiddleware', # Added global exception handler
 ]
 
 if DEBUG and DEBUG_TOOLBAR_AVAILABLE:
@@ -266,6 +266,8 @@ CORS_ALLOW_ALL_ORIGINS = False
 # Production security settings
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
+    USE_X_FORWARDED_PORT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 

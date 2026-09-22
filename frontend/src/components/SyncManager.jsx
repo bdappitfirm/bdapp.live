@@ -1,7 +1,7 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import api from '../utils/api';
-import { cacheData, processSyncQueue } from '../utils/offlineDb';
+import { cacheData } from '../utils/offlineDb';
 
 /**
  * SyncManager: Automatically pre-fetches all school data into local storage
@@ -48,11 +48,15 @@ const SyncManager = () => {
                 { url: `/api/academics/classrooms/?school=${schoolId}`, store: 'classrooms', priority: 1 },
                 { url: `/api/academics/sections/?school=${schoolId}`, store: 'sections', priority: 1 },
 
-                // Priority 2: Staff & Basic Meta
+                // Priority 2: Staff, Students & Basic Meta
                 { url: `/api/users/me/`, store: 'genericCache', priority: 2 },
                 { url: `/api/academics/subjects/?school=${schoolId}&page_size=200`, store: 'subjects', priority: 2 },
+                { url: `/api/users/teachers/?school=${schoolId}&page_size=500`, store: 'teachers', priority: 2 },
+                { url: `/api/academics/students/?school=${schoolId}&page_size=2000`, store: 'students', priority: 2 },
+                { url: `/api/results/examinations/?school=${schoolId}`, store: 'examinations', priority: 2 },
 
-                // Priority 3: Results (Important for Dashboard)
+                // Priority 3: Fees & Results Summary
+                { url: `/api/fees/fees/?school=${schoolId}&page_size=2000`, store: 'fees', priority: 3 },
                 { url: `/api/results/overall/dashboard_result_summary/?school=${schoolId}&year=${new Date().getFullYear()}`, store: 'genericCache', priority: 3 },
             ];
 
@@ -82,7 +86,7 @@ const SyncManager = () => {
 
         const timer = setTimeout(prefetchData, 15000);
         return () => clearTimeout(timer);
-    }, [schoolId]);
+    }, [schoolId, location.pathname]);
 
     return null;
 };

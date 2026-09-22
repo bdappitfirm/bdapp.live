@@ -13,9 +13,7 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Divider,
   Snackbar,
-  Avatar,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -30,8 +28,7 @@ import {
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Refresh as RefreshIcon,
-  Person as PersonIcon
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -41,35 +38,12 @@ import api from '../utils/api';
 import StudentFeeSlipCard from '../components/StudentFeeSlipCard';
 import { useSchool } from '../context/SchoolContext';
 import { isAuthenticated } from '../utils/auth';
-import { useAuth } from '../context/AuthContext';
 import InputGuidance from '../components/InputGuidance';
-
-const StudentAvatar = ({ photo, name, size = 40 }) => {
-  if (photo) {
-    return (
-      <Avatar
-        src={photo}
-        alt={name}
-        sx={{ width: size, height: size }}
-        onError={(e) => {
-          e.target.style.display = 'none';
-          e.target.nextSibling.style.display = 'flex';
-        }}
-      />
-    );
-  }
-  return (
-    <Avatar sx={{ width: size, height: size, bgcolor: 'primary.main' }}>
-      {name ? name.charAt(0).toUpperCase() : <PersonIcon />}
-    </Avatar>
-  );
-};
 
 const FeesPage = () => {
   const { id: schoolId } = useParams();
   const navigate = useNavigate();
   const { school } = useSchool();
-  const { user } = useAuth();
 
   // States
   const [loading, setLoading] = useState(true);
@@ -81,7 +55,7 @@ const FeesPage = () => {
   const [students, setStudents] = useState([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [feeStructures, setFeeStructures] = useState([]);
-  const [isLoadingFeeStructures, setIsLoadingFeeStructures] = useState(false);
+  const [, setIsLoadingFeeStructures] = useState(false);
   const [selectedLedgerStudentId, setSelectedLedgerStudentId] = useState('');
   const [isLoadingLedger, setIsLoadingLedger] = useState(false);
   const [ledger, setLedger] = useState({ assignments: [], collections: [], rows: [], totals: { amount: 0, paid: 0, due: 0 } });
@@ -89,7 +63,7 @@ const FeesPage = () => {
   const [inlinePayment, setInlinePayment] = useState({ amount: '', paymentDate: new Date(), method: 'cash', reference: '', note: '', bkash_to: '', bkash_from: '' });
   const [isDueSlipOpen, setIsDueSlipOpen] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
-  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+  const [, setIsLoadingPayments] = useState(false);
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
   const [planForm, setPlanForm] = useState({

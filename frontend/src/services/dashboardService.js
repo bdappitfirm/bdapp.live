@@ -1,15 +1,5 @@
 // src/services/dashboardService.js
 import api from '../utils/api';
-import { getAccessToken } from '../utils/auth';
-
-// Configure axios to use JWT token
-const configureAxios = () => {
-  const token = getAccessToken();
-  if (token) {
-    return { headers: { Authorization: `Bearer ${token}` } };
-  }
-  return {};
-};
 
 // Get dashboard statistics
 export const getDashboardStats = async (schoolId = null, year = null, isSimple = false) => {

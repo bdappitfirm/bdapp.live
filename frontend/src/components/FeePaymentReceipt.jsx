@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Grid, FormControl,
-  InputLabel, Select, MenuItem, TextField, Button, Dialog,
-  DialogTitle, DialogContent, DialogActions, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, Checkbox,
-  Divider, Paper, Stack, Chip
+  InputLabel, Select, MenuItem, Button, Dialog,
+  DialogTitle, DialogContent, Table, TableBody,
+  TableCell, TableHead, TableRow,
+  Divider, Stack, Chip
 } from '@mui/material';
 import { Receipt } from '@mui/icons-material';
 import html2canvas from 'html2canvas';
@@ -43,7 +43,7 @@ const FeePaymentReceipt = () => {
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
   const [outstandingFees, setOutstandingFees] = useState([]);
-  const [selectedFees, setSelectedFees] = useState({});
+  const [selectedFees] = useState({});
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [generatedReceipt, setGeneratedReceipt] = useState(null);
   const [schoolData, setSchoolData] = useState(null);

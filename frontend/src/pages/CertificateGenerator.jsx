@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import Search from '@mui/icons-material/Search';
-import Print from '@mui/icons-material/Print';
-import Download from '@mui/icons-material/Download';
 import Person from '@mui/icons-material/Person';
 import EmojiEvents from '@mui/icons-material/EmojiEvents';
 import Refresh from '@mui/icons-material/Refresh';
@@ -26,10 +24,7 @@ import {
   InputLabel,
   Checkbox,
   List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  ListItemIcon
+  ListItem
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
@@ -112,7 +107,7 @@ const StudentCard = ({ data, school, bloodGroup, isEditing, onEditProfile, onBlo
   );
 };
 
-const Certificate = ({ data, school, session }) => {
+const CertificatePage = ({ data, school, session, lang = 'en' }) => {
   if (!data) return <Box sx={{ p: 4, textAlign: 'center' }}><Typography variant="h6" color="error">No student data available</Typography></Box>;
   
   const effectiveData = data;
@@ -123,70 +118,72 @@ const Certificate = ({ data, school, session }) => {
     return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
   };
 
-  // Prefer English names for certificate
-  const rawName = `${user.first_name_en || ''} ${user.last_name_en || ''}`.trim() ||
-               effectiveData?.student_name_en ||
-               effectiveData?.student_name ||
-               `${user.first_name || ''} ${user.last_name || ''}`.trim() ||
-               'Student Name';
-  const name = toTitleCase(rawName);
+  const isBn = lang === 'bn';
 
-  const rollNumber = effectiveData?.roll_number || '';
-  const classroom = effectiveData?.classroom?.name || '';
-  const section = effectiveData?.section?.name || '';
+  // Helper for Bengali numbers
+  const toBnNum = (n) => String(n).replace(/\d/g, d => "০১২৩৪৫৬৭৮৯"[d]);
+
+  // Names logic
+  const rawNameEn = `${user.first_name_en || ''} ${user.last_name_en || ''}`.trim() || effectiveData?.student_name_en || effectiveData?.student_name || `${user.first_name || ''} ${user.last_name || ''}`.trim();
+  const rawNameBn = effectiveData?.student_name || `${user.first_name || ''} ${user.last_name || ''}`.trim();
+  const name = isBn ? rawNameBn : toTitleCase(rawNameEn);
+
+  const rawFatherEn = effectiveData.father_name_en || effectiveData.father_name || '';
+  const rawFatherBn = effectiveData.father_name || '';
+  const fatherName = isBn ? rawFatherBn : toTitleCase(rawFatherEn);
+
+  const rawMotherEn = effectiveData.mother_name_en || effectiveData.mother_name || '';
+  const rawMotherBn = effectiveData.mother_name || '';
+  const motherName = isBn ? rawMotherBn : toTitleCase(rawMotherEn);
+
   const formatDate = (dateStr) => {
-    if (!dateStr || dateStr === 'N/A') return 'N/A';
+    if (!dateStr || dateStr === 'N/A') return isBn ? 'N/A' : 'N/A';
     try {
       const parts = dateStr.split('-');
+      let d, m, y;
       if (parts.length === 3) {
-        // If it's already YYYY-MM-DD
-        if (parts[0].length === 4) {
-          const [y, m, d] = parts;
-          const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-          return `${parseInt(d)} ${months[parseInt(m) - 1]} ${y}`;
-        }
-        // If it's DD-MM-YYYY
-        return dateStr;
+        if (parts[0].length === 4) { [y, m, d] = parts; }
+        else { [d, m, y] = parts; }
+      } else {
+        const dt = new Date(dateStr);
+        if (isNaN(dt.getTime())) return dateStr;
+        d = dt.getDate(); m = dt.getMonth() + 1; y = dt.getFullYear();
       }
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    } catch (e) {
-      return dateStr;
-    }
+
+      if (isBn) {
+        const monthsBn = ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+        return `${toBnNum(parseInt(d))} ${monthsBn[parseInt(m) - 1]} ${toBnNum(y)}`;
+      } else {
+        const monthsEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${parseInt(d)} ${monthsEn[parseInt(m) - 1]} ${y}`;
+      }
+    } catch (e) { return dateStr; }
   };
 
   const dob = formatDate(user.date_of_birth || effectiveData.birth_date);
-  const admissionDate = formatDate(effectiveData.admission_date || '01 January 2020');
-
-  const fatherName = toTitleCase(effectiveData.father_name_en || effectiveData.father_name || '');
-  const motherName = toTitleCase(effectiveData.mother_name_en || effectiveData.mother_name || '');
 
   const formatStudentAddress = (addressStr) => {
     if (!addressStr) return '';
     const trimmed = String(addressStr).trim();
     const parts = trimmed.split(/[,，]/).map(p => p.trim()).filter(Boolean);
-    if (parts.length === 4) {
-      const prefixes = ['Village-', 'P.O-', 'Upazilla-', 'District-'];
-      return parts.map((p, i) => `${prefixes[i]}${p}`).join(', ');
+    if (isBn) {
+        if (parts.length === 4) {
+          const prefixes = ['গ্রাম-', 'ডাক-', 'উপজেলা-', 'জেলা-'];
+          return parts.map((p, i) => `${prefixes[i]}${p}`).join(', ');
+        }
+        return trimmed;
+    } else {
+        if (parts.length === 4) {
+          const prefixes = ['Village-', 'P.O-', 'Upazilla-', 'District-'];
+          return parts.map((p, i) => `${prefixes[i]}${p}`).join(', ');
+        }
+        return trimmed;
     }
-    if (parts.length === 3) {
-      const prefixes = ['P.O-', 'Upazilla-', 'District-'];
-      return parts.map((p, i) => `${prefixes[i]}${p}`).join(', ');
-    }
-    return trimmed;
   };
 
-  const rawStudentAddress = effectiveData?.address_en || effectiveData?.address || user?.address_en || user?.address || '';
-  const schoolAddressDisplay = (school?.address_en || school?.address || '').trim().toUpperCase();
+  const rawStudentAddress = isBn ? (effectiveData?.address || user?.address || '') : (effectiveData?.address_en || effectiveData?.address || user?.address_en || user?.address || '');
+  const schoolAddressDisplay = isBn ? (school?.address || '') : (school?.address_en || school?.address || '').trim().toUpperCase();
   const studentAddress = formatStudentAddress(rawStudentAddress) || schoolAddressDisplay;
-
-  const guardianName = toTitleCase(effectiveData.guardian_name_en ||
-                       effectiveData.guardian_name ||
-                       (effectiveData.guardian ?
-                         (`${effectiveData.guardian.first_name_en || ''} ${effectiveData.guardian.last_name_en || ''}`.trim() ||
-                          `${effectiveData.guardian.first_name || ''} ${effectiveData.guardian.last_name || ''}`.trim())
-                         : ''));
 
   const processPhotoUrl = (url) => {
     if (!url) return null;
@@ -194,430 +191,192 @@ const Certificate = ({ data, school, session }) => {
     return url.startsWith('http') ? url : `${base}/media/${url.replace(/^\/+/, '')}`;
   };
 
-  const getClassLevel = (cn) => {
-    const name = String(cn || '').toLowerCase();
-    if (name.includes('দশম') || name.includes('ten') || name.includes('10') || name.includes('ssc') || name.includes('এসএসসি')) return 10;
-    if (name.includes('নবম') || name.includes('nine') || name.includes('9')) return 9;
-    if (name.includes('অষ্টম') || name.includes('eight') || name.includes('8')) return 8;
-    if (name.includes('সপ্তম') || name.includes('seven') || name.includes('7')) return 7;
-    if (name.includes('ষষ্ঠ') || name.includes('six') || name.includes('6')) return 6;
-    if (name.includes('পঞ্চম') || name.includes('five') || name.includes('5')) return 5;
-    if (name.includes('চতুর্থ') || name.includes('four') || name.includes('4')) return 4;
-    if (name.includes('তৃতীয়') || name.includes('three') || name.includes('3')) return 3;
-    if (name.includes('দ্বিতীয়') || name.includes('two') || name.includes('2')) return 2;
-    if (name.includes('প্রথম') || name.includes('one') || name.includes('1')) return 1;
-    return null;
-  };
-
-  const translateClassName = (cn) => {
-    const low = String(cn || '').toLowerCase();
-    if (low.includes('এসএসসি') || low.includes('ssc')) {
-      if (low.includes('পরীক্ষার্থী') || low.includes('candidate')) return 'SSC Candidate';
-      return 'Class Ten (SSC)';
-    }
-    const level = getClassLevel(cn);
-    const mapping = {
-      1: 'Class One', 2: 'Class Two', 3: 'Class Three', 4: 'Class Four', 5: 'Class Five',
-      6: 'Class Six', 7: 'Class Seven', 8: 'Class Eight', 9: 'Class Nine', 10: 'Class Ten'
-    };
-    return mapping[level] || cn;
-  };
-
-  const level = getClassLevel(classroom);
-  const currentYear = parseInt(session) || new Date().getFullYear();
-  let startYear = currentYear;
-  if (level) {
-    const startLevel = level >= 6 ? 6 : 1;
-    startYear = currentYear - (level - startLevel);
-  }
-  const calculatedAdmissionDate = effectiveData.admission_date || `01 January ${startYear}`;
-
-  const translateSectionName = (sn) => ({ 'বিজ্ঞান': 'Science', 'ব্যবসা': 'Commerce', 'মানবিক': 'Humanities', 'ক': 'A', 'খ': 'B', 'গ': 'C' }[sn] || sn);
-
-  const principalSig = processPhotoUrl(school?.principal_signature);
-  const schoolSeal = processPhotoUrl(school?.school_seal);
-  const photoUrl = processPhotoUrl(user?.photo_url);
-
-  const qrData = `It is a S.S.C. Certificate of
-Name: ${name}
-Father: ${fatherName}
-Mother: ${motherName}
-DOB: ${dob}
-Session: ${effectiveData.ssc_session || 'N/A'}
-GPA: ${effectiveData.ssc_gpa || 'N/A'}
-
-Verify Online: ${window.location.origin}/verify/${effectiveData.id}`;
-
-  const studentGender = effectiveData.gender || user.gender || 'male';
-  const genderWord = studentGender === 'female' ? 'daughter' : 'son';
-  const pronoun = studentGender === 'female' ? 'She' : 'He';
-  const possessive = studentGender === 'female' ? 'Her' : 'His';
-  const objective = studentGender === 'female' ? 'her' : 'him';
-
-  const schoolName = (school?.name_en || school?.name || '');
-  const schoolNameWords = schoolName.split(/\s+/).filter(Boolean).length;
-  const schoolNameFontSize = schoolNameWords >= 6 ? '1.45rem !important' : schoolNameWords >= 4 ? '1.85rem !important' : '2.6rem !important';
-  const schoolNameLetterSpacing = schoolNameWords >= 6 ? '-0.8px' : '0.5px';
-
-  const nameFontSize = name.length > 35 ? '2.2rem' : name.length > 25 ? '2.8rem' : '3.8rem';
-  const fatherNameFontSize = fatherName.length > 35 ? '1.8rem' : fatherName.length > 25 ? '2.2rem' : '2.8rem';
-  const motherNameFontSize = motherName.length > 35 ? '1.8rem' : motherName.length > 25 ? '2.2rem' : '2.8rem';
-
   const detectGroup = () => {
-    const g1 = effectiveData.student_group || effectiveData.group;
-    if (g1) return g1;
-    const g2 = effectiveData.user?.group || effectiveData.user?.student_group;
-    if (g2) return g2;
-    const sec = String(section || '').toLowerCase();
-    if (sec.includes('বিজ্ঞান') || sec.includes('science') || sec.includes('sci')) return 'science';
-    if (sec.includes('মানবিক') || sec.includes('arts') || sec.includes('humanities')) return 'arts';
-    if (sec.includes('ব্যবসা') || sec.includes('commerce') || sec.includes('biz')) return 'commerce';
-    const cl = String(classroom || '').toLowerCase();
-    if (cl.includes('বিজ্ঞান') || cl.includes('science')) return 'science';
-    if (cl.includes('মানবিক') || cl.includes('arts') || cl.includes('humanities')) return 'arts';
-    if (cl.includes('ব্যবসা') || cl.includes('commerce')) return 'commerce';
+    const g = effectiveData.student_group || effectiveData.group || effectiveData.user?.group || effectiveData.user?.student_group;
+    if (g) return g;
+    const sec = String(effectiveData.section?.name || '').toLowerCase();
+    if (sec.includes('বিজ্ঞান') || sec.includes('science')) return 'science';
+    if (sec.includes('মানবিক') || sec.includes('arts')) return 'arts';
+    if (sec.includes('ব্যবসা') || sec.includes('commerce')) return 'commerce';
     return '';
   };
   const rawGroup = detectGroup();
   const normalizeGroup = (g) => {
     const lower = String(g || '').toLowerCase().trim();
-    if (lower === 'science' || lower === 'বিজ্ঞান') return 'Science';
-    if (lower === 'arts' || lower === 'humanities' || lower === 'মানবিক') return 'Humanities';
-    if (lower === 'commerce' || lower === 'business' || lower === 'ব্যবসা' || lower === 'ব্যবসায়') return 'Commerce';
-    return g || 'N/A';
+    if (isBn) {
+        if (lower === 'science' || lower === 'বিজ্ঞান') return 'বিজ্ঞান';
+        if (lower === 'arts' || lower === 'humanities' || lower === 'মানবিক') return 'মানবিক';
+        if (lower.includes('commerce') || lower.includes('business') || lower.includes('ব্যবসা') || lower.includes('ব্যবসায়') || lower.includes('ব্যবসায়')) return 'ব্যবসায় শিক্ষা';
+        return g || 'N/A';
+    } else {
+        if (lower === 'science' || lower === 'বিজ্ঞান') return 'Science';
+        if (lower === 'arts' || lower === 'humanities' || lower === 'মানবিক') return 'Humanities';
+        if (lower.includes('commerce') || lower.includes('business') || lower.includes('ব্যবসা') || lower.includes('ব্যবসায়') || lower.includes('ব্যবসায়')) return 'Business Studies';
+        return g || 'N/A';
+    }
   };
   const finalGroup = normalizeGroup(rawGroup);
 
+  const schoolName = isBn ? (school?.name || '') : (school?.name_en || school?.name || '');
+  const schoolNameFontSize = schoolName.length >= 35 ? '1.45rem !important' : schoolName.length >= 25 ? '1.85rem !important' : '2.6rem !important';
+
+  const nameFontSize = name.length > 35 ? '2.2rem' : name.length > 25 ? '2.8rem' : '3.8rem';
+  const fatherNameFontSize = fatherName.length > 35 ? '1.8rem' : fatherName.length > 25 ? '2.2rem' : '2.8rem';
+  const motherNameFontSize = motherName.length > 35 ? '1.8rem' : motherName.length > 25 ? '2.2rem' : '2.8rem';
+
+  const qrData = `It is a S.S.C. Certificate of\nName: ${rawNameEn}\nFather: ${rawFatherEn}\nMother: ${rawMotherEn}\nDOB: ${dob}\nVerify: ${window.location.origin}/verify/${effectiveData.id}`;
+
+  const studentGender = effectiveData.gender || user.gender || 'male';
+  const genderWord = isBn ? (studentGender === 'female' ? 'কন্যা' : 'পুত্র') : (studentGender === 'female' ? 'daughter' : 'son');
+  const pronoun = isBn ? (studentGender === 'female' ? 'সে' : 'সে') : (studentGender === 'female' ? 'She' : 'He');
+  const possessive = isBn ? (studentGender === 'female' ? 'তার' : 'তার') : (studentGender === 'female' ? 'Her' : 'His');
+  const objective = isBn ? (studentGender === 'female' ? 'তাকে' : 'তাকে') : (studentGender === 'female' ? 'her' : 'him');
+
   return (
-    <Box className="certificate-container" sx={{
-      position: 'relative',
-      backgroundColor: '#fdfbf7',
-      width: '1122px', // Standard A4 Landscape Width
-      height: '793px', // Standard A4 Landscape Height
-      p: 0,
-      border: '30px solid #8B4513',
-      display: 'flex',
-      flexDirection: 'column',
-      boxSizing: 'border-box',
-      overflow: 'hidden',
-      fontFamily: "'Playfair Display', serif",
-      mx: 'auto',
-      boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
-      // Responsive transform for small screens
-      transform: { xs: 'scale(0.3)', sm: 'scale(0.5)', md: 'scale(0.8)', lg: 'scale(1)' },
-      transformOrigin: 'top center',
-      mb: { xs: -50, sm: -35, md: -15, lg: 0 },
+    <Box className={`certificate-page certificate-${lang}`} sx={{
+      position: 'relative', backgroundColor: '#fdfbf7', width: '1122px', height: '793px', p: 0, border: '30px solid #8B4513', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden',
+      fontFamily: isBn ? "'Hind Siliguri', sans-serif" : "'Libre Baskerville', serif", mx: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+      transform: { xs: 'scale(0.3)', sm: 'scale(0.5)', md: 'scale(0.8)', lg: 'scale(1)' }, transformOrigin: 'top center', mb: { xs: -50, sm: -35, md: -15, lg: 0 },
+      pageBreakAfter: 'always',
       '@media print': {
-        width: '1122px !important',
-        height: '793px !important',
-        margin: '0 !important',
-        boxShadow: 'none !important',
-        transform: 'none !important',
-        border: '30px solid #8B4513 !important',
-        WebkitPrintColorAdjust: 'exact',
-        printColorAdjust: 'exact',
-        position: 'fixed !important',
-        top: 0,
-        left: 0,
+        width: '1122px !important', height: '793px !important', margin: '0 !important', boxShadow: 'none !important', transform: 'none !important', border: '30px solid #8B4513 !important',
+        WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact', position: 'relative !important',
       }
     }}>
-      {/* Inner decorative border - using real Box for better print rendering */}
-      <Box sx={{
-        position: 'absolute',
-        top: '10px',
-        left: '10px',
-        right: '10px',
-        bottom: '10px',
-        border: '3px solid #d4af37',
-        pointerEvents: 'none',
-        zIndex: 10
-      }} />
-
+      <style>
+        {`
+          @import url('https://fonts.googleapis.com/css2?family=Alex+Brush&family=Great+Vibes&family=Pinyon+Script&family=Galada&family=Hind+Siliguri:wght@400;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+          .name-cursive {
+            font-weight: 400 !important;
+            font-style: normal !important;
+            text-transform: none !important;
+          }
+          @media print {
+            .certificate-page, .certificate-page * {
+              visibility: visible !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+        `}
+      </style>
+      <Box sx={{ position: 'absolute', top: '10px', left: '10px', right: '10px', bottom: '10px', border: '3px solid #d4af37', pointerEvents: 'none', zIndex: 10 }} />
       {/* Corner Ornaments */}
-      <Box sx={{
-        position: 'absolute',
-        top: 0, left: 0, width: '45px', height: '45px',
-        backgroundImage: 'radial-gradient(circle at 0 0, #d4af37 25px, transparent 26px)',
-        zIndex: 11, pointerEvents: 'none'
-      }} />
-      <Box sx={{
-        position: 'absolute',
-        top: 0, right: 0, width: '45px', height: '45px',
-        backgroundImage: 'radial-gradient(circle at 100% 0, #d4af37 25px, transparent 26px)',
-        zIndex: 11, pointerEvents: 'none'
-      }} />
-      <Box sx={{
-        position: 'absolute',
-        bottom: 0, left: 0, width: '45px', height: '45px',
-        backgroundImage: 'radial-gradient(circle at 0 100%, #d4af37 25px, transparent 26px)',
-        zIndex: 11, pointerEvents: 'none'
-      }} />
-      <Box sx={{
-        position: 'absolute',
-        bottom: 0, right: 0, width: '45px', height: '45px',
-        backgroundImage: 'radial-gradient(circle at 100% 100%, #d4af37 25px, transparent 26px)',
-        zIndex: 11, pointerEvents: 'none'
-      }} />
+      <Box sx={{ position: 'absolute', top: 0, left: 0, width: '45px', height: '45px', backgroundImage: 'radial-gradient(circle at 0 0, #d4af37 25px, transparent 26px)', zIndex: 11 }} />
+      <Box sx={{ position: 'absolute', top: 0, right: 0, width: '45px', height: '45px', backgroundImage: 'radial-gradient(circle at 100% 0, #d4af37 25px, transparent 26px)', zIndex: 11 }} />
+      <Box sx={{ position: 'absolute', bottom: 0, left: 0, width: '45px', height: '45px', backgroundImage: 'radial-gradient(circle at 0 100%, #d4af37 25px, transparent 26px)', zIndex: 11 }} />
+      <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: '45px', height: '45px', backgroundImage: 'radial-gradient(circle at 100% 100%, #d4af37 25px, transparent 26px)', zIndex: 11 }} />
 
-      <Box sx={{
-        height: '100%',
-        width: '100%',
-        p: '20px 60px 40px 60px', // Reduced top padding to move header up
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        zIndex: 12
-      }}>
-        <style>
-          {`
-            @import url('https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap');
-            @import url('https://fonts.googleapis.com/css2?family=Alex+Brush&family=Great+Vibes&family=Pinyon+Script&family=Rochester&family=Meie+Script&family=Playfair+Display:wght@400;700;900&family=Libre+Baskerville:wght@400;700&family=Galada&family=Hind+Siliguri:wght@400;700&display=swap');
-
-            @media print {
-              @page {
-                size: A4 landscape;
-                margin: 0 !important;
-              }
-              html, body {
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 297mm !important;
-                height: 210mm !important;
-                background: #fff !important;
-                overflow: hidden !important;
-              }
-              body * {
-                visibility: hidden;
-              }
-              .certificate-container, .certificate-container * {
-                visibility: visible;
-              }
-              .certificate-container {
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 1122px !important;
-                height: 793px !important;
-                display: flex !important;
-                border: 30px solid #8B4513 !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                image-rendering: -webkit-optimize-contrast !important;
-              }
-            }
-
-            .name-cursive {
-              font-family: 'Pinyon Script', cursive !important;
-              letter-spacing: 0 !important;
-              word-spacing: 0.1em !important;
-              font-weight: 400 !important;
-              font-style: normal !important;
-              text-transform: none !important;
-              color: #000 !important;
-              white-space: nowrap !important;
-              text-rendering: optimizeLegibility !important;
-              -webkit-font-smoothing: antialiased !important;
-            }
-            .body-text {
-              font-family: 'Libre Baskerville', serif !important;
-            }
-            .header-text {
-              font-family: 'Playfair Display', serif !important;
-            }
-            /* Do NOT force fonts on children with name-cursive class */
-            .body-text *:not(.name-cursive) {
-              font-family: inherit;
-            }
-          `}
-        </style>
-        {/* Background/Watermark */}
-        <Box sx={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          zIndex: 0, opacity: 0.08, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          pointerEvents: 'none',
-          p: 0
-        }}>
+      <Box sx={{ height: '100%', width: '100%', p: '20px 60px 40px 60px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 12 }}>
+        {/* Background Watermark */}
+        <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, opacity: 0.08, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           {school?.logo && <img src={processPhotoUrl(school.logo)} alt="watermark" style={{ width: '75%', maxHeight: '75%', objectFit: 'contain' }} />}
         </Box>
 
-        {/* Header Section */}
+        {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0, position: 'relative', zIndex: 1 }}>
-          {/* Left Side: Logo */}
-          <Box sx={{
-            width: '120px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            flexShrink: 0
-          }}>
-            {school?.logo && (
-              <img src={processPhotoUrl(school.logo)} alt="Logo" style={{ height: '110px', width: '110px', objectFit: 'contain' }} />
-            )}
+          <Box sx={{ width: '120px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            {school?.logo && <img src={processPhotoUrl(school.logo)} alt="Logo" style={{ height: '110px', width: '110px', objectFit: 'contain' }} />}
           </Box>
-
-          {/* Centered School Info */}
           <Box sx={{ flex: 1, px: 2, textAlign: 'center', minWidth: 0 }}>
-            <Typography component="div" sx={{
-              fontWeight: '900',
-              color: '#5d4037',
-              fontSize: schoolNameFontSize,
-              fontFamily: "'Playfair Display', 'Georgia', serif",
-              textTransform: 'uppercase',
-              mb: 0.1,
-              textShadow: '1px 1px 1px rgba(0,0,0,0.05)',
-              lineHeight: 1.1,
-              letterSpacing: schoolNameLetterSpacing,
-              whiteSpace: 'nowrap',
-              overflow: 'visible',
-              width: '100%'
-            }}>
-              {schoolName}
-            </Typography>
-            {school?.ein && (
-              <Typography sx={{
-                color: '#8b4513',
-                fontSize: '1.1rem !important',
-                fontWeight: 'bold',
-                mb: 0.2,
-                letterSpacing: '2px',
-                fontFamily: "'Playfair Display', serif"
-              }}>
-                EIIN: {school.ein}
-              </Typography>
-            )}
-            <Typography component="div" sx={{
-              color: '#8b4513',
-              fontSize: '1.0rem !important',
-              fontWeight: '600',
-              fontFamily: "'Playfair Display', serif",
-              letterSpacing: '0.5px'
-            }}>
-              {schoolAddressDisplay}
-            </Typography>
+            <Typography component="div" sx={{ fontWeight: '900', color: '#5d4037', fontSize: schoolNameFontSize, textTransform: isBn ? 'none' : 'uppercase', mb: 0.1, lineHeight: 1.1, whiteSpace: 'nowrap' }}>{schoolName}</Typography>
+            {school?.ein && <Typography sx={{ color: '#8b4513', fontSize: '1.1rem !important', fontWeight: 'bold', mb: 0.2 }}>{isBn ? 'ইআইআইএন: ' + toBnNum(school.ein) : 'EIIN: ' + school.ein}</Typography>}
+            <Typography component="div" sx={{ color: '#8b4513', fontSize: '1.0rem !important', fontWeight: '600' }}>{schoolAddressDisplay}</Typography>
           </Box>
-
-          {/* Right Side: QR Code */}
-          <Box sx={{
-            width: '120px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            flexShrink: 0,
-            p: 0.5,
-            bgcolor: 'white',
-            borderRadius: 1,
-            boxShadow: '0 0 10px rgba(0,0,0,0.05)',
-            mr: -2.5 // Shifted 20px right
-          }}>
+          <Box sx={{ width: '120px', display: 'flex', justifyContent: 'center', flexShrink: 0, p: 0.5, bgcolor: 'white', borderRadius: 1, boxShadow: '0 0 10px rgba(0,0,0,0.05)' }}>
             <QRCodeSVG value={qrData} size={110} level="M" />
           </Box>
         </Box>
 
-        <Box sx={{ textAlign: 'center', position: 'relative', zIndex: 1, mt: -2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 0 }}>
-            <Box sx={{
-              position: 'relative',
+        {/* Testimonial Header Box - PURE INLINE STYLES for html2canvas reliability */}
+        <div className="testimonial-header-wrap" style={{ textAlign: 'center', marginTop: '0px', marginBottom: '8px', position: 'relative', zIndex: 100 }}>
+            <div className="testimonial-header-box" data-testimonial-box="true" style={{
+              display: 'inline-block',
               backgroundColor: '#8b4513',
-              px: 10, py: 0.8,
+              background: '#8b4513',
+              paddingLeft: '90px',
+              paddingRight: '90px',
+              paddingTop: '10px',
+              paddingBottom: '10px',
               borderRadius: '50px',
               border: '2px solid #d4af37',
-              boxShadow: '0 5px 15px rgba(139, 69, 19, 0.4)',
+              color: '#ffffff',
+              minWidth: '300px',
+              boxShadow: 'none',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact'
             }}>
-               <Typography variant="h4" className="body-text" sx={{
-                fontWeight: '900',
-                color: '#ffffff',
-                fontSize: '2rem !important',
-                textTransform: 'uppercase',
-                letterSpacing: '10px',
-              }}>
-                Testimonial
-              </Typography>
-            </Box>
-          </Box>
+               <div className="testimonial-header-text" data-testimonial-text="true" style={{
+                 fontWeight: 900,
+                 fontSize: '2.2rem',
+                 textTransform: isBn ? 'none' : 'uppercase',
+                 letterSpacing: isBn ? '2px' : '10px',
+                 fontFamily: isBn ? "'Galada', cursive" : "'Playfair Display', serif",
+                 color: '#ffffff',
+                 display: 'block',
+                 whiteSpace: 'nowrap',
+                 lineHeight: 1.2
+               }}>
+                 {isBn ? 'প্রশংসাপত্র' : 'Testimonial'}
+               </div>
+            </div>
+        </div>
+
+        {/* Serial Number Section - Left Aligned under Testimonial */}
+        <div style={{ textAlign: 'left', marginTop: '5px', marginBottom: '-10px', position: 'relative', zIndex: 10 }}>
+            <span style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#5d4037', fontFamily: isBn ? "'Hind Siliguri', sans-serif" : "'Libre Baskerville', serif" }}>
+                {isBn ? 'ক্রমিক নং: ' + toBnNum(effectiveData.student_custom_id || effectiveData.id) : 'SL No: ' + (effectiveData.student_custom_id || effectiveData.id)}
+            </span>
+        </div>
+
+        {/* Body */}
+        <Box sx={{ textAlign: 'left', color: '#1a202c', zIndex: 1, mt: 2, display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'center', mb: 12 }}>
+          {isBn ? (
+            <Typography sx={{ lineHeight: 1.8, fontSize: '1.8rem', color: '#2c3e50', fontFamily: "'Hind Siliguri', sans-serif", fontStyle: 'italic' }}>
+                এই মর্মে প্রত্যয়ন করা যাচ্ছে যে, <span className="name-cursive" style={{ fontSize: nameFontSize, borderBottom: '2px solid #8b4513', padding: '0 8px', display: 'inline-block', fontFamily: "'Galada', cursive", fontStyle: 'normal' }}>{name}</span>, পিতা: <span className="name-cursive" style={{ fontSize: fatherNameFontSize, display: 'inline-block', fontFamily: "'Galada', cursive", fontStyle: 'normal' }}>{fatherName}</span>, মাতা: <span className="name-cursive" style={{ fontSize: motherNameFontSize, display: 'inline-block', fontFamily: "'Galada', cursive", fontStyle: 'normal' }}>{motherName}</span>, ঠিকানা: <span style={{ fontWeight: '700', fontStyle: 'normal' }}>{studentAddress}</span> এই প্রতিষ্ঠানের একজন নিয়মিত শিক্ষার্থী ছিল। {pronoun} <span style={{ fontWeight: 'bold', fontStyle: 'normal' }}>{effectiveData.ssc_board || 'কুমিল্লা শিক্ষা বোর্ড'}</span>-এর অধীনে <span style={{ fontWeight: 'bold', fontStyle: 'normal' }}>{toBnNum(parseInt(session) || 2024)}</span> সালের এসএসসি পরীক্ষায় <span style={{ fontWeight: 'bold', fontStyle: 'normal' }}>{finalGroup}</span> বিভাগ থেকে রোল নম্বর: <span style={{ fontWeight: 'bold', fontStyle: 'normal' }}>{toBnNum(effectiveData.ssc_roll || '') || 'N/A'}</span> এবং রেজিস্ট্রেশন নম্বর: <span style={{ fontWeight: 'bold', fontStyle: 'normal' }}>{toBnNum(effectiveData.ssc_registration || '') || 'N/A'}</span>, শিক্ষাবর্ষ: <span style={{ fontWeight: 'bold', fontStyle: 'normal' }}>{toBnNum(effectiveData.ssc_session || '') || 'N/A'}</span>-এ অংশগ্রহণ করে <span style={{ fontWeight: 'bold', color: '#1b5e20', fontStyle: 'normal' }}>জিপিএ {toBnNum(effectiveData.ssc_gpa || '') || 'N/A'}</span> পেয়ে উত্তীর্ণ হয়েছে। {possessive} জন্ম তারিখ: <span style={{ fontWeight: 'bold', fontStyle: 'normal' }}>{dob}</span>।
+                <br /><br />
+                আমার জানামতে {objective} রাষ্ট্রবিরোধী কোনো কাজে লিপ্ত ছিল না। {pronoun} সৎ চরিত্রের অধিকারী। আমি তার সর্বাঙ্গীণ মঙ্গল ও উজ্জ্বল ভবিষ্যৎ কামনা করি।
+            </Typography>
+          ) : (
+            <Typography sx={{ lineHeight: 1.5, fontSize: '1.8rem', color: '#2c3e50', fontFamily: "'Libre Baskerville', serif", fontStyle: 'italic' }}>
+                This is to certify that <span className="name-cursive" style={{ fontSize: nameFontSize, borderBottom: '2px solid #8b4513', padding: '0 8px', lineHeight: '1', display: 'inline-block', verticalAlign: 'baseline', fontFamily: "'Pinyon Script', cursive", fontStyle: 'normal' }}>{name}</span> {genderWord} of <span className="name-cursive" style={{ fontSize: fatherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive", fontStyle: 'normal' }}>{fatherName}</span> and <span className="name-cursive" style={{ fontSize: motherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive", fontStyle: 'normal' }}>{motherName}</span> of <span style={{ fontWeight: '700', color: '#5d4037' }}>{studentAddress}</span> was a student of this institute. {pronoun} duly passed the <span style={{ fontWeight: 'bold', color: '#8b4513' }}>SSC Examination</span> under the <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla'}</span> held in <span style={{ fontWeight: 'bold' }}>{parseInt(session) || new Date().getFullYear()}</span> from <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{finalGroup}</span> group bearing Roll No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_roll || 'N/A'}</span> and Registration No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_registration || 'N/A'}</span> in the session <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_session || 'N/A'}</span> and secured <span style={{ fontWeight: 'bold', color: '#1b5e20' }}>GPA {effectiveData.ssc_gpa || 'N/A'} in the scale of 5.00</span>. {possessive} date of birth is <span style={{ fontWeight: 'bold' }}>{dob}</span>.
+                <br /><br />
+                {pronoun} is a Bangladeshi by birth. To the best of my knowledge {pronoun.toLowerCase()} did not take part in any subversive activity against the discipline of state. {pronoun} possesses a good moral character. I wish {objective} every success in life.
+            </Typography>
+          )}
         </Box>
 
-        {/* Content Body */}
-        <Box sx={{
-          textAlign: 'left',
-          color: '#1a202c',
-          zIndex: 1,
-          px: 0,
-          mt: 2,
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-          justifyContent: 'center',
-          mb: 12
-        }}>
-          <Typography className="body-text" sx={{
-            lineHeight: 1.5,
-            fontSize: '1.8rem',
-            color: '#2c3e50',
-            fontFamily: "'Libre Baskerville', serif !important"
-          }}>
-            This is to certify that <span className="name-cursive" style={{ fontSize: nameFontSize, borderBottom: '2px solid #8b4513', padding: '0 8px', lineHeight: '1', display: 'inline-block', verticalAlign: 'baseline', fontFamily: "'Pinyon Script', cursive" }}>{name}</span> {genderWord} of <span className="name-cursive" style={{ fontSize: fatherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive" }}>{fatherName}</span> and <span className="name-cursive" style={{ fontSize: motherNameFontSize, display: 'inline-block', fontFamily: "'Pinyon Script', cursive" }}>{motherName}</span> of <span className="body-text" style={{ fontWeight: '700', color: '#5d4037', fontFamily: "'Libre Baskerville', serif" }}>{studentAddress}</span> was a student of this institute. {pronoun} duly passed the <span style={{ fontWeight: 'bold', color: '#8b4513' }}>SSC Examination</span> under the <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_board || 'Board of Intermediate and Secondary Education, Cumilla'}</span> held in <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{parseInt(session) || new Date().getFullYear()}</span> from <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{finalGroup}</span> group bearing Roll No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_roll || 'N/A'}</span> and Registration No. <span style={{ fontWeight: 'bold' }}>{effectiveData.ssc_registration || 'N/A'}</span> in the session <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{effectiveData.ssc_session || 'N/A'}</span> and achieved <span style={{ fontWeight: 'bold', color: '#1b5e20' }}>GPA {effectiveData.ssc_gpa || 'N/A'}</span>. {possessive} date of birth is <span style={{ fontWeight: 'bold' }}>{dob}</span>.
-          </Typography>
-
-          <Typography className="body-text" sx={{
-            lineHeight: 1.4,
-            fontSize: '1.7rem',
-            fontStyle: 'italic',
-            mt: 1.5,
-            fontFamily: "'Libre Baskerville', serif !important"
-          }}>
-            {pronoun} is a Bangladeshi by birth. To the best of my knowledge {pronoun.toLowerCase()} did not take part in any subversive activity against the discipline of state.
-          </Typography>
-
-          <Typography className="body-text" sx={{
-            lineHeight: 1.4,
-            fontSize: '1.7rem',
-            fontWeight: '600',
-            mt: 1,
-            fontFamily: "'Libre Baskerville', serif !important"
-          }}>
-            {pronoun} possesses a good moral character. I wish {objective} every success in life.
-            <span style={{ fontSize: '10px', opacity: 0.1, position: 'absolute', bottom: 0 }}>V2-AUG25</span>
-          </Typography>
-        </Box>
-
-        {/* Bottom Section */}
-        <Box sx={{
-          position: 'absolute',
-          bottom: '20px',
-          left: '60px',
-          right: '25px',
-          zIndex: 1,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-        }}>
-          {/* Footer Info Section - LEFT */}
-          <Box sx={{ textAlign: 'left', mb: 1 }}>
-            <Typography sx={{ fontWeight: 'bold', fontSize: '1.5rem !important', color: '#5d4037' }}>
-              Date: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-            </Typography>
-            <Typography className="sl-no-footer" sx={{ fontWeight: '900', fontSize: '1.5rem !important', color: '#5d4037', whiteSpace: 'nowrap', mt: 1, display: 'block' }}>
-              SL No: {effectiveData.student_custom_id || effectiveData.id}
-            </Typography>
+        {/* Footer */}
+        <Box sx={{ position: 'absolute', bottom: '20px', left: '60px', right: '60px', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <Box sx={{ textAlign: 'left' }}>
+            <Typography sx={{ fontWeight: 'bold', fontSize: '1.2rem !important', color: '#5d4037' }}>{isBn ? 'তারিখ: ' + toBnNum(new Date().toLocaleDateString('bn-BD')) : 'Date: ' + new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Typography>
           </Box>
-
-          {/* Bottom Signatures Section - RIGHT */}
-          <Box sx={{ textAlign: 'center', width: '350px', mr: 0 }}>
-            <Box sx={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
-              {principalSig && String(school?.id) !== '19' && (
-                <Box component="img" src={principalSig} sx={{
-                  height: 95, position: 'absolute', bottom: 10, zIndex: 1,
-                  pointerEvents: 'none'
-                }} />
-              )}
+          <Box sx={{ textAlign: 'center', width: '300px' }}>
+            <Box sx={{ position: 'relative', display: 'flex', justifyContent: 'center', minHeight: '60px' }}>
+              {/* Manual signature space */}
             </Box>
-            <Box sx={{ borderTop: '3.5px solid #5d4037', pt: 1, width: '100%', position: 'relative', zIndex: 2 }}>
-              <Typography sx={{ fontWeight: '900', fontSize: '1.7rem !important', textTransform: 'uppercase', color: '#5d4037', lineHeight: 1.1 }}>Head Teacher</Typography>
+            <Box sx={{ borderTop: '3px solid #5d4037', pt: 1 }}>
+              <Typography sx={{ fontWeight: '900', fontSize: '1.4rem !important', textTransform: 'uppercase', color: '#5d4037' }}>{isBn ? 'প্রধান শিক্ষক' : 'Head Teacher'}</Typography>
             </Box>
           </Box>
         </Box>
       </Box>
+    </Box>
+  );
+};
+
+const Certificate = ({ data, school, session }) => {
+  const isSchool62 = String(school?.id) === '62';
+
+  return (
+    <Box className="dual-certificate-container">
+      <CertificatePage data={data} school={school} session={session} lang="en" />
+      {isSchool62 && (
+        <>
+          <Box sx={{ height: '40px', '@media print': { display: 'none' } }} /> {/* Gap in UI preview */}
+          <CertificatePage data={data} school={school} session={session} lang="bn" />
+        </>
+      )}
     </Box>
   );
 };
@@ -628,10 +387,7 @@ export default function CertificateGenerator() {
   const toast = useToast();
   const [rollNumber, setRollNumber] = useState('');
   const [studentName, setStudentName] = useState('');
-  const [guardianName, setGuardianName] = useState('');
   const [session, setSession] = useState('');
-  const [guardianSuggestions, setGuardianSuggestions] = useState([]);
-  const [guardianSuggestLoading, setGuardianSuggestLoading] = useState(false);
   const [classFilter, setClassFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
   const [loading, setLoading] = useState(false);
@@ -642,13 +398,13 @@ export default function CertificateGenerator() {
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState(new Set());
   const [bulkCertificatesGenerated, setBulkCertificatesGenerated] = useState(false);
-  const { classrooms, sections, refreshAll, students } = useAcademics();
+  const { classrooms, sections, refreshAll, students, loading: academicsLoading, fetchStudentsScoped, setStudents } = useAcademics();
   const [bloodGroup, setBloodGroup] = useState('');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const certificateRef = useRef(null);
   const bulkCertificatesRef = useRef(null);
   const [activeStep, setActiveStep] = useState(0);
-  const [fontLoaded, setFontLoaded] = useState(false);
+  const [isSearchingBulk, setIsSearchingBulk] = useState(false);
 
   useEffect(() => {
     const fonts = [
@@ -669,10 +425,7 @@ export default function CertificateGenerator() {
     ]).then(() => {
       if ('fonts' in document) {
         Promise.all(fonts.map(f => document.fonts.load(`${f.weight} 3rem "${f.family}"`)))
-          .catch(() => {})
-          .finally(() => { setTimeout(() => setFontLoaded(true), 100); });
-      } else {
-        setTimeout(() => setFontLoaded(true), 300);
+          .catch(() => {});
       }
     });
   }, []);
@@ -698,7 +451,7 @@ export default function CertificateGenerator() {
 
   const loadSchool = useCallback(() => { api.get(`/api/schools/${schoolId}/`).then(res => setSchool(res.data)).catch(err => console.error(err)); }, [schoolId]);
   
-  const filteredSections = classFilter ? sections.filter(sec => String(sec.classroom?.id) === String(classFilter)) : [];
+  const filteredSections = classFilter ? sections.filter(sec => Number(sec.classroom?.id) === Number(classFilter)) : [];
 
   useEffect(() => { 
     if (schoolId) { 
@@ -710,144 +463,200 @@ export default function CertificateGenerator() {
   // Update sectionFilter when class changes
   useEffect(() => {
     setSectionFilter('');
-  }, [classFilter]);
+    if (isBulkMode) {
+      setSelectedStudents(new Set());
+      setBulkCertificatesGenerated(false);
+    }
+  }, [classFilter, isBulkMode]);
+
+  useEffect(() => {
+    if (isBulkMode) {
+      setSelectedStudents(new Set());
+      setBulkCertificatesGenerated(false);
+    }
+  }, [sectionFilter, isBulkMode]);
+
+  const handleSearchStudentsBulk = async () => {
+    if (!classFilter) {
+      setError('Please select a class first');
+      return;
+    }
+    setIsSearchingBulk(true);
+    setError('');
+    try {
+      const filters = { classroom: classFilter };
+      if (sectionFilter) filters.section = sectionFilter;
+      const results = await fetchStudentsScoped(schoolId, filters);
+      if (results.length === 0) {
+        setError('No students found for the selected criteria');
+      } else {
+        setStudents(results);
+        toast.success(`${results.length} students loaded`);
+      }
+    } catch (err) {
+      console.error('Bulk search error:', err);
+      setError('Failed to fetch students. Please check your connection.');
+    } finally {
+      setIsSearchingBulk(false);
+    }
+  };
 
   const handleEditProfile = () => { if (!isAuthenticated()) { navigate('/login'); return; } setIsEditingProfile(!isEditingProfile); };
   const handleBloodGroupChange = (value) => setBloodGroup(value);
 
-  const handlePrintCertificate = () => {
-    const el = certificateRef.current?.querySelector('.certificate-container') || certificateRef.current;
-    if (!el) return;
-    toast.info('Preparing for high-quality print...');
+  const getHtml2CanvasOptions = (scale = 3.0) => ({
+    scale,
+    useCORS: true,
+    backgroundColor: '#ffffff',
+    width: 1122,
+    height: 793,
+    logging: false,
+    allowTaint: true,
+    scrollX: 0,
+    scrollY: 0,
+    windowWidth: 1400,
+    windowHeight: 900,
+    imageTimeout: 15000,
+    onclone: (clonedDoc) => {
+      const pages = clonedDoc.querySelectorAll('.certificate-page');
+      pages.forEach(p => {
+        p.style.setProperty('-webkit-print-color-adjust', 'exact', 'important');
+        p.style.setProperty('print-color-adjust', 'exact', 'important');
+        p.style.transform = 'none';
+        p.style.webkitTransform = 'none';
+      });
 
-    // Save scroll and styles
-    const scrollPos = window.scrollY;
-    const originalTransform = el.style.transform;
-    const originalMargin = el.style.margin;
+      const testimonialBoxes = clonedDoc.querySelectorAll('[data-testimonial-box="true"]');
+      testimonialBoxes.forEach(box => {
+        box.style.setProperty('display', 'inline-block', 'important');
+        box.style.setProperty('backgroundColor', '#8b4513', 'important');
+        box.style.setProperty('background', '#8b4513', 'important');
+        box.style.setProperty('paddingLeft', '90px', 'important');
+        box.style.setProperty('paddingRight', '90px', 'important');
+        box.style.setProperty('paddingTop', '10px', 'important');
+        box.style.setProperty('paddingBottom', '10px', 'important');
+        box.style.setProperty('borderRadius', '50px', 'important');
+        box.style.setProperty('border', '2px solid #d4af37', 'important');
+        box.style.setProperty('color', '#ffffff', 'important');
+        box.style.setProperty('minWidth', '300px', 'important');
+        box.style.setProperty('zIndex', '9999', 'important');
+        box.style.setProperty('position', 'relative', 'important');
+        box.style.setProperty('opacity', '1', 'important');
+        box.style.setProperty('visibility', 'visible', 'important');
+      });
 
-    // Move to top and reset styles for capture
-    window.scrollTo(0, 0);
-    el.style.transform = 'none';
-    el.style.margin = '0';
-    el.style.width = '1122px';
-    el.style.height = '793px';
+      const testimonialTexts = clonedDoc.querySelectorAll('[data-testimonial-text="true"]');
+      testimonialTexts.forEach(txt => {
+        txt.style.setProperty('fontWeight', '900', 'important');
+        txt.style.setProperty('fontSize', '2.2rem', 'important');
+        txt.style.setProperty('letterSpacing', txt.textContent && /[a-zA-Z]/.test(txt.textContent) ? '10px' : '2px', 'important');
+        txt.style.setProperty('fontFamily', txt.textContent && /[a-zA-Z]/.test(txt.textContent) ? "'Playfair Display', serif" : "'Galada', cursive", 'important');
+        txt.style.setProperty('color', '#ffffff', 'important');
+        txt.style.setProperty('display', 'block', 'important');
+        txt.style.setProperty('whiteSpace', 'nowrap', 'important');
+        txt.style.setProperty('lineHeight', '1.2', 'important');
+        txt.style.setProperty('opacity', '1', 'important');
+        txt.style.setProperty('visibility', 'visible', 'important');
+        txt.style.setProperty('position', 'relative', 'important');
+        txt.style.setProperty('zIndex', '10000', 'important');
+        txt.style.textTransform = txt.textContent && /[a-zA-Z]/.test(txt.textContent) ? 'uppercase' : 'none';
+      });
 
-    html2canvas(el, {
-      scale: 4, // Higher scale for extreme sharpness
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      width: 1122,
-      height: 793,
-      windowWidth: 1122,
-      windowHeight: 793,
-      scrollX: 0,
-      scrollY: 0,
-      x: 0,
-      y: 0,
-      letterRendering: true, // Better text sharpness
-      allowTaint: true
-    }).then(canvas => {
-      // Restore scroll and styles
-      el.style.transform = originalTransform;
-      el.style.margin = originalMargin;
-      window.scrollTo(0, scrollPos);
+      const allDivs = clonedDoc.querySelectorAll('*');
+      allDivs.forEach(el => {
+        const cs = window.getComputedStyle(el);
+        const bg = cs.backgroundColor;
+        if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+          el.style.setProperty('background-color', bg, 'important');
+          el.style.setProperty('background', bg, 'important');
+        }
+        const color = cs.color;
+        if (color) {
+          el.style.setProperty('color', color, 'important');
+        }
+      });
+    }
+  });
 
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      const win = window.open('', '_blank');
-      win.document.write(`
-        <html>
-          <head>
-            <title>Certificate - ${student?.user?.first_name || 'Student'}</title>
-            <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap" rel="stylesheet">
-            <style>
-              @page {
-                size: A4 landscape;
-                margin: 0 !important;
-              }
-              html, body {
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 297mm !important;
-                height: 210mm !important;
-                background: #fff;
-                overflow: hidden;
-              }
-              body {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              }
-              img {
-                width: 297mm;
-                height: 210mm;
-                display: block;
-                border: none;
-                margin: 0;
-                padding: 0;
-                object-fit: fill;
-                image-rendering: -webkit-optimize-contrast;
-                filter: contrast(1.01) saturate(1.1);
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-            </style>
-          </head>
-          <body>
-            <img src="${imgData}" />
-          </body>
-        </html>
-      `);
-      win.document.close();
-      win.focus();
-      setTimeout(() => {
-        win.print();
-        win.close();
-      }, 1000);
-    }).catch(err => {
-      el.style.transform = originalTransform;
-      el.style.margin = originalMargin;
-      window.scrollTo(0, scrollPos);
-      console.error('Print capture error:', err);
-      toast.error('Failed to capture certificate for print');
-    });
+  const waitForFonts = async () => {
+    if ('fonts' in document && document.fonts && document.fonts.ready) {
+      try { await document.fonts.ready; } catch (e) {}
+    }
+    await new Promise(r => setTimeout(r, 400));
+  };
+
+  const handlePrintCertificate = async () => {
+    const container = certificateRef.current;
+    if (!container) return;
+    toast.info('Preparing high-quality dual-page print...');
+    await waitForFonts();
+
+    const pages = container.querySelectorAll('.certificate-page');
+    const printWindow = window.open('', '_blank');
+    const imageDataUrls = [];
+
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      const canvas = await html2canvas(page, getHtml2CanvasOptions(3.5));
+      imageDataUrls.push(canvas.toDataURL('image/jpeg', 1.0));
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Certificate - ${student?.user?.first_name || 'Student'}</title>
+          <style>
+            @page { size: A4 landscape; margin: 0 !important; }
+            body { margin: 0 !important; padding: 0 !important; background: #fff; }
+            .page-container {
+              width: 297mm;
+              height: 210mm;
+              page-break-after: always;
+              overflow: hidden;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .page-container:last-child { page-break-after: avoid; }
+            img { width: 297mm; height: 210mm; display: block; object-fit: fill; }
+          </style>
+        </head>
+        <body>
+          ${imageDataUrls.map(src => `<div class="page-container"><img src="${src}" /></div>`).join('')}
+          <script>
+            window.onload = () => {
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 1000);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const handleDownloadCertificate = async () => {
-    const el = certificateRef.current?.querySelector('.certificate-container') || certificateRef.current;
-    if (!el) return;
-    toast.info('Generating PDF...');
+    const container = certificateRef.current;
+    if (!container) return;
+    toast.info('Generating Dual-Page PDF...');
+    await waitForFonts();
 
-    const originalTransform = el.style.transform;
-    const originalMargin = el.style.margin;
-    el.style.transform = 'none';
-    el.style.margin = '0';
-    el.style.width = '1122px';
-    el.style.height = '793px';
+    const pages = container.querySelectorAll('.certificate-page');
+    const pdf = new jsPDF('l', 'px', [1122, 793]);
 
     try {
-      const canvas = await html2canvas(el, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: 1122,
-        height: 793,
-        windowWidth: 1122,
-        windowHeight: 793,
-        scrollX: 0,
-        scrollY: 0,
-      });
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        const canvas = await html2canvas(page, getHtml2CanvasOptions(2.5));
 
-      el.style.transform = originalTransform;
-      el.style.margin = originalMargin;
-
-      const pdf = new jsPDF('l', 'px', [1122, 793]);
-      pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 1122, 793);
+        if (i > 0) pdf.addPage([1122, 793], 'l');
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 1122, 793);
+      }
       pdf.save(`certificate-${student?.roll_number || student?.id}.pdf`);
       toast.success('Downloaded successfully');
     } catch (err) {
-      el.style.transform = originalTransform;
-      el.style.margin = originalMargin;
       console.error('PDF generation error:', err);
       toast.error('Failed to generate PDF');
     }
@@ -887,16 +696,21 @@ export default function CertificateGenerator() {
         matchedResults = Array.isArray(resClean.data) ? resClean.data : (resClean.data.results || []);
       }
 
-      // যদি তাও না পাওয়া যায়, তবে আইকন্টেইনস সার্চ (icontains search)
+      // যদি তাও না পাওয়া যায়, তবে আইকন্টেইনস সার্চ (icontains search) - Keeping filters
       if (matchedResults.length === 0 && (rollNumber || studentName)) {
         const resSearch = await api.get(`/api/academics/students/`, {
-          params: { school: schoolId, search: (rollNumber || studentName).trim() }
+          params: {
+            school: schoolId,
+            search: (rollNumber || studentName).trim(),
+            classroom: classFilter,
+            section: sectionFilter
+          }
         });
         matchedResults = Array.isArray(resSearch.data) ? resSearch.data : (resSearch.data.results || []);
       }
 
       if (matchedResults.length === 0) {
-        setError('এই স্কুলে এই রোল বা নামে কোনো শিক্ষার্থী পাওয়া যায়নি');
+        setError('এই স্কুলে এই রোল বা নামে কোনো শিক্ষার্থী পাওয়া যায়নি। অনুগ্রহ করে শ্রেণি ও সেকশন সঠিক আছে কিনা পরীক্ষা করুন।');
         return;
       }
 
@@ -940,34 +754,53 @@ export default function CertificateGenerator() {
     setBulkCertificatesGenerated(false);
   };
 
-  const getFilteredStudentsForBulk = () => {
+  const getFilteredStudentsForBulk = useCallback(() => {
     let filtered = [...students];
     if (classFilter) {
-      filtered = filtered.filter(s => String(s.classroom?.id) === String(classFilter));
+      filtered = filtered.filter(s => {
+        const cid = s.classroom?.id || s.classroom_id || s.classroom;
+        return Number(cid) === Number(classFilter);
+      });
     }
     if (sectionFilter) {
-      filtered = filtered.filter(s => String(s.section?.id) === String(sectionFilter));
+      filtered = filtered.filter(s => {
+        const sid = s.section?.id || s.section_id || s.section;
+        return Number(sid) === Number(sectionFilter);
+      });
     }
     return filtered;
-  };
+  }, [students, classFilter, sectionFilter]);
 
   const handleToggleAllStudents = () => {
     const filteredStudents = getFilteredStudentsForBulk();
-    if (selectedStudents.size === filteredStudents.length) {
-      setSelectedStudents(new Set());
-    } else {
-      setSelectedStudents(new Set(filteredStudents.map(s => s.id)));
-    }
+    const filteredIds = filteredStudents.map(s => s.id);
+
+    // Check if ALL currently filtered students are already selected
+    const allFilteredSelected = filteredIds.every(id => selectedStudents.has(id));
+
+    setSelectedStudents(prev => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        // Unselect only the currently filtered ones
+        filteredIds.forEach(id => next.delete(id));
+      } else {
+        // Select all currently filtered ones
+        filteredIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
   };
 
   const handleToggleStudent = (studentId) => {
-    const newSelected = new Set(selectedStudents);
-    if (newSelected.has(studentId)) {
-      newSelected.delete(studentId);
-    } else {
-      newSelected.add(studentId);
-    }
-    setSelectedStudents(newSelected);
+    setSelectedStudents(prev => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
   };
 
   const handleGenerateBulkCertificates = () => {
@@ -977,163 +810,86 @@ export default function CertificateGenerator() {
     }
     setBulkCertificatesGenerated(true);
     setError('');
+
+    // Auto-scroll to results
+    setTimeout(() => {
+      if (bulkCertificatesRef.current) {
+        bulkCertificatesRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handlePrintBulkCertificates = async () => {
     if (!bulkCertificatesRef.current) return;
-    toast.info('Preparing all certificates for print...');
+    toast.info('Preparing all dual-page certificates for print...');
+    await waitForFonts();
     const container = bulkCertificatesRef.current;
-    const certificateElements = container.querySelectorAll('.certificate-container');
+    const pages = container.querySelectorAll('.certificate-page');
     const printWindow = window.open('', '_blank');
-    let allImagesHTML = '';
+    const imageDataUrls = [];
 
-    for (let i = 0; i < certificateElements.length; i++) {
-      const el = certificateElements[i];
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
       try {
-        const canvas = await html2canvas(el, {
-          scale: 3.5,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          width: 1122,
-          height: 793,
-          onclone: (clonedDoc) => {
-            const clonedEls = clonedDoc.querySelectorAll('.certificate-container');
-            const clonedEl = clonedEls[i] || clonedEls[0] || clonedDoc.querySelector('.certificate-container');
-            if (clonedEl) {
-              clonedEl.style.transform = 'none';
-              clonedEl.style.margin = '0 auto';
-              clonedEl.style.padding = '0';
-              clonedEl.style.boxShadow = 'none';
-              clonedEl.style.display = 'flex';
-              clonedEl.style.position = 'relative';
-              clonedEl.style.border = '30px solid #8B4513';
-              clonedEl.style.boxSizing = 'border-box';
-              clonedEl.style.width = '1122px';
-              clonedEl.style.height = '793px';
-              clonedEl.style.overflow = 'hidden';
-            }
-          }
-        });
-        const isLast = i === certificateElements.length - 1;
-        allImagesHTML += `
-          <div style="page-break-after: ${isLast ? 'avoid' : 'always'}; page-break-inside: avoid; width: 297mm; height: 210mm; margin: 0; padding: 0; background: #fff; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-            <img src="${canvas.toDataURL('image/jpeg', 1.0)}" style="width: 297mm; height: 210mm; display: block; border: none; margin: 0; padding: 0; object-fit: fill; image-rendering: -webkit-optimize-contrast; filter: contrast(1.02) saturate(1.15); -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
-          </div>
-        `;
+        const canvas = await html2canvas(page, getHtml2CanvasOptions(3.0));
+        imageDataUrls.push(canvas.toDataURL('image/jpeg', 0.95));
       } catch (err) {
-        console.error(`Failed to capture certificate ${i + 1}:`, err);
+        console.error(`Failed to capture page ${i + 1}:`, err);
       }
     }
 
     printWindow.document.write(`
-      <!DOCTYPE html>
       <html>
         <head>
-          <meta charset="utf-8" />
           <title>Bulk Certificates</title>
           <style>
-            @page {
-              size: A4 landscape;
-              margin: 0 !important;
+            @page { size: A4 landscape; margin: 0 !important; }
+            body { margin: 0 !important; padding: 0 !important; background: #fff; }
+            .page-container {
+              width: 297mm;
+              height: 210mm;
+              page-break-after: always;
+              overflow: hidden;
+              display: flex;
+              align-items: center;
+              justify-content: center;
             }
-            * { box-sizing: border-box; }
-            html, body {
-              margin: 0 !important;
-              padding: 0 !important;
-              width: 297mm !important;
-              background: #fff !important;
-            }
-            body > div {
-              box-sizing: border-box;
-            }
-            img {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
+            .page-container:last-child { page-break-after: avoid; }
+            img { width: 297mm; height: 210mm; display: block; object-fit: fill; }
           </style>
         </head>
         <body>
-          ${allImagesHTML}
+          ${imageDataUrls.map(src => `<div class="page-container"><img src="${src}" /></div>`).join('')}
+          <script>
+            window.onload = () => {
+              setTimeout(() => { window.print(); window.close(); }, 2000);
+            };
+          </script>
         </body>
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 2000);
   };
 
   const handleDownloadBulkCertificates = async () => {
     if (!bulkCertificatesRef.current) return;
-    toast.info('Generating Bulk PDF...');
+    toast.info('Generating Bulk Dual-Page PDF...');
+    await waitForFonts();
     const container = bulkCertificatesRef.current;
-    const certificateElements = container.querySelectorAll('.certificate-container');
+    const pages = container.querySelectorAll('.certificate-page');
     const pdf = new jsPDF('l', 'px', [1122, 793]);
-    for (let i = 0; i < certificateElements.length; i++) {
-      const el = certificateElements[i];
+
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
       try {
-        const canvas = await html2canvas(el, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          width: 1122,
-          height: 793,
-          onclone: (clonedDoc) => {
-            const clonedEls = clonedDoc.querySelectorAll('.certificate-container');
-            const clonedEl = clonedEls[i] || clonedEls[0] || clonedDoc.querySelector('.certificate-container');
-            if (clonedEl) {
-              clonedEl.style.transform = 'none';
-              clonedEl.style.margin = '0';
-              clonedEl.style.padding = '0';
-              clonedEl.style.boxShadow = 'none';
-              clonedEl.style.display = 'flex';
-              clonedEl.style.position = 'relative';
-              clonedEl.style.left = 'auto';
-              clonedEl.style.top = 'auto';
-              clonedEl.style.right = 'auto';
-              clonedEl.style.bottom = 'auto';
-              clonedEl.style.border = '30px solid #8B4513';
-              clonedEl.style.boxSizing = 'border-box';
-              clonedEl.style.width = '1122px';
-              clonedEl.style.minWidth = '1122px';
-              clonedEl.style.height = '793px';
-              clonedEl.style.minHeight = '793px';
-              clonedEl.style.overflow = 'hidden';
-              clonedDoc.body.innerHTML = '';
-              clonedDoc.body.appendChild(clonedEl);
-            }
-            const b = clonedDoc.body;
-            const h = clonedDoc.documentElement;
-            if (b) {
-              b.style.margin = '0';
-              b.style.padding = '0';
-              b.style.overflow = 'hidden';
-              b.style.background = '#fff';
-              b.style.width = '1122px';
-              b.style.height = '793px';
-              b.style.minWidth = '1122px';
-              b.style.minHeight = '793px';
-              b.style.display = 'block';
-            }
-            if (h) {
-              h.style.margin = '0';
-              h.style.padding = '0';
-              h.style.overflow = 'hidden';
-              h.style.background = '#fff';
-              h.style.width = '1122px';
-              h.style.height = '793px';
-            }
-          }
-        });
+        const canvas = await html2canvas(page, getHtml2CanvasOptions(2.0));
         if (i > 0) pdf.addPage([1122, 793], 'l');
-        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 1122, 793);
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 1122, 793);
       } catch (err) {
-        console.error(`Failed to capture certificate ${i + 1} for PDF:`, err);
+        console.error(`Failed to capture page ${i + 1} for PDF:`, err);
       }
     }
-    pdf.save('bulk-certificates.pdf');
+    pdf.save('bulk-certificates-dual.pdf');
     toast.success('Bulk download complete');
   };
 
@@ -1190,7 +946,24 @@ export default function CertificateGenerator() {
             </>
           ) : (
             <>
-              <Button variant="contained" startIcon={<CollectionsBookmark />} onClick={handleGenerateBulkCertificates} sx={{ bgcolor: '#2E7D32' }}>Generate Selected ({selectedStudents.size})</Button>
+              <Button
+                variant="contained"
+                startIcon={<Search />}
+                onClick={handleSearchStudentsBulk}
+                disabled={isSearchingBulk || academicsLoading}
+                sx={{ bgcolor: '#1976d2' }}
+              >
+                Search Students
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<CollectionsBookmark />}
+                onClick={handleGenerateBulkCertificates}
+                disabled={selectedStudents.size === 0}
+                sx={{ bgcolor: '#2E7D32' }}
+              >
+                Generate Selected ({selectedStudents.size})
+              </Button>
             </>
           )}
           <Button variant="outlined" startIcon={<Refresh />} onClick={handleReset}>Reset</Button>
@@ -1200,41 +973,55 @@ export default function CertificateGenerator() {
 
       {isBulkMode && (
         <Paper sx={{ p: 3, mb: 3 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Checkbox 
-              checked={selectedStudents.size === getFilteredStudentsForBulk().length && getFilteredStudentsForBulk().length > 0} 
-              onClick={handleToggleAllStudents}
-            />
-            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-              Select All ({getFilteredStudentsForBulk().length} students)
-            </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Checkbox
+                indeterminate={selectedStudents.size > 0 && !getFilteredStudentsForBulk().every(s => selectedStudents.has(s.id))}
+                checked={getFilteredStudentsForBulk().length > 0 && getFilteredStudentsForBulk().every(s => selectedStudents.has(s.id))}
+                onClick={handleToggleAllStudents}
+              />
+              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                Select All ({getFilteredStudentsForBulk().length} students)
+              </Typography>
+            </Stack>
+            {selectedStudents.size > 0 && (
+              <Button size="small" onClick={() => setSelectedStudents(new Set())}>Clear Selection</Button>
+            )}
           </Stack>
-          <List sx={{ maxHeight: '300px', overflow: 'auto' }}>
-            {getFilteredStudentsForBulk().map(student => {
-              const user = student?.user || {};
-              const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+          {(isSearchingBulk || academicsLoading) ? (
+            <Box align="center" p={3}><CircularProgress size={30} /><Typography variant="body2" sx={{ mt: 1 }}>Loading students...</Typography></Box>
+          ) : (
+            <List sx={{ maxHeight: '400px', overflow: 'auto', border: '1px solid #eee', borderRadius: 1 }}>
+              {getFilteredStudentsForBulk().length === 0 ? (
+                <Box p={4} textAlign="center" color="text.secondary">
+                  <Typography>No students found. Try changing filters or clicking "Search Students".</Typography>
+                </Box>
+              ) : getFilteredStudentsForBulk().map(student => {
+                const user = student?.user || {};
+                const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
 
-              return (
-                <ListItem key={student.id} disablePadding>
-                  <Button
-                    fullWidth
-                    onClick={() => handleToggleStudent(student.id)}
-                    sx={{ justifyContent: 'flex-start', textAlign: 'left', textTransform: 'none', color: 'text.primary', py: 1 }}
-                  >
-                    <Checkbox checked={selectedStudents.has(student.id)} sx={{ mr: 2 }} />
-                    <Box>
-                      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                        {`${name} (Roll: ${student.roll_number || 'N/A'})`}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {`Class: ${student.classroom?.name || 'N/A'}, Section: ${student.section?.name || 'N/A'}`}
-                      </Typography>
-                    </Box>
-                  </Button>
-                </ListItem>
-              )
-            })}
-          </List>
+                return (
+                  <ListItem key={student.id} disablePadding divider>
+                    <Button
+                      fullWidth
+                      onClick={() => handleToggleStudent(student.id)}
+                      sx={{ justifyContent: 'flex-start', textAlign: 'left', textTransform: 'none', color: 'text.primary', py: 1.5 }}
+                    >
+                      <Checkbox checked={selectedStudents.has(student.id)} sx={{ mr: 2 }} />
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                          {`${name} (Roll: ${student.roll_number || 'N/A'})`}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {`Class: ${student.classroom?.name || 'N/A'}, Section: ${student.section?.name || 'N/A'}`}
+                        </Typography>
+                      </Box>
+                    </Button>
+                  </ListItem>
+                )
+              })}
+            </List>
+          )}
         </Paper>
       )}
 

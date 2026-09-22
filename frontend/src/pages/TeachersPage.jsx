@@ -5,7 +5,6 @@ import {
   Box,
   Typography,
   Grid,
-  Avatar,
   Button,
   Stack,
   TextField,
@@ -34,7 +33,6 @@ import EmptyState from '../components/EmptyState';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import PhotoUpload from '../components/PhotoUpload';
-import { useAuth } from '../context/AuthContext';
 import { getMediaUrl } from '../utils/media';
 
 export default function TeachersPage() {
@@ -342,7 +340,7 @@ export default function TeachersPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, buildAssignments]); // Removed toast
+  }, [id, buildAssignments, toast]);
 
   const loadFormData = useCallback(async () => {
     try {
@@ -858,29 +856,6 @@ export default function TeachersPage() {
 
   const aggregated = useMemo(() => groupAssignments(assignments), [assignments]);
 
-  const normalizeClassBase = (name) => {
-    const s = String(name || '').toLowerCase();
-    return s.replace(/\s*(শ্রেণী|শ্রেণি|শেণি)\s*$/i, '').trim();
-  };
-  const classOrder = ['প্রথম','দ্বিতীয়','দ্বিতীয়','তৃতীয়','তৃতীয়','চতুর্থ','পঞ্চম','ষষ্ঠ','সপ্তম','অষ্টম','নবম','দশম','একাদশ','দ্বাদশ'];
-  const classIndex = (name) => {
-    const base = normalizeClassBase(name);
-    const idx = classOrder.indexOf(base);
-    return idx >= 0 ? idx : 999;
-  };
-  const formatClassRange = (classesSet) => {
-    const arr = Array.from(classesSet || []);
-    if (!arr.length) return '';
-    const sorted = arr.slice().sort((a, b) => classIndex(a) - classIndex(b));
-    if (sorted.length >= 2) {
-      const first = normalizeClassBase(sorted[0]);
-      const last = normalizeClassBase(sorted[sorted.length - 1]);
-      return `${first}-${last} শ্রেণি`;
-    }
-    const single = normalizeClassBase(sorted[0]);
-    return `${single} শ্রেণি`;
-  };
-
   const getDesignationRank = (designation) => {
     const d = String(designation || '').toLowerCase();
     if (d.includes('প্রধান শিক্ষক') || d.includes('principal') || d.includes('headmaster')) return 1;
@@ -1025,12 +1000,7 @@ export default function TeachersPage() {
           {filtered
             .map(g => {
               const a = g; // aggregated item
-              const qualification = a.teacher?.educational_qualification || '';
-              const qualificationText = qualification ? qualification.replace(/\s*,\s*/g, ' ও ') : '';
-              const classTextRaw = formatClassRange(a.classes) || Array.from(a.classes).join(', ');
-              const hasHyphen = classTextRaw.includes('-');
-              const classParts = hasHyphen ? classTextRaw.split('-').map(s => s.trim()) : [classTextRaw, ''];
-                    return (
+              return (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={(a.teacher?.user?.id || a.teacher?.id || Math.random())}>
                 <TeacherCard 
                   teacher={{
@@ -1067,16 +1037,10 @@ export default function TeachersPage() {
             </Box>
             
             <TextField
-              label="First Name"
+              label="শিক্ষকের নাম (Name) *"
               fullWidth
               value={editFormData.first_name || ''}
               onChange={(e) => setEditFormData({...editFormData, first_name: e.target.value})}
-            />
-            <TextField
-              label="Last Name"
-              fullWidth
-              value={editFormData.last_name || ''}
-              onChange={(e) => setEditFormData({...editFormData, last_name: e.target.value})}
             />
             <TextField
               label="Email"
@@ -1084,12 +1048,7 @@ export default function TeachersPage() {
               value={editFormData.email || ''}
               onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
             />
-            <TextField
-              label="Designation"
-              fullWidth
-              value={editFormData.designation || ''}
-              onChange={(e) => setEditFormData({...editFormData, designation: e.target.value})}
-            />
+
             <TextField
               label="Username (Login ID)"
               fullWidth
@@ -1405,25 +1364,14 @@ export default function TeachersPage() {
               </Typography>
             </Grid>
             
-            <Grid size={{ xs: 12, sm: 6 }}>
+            <Grid size={{ xs: 12 }}>
               <TextField
-                label="First Name *"
+                label="শিক্ষকের নাম (Name) *"
                 value={newTeacher.first_name}
                 onChange={(e) => setNewTeacher({...newTeacher, first_name: e.target.value})}
                 fullWidth
                 error={!!newTeacherErrors.first_name}
                 helperText={newTeacherErrors.first_name || ''}
-              />
-            </Grid>
-            
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                label="Last Name *"
-                value={newTeacher.last_name}
-                onChange={(e) => setNewTeacher({...newTeacher, last_name: e.target.value})}
-                fullWidth
-                error={!!newTeacherErrors.last_name}
-                helperText={newTeacherErrors.last_name || ''}
               />
             </Grid>
             

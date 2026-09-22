@@ -164,21 +164,30 @@ def calculate_student_overall_result(examination, student):
     results_to_calculate = main_results if main_results else results_to_process
     count = len(results_to_calculate)
 
+    group = _class_group(getattr(examination.classroom, "name", None))
+
     # Calculate literal total obtained marks for display (Main subjects only)
     literal_total_obtained = sum(float(r.total_obtained) for r in results_to_calculate)
 
     # Calculate internal total for GPA calculation (Main subjects only)
     total_obtained_for_gpa = sum(float(r.total_obtained) for r in results_to_calculate)
 
+    if group == 'primary':
+        tutorial_total = sum(float(r.mcq_marks) for r in results_to_calculate if r.mcq_marks is not None)
+        literal_total_obtained += tutorial_total
+        # NOTE: total_obtained_for_gpa intentionally excludes tutorial_total so tutorial has zero effect on GPA/CGPA
+
     # Improved total_possible calculation (Main subjects only)
-    group = _class_group(getattr(examination.classroom, "name", None))
     total_possible = 0
     for r in results_to_calculate:
         maxima = get_subject_maxima(group, getattr(r.subject, "name", None), student_group if is_910 else None)
-        if maxima:
-            total_possible += (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0)))
+        if group == 'primary':
+            total_possible += (int(maxima.get("written", 100)) if maxima else 100)
         else:
-            total_possible += float(examination.total_marks)
+            if maxima:
+                total_possible += (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0)))
+            else:
+                total_possible += float(examination.total_marks)
 
     # Optional Marks Bonus (Above 40%) - Following standard merit rules
     bonus_marks = 0
@@ -302,6 +311,10 @@ def calculate_student_overall_result(examination, student):
 
     # Check for missing mandatory subjects (Bangla/English/Math/Religion/ICT/Science/BGS)
     mandatory_keywords = {
+        'bangla': (['bangla', 'বাংলা'], 'বাংলা'),
+        'english': (['english', 'ইংরেজি', 'ইংরেজী'], 'ইংরেজি'),
+        'math': (['math', 'গণিত', 'গনিত'], 'গণিত'),
+    } if group == 'primary' else {
         'bangla': (['bangla', 'বাংলা'], 'বাংলা'),
         'english': (['english', 'ইংরেজি', 'ইংরেজী'], 'ইংরেজি'),
         'math': (['math', 'গণিত', 'গনিত'], 'গণিত'),

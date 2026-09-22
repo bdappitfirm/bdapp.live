@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { Card, CardContent, CardHeader, Typography, Box, Avatar, Divider, Grid, Button, Chip } from '@mui/material';
+import { Card, CardContent, CardHeader, Typography, Box, Avatar, Divider, Grid, Button } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import html2canvas from 'html2canvas';
@@ -180,11 +180,9 @@ export default function StudentFeeSlipCard({ school, student, rows = [], totals 
               } else {
                 // multi-page
                 let remaining = imgHeight;
-                let position = 0;
                 while (remaining > 0) {
                   pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight, undefined, 'FAST');
                   remaining -= (pageHeight - 20);
-                  position -= (pageHeight - 20);
                   if (remaining > 0) pdf.addPage();
                 }
               }

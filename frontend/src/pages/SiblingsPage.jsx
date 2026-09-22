@@ -21,13 +21,11 @@ import {
 } from '@mui/material';
 import { scopedGet } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
-import { useSchool } from '../context/SchoolContext';
 import { getMediaUrl } from '../utils/media';
 
 export default function SiblingsPage() {
   const { id } = useParams();
   const toast = useToast();
-  const { school: schoolInfo } = useSchool();
   const [loading, setLoading] = useState(false);
   const [siblingGroups, setSiblingGroups] = useState([]);
 

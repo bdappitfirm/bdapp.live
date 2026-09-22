@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -22,7 +22,6 @@ import { transliterateBangla } from '../utils/helpers';
 
 export default function SchoolSettings() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
   
   const [loading, setLoading] = useState(true);
@@ -62,11 +61,14 @@ export default function SchoolSettings() {
         const bNum = match ? parseInt(match[0]) : null;
         if (bNum) {
           // Fetch rooms for this building to get count and details
-          const roomsRes = await api.get(`/api/academics/rooms/?building=${b.id}`);
-          const rooms = roomsRes.data || [];
+          const roomsRes = await api.get(`/api/academics/rooms/?building=${b.id}&page_size=1000`);
+          const roomsArr = Array.isArray(roomsRes.data)
+            ? roomsRes.data
+            : (Array.isArray(roomsRes.data?.results) ? roomsRes.data.results : []);
+
           newBuildingData[bNum] = {
-            count: rooms.length,
-            rooms: rooms.map((r, idx) => ({
+            count: roomsArr.length,
+            rooms: roomsArr.map((r, idx) => ({
               room_number: idx + 1,
               room_name: r.name,
               bench_count: Math.ceil(r.capacity / 3) || 10

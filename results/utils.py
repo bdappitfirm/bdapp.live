@@ -11,21 +11,25 @@ def _round_half_up(x):
     return int(q)
 
 def _class_group(n):
-    """Determines the class group (six_to_eight or nine_ten) based on class name."""
+    """Determines the class group (six_to_eight, nine_ten, or primary) based on class name."""
     x = (n or "").lower().strip()
     if not x:
         return None
         
+    # Primary (Play, Shishu, 1 to 5)
+    if any(k in x for k in ["প্লে", "play", "শিশু", "nursery", "প্রথম", "১ম", "ক্লাস ১", "শ্রেণি ১", "শ্রেণী ১", "দ্বিতীয়", "দ্বিতীয়", "২য়", "ক্লাস ২", "শ্রেণি ২", "শ্রেণী ২", "তৃতীয়", "তৃতীয়", "৩য়", "ক্লাস ৩", "শ্রেণি ৩", "শ্রেণী ৩", "চতুর্থ", "৪র্থ", "ক্লাস ৪", "শ্রেণি ৪", "শ্রেণী ৪", "পঞ্চম", "৫ম", "ক্লাস ৫", "শ্রেণি ৫", "শ্রেণী ৫"]):
+        if not any(k in x for k in ["10", "11", "12", "৬", "৭", "৮", "৯", "১০", "six", "seven", "eight", "nine", "ten"]):
+            return "primary"
+    if any(x == k or x.endswith(k) or x.startswith(k) for k in [" 1", " 2", " 3", " 4", " 5", "১", "২", "৩", "৪", "৫"]):
+        if not any(k in x for k in ["10", "11", "12", "৬", "৭", "৮", "৯", "১০", "six", "seven", "eight", "nine", "ten"]):
+            return "primary"
+
     # Six to Eight
-    if any(k in x for k in ["ষষ্ঠ", "six", " 6", "সপ্তম", "seven", " 7", "অষ্টম", "eight", " 8"]):
-        if x.startswith("6") or x.startswith("7") or x.startswith("8"):
-             return "six_to_eight"
+    if any(k in x for k in ["ষষ্ঠ", "six", " 6", "সপ্তম", "seven", " 7", "অষ্টম", "eight", " 8", "dakhil 6", "dakhil 7", "dakhil 8", "দাখিল ৬", "দাখিল ৭", "দাখিল ৮"]):
         return "six_to_eight"
     
     # Nine to Ten (and SSC)
-    if any(k in x for k in ["নবম", "nine", " 9", "দশম", "ten", " 10", "এসএসসি", "ssc"]):
-        if x.startswith("9") or x.startswith("10"):
-            return "nine_ten"
+    if any(k in x for k in ["নবম", "nine", " 9", "দশম", "ten", " 10", "এসএসসি", "ssc", "dakhil 9", "dakhil 10", "দাখিল ৯", "দাখিল ১০", "alim", "আলিম"]):
         return "nine_ten"
         
     return None
@@ -123,6 +127,15 @@ SECTION_MAXIMA = {
         "wcat": {"written": 50, "mcq": 0, "practical": 0},
     },
     "nine_ten": {
+        # Madrasah Standard (Dakhil)
+        "quran majid": DIST_70_30,
+        "hadith sharif": DIST_70_30,
+        "fiqh": DIST_70_30,
+        "arabic first paper": DIST_100_NO_PRACTICAL,
+        "arabic second paper": DIST_100_NO_PRACTICAL,
+        "history of islam": DIST_70_30,
+        "balagat": DIST_70_30,
+
         # Bangla
         "bangla 1st paper": DIST_70_30,
         "বাংলা প্রথম পত্র": DIST_70_30,
@@ -242,6 +255,12 @@ def get_subject_maxima(group, subject_name, student_group=None, target_total=Non
     """
     if not group:
         return None
+    if group == 'primary':
+        s_low = (subject_name or '').lower()
+        if any(w in s_low for w in ['অংকন', 'drawing', 'চিত্রাংকন']):
+            return {'written': 50, 'mcq': 0, 'practical': 0}
+        return {'written': 100, 'mcq': 0, 'practical': 0}
+
     raw = (subject_name or "").strip().lower()
 
     # Handle combined subjects if student_group is provided
@@ -328,6 +347,10 @@ def get_subject_maxima(group, subject_name, student_group=None, target_total=Non
             'বিজ্ঞান': 'বিজ্ঞান',
             'religion': 'religion',
             'ধর্ম': 'ধর্ম',
+            'quran': 'quran majid',
+            'hadith': 'hadith sharif',
+            'fiqh': 'fiqh',
+            'arabic': 'arabic first paper',
             'ict': 'ict',
             'তথ্য': 'তথ্য ও যোগাযোগ প্রযুক্তি',
             'কৃষি': 'কৃষি',

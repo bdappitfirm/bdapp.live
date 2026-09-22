@@ -136,4 +136,4 @@ const ClassDistributionChart = ({ classDistribution }) => {
   );
 };
 
-export default ClassDistributionChart;
+export default React.memo(ClassDistributionChart);

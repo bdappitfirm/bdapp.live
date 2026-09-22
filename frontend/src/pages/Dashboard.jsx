@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { getDashboardStats, getCurrentSchoolId } from '../services/dashboardService';
 import StatCard from '../components/dashboard/StatCard';
@@ -48,6 +48,7 @@ const Dashboard = () => {
   const [summaryExamType, setSummaryExamType] = useState('annual');
   const [summaryYear, setSummaryYear] = useState(new Date().getFullYear());
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const summaryLoadingRef = useRef(false);
   const [summaryRows, setSummaryRows] = useState([]);
   const [summaryFailBuckets, setSummaryFailBuckets] = useState(Array.from({ length: 10 }, (_, i) => i + 1));
 
@@ -70,8 +71,9 @@ const Dashboard = () => {
   }, [schoolId]);
 
   const generateSummary = React.useCallback(async () => {
-    if (!schoolId || summaryLoading) return;
+    if (!schoolId || summaryLoadingRef.current) return;
     console.log('📊 Dashboard: Generating summary for school', schoolId);
+    summaryLoadingRef.current = true;
     setSummaryLoading(true);
     try {
       const clsRes = await scopedGet('/api/academics/classrooms/', schoolId, {}, { timeout: 20000 });
@@ -81,10 +83,10 @@ const Dashboard = () => {
       for (const classroom of classrooms) {
         const secRes = await scopedGet('/api/academics/sections/', schoolId, { classroom: classroom.id }, { timeout: 20000 });
         const sections = Array.isArray(secRes.data) ? secRes.data : (secRes.data?.results || []);
-        const exRes = await scopedGet('/api/results/examinations/', schoolId, { classroom: classroom.id }, { timeout: 20000 });
+        const exRes = await scopedGet('/api/results/examinations/', schoolId, { classroom: classroom.id, page_size: 100 }, { timeout: 20000 });
         let exams = Array.isArray(exRes.data) ? exRes.data : (exRes.data?.results || []);
         if (!exams.length) {
-          const exAllRes = await scopedGet('/api/results/examinations/', schoolId, {}, { timeout: 20000 });
+          const exAllRes = await scopedGet('/api/results/examinations/', schoolId, { page_size: 100 }, { timeout: 20000 });
           exams = Array.isArray(exAllRes.data) ? exAllRes.data : (exAllRes.data?.results || []);
         }
         const bnMap = { '০':'0','১':'1','২':'2','৩':'3','৪':'4','৫':'5','৬':'6','৭':'7','৮':'8','৯':'9' };
@@ -159,6 +161,7 @@ const Dashboard = () => {
       setSummaryRows([]);
       setSummaryFailBuckets([]);
     } finally {
+      summaryLoadingRef.current = false;
       setSummaryLoading(false);
     }
   }, [schoolId, summaryExamType, summaryYear]);
@@ -234,6 +237,7 @@ const Dashboard = () => {
               <option value="annual">বার্ষিক</option>
               <option value="terminal">টার্মিনাল</option>
               <option value="model">মডেল টেস্ট</option>
+              <option value="pre_test">প্রাক-নির্বাচনী</option>
             </select>
             <input
               type="number"

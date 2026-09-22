@@ -3,7 +3,7 @@ import api from './api';
 
 // Helper that injects ?school=ID and a cache buster _t into GETs
 export function scopedGet(path, schoolId, extraParams = {}, config = {}) {
-  const params = { ...(extraParams || {}) };
+  const params = { ...(extraParams || {}), _t: Date.now() };
   if (schoolId && !('school' in params) && !/\bschool=/.test(path)) {
     params.school = schoolId;
   }

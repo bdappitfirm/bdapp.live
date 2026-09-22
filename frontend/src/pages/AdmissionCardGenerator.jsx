@@ -8,8 +8,6 @@ import {
   TextField,
   Button,
   Paper,
-  Tabs,
-  Tab,
   MenuItem,
   Grid,
   Alert,
@@ -95,7 +93,7 @@ export default function AdmissionCardGenerator() {
     const fetchExams = async () => {
       setLoadingExams(true);
       try {
-        let url = `/api/results/examinations/?school=${id}`;
+        let url = `/api/results/examinations/?school=${id}&page_size=100`;
         if (classFilter) url += `&classroom=${classFilter}`;
         const res = await api.get(url, { timeout: 15000 });
         const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);

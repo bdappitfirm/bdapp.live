@@ -204,8 +204,8 @@ class StudentProfileSerializer(serializers.ModelSerializer):
     father_id = serializers.PrimaryKeyRelatedField(source='father', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
     mother = SimpleUserSerializer(read_only=True)
     mother_id = serializers.PrimaryKeyRelatedField(source='mother', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
-    username = serializers.CharField(write_only=True, required=False)
-    password = serializers.CharField(write_only=True, required=False)
+    username = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     first_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     last_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     first_name_en = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -222,17 +222,9 @@ class StudentProfileSerializer(serializers.ModelSerializer):
     student_custom_id = serializers.CharField(read_only=True)
     group = serializers.CharField(source='student_group', required=False, allow_null=True, allow_blank=True)
 
-    _birth_date_db_exists = None
     @classmethod
     def birth_date_db_exists(cls):
-        if cls._birth_date_db_exists is None:
-            try:
-                from django.db import connection
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'academics_studentprofile' AND column_name = 'birth_date'")
-                    cls._birth_date_db_exists = cursor.fetchone() is not None
-            except Exception: cls._birth_date_db_exists = False
-        return cls._birth_date_db_exists
+        return True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -251,12 +243,29 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             if sid: school = School.objects.filter(pk=sid).first()
         if not school: raise serializers.ValidationError({'school': 'This field is required.'})
 
+        group_val = validated_data.pop('group', None)
+        if group_val and not validated_data.get('student_group'):
+            validated_data['student_group'] = group_val
+
         user_fields = ['username', 'password', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo']
         user_data = {f: validated_data.pop(f, '') for f in user_fields if f in validated_data or f in ['username', 'password', 'first_name', 'last_name', 'email']}
 
-        if not user_data.get('username'):
-            base = re.sub(r'[^a-z]', '', (user_data.get('first_name') or 'student').lower()) or 'student'
-            user_data['username'] = f"{base}{User.objects.count() + 1}"
+        raw_uname = (user_data.get('username') or '').strip()
+        if not raw_uname:
+            base = re.sub(r'[^a-z0-9]', '', (user_data.get('first_name_en') or user_data.get('first_name') or 'student').lower()) or 'student'
+            counter = User.objects.count() + 1
+            candidate = f"{base}{counter}"
+            while User.objects.filter(username=candidate).exists():
+                counter += 1
+                candidate = f"{base}{counter}"
+            user_data['username'] = candidate
+        else:
+            cand = raw_uname
+            c = 1
+            while User.objects.filter(username=cand).exists():
+                cand = f"{raw_uname}_{c}"
+                c += 1
+            user_data['username'] = cand
 
         def clean_student_name(fn, ln):
             fn = (fn or '').strip()
@@ -273,7 +282,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
         user = User.objects.create_user(
             username=user_data['username'],
-            password=user_data['password'] or '12345678',
+            password=user_data.get('password') or '12345678',
             first_name=full_name,
             last_name='',
             email=user_data.get('email') or ''

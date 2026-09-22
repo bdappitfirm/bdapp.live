@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   Box, Paper, Stack, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
   Chip, CircularProgress, TextField, MenuItem, Grid
@@ -14,7 +14,6 @@ import { useAcademics } from '../context/AcademicsContext';
 
 export default function CredentialsPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
   const { classrooms, sections, refreshAll } = useAcademics();
 

@@ -54,15 +54,13 @@ root.render(
   </ThemeProvider>
 );
 
-// Unregister any existing service worker to prevent reload loops and "shaking" issues
+// Unregister service workers to prevent stale chunk caching errors
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     for (let registration of registrations) {
       registration.unregister();
     }
-  }).catch((err) => {
-    console.error('SW: Unregistration failed:', err);
-  });
+  }).catch(() => {});
 }
 
 // If you want to start measuring performance in your app, pass a function

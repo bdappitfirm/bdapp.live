@@ -2,14 +2,13 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Box, Paper, Typography, CircularProgress, Grid, Card, CardContent, Chip, Avatar,
+  Box, Paper, Typography, CircularProgress, Grid, Chip, Avatar,
   Tabs, Tab, Alert, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Button, TextField, MenuItem, Stack, Container, AppBar, Toolbar, Divider
+  Button, TextField, MenuItem, Stack, Container, AppBar, Toolbar
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { 
   ArrowBack, 
-  Save as SaveIcon, 
   History as HistoryIcon,
   VideoCall as VideoCallIcon 
 } from '@mui/icons-material';
@@ -20,7 +19,7 @@ import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import MonthlyAttendanceInput from '../components/MonthlyAttendanceInput';
-import ResultCardComponent from '../components/ResultCard';
+import AcademicTranscriptCard from '../components/AcademicTranscriptCard';
 import StudentFeeSlipCard from '../components/StudentFeeSlipCard';
 import PaymentHistoryDialog from '../components/PaymentHistoryDialog';
 import { getMediaUrl, resolveStudentPhoto } from '../utils/media';
@@ -337,7 +336,7 @@ const StudentResults = ({
           <CircularProgress />
         </Box>
       ) : resultCardData && resultCardData.studentData && resultCardData.results && resultCardData.results.length > 0 ? (
-        <ResultCardComponent
+        <AcademicTranscriptCard
           studentData={resultCardData.studentData}
           results={resultCardData.results}
           overallResult={resultCardData.overallResult}
@@ -446,6 +445,7 @@ class StudentDashboard extends React.Component {
         { value: 'annual', label: 'বার্ষিক' },
         { value: 'terminal', label: 'টার্মিনাল' },
         { value: 'model', label: 'মডেল টেস্ট' },
+        { value: 'pre_test', label: 'প্রাক-নির্বাচনী' },
         { value: 'first_term', label: 'প্রথম টার্ম' },
         { value: 'final', label: 'ফাইনাল' }
       ],
@@ -458,7 +458,7 @@ class StudentDashboard extends React.Component {
 
   getStructureLabel = (s, fallback) => {
     if (!s) return fallback;
-    const { frequency, academic_year, category, name, title, label, month, type, month_no, month_number, exam_code, exam_type, exam, _month_inferred } = s;
+    const { frequency, category, name, title, label, month, type, month_no, month_number, exam_code, exam_type, exam, _month_inferred } = s;
     // Ignore raw name to enforce requested Bengali formatting
     const monthsBn = ['জানুয়ারী','ফেব্রুয়ারী','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগষ্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
     const freq = String(frequency || '').toLowerCase();
@@ -529,7 +529,7 @@ class StudentDashboard extends React.Component {
 
       // Load examinations for result card
       try {
-        const examsRes = await api.get(`/api/results/examinations/?school=${id}`);
+        const examsRes = await api.get(`/api/results/examinations/?school=${id}&page_size=100`);
         const examsData = Array.isArray(examsRes.data) ? examsRes.data : (examsRes.data?.results || []);
         const classroomId = s?.classroom?.id;
         if (classroomId) {
@@ -539,7 +539,7 @@ class StudentDashboard extends React.Component {
           });
           if (classExams.length === 0) {
             try {
-              const classOnlyRes = await api.get(`/api/results/examinations/?classroom=${classroomId}`);
+              const classOnlyRes = await api.get(`/api/results/examinations/?classroom=${classroomId}&page_size=100`);
               const classOnlyData = Array.isArray(classOnlyRes.data) ? classOnlyRes.data : (classOnlyRes.data?.results || []);
               this.setState({ examinations: classOnlyData });
             } catch (_) {
@@ -1000,22 +1000,26 @@ class StudentDashboard extends React.Component {
   };
 
   normalizeExamType = (type, name) => {
+    const n = String(name || '').toLowerCase();
     const s = String(type || '').toLowerCase();
-    if (!s) {
-      const rn = String(name || '').toLowerCase();
-      if (/(বার্ষিক|final|annual)/.test(rn)) return 'annual';
-      if (/(অর্ধ|half|mid)/.test(rn)) return 'half_yearly';
-      if (/(টার্মিনাল|terminal)/.test(rn)) return 'terminal';
-      if (/(মডেল|model)/.test(rn)) return 'model';
-      if (/(টেস্ট|test|monthly)/.test(rn)) return 'test';
-    }
+    const combined = (n + ' ' + s).trim();
+
+    if (/(প্রাক|pre)/.test(combined)) return 'pre_test';
+    if (/(বার্ষিক|final|annual|yearly)/.test(combined)) return 'annual';
+    if (/(অর্ধ|half|mid|semi)/.test(combined)) return 'half_yearly';
+    if (/(টার্মিনাল|terminal|term)/.test(combined)) return 'terminal';
+    if (/(মডেল|model)/.test(combined)) return 'model';
+    if (/(প্রথম\s*টার্ম|first\s*term)/.test(combined)) return 'first_term';
+    if (/(টেস্ট|test|monthly)/.test(combined)) return 'test';
+
     if (['final','annual','yearly'].includes(s)) return 'annual';
     if (['half','half_yearly','mid','half-yearly'].includes(s)) return 'half_yearly';
     if (['terminal','term'].includes(s)) return 'terminal';
     if (['model','model_test','model-test'].includes(s)) return 'model';
+    if (['pre_test','pre-test','pre'].includes(s)) return 'pre_test';
     if (['test','monthly'].includes(s)) return 'test';
     if (['first_term','first','first-term'].includes(s)) return 'first_term';
-    return s || 'annual';
+    return s || n || 'annual';
   };
 
   getClassroomId = (cls) => {
@@ -1025,8 +1029,8 @@ class StudentDashboard extends React.Component {
   };
 
   loadResultCard = async () => {
-    const { id, studentId } = this.props.params;
-    const { selectedExamType, student, examinations, schoolInfo } = this.state;
+    const { studentId } = this.props.params;
+    const { selectedExamType, student, examinations } = this.state;
     const classroomId = student?.classroom?.id;
 
     if (!selectedExamType || !studentId || !classroomId) {
@@ -1168,94 +1172,6 @@ class StudentDashboard extends React.Component {
         </Box>
       );
     }
-
-    const attendanceColumns = [
-      { 
-        field: 'date', 
-        headerName: 'Date', 
-        width: 150,
-        valueFormatter: ({ value }) => dayjs(value).format('DD MMM YYYY')
-      },
-      { 
-        field: 'is_present', 
-        headerName: 'Status', 
-        width: 120, 
-        renderCell: (params) => (
-          <Chip 
-            label={params.value ? 'Present' : 'Absent'} 
-            color={params.value ? 'success' : 'error'} 
-            size="small" 
-          />
-        )
-      },
-    ];
-
-    const resultColumns = [
-      { 
-        field: 'subject', 
-        headerName: 'Subject', 
-        flex: 1,
-        valueFormatter: ({ value }) => value || 'N/A'
-      },
-      { 
-        field: 'marks', 
-        headerName: 'Marks', 
-        width: 100,
-        valueFormatter: ({ value }) => value || 'N/A'
-      },
-      { 
-        field: 'grade', 
-        headerName: 'Grade', 
-        width: 100,
-        valueFormatter: ({ value }) => value || 'N/A'
-      },
-    ];
-
-    const feeColumns = [
-      { 
-        field: 'name', 
-        headerName: 'Fee', 
-        flex: 1,
-        valueFormatter: ({ value }) => value || 'N/A'
-      },
-      { 
-        field: 'amount', 
-        headerName: 'Amount', 
-        width: 120, 
-        renderCell: (params) => `৳${Number(params.value || 0).toFixed(2)}`,
-        valueFormatter: ({ value }) => `৳${Number(value || 0).toFixed(2)}`
-      },
-      { 
-        field: 'paid', 
-        headerName: 'Paid', 
-        width: 120, 
-        renderCell: (params) => `৳${Number(params.value || 0).toFixed(2)}`,
-        valueFormatter: ({ value }) => `৳${Number(value || 0).toFixed(2)}`
-      },
-      { 
-        field: 'due', 
-        headerName: 'Due', 
-        width: 120, 
-        renderCell: (params) => `৳${Number(params.value || 0).toFixed(2)}`,
-        valueFormatter: ({ value }) => `৳${Number(value || 0).toFixed(2)}`
-      },
-      {
-        field: 'actions',
-        headerName: 'Actions',
-        width: 200,
-        renderCell: (params) => (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={() => this.setState({ showMonthlyAttendanceDialog: true })}
-            startIcon={<SaveIcon />}
-          >
-            মাসিক হাজিরা দিন
-          </Button>
-        )
-      }
-    ];
 
     // Styled components for better UI
     const HeaderCard = styled(Paper)(({ theme }) => ({

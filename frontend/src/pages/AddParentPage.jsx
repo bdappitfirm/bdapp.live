@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import api from '../utils/api';
-import { Box, Paper, Typography, TextField, Stack, Button, Alert, Chip, Autocomplete, CircularProgress } from '@mui/material';
+import { Box, Paper, Typography, TextField, Stack, Button, Alert, Autocomplete, CircularProgress } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import PhotoUpload from '../components/PhotoUpload';
 import { useToast } from '../components/Toast';
@@ -33,20 +33,6 @@ export default function AddParentPage() {
 
   const [usernameCheck, setUsernameCheck] = useState({ loading: false, available: null, suggestions: [], msg: '' });
   const username = form.username.trim();
-
-  // Preserve context: classroom/section from URL
-  const [fromClassroom, setFromClassroom] = useState('');
-  const [fromSection, setFromSection] = useState('');
-
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const cls = params.get('classroom');
-      const sec = params.get('section');
-      if (cls) setFromClassroom(String(cls));
-      if (sec) setFromSection(String(sec));
-    } catch (_) {}
-  }, []);
 
   useEffect(() => {
     // Load students for optional link
@@ -300,8 +286,6 @@ export default function AddParentPage() {
       console.log('Form submission finished');
     }
   };
-
-  const applySuggestion = (sug) => setForm(prev => ({ ...prev, username: sug }));
 
   // Add a loading state that prevents interaction during submission
   if (saving) {

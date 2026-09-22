@@ -58,15 +58,15 @@ export function normalizeApiError(err) {
   // Missing minimal requirements
   if (!message && Object.keys(fieldErrors).length === 0) {
     if (def.status === 400) {
-      message = 'Some inputs look incomplete or invalid. Please review and try again.';
+      message = 'কিছু তথ্য অসম্পূর্ণ বা ত্রুটিপূর্ণ। অনুগ্রহ করে পর্যালোচনা করুন।';
     } else if (def.status >= 500) {
-      message = 'Server encountered an issue. Please try again shortly.';
+      message = 'সার্ভারে সাময়িক সমস্যা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।';
     }
   }
 
   // Default message if still none
   if (!message) {
-    message = 'Please correct the highlighted inputs and try again.';
+    message = 'লাল চিহ্নিত ঘরগুলোর সঠিক তথ্য প্রদান করে আবার চেষ্টা করুন।';
   }
 
   return { ...def, message, fieldErrors, suggestions };

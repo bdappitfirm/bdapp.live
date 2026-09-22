@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import api from '../utils/api';
-import { Box, Paper, Typography, TextField, Stack, Button, Alert, Chip, MenuItem, IconButton, Divider, Autocomplete } from '@mui/material';
+import { Box, Paper, Typography, TextField, Stack, Button, Alert, MenuItem, IconButton, Divider, Autocomplete } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoUpload from '../components/PhotoUpload';
@@ -205,8 +205,6 @@ export default function AddTeacherPage() {
     }
   };
 
-  const applySuggestion = (sug) => setForm(prev => ({ ...prev, username: sug }));
-
   return (
     <Box sx={{ p: 3 }}>
       <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
@@ -254,32 +252,17 @@ export default function AddTeacherPage() {
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
-              label="First Name"
+              label="শিক্ষকের নাম (Name) *"
               value={form.first_name}
               onChange={e => {
                 const val = e.target.value;
                 setForm({ ...form, first_name: val, first_name_en: transliterateBangla(val) });
               }}
-              helperText={formErrors.first_name || 'Provide either a username or first name'}
+              helperText={formErrors.first_name || ''}
               error={!!formErrors.first_name}
               fullWidth
             />
-            <TextField label="First Name (English)" value={form.first_name_en} onChange={e => setForm({ ...form, first_name_en: e.target.value })} fullWidth />
-          </Stack>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField
-              label="Last Name"
-              value={form.last_name}
-              onChange={e => {
-                const val = e.target.value;
-                setForm({ ...form, last_name: val, last_name_en: transliterateBangla(val) });
-              }}
-              fullWidth
-              error={!!formErrors.last_name}
-              helperText={formErrors.last_name || ''}
-            />
-            <TextField label="Last Name (English)" value={form.last_name_en} onChange={e => setForm({ ...form, last_name_en: e.target.value })} fullWidth />
+            <TextField label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({ ...form, first_name_en: e.target.value })} fullWidth />
           </Stack>
 
           <TextField label="Phone Number" value={form.phone_number} onChange={e => setForm({ ...form, phone_number: e.target.value })} placeholder="+8801712345678" error={!!formErrors.phone_number} helperText={formErrors.phone_number || ''} />
@@ -293,26 +276,7 @@ export default function AddTeacherPage() {
             helperText={formErrors.educational_qualification || 'Optional - শিক্ষাগত যোগ্যতা লিখুন'} 
           />
           
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField
-              label="পদবী (Designation)"
-              value={form.designation}
-              onChange={e => {
-                const val = e.target.value;
-                setForm({ ...form, designation: val, designation_en: transliterateBangla(val) });
-              }}
-              placeholder="e.g., Assistant Teacher, Lecturer, Demonstrator"
-              error={!!formErrors.designation}
-              helperText={formErrors.designation || 'Optional - শিক্ষকের পদবী'}
-              fullWidth
-            />
-            <TextField
-              label="পদবী (ইংরেজিতে)"
-              value={form.designation_en}
-              onChange={e => setForm({ ...form, designation_en: e.target.value })}
-              fullWidth
-            />
-          </Stack>
+
           
           <TextField 
             select

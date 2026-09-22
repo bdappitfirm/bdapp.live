@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Paper, CircularProgress, Button, Alert, Card, CardContent } from '@mui/material';
 import { WhatsApp as WhatsAppIcon, Refresh as RefreshIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
-import api from '../utils/api';
 
 export default function WhatsAppSettings() {
     const [status, setStatus] = useState('LOADING');
     const [qrImage, setQrImage] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(false);
 
     const checkStatus = async () => {
         try {

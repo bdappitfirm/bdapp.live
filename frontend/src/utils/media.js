@@ -10,17 +10,12 @@ export const getMediaUrl = (path, type = 'media') => {
   if (!path) return null;
   if (typeof path !== 'string') return null;
 
-  const val = path.trim();
+  let val = path.trim();
   if (!val || val === '/' || val === 'media' || val === '/media' || val === '/media/') return null;
 
-  // Normalize absolute URLs from backend to HTTPS if needed
+  // Extract relative media path if an absolute URL is given (strip domain/protocol)
   if (/^https?:\/\//i.test(val)) {
-    // If it's the production domain but with http, upgrade to https
-    const prodDomain = 'bdapp.live';
-    if (val.includes(prodDomain) && val.startsWith('http://')) {
-      return val.replace('http://', 'https://');
-    }
-    return val;
+    val = val.replace(/^https?:\/\/[^/]+/i, '');
   }
 
   // Use origin as base
@@ -35,11 +30,11 @@ export const getMediaUrl = (path, type = 'media') => {
     }
   }
   
-  // In development (CRA), if base is port 3000, we might need to point to 8000 for media
+  // In development (CRA), if base is port 3000, point to port 8000 on current hostname for media
   if (typeof window !== 'undefined') {
     const origin = window.location.origin.replace(/\/$/, '');
-    if (/:3000$/.test(origin) && base === origin) {
-      base = 'http://127.0.0.1:8000';
+    if (/:3000$/.test(origin)) {
+      base = `http://${window.location.hostname}:8000`;
     }
   }
 
@@ -86,10 +81,11 @@ export const getMediaUrl = (path, type = 'media') => {
 export const resolveStudentPhoto = (student) => {
   if (!student) return null;
   const candidates = [
-    student.photo_url,
+    student.user?.thumbnail_url,
     student.user?.photo_url,
-    student.photo,
     student.user?.photo,
+    student.photo_url,
+    student.photo,
     student.profile_picture,
     student.user?.profile_picture
   ];

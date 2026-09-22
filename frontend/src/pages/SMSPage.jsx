@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
 import { scopedGet } from '../utils/schoolApi';
@@ -39,7 +39,6 @@ import ErrorIcon from '@mui/icons-material/Error';
 import MicIcon from '@mui/icons-material/Mic';
 import { useToast } from '../components/Toast';
 import { CardSkeleton } from '../components/LoadingSkeleton';
-import EmptyState from '../components/EmptyState';
 import VoiceRecorder from '../components/VoiceRecorder';
 
 export default function SMSPage() {
@@ -59,7 +58,6 @@ export default function SMSPage() {
   // Form data
   const [message, setMessage] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [templateData, setTemplateData] = useState({});
   const [senderMobile, setSenderMobile] = useState('');
   
   // Manual selection
@@ -84,12 +82,8 @@ export default function SMSPage() {
   const [telegramDialogOpen, setTelegramDialogOpen] = useState(false);
   const [telegramChatIdsInput, setTelegramChatIdsInput] = useState('');
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!id) return;
-    loadData();
-  }, [id]);
-
-  const loadData = async () => {
     setLoading(true);
     try {
       const [studentsRes, parentsRes, teachersRes, classroomsRes] = await Promise.all([
@@ -115,10 +109,15 @@ export default function SMSPage() {
       setLoading(false);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load data');
+      toast.error('Failed to load recipients');
       setLoading(false);
     }
-  };
+  }, [id, toast]);
+
+  useEffect(() => {
+    if (!id) return;
+    loadData();
+  }, [id, loadData]);
 
   const loadSections = async (classroomId) => {
     if (!classroomId) {
@@ -271,6 +270,28 @@ export default function SMSPage() {
     })();
   };
 
+  const dispatchBulkSms = async (phoneNumbers, successMsg = '') => {
+    setSending(true);
+    try {
+      const res = await api.post('/api/users/sms/bulk/', {
+        phone_numbers: phoneNumbers,
+        message: message,
+        sender_mobile: senderMobile
+      });
+      setSendResults(res.data);
+      setResultsDialogOpen(true);
+      toast.success(successMsg || `SMS sent to ${res.data.sent} recipients!`);
+      setMessage('');
+      return true;
+    } catch (err) {
+      console.error(err);
+      toast.error('SMS পাঠাতে ব্যর্থ হয়েছে');
+      return false;
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleSendManual = async () => {
     if (selectedRecipients.length === 0) {
       toast.warning('কমপক্ষে একজন প্রাপক নির্বাচন করুন');
@@ -282,33 +303,14 @@ export default function SMSPage() {
       return;
     }
 
-    setSending(true);
-    try {
-      if (voiceMessage) {
-        // TODO: Implement voice message sending via WhatsApp/Telegram API
-        // For now, just show success message
-        toast.info('Voice message feature coming soon! Will be sent via WhatsApp/Telegram.');
-        setVoiceMessage(null);
-      } else {
-        const res = await api.post('/api/users/sms/bulk/', {
-          phone_numbers: selectedRecipients,
-          message: message,
-          sender_mobile: senderMobile
-        });
-        
-        setSendResults(res.data);
-        setResultsDialogOpen(true);
-        toast.success(`SMS sent to ${res.data.sent} recipients!`);
-      }
-      
-      setMessage('');
-      setSelectedRecipients([]);
-    } catch (err) {
-      console.error(err);
-      toast.error('মেসেজ পাঠাতে ব্যর্থ হয়েছে');
-    } finally {
-      setSending(false);
+    if (voiceMessage) {
+      toast.info('Voice message feature coming soon! Will be sent via WhatsApp/Telegram.');
+      setVoiceMessage(null);
+      return;
     }
+
+    const ok = await dispatchBulkSms(selectedRecipients);
+    if (ok) setSelectedRecipients([]);
   };
 
   const handleSendToClass = async () => {
@@ -329,24 +331,7 @@ export default function SMSPage() {
       return;
     }
 
-    setSending(true);
-    try {
-      const res = await api.post('/api/users/sms/bulk/', {
-        phone_numbers: phones,
-        message: message,
-        sender_mobile: senderMobile
-      });
-      
-      setSendResults(res.data);
-      setResultsDialogOpen(true);
-      toast.success(`SMS sent to ${res.data.sent} recipients!`);
-      setMessage('');
-    } catch (err) {
-      console.error(err);
-      toast.error('SMS পাঠাতে ব্যর্থ হয়েছে');
-    } finally {
-      setSending(false);
-    }
+    await dispatchBulkSms(phones);
   };
 
   const handleSendToSchool = async () => {
@@ -361,24 +346,7 @@ export default function SMSPage() {
       return;
     }
 
-    setSending(true);
-    try {
-      const res = await api.post('/api/users/sms/bulk/', {
-        phone_numbers: phones,
-        message: message,
-        sender_mobile: senderMobile
-      });
-      
-      setSendResults(res.data);
-      setResultsDialogOpen(true);
-      toast.success(`SMS sent to ${res.data.sent} recipients across the school!`);
-      setMessage('');
-    } catch (err) {
-      console.error(err);
-      toast.error('SMS পাঠাতে ব্যর্থ হয়েছে');
-    } finally {
-      setSending(false);
-    }
+    await dispatchBulkSms(phones, 'SMS sent across the school!');
   };
 
   const templates = [

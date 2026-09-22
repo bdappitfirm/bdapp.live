@@ -5,7 +5,6 @@ import {
   TableHead, TableRow, TextField, MenuItem, Button, Stack, Menu
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-import api from '../utils/api';
 import { scopedGet, scopedPost } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
@@ -27,7 +26,7 @@ export default function StudentListPage() {
   const [selectedSection, setSelectedSection] = useState('');
   const [students, setStudents] = useState([]);
   const [allSubjects, setAllSubjects] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle', 'saving', 'saved', 'error'
   const [downloadAnchor, setDownloadAnchor] = useState(null);
 
@@ -80,7 +79,7 @@ export default function StudentListPage() {
               const dmYRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
               const match = dateStr.match(dmYRegex);
               if (match) {
-                  const [_, d, m, y] = match;
+                  const [, d, m, y] = match;
                   return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
               }
 

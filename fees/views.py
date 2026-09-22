@@ -9,7 +9,7 @@ from .serializers import (
     FeeStructureSerializer, PaymentSerializer,
     FeeCategorySerializer, StudentFeeAssignmentSerializer, FeeCollectionSerializer, FeeSlipSerializer
 )
-from users.permissions import AdminOrReadOnly, IsSchoolMember
+from users.permissions import AdminOrReadOnly, IsSchoolMember, get_user_school_id, is_global_admin
 
 class FeeStructureViewSet(viewsets.ModelViewSet):
     queryset = FeeStructure.objects.select_related('school','classroom','category').all()
@@ -91,12 +91,40 @@ class PaymentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSchoolMember, AdminOrReadOnly]
     filter_backends = []
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        school = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        student = self.request.query_params.get('student') or self.request.query_params.get('student_id')
+        status_filter = self.request.query_params.get('status')
+        if not school:
+            school = get_user_school_id(self.request.user, self.request)
+        if school:
+            qs = qs.filter(student__school_id=school)
+        elif not is_global_admin(self.request.user):
+            return Payment.objects.none()
+        if student:
+            qs = qs.filter(student_id=student)
+        if status_filter:
+            qs = qs.filter(payment_status=status_filter)
+        return qs
+
 
 class FeeCategoryViewSet(viewsets.ModelViewSet):
     queryset = FeeCategory.objects.select_related('school').all()
     serializer_class = FeeCategorySerializer
     permission_classes = [IsSchoolMember, AdminOrReadOnly]
     filter_backends = []
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        school = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if not school:
+            school = get_user_school_id(self.request.user, self.request)
+        if school:
+            qs = qs.filter(school_id=school)
+        elif not is_global_admin(self.request.user):
+            return FeeCategory.objects.none()
+        return qs
 
 
 class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
@@ -188,6 +216,24 @@ class FeeCollectionViewSet(viewsets.ModelViewSet):
     serializer_class = FeeCollectionSerializer
     permission_classes = [IsSchoolMember, AdminOrReadOnly]
     filter_backends = []
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        school = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        classroom = (
+            self.request.query_params.get('classroom')
+            or self.request.query_params.get('classroom_id')
+            or self.request.query_params.get('class_id')
+        )
+        if not school:
+            school = get_user_school_id(self.request.user, self.request)
+        if school:
+            qs = qs.filter(school_id=school)
+        elif not is_global_admin(self.request.user):
+            return FeeCollection.objects.none()
+        if classroom:
+            qs = qs.filter(classroom_id=classroom)
+        return qs
 
 
 class FeeSlipViewSet(viewsets.ModelViewSet):

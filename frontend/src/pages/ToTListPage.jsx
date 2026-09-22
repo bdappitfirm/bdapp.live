@@ -16,8 +16,6 @@ import {
   Stack
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
-import SaveIcon from '@mui/icons-material/Save';
-import api from '../utils/api';
 import { scopedGet, scopedPost } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
@@ -115,7 +113,7 @@ export default function ToTListPage() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [autoSaveStatus, setAutoSaveStatus] = useState('idle');
+  const [, setAutoSaveStatus] = useState('idle');
 
   const autoSaveTimerRef = useRef(null);
   const studentsRef = useRef([]);
@@ -179,7 +177,7 @@ export default function ToTListPage() {
     });
   };
 
-  const performAutoSaveEffect = async () => {
+  const performAutoSaveEffect = useCallback(async () => {
     const studentsToSave = studentsRef.current;
     if (studentsToSave.length === 0) return;
     try {
@@ -206,7 +204,7 @@ export default function ToTListPage() {
     } catch (err) {
       setAutoSaveStatus('idle');
     }
-  };
+  }, [id]);
 
   const handleManualChange = useCallback((studentId, field, value) => {
     setStudents(prev => {
@@ -215,10 +213,9 @@ export default function ToTListPage() {
         if (idx > -1) next[idx] = { ...next[idx], [field]: value };
         return next;
     });
-    setAutoSaveStatus('saving');
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => { performAutoSaveEffect(); }, 2000);
-  }, []);
+  }, [performAutoSaveEffect]);
 
   const loadData = useCallback(async (clsId, secId) => {
     const targetCls = clsId || selectedClassroom;

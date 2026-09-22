@@ -12,7 +12,6 @@ import {
   Collapse
 } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import api from '../utils/api';
 import { useToast } from './Toast';
 import { isAuthenticated } from '../utils/auth';

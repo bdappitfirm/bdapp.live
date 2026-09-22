@@ -40,7 +40,6 @@ import { TableSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { isAuthenticated } from '../utils/auth';
-import { useAuth } from '../context/AuthContext';
 
 const EXAM_TYPES = [
   { value: 'half_yearly', label: 'অর্ধবার্ষিক' },
@@ -55,7 +54,6 @@ const EXAM_TYPES = [
 export default function ExaminationsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
 
   const [examinations, setExaminations] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
@@ -109,7 +107,7 @@ export default function ExaminationsPage() {
     setLoading(true);
     try {
       const [examsRes, classroomsRes, subjectsRes] = await Promise.all([
-        api.get(`/api/results/examinations/?school=${id}`),
+        api.get(`/api/results/examinations/?school=${id}&page_size=200`),
         api.get(`/api/academics/classrooms/?school=${id}`),
         api.get(`/api/academics/subjects/?school=${id}`)
       ]);
@@ -158,9 +156,6 @@ export default function ExaminationsPage() {
     };
     const dateStr = formatDate(bulkForm.exam_date);
 
-    let successCount = 0;
-    let failCount = 0;
-
     const promises = [];
     for (const classroomId of bulkForm.classrooms) {
       for (const subjectId of bulkForm.subjects) {
@@ -179,15 +174,14 @@ export default function ExaminationsPage() {
           practical_max: bulkForm.practical_max,
           school: parseInt(id)
         };
-        promises.push(
-          api.post('/api/results/examinations/', examData)
-            .then(() => { successCount++; })
-            .catch(() => { failCount++; })
-        );
+        promises.push(api.post('/api/results/examinations/', examData));
       }
     }
 
-    await Promise.all(promises);
+    const results = await Promise.allSettled(promises);
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    const failCount = results.filter(r => r.status === 'rejected').length;
+
     setBulkLoading(false);
 
     if (successCount > 0) {
@@ -198,7 +192,7 @@ export default function ExaminationsPage() {
     if (failCount > 0) {
       toast.error(`Failed to create ${failCount} examinations`);
     }
-  }, [id, bulkForm, classrooms, subjects, handleBulkDialogClose, loadData, navigate, toast]);
+  }, [id, bulkForm, subjects, handleBulkDialogClose, loadData, navigate, toast]);
 
   const handleDialogOpen = useCallback((exam = null) => {
     if (!isAuthenticated()) { navigate('/login'); return; }
