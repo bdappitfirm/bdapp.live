@@ -903,12 +903,17 @@ export default function ClassResultsPage() {
                 const cqPass = cqM === 0 || totalW >= Math.round(cqM * 0.33 - 0.5);
                 const mcqPass = mcqM === 0 || totalM >= Math.round(mcqM * 0.33 - 0.5);
                 const prPass = prM === 0 || totalP >= Math.round(prM * 0.33 - 0.5);
-                const totPass = totalObtained >= Math.round(totalPossible * 0.33 - 0.5);
+                // PRIMARY: the টিউটোরিয়াল mark must never decide pass/fail or the grade points -
+                // the written mark is judged against the written maximum (100, 50 for drawing),
+                // exactly like ResultCard.jsx and Result.save(). মোট keeps written + tutorial.
+                const gradeBasis = isPrimaryClass ? totalW : totalObtained;
+                const gradePossible = isPrimaryClass ? (cqM || 100) : totalPossible;
+                const totPass = gradeBasis >= Math.round(gradePossible * 0.33 - 0.5);
 
                 const isCoCurric = CO_CURRICULAR.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
                 let isSubjectPassed = isAnyPaperPresentForSub && (isClassNineOrTen ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
 
-                const gp = (isSubjectPassed && totalPossible > 0) ? computeGpa((totalObtained / totalPossible) * 100) : 0;
+                const gp = (isSubjectPassed && gradePossible > 0) ? computeGpa((gradeBasis / gradePossible) * 100) : 0;
                 const isAgricultureSub = (key === 'higher' || key === 'agriculture');
 
                 if ((key === 'higher' && showHM) || (key === 'agriculture' && showAgri)) {
@@ -1200,10 +1205,14 @@ export default function ClassResultsPage() {
         if (spec.mcq > 0 && !isPrimaryClass) p.push(r.mcq_marks !== '' && r.mcq_marks !== null ? Math.round(mcq) : '0');
         if (spec.pr > 0) p.push(r.practical_marks !== '' && r.practical_marks !== null ? Math.round(pr) : '0');
 
+        // PRIMARY: pass/fail comes from the written mark against the written maximum (100, or 50
+        // for drawing) - the same rule as ResultCard.jsx. The tutorial never flips a subject here.
+        const passBasis = isPrimaryClass ? w : tot;
+        const passPossible = isPrimaryClass ? (spec.cq || 100) : totalPossible;
         const cqPass = spec.cq === 0 || w >= Math.round(spec.cq * 0.33 - 0.5),
               mcqPass = spec.mcq === 0 || mcq >= Math.round(spec.mcq * 0.33 - 0.5),
               prPass = spec.pr === 0 || pr >= Math.round(spec.pr * 0.33 - 0.5),
-              totPass = tot >= Math.round(totalPossible * 0.33 - 0.5);
+              totPass = passBasis >= Math.round(passPossible * 0.33 - 0.5);
         const isPassed = has && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
 
         // Primary subjects show the WRITTEN mark only (out of 100) - exactly like the printed
