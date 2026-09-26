@@ -8,12 +8,17 @@
 #
 # Design rules:
 #   1. LIVE db is READ-ONLY to us: only SELECT / pg_dump --data-only
-#   2. LOCAL db rows are UPDATED from LIVE (upsert on each table's real unique key);
-#      local-only extra rows are PRESERVED - nothing is ever deleted
-#   3. NO DROP / TRUNCATE / CREATE TABLE / ALTER TABLE anywhere
-#   4. Tables are synced in FOREIGN-KEY dependency order
-#   5. Only specific tables (student/user/profile + result chain) are synced
-#   6. Media files: only referenced profile/school photos, skip if local exists
+#   2. MIRROR MODE: for every synced table the LOCAL rows are DELETEd and
+#      reloaded from LIVE, so LOCAL becomes an EXACT copy of LIVE.
+#      LIVE is the single source of truth - local-only rows are NOT preserved.
+#   3. The delete + reload runs as ONE transaction (psql -1 with ON_ERROR_STOP=1),
+#      so any error rolls the whole thing back and LOCAL is left untouched.
+#   4. NO DROP / TRUNCATE / CREATE TABLE / ALTER TABLE anywhere
+#   5. Tables are emptied/reloaded in REVERSE foreign-key order, then inserted
+#      in forward FK order
+#   6. Only the tables listed in $SYNC_TABLES are touched - every other table
+#      (fees_*, schools_advertisement, users_task, auth_*, django_*, ...) is left alone
+#   7. Media files: only referenced profile/school photos, skip if local exists
 # ====================================================================
 
 # ---------------- CONFIGURATION  (edit these as needed) ----------------

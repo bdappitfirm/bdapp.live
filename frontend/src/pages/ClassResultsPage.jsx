@@ -1206,11 +1206,13 @@ export default function ClassResultsPage() {
               totPass = tot >= Math.round(totalPossible * 0.33 - 0.5);
         const isPassed = has && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
 
-        // Primary shows the subject's TOTAL (written + টিউটোরিয়াল). It used to show written only,
-        // so a subject whose marks were entered in the টিউটোরিয়াল box displayed "0"/"Absent" while
-        // the মোট column still counted those marks - and Result Card already shows this same total.
+        // Primary subjects show the WRITTEN mark only (out of 100) - exactly like the printed
+        // Result Card (ResultCard.jsx: display_total = w for primary) and like the grade, which
+        // Result.save() computes from written_marks alone. The টিউটোরিয়াল mark lives in
+        // mcq_marks and has its own "টিউটোরিয়াল" column; it is added to মোট (grand total) only,
+        // so it must NOT inflate the subject column (e.g. বাংলা 86 + 28 used to render as 114).
         const displayStr = (has && tot > 0) ?
-            (isPrimaryClass ? String(Math.round(tot)) :
+            (isPrimaryClass ? String(Math.round(w)) :
                 (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot)))) :
             (has && tot === 0 ? '0' : 'Absent');
 
