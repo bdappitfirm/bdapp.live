@@ -138,7 +138,7 @@ const isScienceGroup = (g) => { const l = String(g || '').toLowerCase(); return 
 const isCommerceGroup = (g) => { const l = String(g || '').toLowerCase(); return l.includes('commerce') || l.includes('business') || l.includes('ব্যবসায়') || l.includes('ব্যবসায়'); };
 const isHumanitiesGroup = (g) => { const l = String(g || '').toLowerCase(); return l.includes('arts') || l.includes('humanities') || l.includes('মানবিক'); };
 
-const getExpectedSubjects = (studentGroup, isNT, classSubjs, religionInPlay) => {
+const getExpectedSubjects = (studentGroup, isNT, classSubjs, religionInPlay, onlyPrimary) => {
     // Only subjects that actually exist for THIS class/exam count as "expected".
     // A hardcoded global list previously made Primary classes report phantom subjects:
     // শিশু–২য় teach Arabic instead of Religion and have no ICT/Science/BGS, so those
@@ -180,6 +180,17 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs, religionInPlay) => 
             }
         }
     } else {
+        // PRIMARY: every subject the class actually teaches counts as expected. Without this,
+        // subjects outside the core list - আরবি, অংকন, ... - were neither mandatory nor part of a
+        // group, so their marks were skipped entirely: they never reached মোট / টিউটোরিয়াল and the
+        // merit rank disagreed with the Result Card (a 586-mark student showed মোট 359, rank 1
+        // instead of 2). Primary classes have no optional/partial subjects, so this is safe.
+        // 6-8 is deliberately NOT included here: those classes do have partial subjects
+        // (হিন্দু ধর্ম, শারীরিক শিক্ষা, half-entered papers) and treating them as mandatory would
+        // mark students as failed - that needs a separate, school-confirmed change.
+        if (onlyPrimary) {
+            normKeys.forEach(k => subjects.add(k));
+        }
         ['science', 'bgs'].forEach(k => { if (classHas(k)) subjects.add(k); });
     }
     return subjects;
@@ -730,7 +741,7 @@ export default function ClassResultsPage() {
             const classLabelForReligion = (classrooms.find(c => String(c.id) === String(selectedClass)) || {}).name || '';
             const religionInPlay = religionAssigned &&
                 !(arabicAssigned && !religionHasResults && isEarlyPrimaryName(classLabelForReligion));
-            const expectedKeys = getExpectedSubjects(group, isClassNineOrTen, classSubjects, religionInPlay);
+            const expectedKeys = getExpectedSubjects(group, isClassNineOrTen, classSubjects, religionInPlay, isPrimaryClass);
             const takenRelId = resList.find(r => isRelSubj(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0))?.subject?.id || resList.find(r => isRelSubj(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0))?.subject;
 
             let score = 0, fails = 0, hasAnyMarks = false, totalPoints = 0, subjectCount = 0;
@@ -882,7 +893,15 @@ export default function ClassResultsPage() {
 
                     if (r.hasMarks) { hasAnyMarks = true; isAnyPaperPresentForSub = true; }
                     const w = r.sumW, m = r.sumM, pr = r.sumP;
-                    const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen, group);
+                    const subjName = r.subject?.name || r.subject_name;
+                    let spec = getSubjectMaxima(subjName, isClassNineOrTen, group);
+                    if (isPrimaryClass) {
+                        // PRIMARY: written 100 (50 for drawing) + a separate 30-mark টিউটোরিয়াল that
+                        // is stored in mcq_marks. The shared maxima helper describes 6-8 (English
+                        // there has mcq 0), which capped 130 down to 100 and silently dropped the
+                        // tutorial from মোট - a 586-mark student showed 359 and the wrong merit.
+                        spec = { cq: primaryWrittenMax(subjName), mcq: 30, pr: 0 };
+                    }
                     const paperMax = (spec.cq + spec.mcq + spec.pr || 100);
 
                     let obtained = (w + m + pr) > 0 ? (w + m + pr) : (parseFloat(r.total_obtained) || 0);
