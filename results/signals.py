@@ -167,15 +167,18 @@ def calculate_student_overall_result(examination, student):
     group = _class_group(getattr(examination.classroom, "name", None))
 
     # Calculate literal total obtained marks for display (Main subjects only)
+    # PRIMARY: the টিউটোরিয়াল mark is stored in mcq_marks, and Result.save() already folds it into
+    # every row's total_obtained (written + mcq + practical). So the tutorial is included here
+    # EXACTLY ONCE and must NOT be added again as a separate tutorial_total (doing that would
+    # double-count it). The subject column / grade / GPA stay written-only by design.
     literal_total_obtained = sum(float(r.total_obtained) for r in results_to_calculate)
 
     # Calculate internal total for GPA calculation (Main subjects only)
     total_obtained_for_gpa = sum(float(r.total_obtained) for r in results_to_calculate)
 
-    if group == 'primary':
-        tutorial_total = sum(float(r.mcq_marks) for r in results_to_calculate if r.mcq_marks is not None)
-        literal_total_obtained += tutorial_total
-        # NOTE: total_obtained_for_gpa intentionally excludes tutorial_total so tutorial has zero effect on GPA/CGPA
+    # NOTE: because total_obtained already contains the tutorial, the tutorial does contribute to
+    # the percentage below; it has ZERO effect on the subject grade and GPA, which Result.save()
+    # and the GPA loop compute from written_marks alone.
 
     # Improved total_possible calculation (Main subjects only)
     total_possible = 0
