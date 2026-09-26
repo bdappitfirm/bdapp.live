@@ -1225,15 +1225,23 @@ export default function ClassResultsPage() {
               totPass = passBasis >= Math.round(passPossible * 0.33 - 0.5);
         const isPassed = has && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
 
-        // Primary subjects show the WRITTEN mark only (out of 100) - exactly like the printed
-        // Result Card (ResultCard.jsx: display_total = w for primary) and like the grade, which
-        // Result.save() computes from written_marks alone. The টিউটোরিয়াল mark lives in
-        // mcq_marks and has its own "টিউটোরিয়াল" column; it is added to মোট (grand total) only,
-        // so it must NOT inflate the subject column (e.g. বাংলা 86 + 28 used to render as 114).
-        const displayStr = (has && tot > 0) ?
-            (isPrimaryClass ? String(Math.round(w)) :
-                (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot)))) :
-            (has && tot === 0 ? '0' : 'Absent');
+        // PRIMARY: the subject cell shows the written and the টিউটোরিয়াল part SIDE BY SIDE and
+        // never adds them together - e.g. বাংলা "86+28", or "28" when only the tutorial part was
+        // entered, or "86" when only the written part was. The separate টিউটোরিয়াল column (its own
+        // total) and the মোট column (written + tutorial) are unchanged, and the pass check above
+        // stays written-only.
+        const wEntered = r.written_marks !== '' && r.written_marks !== null && r.written_marks !== undefined;
+        const tEntered = r.mcq_marks !== '' && r.mcq_marks !== null && r.mcq_marks !== undefined;
+        const primaryParts = [];
+        if (wEntered) primaryParts.push(Math.round(w));
+        if (tEntered) primaryParts.push(Math.round(mcq));
+        const primaryDisplay = primaryParts.length ? primaryParts.join('+') : '0';
+
+        const displayStr = !has ? 'Absent'
+            : isPrimaryClass ? primaryDisplay
+            : (tot > 0
+                ? (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot)))
+                : '0');
 
         m.set(key, { total: tot, display: displayStr, is_passed: isPassed, hasMarks: has });
     });
