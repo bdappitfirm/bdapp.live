@@ -1,6 +1,8 @@
 #!/bin/bash
 sudo -u postgres psql -c "CREATE DATABASE local_pg_db;"
-sudo -u postgres psql -c "CREATE USER local_pg_user WITH PASSWORD 'Bangladesh@4321$';"
+# Password comes from the environment (see .env) - never hardcode credentials here.
+: "${PG_PASSWORD:?PG_PASSWORD is not set - export it or 'set -a; . ./.env; set +a' first}"
+sudo -u postgres psql -c "CREATE USER local_pg_user WITH PASSWORD '$PG_PASSWORD';"
 sudo -u postgres psql -c "ALTER ROLE local_pg_user SET client_encoding TO 'utf8';"
 sudo -u postgres psql -c "ALTER ROLE local_pg_user SET default_transaction_isolation TO 'read committed';"
 sudo -u postgres psql -c "ALTER ROLE local_pg_user SET timezone TO 'UTC';"

@@ -24,7 +24,7 @@ except ImportError:
 # Configuration
 DB_NAME = os.environ.get("PG_NAME", "local_pg_db")
 DB_USER = os.environ.get("PG_USER", "local_pg_user")
-DB_PASS = os.environ.get("PG_PASSWORD", "Bangladesh@4321$")
+DB_PASS = os.environ.get("PG_PASSWORD", "")
 DB_HOST = os.environ.get("PG_HOST", "localhost")
 DB_PORT = os.environ.get("PG_PORT", "5432")
 

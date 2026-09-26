@@ -1,6 +1,11 @@
 $ErrorActionPreference = 'Continue'
 
-$env:PGPASSWORD = 'Bangladesh@4321$'
+$envFile = Join-Path (Split-Path $PSScriptRoot -Parent) '.env'
+if (Test-Path $envFile) {
+    $line = Get-Content $envFile | Where-Object { $_ -match '^PG_PASSWORD=' }
+    if ($line) { $env:PGPASSWORD = ($line -replace '^PG_PASSWORD=','').Trim() }
+}
+if (-not $env:PGPASSWORD) { Write-Error 'PG_PASSWORD not found in .env or the environment.'; exit 1 }
 $pgPath = "C:\Program Files\PostgreSQL\16\bin"
 $env:Path += ";$pgPath"
 

@@ -14,7 +14,10 @@ from schools.models import School
 
 # Create superuser
 if not User.objects.filter(username='bdadmin').exists():
-    User.objects.create_superuser('bdadmin', 'bdadmin@bdapp.live', 'Bangladesh@4321$')
+    _pw = os.environ.get('DJANGO_SUPERUSER_PASSWORD') or os.environ.get('PG_PASSWORD')
+    if not _pw:
+        raise SystemExit('Set DJANGO_SUPERUSER_PASSWORD (or PG_PASSWORD) before running this script.')
+    User.objects.create_superuser('bdadmin', 'bdadmin@bdapp.live', _pw)
     print('Superuser bdadmin created successfully!')
 else:
     print('Superuser bdadmin already exists!')

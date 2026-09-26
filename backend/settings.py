@@ -40,7 +40,7 @@ def _env_flag(key):
 
 PG_NAME = os.environ.get("PG_NAME", "local_pg_db")
 PG_USER = os.environ.get("PG_USER", "local_pg_user")
-PG_PASSWORD = os.environ.get("PG_PASSWORD", "Bangladesh@4321$")
+PG_PASSWORD = os.environ.get("PG_PASSWORD", "")
 PG_HOST = os.environ.get("PG_HOST", "localhost")
 PG_PORT = os.environ.get("PG_PORT", "5432")
 SQLITE_PATH = BASE_DIR / "db.sqlite3"

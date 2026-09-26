@@ -23,7 +23,16 @@ $REMOTE_DB_NAME  = "local_pg_db"
 $REMOTE_DB_USER  = "postgres"
 $LOCAL_DB_NAME   = "local_pg_db"
 $LOCAL_DB_USER   = "local_pg_user"
-$LOCAL_DB_PASS   = "Bangladesh@4321$"
+# Password is read from .env (repo root) or the environment - never hardcode it here.
+$LOCAL_DB_PASS   = $env:PG_PASSWORD
+if (-not $LOCAL_DB_PASS) {
+    $__env = Join-Path $PSScriptRoot '.env'
+    if (Test-Path $__env) {
+        $__l = Get-Content $__env | Where-Object { $_ -match '^PG_PASSWORD=' } | Select-Object -First 1
+        if ($__l) { $LOCAL_DB_PASS = ($__l -replace '^PG_PASSWORD=','').Trim() }
+    }
+}
+if (-not $LOCAL_DB_PASS) { Write-Error "PG_PASSWORD not found in .env or the environment."; exit 1 }
 $REMOTE_APP_DIR  = "/var/www/bdapp"
 
 # Tables to sync - ORDER MATTERS (parents before children for FKs)
