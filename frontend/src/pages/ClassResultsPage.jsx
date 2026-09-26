@@ -6,6 +6,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import { scopedGet } from '../utils/schoolApi';
 import { useAcademics } from '../context/AcademicsContext';
 import { useSchool } from '../context/SchoolContext';
+import { primaryWrittenMax } from '../utils/primaryMaxima';
 import { getMediaUrl } from '../utils/media';
 
 const getSubjectMaxima = (name, isNT, group = '') => {
@@ -63,11 +64,9 @@ const getSubjectMaxima = (name, isNT, group = '') => {
   return isNT ? { cq: 70, mcq: 30, pr: 0 } : { cq: 100, mcq: 30, pr: 0 };
 };
 
-// PRIMARY written ceiling: 100 for every subject, 50 for drawing (অংকন). This is what the backend
-// uses (results/utils.py get_subject_maxima + Result.save()), so the printed Result Card, the
-// transcript and this table all grade a primary subject identically. The 30-mark টিউটোরিয়াল is
-// stored separately in mcq_marks and is never part of this ceiling.
-const primaryWrittenMax = (name) => (/অংকন|drawing|চিত্রাংকন/i.test(String(name || '')) ? 50 : 100);
+// PRIMARY written ceiling: 100 for every subject, 50 for drawing (অংকন) - imported from
+// utils/primaryMaxima so this table, the Result Card, the transcript and the merit list all use
+// the same maxima as the backend (results/utils.py get_subject_maxima + Result.save()).
 
 const computeGpa = (pct) => {
   if (pct >= 80) return 5.0; if (pct >= 70) return 4.0; if (pct >= 60) return 3.5;

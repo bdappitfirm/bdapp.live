@@ -8,6 +8,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import { getMediaUrl } from '../utils/media';
 import { bengaliToEnglishNumber } from '../utils/helpers';
+import { primaryWrittenMax, primarySpecForSubject, isPrimaryClassName } from '../utils/primaryMaxima';
 
 // --- SHARED LOGIC ENGINE (MIRROR OF CLASSRESULTSPAGE) ---
 const getSubjectMaxima = (name, isNT, group = '') => {
@@ -375,6 +376,14 @@ const MeritListPage = () => {
     if (!cls) return false;
     const text = String(cls.name || '').toLowerCase();
     return /নবম|দশম|ssc|nine|ten|\bix\b|\bx\b|নাইন|টেন|৯|১০|\b9\b|\b10\b/i.test(text);
+  }, [selectedClass, classrooms]);
+
+  // শিশু–পঞ্চম (everything that is not 6-10): the subject's own maxima are written 100/50 plus a
+  // separate 30-mark tutorial, so the merit CGPA/order must not use the class 6-8 distribution.
+  const isPrimary = useMemo(() => {
+    const cls = classrooms.find(c => String(c.id) === String(selectedClass));
+    if (!cls) return false;
+    return isPrimaryClassName(cls.name);
   }, [selectedClass, classrooms]);
 
   const effectiveGroup = useMemo(() => {
@@ -779,7 +788,7 @@ const MeritListPage = () => {
                         return;
                     }
 
-                    let tW=0, tM=0, tP=0, tO=0, tPossible=0, cqM=0, mcqM=0, prM=0, pPresent=false;
+                    let tW=0, tM=0, tP=0, tO=0, tPossible=0, cqM=0, mcqM=0, prM=0, pPresent=false, wPoss=0;
                     let hasUnprocessedPaper = false;
 
                     papers.forEach(r => {
@@ -790,10 +799,15 @@ const MeritListPage = () => {
 
                         const hasActualMarks = (r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null);
                         if (hasActualMarks || r.total_obtained > 0) { hasAnyMarks = true; pPresent = true; }
-                        const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT, group);
+                        const sName = r.subject?.name || r.subject_name;
+                        // PRIMARY: written 100 (50 for drawing) + a separate 30-mark tutorial in
+                        // mcq_marks - the shared maxima describe 6-8 and under-scored primary
+                        // subjects, which made the merit list CGPA/order disagree with the card.
+                        const spec = isPrimary ? primarySpecForSubject(sName) : getSubjectMaxima(sName, isNT, group);
                         const pMax = (spec.cq + spec.mcq + spec.pr || 100);
                         tW += r.sumW; tM += r.sumM; tP += r.sumP; tO += Math.min(r.total_obtained, pMax);
                         tPossible += pMax; cqM += spec.cq; mcqM += spec.mcq; prM += spec.pr;
+                        wPoss += primaryWrittenMax(sName);
                     });
 
                     if (!hasUnprocessedPaper) return;
@@ -806,7 +820,11 @@ const MeritListPage = () => {
                     const cqPass = cqM === 0 || tW >= Math.round(cqM * 0.33 - 0.5);
                     const mcqPass = mcqM === 0 || tM >= Math.round(mcqM * 0.33 - 0.5);
                     const prPass = prM === 0 || tP >= Math.round(prM * 0.33 - 0.5);
-                    const totPass = tO >= Math.round(tPossible * 0.33 - 0.5);
+                    // PRIMARY: the tutorial never decides pass/fail or the GP - judge written vs
+                    // written maximum, like Result.save() / Result Card / Class Results.
+                    const totPass = isPrimary
+                        ? tW >= Math.round((wPoss || 100) * 0.33 - 0.5)
+                        : tO >= Math.round(tPossible * 0.33 - 0.5);
 
                     const isCoCurric = CO_CURRICULAR.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
                     let isSubjectPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
@@ -815,7 +833,9 @@ const MeritListPage = () => {
                     if (isNT && key === 'english' && tPossible === 200 && tO >= 66) isSubjectPassed = true;
                     if (isNT && key === 'english' && tPossible === 100 && tO >= 33) isSubjectPassed = true;
 
-                    const gp = isSubjectPassed ? computeGpa((tO / tPossible) * 100) : 0;
+                    const gp = isSubjectPassed
+                        ? computeGpa(((isPrimary ? (wPoss > 0 ? tW / wPoss : 0) : (tPossible > 0 ? tO / tPossible : 0)) * 100))
+                        : 0;
 
                     if ((key === 'higher' && showHM) || (key === 'agriculture' && showAgri)) {
                         const threshold = tPossible * 0.4;

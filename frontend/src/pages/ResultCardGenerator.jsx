@@ -4,6 +4,7 @@ import jsPDF from 'jspdf';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAcademics } from '../context/AcademicsContext';
+import { primaryWrittenMax, primarySpecForSubject } from '../utils/primaryMaxima';
 import {
   Box,
   Typography,
@@ -367,6 +368,16 @@ export default function ResultCardGenerator() {
     return /নবম|দশম|ssc|nine|ten|\bix\b|\bx\b|নাইন|টেন|৯|১০|\b9\b|\b10\b/i.test(text);
   }, [selectedClass, classrooms]);
 
+  // True for শিশু–পঞ্চম (everything that is NOT 6-10). Used so the card's own CGPA / merit
+  // calculation applies the primary maxima (written 100/50 + separate 30 tutorial) instead of the
+  // class 6-8 distribution.
+  const isPrimaryClass = useMemo(() => {
+    const cls = classrooms.find(c => String(c.id) === String(selectedClass));
+    if (!cls) return false;
+    const text = String(cls.name || '').toLowerCase();
+    return !/ষষ্ঠ|six|\b6\b|সপ্তম|seven|\b7\b|অষ্টম|eight|\b8\b|নবম|nine|\b9\b|দশম|ten|\b10\b|ssc|ix|x/i.test(text);
+  }, [selectedClass, classrooms]);
+
   // Names of the subjects THIS class actually teaches, derived from the academics context using
   // each subject's linked classrooms. A result card may only fill such a subject as "Absent" -
   // never a subject the class does not have (that produced phantom Absent/F rows).
@@ -573,12 +584,13 @@ export default function ResultCardGenerator() {
                     return;
                 }
 
-                let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0, pPresent = false;
+                let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0, pPresent = false, wPoss = 0;
                 papers.forEach(r => {
                     const w = sumStr(r.written_marks), m = sumStr(r.mcq_marks), p = sumStr(r.practical_marks);
                     const hasActual = (r.hasActualMarks !== undefined ? r.hasActualMarks : ((r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null)));
                     if (hasActual || (w+m+p) > 0 || parseFloat(r.total_obtained) > 0) { hasAnyMarks = true; pPresent = true; }
-                    const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT, group);
+                    const sName = r.subject?.name || r.subject_name;
+                    const spec = isPrimaryClass ? primarySpecForSubject(sName) : getSubjectMaxima(sName, isNT, group);
                     const maxPossible = (spec.cq + spec.mcq + spec.pr || 100);
 
                     let obt = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
@@ -587,6 +599,7 @@ export default function ResultCardGenerator() {
                     tMarks += cappedObt; tPoss += maxPossible;
                     sumW += w; sumM += m; sumP += p;
                     cqMax += spec.cq; mcqMax += spec.mcq; prMax += spec.pr;
+                    wPoss += primaryWrittenMax(sName);
                 });
 
                 if (isNT && (key === 'bangla' || key === 'english')) { tPoss = Math.max(tPoss, 200); if (tMarks > 200) tMarks = 200; }
@@ -594,14 +607,18 @@ export default function ResultCardGenerator() {
                 const cqPass = cqMax === 0 || sumW >= Math.round(cqMax * 0.33 - 0.5);
                 const mcqPass = mcqMax === 0 || sumM >= Math.round(mcqMax * 0.33 - 0.5);
                 const prPass = prMax === 0 || sumP >= Math.round(prMax * 0.33 - 0.5);
-                const totPass = tMarks >= Math.round(tPoss * 0.33 - 0.5);
+                const totPass = isPrimaryClass
+                    ? sumW >= Math.round((wPoss || 100) * 0.33 - 0.5)
+                    : tMarks >= Math.round(tPoss * 0.33 - 0.5);
 
                 const isCoCurric = isCoCurricularLocal(key, isNT);
                 let isPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
                 // SPECIAL SYNC: School 63 English/Combined Subject Correction (mirror MeritListPage.jsx L591-592)
                 if (isNT && key === 'english' && tPoss === 200 && tMarks >= 66) isPassed = true;
                 if (isNT && key === 'english' && tPoss === 100 && tMarks >= 33) isPassed = true;
-                const gp = isPassed ? computeGpa((tMarks / tPoss) * 100) : 0;
+                const gp = isPassed
+                    ? computeGpa(((isPrimaryClass ? (wPoss > 0 ? sumW / wPoss : 0) : (tPoss > 0 ? tMarks / tPoss : 0)) * 100))
+                    : 0;
 
                 if (key === 'higher' || key === 'agriculture') {
                     if (isNT) {
@@ -2357,12 +2374,13 @@ export default function ResultCardGenerator() {
                   return;
               }
 
-              let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0, pPresent = false;
+              let tMarks = 0, tPoss = 0, sumW = 0, sumM = 0, sumP = 0, cqMax = 0, mcqMax = 0, prMax = 0, pPresent = false, wPoss = 0;
               papers.forEach(r => {
                   const w = sumStr(r.written_marks), m = sumStr(r.mcq_marks), p = sumStr(r.practical_marks);
                   const hasActual = (r.hasActualMarks !== undefined ? r.hasActualMarks : ((r.written_marks !== '' && r.written_marks !== null) || (r.mcq_marks !== '' && r.mcq_marks !== null) || (r.practical_marks !== '' && r.practical_marks !== null)));
                   if (hasActual || (w+m+p) > 0 || parseFloat(r.total_obtained) > 0) { hasAnyMarks = true; pPresent = true; }
-                  const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isNT, group);
+                  const sName = r.subject?.name || r.subject_name;
+                  const spec = isPrimaryClass ? primarySpecForSubject(sName) : getSubjectMaxima(sName, isNT, group);
                   const maxPossible = (spec.cq + spec.mcq + spec.pr || 100);
 
                   let obt = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
@@ -2371,6 +2389,7 @@ export default function ResultCardGenerator() {
                   tMarks += cappedObt; tPoss += maxPossible;
                   sumW += w; sumM += m; sumP += p;
                   cqMax += spec.cq; mcqMax += spec.mcq; prMax += spec.pr;
+                  wPoss += primaryWrittenMax(sName);
               });
 
               if (isNT && (key === 'bangla' || key === 'english')) { tPoss = Math.max(tPoss, 200); if (tMarks > 200) tMarks = 200; }
@@ -2378,14 +2397,20 @@ export default function ResultCardGenerator() {
               const cqPass = cqMax === 0 || sumW >= Math.round(cqMax * 0.33 - 0.5);
               const mcqPass = mcqMax === 0 || sumM >= Math.round(mcqMax * 0.33 - 0.5);
               const prPass = prMax === 0 || sumP >= Math.round(prMax * 0.33 - 0.5);
-              const totPass = tMarks >= Math.round(tPoss * 0.33 - 0.5);
+              // PRIMARY: the টিউটোরিয়াল must not decide pass/fail or the grade points - judge the
+              // written mark against the written maximum, exactly like Result.save() / Class Results.
+              const totPass = isPrimaryClass
+                  ? sumW >= Math.round((wPoss || 100) * 0.33 - 0.5)
+                  : tMarks >= Math.round(tPoss * 0.33 - 0.5);
 
               const isCoCurric = isCoCurricularLocal(key, isNT);
               let isPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
               // SPECIAL SYNC: School 63 English/Combined Subject Correction (mirror MeritListPage.jsx L591-592)
               if (isNT && key === 'english' && tPoss === 200 && tMarks >= 66) isPassed = true;
               if (isNT && key === 'english' && tPoss === 100 && tMarks >= 33) isPassed = true;
-              const gp = isPassed ? computeGpa((tMarks / tPoss) * 100) : 0;
+              const gp = isPassed
+                  ? computeGpa(((isPrimaryClass ? (wPoss > 0 ? sumW / wPoss : 0) : (tPoss > 0 ? tMarks / tPoss : 0)) * 100))
+                  : 0;
 
               if (key === 'higher' || key === 'agriculture') {
                   if (isNT) {
