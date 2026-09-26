@@ -2183,7 +2183,7 @@ export default function ResultCardGenerator() {
       const normalizedSelType = normalizeExamType(selectedExamType);
 
       // 1. Fetch EVERYTHING in bulk (scoped strictly to selected exam type with fallback)
-      const [rRes, , aRes] = await Promise.all([
+      const [rRes, oRes, aRes] = await Promise.all([
         scopedGet('/api/results/results/', id, { classroom: selectedClass, section: selectedSection, exam_type: normalizedSelType, year: selectedYear, page_size: 10000 }, { timeout: 25000 }).catch(() => ({ data: [] })),
         api.get('/api/results/overall/combined_rank_list_by_exam_type/', {
           params: { exam_type: normalizedSelType, classroom: selectedClass, section: selectedSection, school: id, year: selectedYear, page_size: 2000 }
@@ -2201,6 +2201,16 @@ export default function ResultCardGenerator() {
         } catch (_) {}
       }
       const aList = Array.isArray(aRes.data) ? aRes.data : [];
+
+      // The database rows for CGPA / rank / totals. These were fetched before but DISCARDED (the
+      // Promise.all destructuring skipped the slot), so every card fell back to the local mirror
+      // below - which mis-scored primary subjects and disagreed with Class Results.
+      const oList = Array.isArray(oRes?.data) ? oRes.data : (oRes?.data?.results || []);
+      const apiOverallByStudent = {};
+      oList.forEach(o => {
+        const osid = String(o?.student?.id ?? o?.student_id ?? o?.student ?? '');
+        if (osid) apiOverallByStudent[osid] = o;
+      });
 
       const attendanceMap = {};
       aList.forEach(item => {
@@ -2332,7 +2342,10 @@ export default function ResultCardGenerator() {
           allSubjectKeys.forEach(key => {
               const papers = consolidatedMap.get(key) || [];
               const isRel = isRelSubjLocal(key);
-              let isMandatory = expectedKeys.has(key);
+              // Primary re-keys bangla/english as bangla_p1 / english_p1 (see above), so accept the
+              // base key too - otherwise the two biggest subjects were never counted as mandatory
+              // and their marks never reached score / CGPA / merit.
+              let isMandatory = expectedKeys.has(key) || expectedKeys.has(String(key).split('_')[0]);
               const belongsToGroup = (isScienceGroupLocal(group) && ['physics', 'chemistry', 'biology'].includes(key)) ||
                                      (isCommerceGroupLocal(group) && ['accounting', 'finance', 'business'].includes(key)) ||
                                      (isHumanitiesGroupLocal(group) && ['history', 'geography', 'civics', 'economics'].includes(key));
@@ -2440,6 +2453,22 @@ export default function ResultCardGenerator() {
               is_passed: fails === 0 && hasAnyMarks,
               grade: fails === 0 ? 'Passed' : 'Failed'
           };
+
+          // Prefer the stored (authoritative) values so the card agrees with Class Results and the
+          // Result Card's own overall row. The local mirror above stays as a fallback only.
+          const apiRow = apiOverallByStudent[sid];
+          if (apiRow) {
+              overallByStudent[sid] = {
+                  ...overallByStudent[sid],
+                  percentage: apiRow.percentage ?? overallByStudent[sid].percentage,
+                  total_marks_obtained: apiRow.total_marks_obtained ?? overallByStudent[sid].total_marks_obtained,
+                  total_marks_possible: apiRow.total_marks_possible ?? overallByStudent[sid].total_marks_possible,
+                  cgpa: apiRow.cgpa ?? overallByStudent[sid].cgpa,
+                  is_passed: apiRow.is_passed ?? overallByStudent[sid].is_passed,
+                  grade: apiRow.grade ?? overallByStudent[sid].grade,
+                  rank: apiRow.rank ?? null
+              };
+          }
       }
 
       const finalRankMap = {};
@@ -2467,7 +2496,7 @@ export default function ResultCardGenerator() {
           if (a.fails !== b.fails) return a.fails - b.fails;
           if (Math.abs(b.points - a.points) > 0.0001) return b.points - a.points;
           if (Math.abs(b.rawScore - a.rawScore) > 0.01) return b.rawScore - a.rawScore;
-          return (Number(a.roll) || 0) - (Number(a.roll) || 0);
+          return (Number(a.roll) || 0) - (Number(b.roll) || 0);   // was a.roll - a.roll (no tie-break)
         });
         sectionItems.forEach((c, idx) => {
           finalRankMap[c.sid] = c.isAbsent ? null : (idx + 1);
@@ -2476,9 +2505,11 @@ export default function ResultCardGenerator() {
 
       studentIds.forEach(sid => {
         if (overallByStudent[sid]) {
+          // Prefer the stored rank; only fall back to the locally computed position.
+          const stored = overallByStudent[sid].rank;
           const fRank = finalRankMap[sid];
-          overallByStudent[sid].rank = fRank || null;
-          overallByStudent[sid].rank_in_section = fRank || null;
+          overallByStudent[sid].rank = stored || fRank || null;
+          overallByStudent[sid].rank_in_section = overallByStudent[sid].rank;
         }
       });
 
