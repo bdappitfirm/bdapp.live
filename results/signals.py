@@ -181,16 +181,16 @@ def calculate_student_overall_result(examination, student):
     # and the GPA loop compute from written_marks alone.
 
     # Improved total_possible calculation (Main subjects only)
+    # PRIMARY: the maxima dict already carries the separate tutorial part
+    # (written 100 + tutorial 30), so the possible total matches the obtained total, which
+    # includes the tutorial exactly once. 4 subjects -> 520, and 234/520 = 45%.
     total_possible = 0
     for r in results_to_calculate:
         maxima = get_subject_maxima(group, getattr(r.subject, "name", None), student_group if is_910 else None)
-        if group == 'primary':
-            total_possible += (int(maxima.get("written", 100)) if maxima else 100)
+        if maxima:
+            total_possible += (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0)))
         else:
-            if maxima:
-                total_possible += (int(maxima.get("written", 0)) + int(maxima.get("mcq", 0)) + int(maxima.get("practical", 0)))
-            else:
-                total_possible += float(examination.total_marks)
+            total_possible += float(examination.total_marks)
 
     # Optional Marks Bonus (Above 40%) - Following standard merit rules
     bonus_marks = 0

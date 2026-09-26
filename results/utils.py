@@ -256,10 +256,16 @@ def get_subject_maxima(group, subject_name, student_group=None, target_total=Non
     if not group:
         return None
     if group == 'primary':
+        # PRIMARY scheme: every subject has a WRITTEN part and a separate টিউটোরিয়াল part.
+        #   written    = 100 (50 for drawing)
+        #   tutorial   = 30   -> stored in the mcq_marks column
+        # The tutorial is NOT added to the subject mark (the subject column, its grade and the
+        # GPA use written_marks only); it is added once to the grand total, so the overall
+        # "possible" must count it too (e.g. 4 subjects -> 4 x 130 = 520).
         s_low = (subject_name or '').lower()
         if any(w in s_low for w in ['অংকন', 'drawing', 'চিত্রাংকন']):
-            return {'written': 50, 'mcq': 0, 'practical': 0}
-        return {'written': 100, 'mcq': 0, 'practical': 0}
+            return {'written': 50, 'mcq': 30, 'practical': 0}
+        return {'written': 100, 'mcq': 30, 'practical': 0}
 
     raw = (subject_name or "").strip().lower()
 
