@@ -288,15 +288,27 @@ const getStudentAcademicGroup = (stu, stuData, fetchedRes = []) => {
     return inferClassGroupFromAllResultsLocal(fetchedRes, true, []);
 };
 
-const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs) => {
-    const subjects = new Set();
-    if (classSubjs && classSubjs.size > 0) {
-        classSubjs.forEach(s => {
-            const norm = normalizeSubjKeyLocal(s);
-            if (norm && norm.length > 0) subjects.add(norm);
+const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs, classAssignedSubjs) => {
+    // Only subjects that ACTUALLY EXIST for this class count as "expected", i.e. the subjects the
+    // class teaches (classAssignedSubjs) plus whatever subjects already have results (classSubjs).
+    // The old code force-added bangla/english/math/religion/science/bgs to EVERY class, so a
+    // Shishu class - which teaches আরবি instead of ধর্ম and has no Science/BGS - got phantom rows
+    // printed as "Absent / F" and every student came out as "Result: Failed".
+    const normKeys = new Set();
+    const addAll = (src) => {
+        (src ? Array.from(src) : []).forEach(n => {
+            const k = normalizeSubjKeyLocal(n);
+            if (k) normKeys.add(k);
         });
-    }
-    ['bangla', 'english', 'math', 'religion', 'science', 'bgs'].forEach(s => subjects.add(s));
+    };
+    addAll(classSubjs);
+    addAll(classAssignedSubjs);
+    const classHas = (base) => normKeys.has(base) || Array.from(normKeys).some(k => k.startsWith(base + '_'));
+    const subjects = new Set(normKeys);
+    ['bangla', 'english', 'math', 'ict'].forEach(k => { if (classHas(k)) subjects.add(k); });
+    if (classHas('religion')) subjects.add('religion');
+    if (classHas('science')) subjects.add('science');
+    if (classHas('bgs')) subjects.add('bgs');
     return subjects;
 };
 
@@ -354,6 +366,21 @@ export default function ResultCardGenerator() {
     const text = String(cls.name || '').toLowerCase();
     return /নবম|দশম|ssc|nine|ten|\bix\b|\bx\b|নাইন|টেন|৯|১০|\b9\b|\b10\b/i.test(text);
   }, [selectedClass, classrooms]);
+
+  // Names of the subjects THIS class actually teaches, derived from the academics context using
+  // each subject's linked classrooms. A result card may only fill such a subject as "Absent" -
+  // never a subject the class does not have (that produced phantom Absent/F rows).
+  // Deliberately NO "all subjects" fallback: if the context carries no classroom links we simply
+  // rely on the subjects that already have results, which can never invent a phantom subject.
+  const classAssignedSubjectNames = useMemo(() => {
+    const names = new Set();
+    const list = Array.isArray(contextSubjects) ? contextSubjects : [];
+    list.forEach(sub => {
+      const linked = Array.isArray(sub?.classrooms) ? sub.classrooms : [];
+      if (linked.some(c => String(c.id || c) === String(selectedClass)) && sub?.name) names.add(sub.name);
+    });
+    return names;
+  }, [contextSubjects, selectedClass]);
 
   const calculateStudentRank = useCallback(async (studentId, listResults = null, overrideSectionId = null) => {
     try {
@@ -491,7 +518,7 @@ export default function ResultCardGenerator() {
             const classGroupFromAllResults = inferClassGroupFromAllResultsLocal(allResults, isNT, contextSubjects);
             const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT, stuObj) || classGroupFromAllResults || '').toLowerCase();
             const classSubjs = new Set(allResults.map(r => r.subject?.name || r.subject_name));
-            const expectedKeys = getExpectedSubjectsLocal(group, isNT, classSubjs);
+            const expectedKeys = getExpectedSubjectsLocal(group, isNT, classSubjs, classAssignedSubjectNames);
             const relWithMarks = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0));
             const takenRelId = relWithMarks?.subject?.id || relWithMarks?.subject;
 
@@ -1706,7 +1733,7 @@ export default function ResultCardGenerator() {
 
         const classSubjs = new Set(useResults.map(r => r.subject?.name || r.subject_name));
         const group = getStudentAcademicGroup(student, studentData, useResults);
-        const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, classSubjs);
+        const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, classSubjs, classAssignedSubjectNames);
 
         const merged = dedupeAndFillResults(useResults, matchingExams, expectedKeys, student.optional_subject, validSubjKeys, group);
 
@@ -2058,7 +2085,7 @@ export default function ResultCardGenerator() {
 
       // Fill missing subjects for bulk cards
       const group = getStudentAcademicGroup(student, student, fetchedResults);
-      const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, sectionSubjs);
+      const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, sectionSubjs, classAssignedSubjectNames);
 
       const bulkTargetExamIds = new Set();
       (matchingExams || []).forEach(ex => { if (ex?.id) bulkTargetExamIds.add(String(ex.id)); });
@@ -2277,7 +2304,7 @@ export default function ResultCardGenerator() {
 
           const classGroupFromAllResults = inferClassGroupFromAllResultsLocal(Object.values(resultsByStudent).flat(), isNT, contextSubjects);
           const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT, stuObj) || classGroupFromAllResults || '').toLowerCase();
-          const expectedKeys = getExpectedSubjectsLocal(group, isNT, sectionSubjs);
+          const expectedKeys = getExpectedSubjectsLocal(group, isNT, sectionSubjs, classAssignedSubjectNames);
           const relWithMarks = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0));
           const takenRelId = relWithMarks?.subject?.id || relWithMarks?.subject;
 
