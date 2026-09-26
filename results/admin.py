@@ -80,17 +80,19 @@ class ExaminationAdmin(admin.ModelAdmin):
                             errors.append(f"Row {row_num}: Subject '{subject_name}' not found")
                             continue
                         
-                        # Create or update result
-                        result, created = Result.objects.update_or_create(
-                            examination=exam,
-                            student=student,
-                            subject=subject,
-                            defaults={
-                                'written_marks': written,
-                                'mcq_marks': mcq,
-                                'practical_marks': practical,
-                            }
-                        )
+                        # Same fix as bulk_results: a full save() is required so that
+                        # Result.save() persists total_obtained/grade/gpa/is_passed
+                        # (Django 6's update_or_create() would pass update_fields and skip them).
+                        result = Result.objects.filter(
+                            examination=exam, student=student, subject=subject
+                        ).first()
+                        created = result is None
+                        if created:
+                            result = Result(examination=exam, student=student, subject=subject)
+                        result.written_marks = written
+                        result.mcq_marks = mcq
+                        result.practical_marks = practical
+                        result.save()  # full save -> recomputes total/grade/gpa/is_passed
                         
                         if created:
                             created_count += 1

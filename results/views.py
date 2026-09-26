@@ -112,17 +112,29 @@ class ExaminationViewSet(viewsets.ModelViewSet):
                         except:
                             return None
 
-                    obj, created_now = Result.objects.update_or_create(
+                    # NOTE: do NOT use update_or_create() here. Django 6 passes
+                    # update_fields=<the defaults keys> to save(), so Result.save() would
+                    # recompute total_obtained/grade/gpa/is_passed in memory but never write
+                    # them - leaving every EDITED row with a stale total and grade "F".
+                    obj = Result.objects.filter(
                         examination=examination,
                         student_id=int(student_id),
                         subject_id=int(subject_id),
-                        defaults={
-                            'written_marks': clean_mark(r_data.get('written_marks')),
-                            'mcq_marks': clean_mark(r_data.get('mcq_marks')),
-                            'practical_marks': clean_mark(r_data.get('practical_marks')),
-                            'remarks': r_data.get('remarks', '')
-                        }
-                    )
+                    ).first()
+                    created_now = obj is None
+                    if created_now:
+                        obj = Result(
+                            examination=examination,
+                            student_id=int(student_id),
+                            subject_id=int(subject_id),
+                        )
+
+                    obj.written_marks = clean_mark(r_data.get('written_marks'))
+                    obj.mcq_marks = clean_mark(r_data.get('mcq_marks'))
+                    obj.practical_marks = clean_mark(r_data.get('practical_marks'))
+                    obj.remarks = r_data.get('remarks', '')
+                    obj.save()  # full save -> recomputes total/grade/gpa/is_passed
+
                     if created_now:
                         created += 1
                     else:

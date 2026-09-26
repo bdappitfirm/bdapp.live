@@ -132,8 +132,16 @@ const isScienceGroup = (g) => { const l = String(g || '').toLowerCase(); return 
 const isCommerceGroup = (g) => { const l = String(g || '').toLowerCase(); return l.includes('commerce') || l.includes('business') || l.includes('ব্যবসায়') || l.includes('ব্যবসায়'); };
 const isHumanitiesGroup = (g) => { const l = String(g || '').toLowerCase(); return l.includes('arts') || l.includes('humanities') || l.includes('মানবিক'); };
 
-const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
-    const subjects = new Set(['math', 'religion', 'ict']);
+const getExpectedSubjects = (studentGroup, isNT, classSubjs, religionInPlay) => {
+    // Only subjects that actually exist for THIS class/exam count as "expected".
+    // A hardcoded global list previously made Primary classes report phantom subjects:
+    // শিশু–২য় teach Arabic instead of Religion and have no ICT/Science/BGS, so those
+    // showed up as mandatory and every student was marked "Absent" (and counted as failed).
+    const normKeys = new Set(Array.from(classSubjs).map(s => normalizeSubjKey(s)));
+    const classHas = (base) => normKeys.has(base) || Array.from(normKeys).some(k => k.startsWith(base + '_'));
+    const subjects = new Set();
+    ['math', 'ict'].forEach(k => { if (classHas(k)) subjects.add(k); });
+    if (religionInPlay === undefined ? classHas('religion') : religionInPlay) subjects.add('religion');
     const g = String(studentGroup || '').toLowerCase();
     const checkPaper = (base) => {
         if (isNT) return [base];
@@ -166,7 +174,7 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
             }
         }
     } else {
-        ['science', 'bgs'].forEach(s => subjects.add(s));
+        ['science', 'bgs'].forEach(k => { if (classHas(k)) subjects.add(k); });
     }
     return subjects;
 };
@@ -177,6 +185,11 @@ const CO_CURRICULAR = [
   'life and work', 'জীবনমুখী', 'কর্ম', 'word collection', 'ওয়ার্ড কালেকশন'
 ];
 const isRelSubj = (n) => /religion|islam|hindu|buddhist|christian|ধর্ম|ইসলাম|হিন্দু|বৌদ্ধ|খ্রিস্ট/i.test(String(n));
+const isArabicSubj = (n) => /arabic|আরবি|আরবী/i.test(String(n));
+// Early Primary grades (শিশু–২য়) teach Arabic in place of Religion. ৩য়–৫ম DO teach ধর্ম,
+// so the substitution must never be applied to them.
+const EARLY_PRIMARY_PAT = /প্লে|play|nursery|শিশু|প্রথম|১ম|\b1st\b|\b1\b|দ্বিতীয়|দ্বিতীয়|২য়|২য়|\b2nd\b|\b2\b|class\s*[12]\b|শ্রেণি\s*[১২]|শ্রেণী\s*[১২]/i;
+const isEarlyPrimaryName = (n) => EARLY_PRIMARY_PAT.test(String(n || ''));
 
 const getSubjectName = (r, subjectsList = []) => {
     if (r.subject_name) return r.subject_name;
@@ -490,13 +503,28 @@ export default function ClassResultsPage() {
             // 1b. Fetch Subjects for this class/section
             const subRes = await scopedGet('/api/academics/subjects/', currentSchoolId, { classroom: selectedClass, section: selectedSection, page_size: 200 }).catch(() => ({ data: [] }));
             if (!isMounted.current || currentSchoolId !== id) return;
-            setClassSubjectsList(Array.isArray(subRes.data) ? subRes.data : (subRes.data?.results || []));
+            const assignedList = Array.isArray(subRes.data) ? subRes.data : (subRes.data?.results || []);
+            setClassSubjectsList(assignedList);
 
             // 2. Fetch Students
             const stuRes = await scopedGet('/api/academics/students/', currentSchoolId, { classroom: selectedClass, section: selectedSection, page_size: 500 });
             if (!isMounted.current || currentSchoolId !== id) return;
             const fetchedStudents = Array.isArray(stuRes.data) ? stuRes.data : (stuRes.data?.results || []);
             setStudents(fetchedStudents);
+
+            // Primary classes have students with section = NULL, and may expose no sections at all.
+            // A section filter (stale ?section= URL param, or a section that matches no student in
+            // this class) would exclude every student and blank the table. Drop such a section so
+            // it behaves as "All"; the fetch effect then re-runs without the section filter.
+            if (selectedSection) {
+                const anyStudentInSection = fetchedStudents.some(s =>
+                    String(s.section?.id || s.section || '') === String(selectedSection));
+                if (!anyStudentInSection) {
+                    setSelectedSection('');
+                    updateUrl({ section: '' });
+                    return;
+                }
+            }
 
             const activeStudents = fetchedStudents.filter(s => {
                 const fn = (s.user?.first_name || '').toUpperCase();
@@ -687,7 +715,16 @@ export default function ClassResultsPage() {
                 classGroupFromAllResults ||
                 classLevelGroup
             ).toLowerCase();
-            const expectedKeys = getExpectedSubjects(group, isClassNineOrTen, classSubjects);
+            // ধর্ম is part of the curriculum wherever it is ASSIGNED to the class (৩য়–৫ম), even
+            // before any marks exist. Exception: শিশু–২য় teach Arabic instead, so a stale religion
+            // assignment there must not make ধর্ম mandatory.
+            const religionAssigned = assignedList.some(s => isRelSubj(s?.name));
+            const arabicAssigned = assignedList.some(s => isArabicSubj(s?.name));
+            const religionHasResults = allResults.some(r => isRelSubj(r.subject?.name || r.subject_name || ''));
+            const classLabelForReligion = (classrooms.find(c => String(c.id) === String(selectedClass)) || {}).name || '';
+            const religionInPlay = religionAssigned &&
+                !(arabicAssigned && !religionHasResults && isEarlyPrimaryName(classLabelForReligion));
+            const expectedKeys = getExpectedSubjects(group, isClassNineOrTen, classSubjects, religionInPlay);
             const takenRelId = resList.find(r => isRelSubj(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0))?.subject?.id || resList.find(r => isRelSubj(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0))?.subject;
 
             let score = 0, fails = 0, hasAnyMarks = false, totalPoints = 0, subjectCount = 0;
@@ -979,6 +1016,18 @@ export default function ClassResultsPage() {
         if (!subjectsWithMarks.has('religion')) subjectsWithMarks.set('religion', 'ধর্ম');
     }
 
+    // The ধর্ম column follows the subjects ASSIGNED to this class (the curriculum), not whether
+    // marks happen to exist yet — ৩য়/৪র্থ/৫ম do teach ধর্ম even before any marks are entered.
+    // Exception: early Primary (শিশু–২য়) teach Arabic instead, so a stale religion assignment
+    // there must not create a phantom "ধর্ম" column full of "Absent".
+    const religionAssignedToClass = (classSubjectsList || []).some(s => isRelSubj(s?.name));
+    const arabicAssignedToClass = (classSubjectsList || []).some(s => isArabicSubj(s?.name));
+    const classHasReligionResults = Array.from(resultsByStudent.values()).some(list =>
+        list.some(r => isRelSubj(r.subject_name || r.subject?.name || '')));
+    const classLabelForReligion = (classrooms.find(c => String(c.id) === String(selectedClass)) || {}).name || '';
+    const religionReplacedByArabic = arabicAssignedToClass && !classHasReligionResults && isEarlyPrimaryName(classLabelForReligion);
+    const classHasReligion = religionAssignedToClass && !religionReplacedByArabic;
+
     const allLabels = Array.from(subjectsWithMarks.values());
     subjectsWithMarks.forEach((label, key) => {
         // Navam-dasham bangla & english merged column handling
@@ -1025,7 +1074,7 @@ export default function ClassResultsPage() {
 
         // ধর্ম সমন্বয়: হিন্দু ধর্ম বা ইসলাম শিক্ষা যাই হোক, সব 'ধর্ম' হিসেবে দেখাবো
         if (isRelSubj(label)) {
-            set.add({ label: 'ধর্ম', key: 'religion_merged' });
+            if (classHasReligion) set.add({ label: 'ধর্ম', key: 'religion_merged' });
             return;
         }
 
@@ -1063,7 +1112,7 @@ export default function ClassResultsPage() {
     });
     return subjects.sort((a, b) => getWeight(a.key) - getWeight(b.key));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resultsByStudent, isClassNineOrTen, detectedGroup, selectedSection, sections, currentGroupFromURL, selectedClass, contextSubjects]);
+  }, [resultsByStudent, isClassNineOrTen, detectedGroup, selectedSection, sections, currentGroupFromURL, selectedClass, contextSubjects, classSubjectsList, classrooms]);
 
   const currentClassLabel = classrooms.find(c => String(c.id) === String(selectedClass))?.name || '---';
   const currentSectionLabel = sections.find(s => String(s.id) === String(selectedSection))?.name || 'সব শাখা';
@@ -1157,8 +1206,11 @@ export default function ClassResultsPage() {
               totPass = tot >= Math.round(totalPossible * 0.33 - 0.5);
         const isPassed = has && (isClassNineOrTen ? (cqPass && mcqPass && prPass && totPass) : totPass);
 
+        // Primary shows the subject's TOTAL (written + টিউটোরিয়াল). It used to show written only,
+        // so a subject whose marks were entered in the টিউটোরিয়াল box displayed "0"/"Absent" while
+        // the মোট column still counted those marks - and Result Card already shows this same total.
         const displayStr = (has && tot > 0) ?
-            (isPrimaryClass ? String(Math.round(w)) :
+            (isPrimaryClass ? String(Math.round(tot)) :
                 (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot)))) :
             (has && tot === 0 ? '0' : 'Absent');
 

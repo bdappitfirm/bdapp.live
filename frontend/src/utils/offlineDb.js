@@ -158,3 +158,26 @@ export const processSyncQueue = async () => {
 
 // Listen for connection changes
 window.addEventListener('online', processSyncQueue);
+
+// ---------------------------------------------------------------------------
+// AUTO-FLUSH + PENDING COUNT
+//   api.js queues a failed mutation and replies with a fake 202 "Queued for sync",
+//   so the UI reports success even though the server never received it. This queue
+//   used to be flushed ONLY by the browser 'online' event - which does NOT fire when
+//   the backend is simply not running - so those entered marks were silently lost.
+//   Now the queue is retried on app start and every 30s, and the UI can show how
+//   many entries are still waiting to be saved.
+// ---------------------------------------------------------------------------
+export const getQueueCount = async () => {
+    try { return await db.syncQueue.count(); } catch (e) { return 0; }
+};
+
+let _autoSyncTimer = null;
+
+export const startAutoSync = (intervalMs = 30000) => {
+    if (_autoSyncTimer) return () => {};
+    const tick = () => { processSyncQueue().catch(() => {}); };
+    tick();                                    // flush immediately on app start
+    _autoSyncTimer = setInterval(tick, intervalMs);
+    return () => { clearInterval(_autoSyncTimer); _autoSyncTimer = null; };
+};

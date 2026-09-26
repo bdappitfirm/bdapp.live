@@ -10,6 +10,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import { CircularProgress, Box, Typography } from '@mui/material';
 import SyncManager from './components/SyncManager';
+import { startAutoSync, getQueueCount } from './utils/offlineDb';
 import {
   Paper, Stack, Button
 } from '@mui/material';
@@ -194,18 +195,30 @@ const ScrollToTop = () => {
 
 const OfflineIndicator = () => {
   const [isOffline, setIsOffline] = React.useState(!navigator.onLine);
+  const [pending, setPending] = React.useState(0);
 
   useEffect(() => {
     const handleStatusChange = () => setIsOffline(!navigator.onLine);
     window.addEventListener('online', handleStatusChange);
     window.addEventListener('offline', handleStatusChange);
+
+    // Retry anything that failed to save (e.g. backend was not running) and keep
+    // showing how many entries are still pending, so a "saved" toast can never
+    // hide unsaved data again.
+    const stopAutoSync = startAutoSync(30000);
+    const refresh = () => { getQueueCount().then(setPending).catch(() => {}); };
+    refresh();
+    const countTimer = setInterval(refresh, 5000);
+
     return () => {
       window.removeEventListener('online', handleStatusChange);
       window.removeEventListener('offline', handleStatusChange);
+      stopAutoSync();
+      clearInterval(countTimer);
     };
   }, []);
 
-  if (!isOffline) return null;
+  if (!isOffline && !pending) return null;
 
   return (
     <Box
@@ -213,7 +226,7 @@ const OfflineIndicator = () => {
         position: 'fixed',
         bottom: 20,
         right: 20,
-        bgcolor: '#f44336',
+        bgcolor: isOffline ? '#f44336' : '#ed6c02',
         color: 'white',
         px: 2,
         py: 1,
@@ -222,11 +235,14 @@ const OfflineIndicator = () => {
         boxShadow: 3,
         display: 'flex',
         alignItems: 'center',
-        gap: 1
+        gap: 1,
+        maxWidth: 420
       }}
     >
       <Box sx={{ width: 10, height: 10, bgcolor: 'white', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
-      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>অফলাইন মোড</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+        {isOffline ? 'অফলাইন মোড' : `সতর্কতা: ${pending}টি এন্ট্রি এখনো সার্ভারে সেভ হয়নি`}
+      </Typography>
       <style>{`
         @keyframes pulse {
           0% { opacity: 1; transform: scale(1); }

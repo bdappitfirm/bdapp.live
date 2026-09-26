@@ -90,3 +90,23 @@ local_db_final.sql
 local_db_fresh.dump
 local_db_plain.sql
 filter_paths.txt.git.old
+
+# ===== project hygiene (added during cleanup) =====
+db_dump*.json
+sqlite_dump*.json
+*.sql.gz
+plink.exe
+pscp.exe
+school_19_students.json
+staticfiles/
+*.js.map
+*.css.map
+tmp_sync_*/
+exams_list.txt
+sections.txt
+db_stats.txt
+allfiles.txt
+debug_school63_output.txt
+ai_test_output.txt
+.piptmp/
+_workspace_archive/

@@ -2107,8 +2107,11 @@ export default function ResultCardGenerator() {
   };
 
   const handleGenerateBulkCards = async (targetLang = 'en') => {
-    if (!selectedClass || !selectedSection || !selectedExamType) {
-      toast.error('শ্রেণি, সেকশন ও পরীক্ষার ধরন নির্বাচন করুন');
+    // Section is OPTIONAL: Primary classes have students with section = NULL and may
+    // expose no sections at all, so requiring one made card generation impossible.
+    // An empty section now means "every student in the selected class".
+    if (!selectedClass || !selectedExamType) {
+      toast.error('শ্রেণি ও পরীক্ষার ধরন নির্বাচন করুন');
       return;
     }
     if (!Array.isArray(students) || students.length === 0) {
@@ -2120,13 +2123,15 @@ export default function ResultCardGenerator() {
     setForceLanguage(targetLang);
 
     try {
-      const sectionList = students.filter(s => {
-        const secId = (typeof s.section === 'object') ? (s.section?.id ?? s.section?.section_id) : s.section_id;
-        return String(secId || '') === String(selectedSection || '');
-      });
+      const sectionList = selectedSection
+        ? students.filter(s => {
+            const secId = (typeof s.section === 'object') ? (s.section?.id ?? s.section?.section_id) : (s.section_id ?? s.section);
+            return String(secId || '') === String(selectedSection);
+          })
+        : students;
 
       if (sectionList.length === 0) {
-        toast.error('এই সেকশনে কোনো শিক্ষার্থী পাওয়া যায়নি');
+        toast.error(selectedSection ? 'এই সেকশনে কোনো শিক্ষার্থী পাওয়া যায়নি' : 'এই শ্রেণিতে কোনো শিক্ষার্থী পাওয়া যায়নি');
         setBulkLoading(false);
         return;
       }
@@ -2744,7 +2749,7 @@ export default function ResultCardGenerator() {
               if (selectedStudent) handleSearch(null, 'bn');
               else handleGenerateBulkCards('bn');
             }}
-            disabled={loading || bulkLoading || (!selectedStudent && !selectedSection) || !selectedExamType}
+            disabled={loading || bulkLoading || (!selectedStudent && !selectedClass) || !selectedExamType}
             color="primary"
           >
             {loading && !forceLanguage ? 'তৈরি হচ্ছে...' : 'বাংলায় মার্কশীট তৈরি করুন'}
@@ -2757,7 +2762,7 @@ export default function ResultCardGenerator() {
               if (selectedStudent) handleSearch(null, 'en');
               else handleGenerateBulkCards('en');
             }}
-            disabled={loading || bulkLoading || (!selectedStudent && !selectedSection) || !selectedExamType}
+            disabled={loading || bulkLoading || (!selectedStudent && !selectedClass) || !selectedExamType}
             sx={{ bgcolor: '#1a237e', '&:hover': { bgcolor: '#0d1642' } }}
           >
             {isTranslating ? 'AI অনুবাদ হচ্ছে...' : 'ইংরেজিতে মার্কশীট তৈরি করুন'}
@@ -2768,7 +2773,7 @@ export default function ResultCardGenerator() {
             startIcon={<PrintIcon />}
             onClick={() => handleGenerateBulkCards('en')}
             color="secondary"
-            disabled={!selectedSection || bulkLoading || !selectedExamType}
+            disabled={bulkLoading || !selectedExamType || !selectedClass}
           >
             {bulkLoading ? 'লোড হচ্ছে...' : 'সেকশনের সব কার্ড তৈরি'}
           </Button>

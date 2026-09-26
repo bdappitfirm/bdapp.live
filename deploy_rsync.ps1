@@ -101,9 +101,9 @@ if ($LASTEXITCODE -ne 0) { throw "tar pack failed." }
 
 # 3) Upload bundle to LIVE /tmp (not into application tree yet)
 Write-Host "[4/5] Uploading bundle to LIVE /tmp ..." -ForegroundColor Yellow
-& ".\pscp.exe" -v $zipName "${USER}@${VPS_IP}:/tmp/deploy_latest.tar.gz"
+& scp -v $zipName "${USER}@${VPS_IP}:/tmp/deploy_latest.tar.gz"
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Upload to LIVE failed (pscp exit $LASTEXITCODE)."
+    Write-Error "Upload to LIVE failed (scp exit $LASTEXITCODE)."
     if (Test-Path $zipName) { Remove-Item $zipName -Force }
     exit 1
 }
@@ -135,3 +135,5 @@ Write-Host "  `u{2705} CODE DEPLOY (LOCAL -> LIVE) COMPLETE" -ForegroundColor Gr
 Write-Host "  Browser hard-refresh: Ctrl+F5"      -ForegroundColor White
 Write-Host "  (To pull LIVE DATA: .\sync_live_to_local.ps1)" -ForegroundColor DarkGray
 Write-Host "========================================" -ForegroundColor Green
+
+
