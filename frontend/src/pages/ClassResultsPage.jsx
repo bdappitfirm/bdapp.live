@@ -63,6 +63,12 @@ const getSubjectMaxima = (name, isNT, group = '') => {
   return isNT ? { cq: 70, mcq: 30, pr: 0 } : { cq: 100, mcq: 30, pr: 0 };
 };
 
+// PRIMARY written ceiling: 100 for every subject, 50 for drawing (অংকন). This is what the backend
+// uses (results/utils.py get_subject_maxima + Result.save()), so the printed Result Card, the
+// transcript and this table all grade a primary subject identically. The 30-mark টিউটোরিয়াল is
+// stored separately in mcq_marks and is never part of this ceiling.
+const primaryWrittenMax = (name) => (/অংকন|drawing|চিত্রাংকন/i.test(String(name || '')) ? 50 : 100);
+
 const computeGpa = (pct) => {
   if (pct >= 80) return 5.0; if (pct >= 70) return 4.0; if (pct >= 60) return 3.5;
   if (pct >= 50) return 3.0; if (pct >= 40) return 2.0; if (pct >= 33) return 1.0;
@@ -907,7 +913,9 @@ export default function ClassResultsPage() {
                 // the written mark is judged against the written maximum (100, 50 for drawing),
                 // exactly like ResultCard.jsx and Result.save(). মোট keeps written + tutorial.
                 const gradeBasis = isPrimaryClass ? totalW : totalObtained;
-                const gradePossible = isPrimaryClass ? (cqM || 100) : totalPossible;
+                const gradePossible = isPrimaryClass
+                    ? primaryWrittenMax(papers[0]?.subject?.name || papers[0]?.subject_name || '')
+                    : totalPossible;
                 const totPass = gradeBasis >= Math.round(gradePossible * 0.33 - 0.5);
 
                 const isCoCurric = CO_CURRICULAR.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
@@ -1208,7 +1216,9 @@ export default function ClassResultsPage() {
         // PRIMARY: pass/fail comes from the written mark against the written maximum (100, or 50
         // for drawing) - the same rule as ResultCard.jsx. The tutorial never flips a subject here.
         const passBasis = isPrimaryClass ? w : tot;
-        const passPossible = isPrimaryClass ? (spec.cq || 100) : totalPossible;
+        const passPossible = isPrimaryClass
+            ? primaryWrittenMax(r.subject?.name || r.subject_name || '')
+            : totalPossible;
         const cqPass = spec.cq === 0 || w >= Math.round(spec.cq * 0.33 - 0.5),
               mcqPass = spec.mcq === 0 || mcq >= Math.round(spec.mcq * 0.33 - 0.5),
               prPass = spec.pr === 0 || pr >= Math.round(spec.pr * 0.33 - 0.5),

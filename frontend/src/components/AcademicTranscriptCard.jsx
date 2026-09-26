@@ -806,7 +806,10 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
       let obtained = isActuallyAbsent ? 0 : ((w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0));
 
       if (isPrimaryGroup) {
-          totalPossible = 100;
+          // PRIMARY written ceiling: 100 per subject, 50 for drawing (অংকন) - matches the backend
+          // (results/utils.py + Result.save()). The টিউটোরিয়াল (mcq_marks) stays outside this.
+          const primaryName = String(r.subject?.name || r.subject_name || '').toLowerCase();
+          totalPossible = /অংকন|drawing|চিত্রাংকন/.test(primaryName) ? 50 : 100;
           obtained = isActuallyAbsent ? 0 : w;
       } else {
           if (obtained > totalPossible) obtained = totalPossible;

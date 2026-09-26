@@ -802,7 +802,13 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       let obtained = (w + m + p) > 0 ? (w + m + p) : (parseFloat(r.total_obtained) || 0);
 
       if (isPrimaryGroup) {
-          totalPossible = spec.cq || 100;
+          // PRIMARY written ceiling: 100 for every subject, 50 for drawing (অংকন) - the same
+          // maxima the backend uses (results/utils.py + Result.save()). The spec above describes
+          // the 6-8 distribution (e.g. Bangla cq 70) and must NOT be used for primary, otherwise a
+          // written mark of 49/100 was printed as an 'A' while the database grades it 'C'.
+          // The টিউটোরিয়াল (mcq_marks) is deliberately NOT part of totalPossible.
+          const primaryName = String(r.subject?.name || r.subject_name || '').toLowerCase();
+          totalPossible = /অংকন|drawing|চিত্রাংকন/.test(primaryName) ? 50 : 100;
           obtained = w;
       } else {
           if (obtained > totalPossible) obtained = totalPossible;
