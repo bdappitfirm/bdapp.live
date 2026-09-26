@@ -412,8 +412,23 @@ Write-Info ("Stateful parser: kept {0} setval restores, dropped {1} noise lines.
 
 # Write processed file
 $PROCESSED_SQL = Join-Path $TMP_DIR "live_data_processed.sql"
-$processedContent = $filteredSqlLines -join [Environment]::NewLine
+
+# ---------------------------------------------------------------------
+# MIRROR MODE: make the LOCAL synced tables an EXACT copy of LIVE.
+#   The import below is DELETE-all + INSERT-all inside ONE transaction, so rows
+#   that were deleted or cleared on LIVE also disappear locally (before this,
+#   they lingered forever because the import was insert/update only).
+#   Deletes run in REVERSE $SYNC_TABLES order => children before parents (FK safe).
+# ---------------------------------------------------------------------
+$reverseTables = if ($SYNC_TABLES.Count -gt 1) { $SYNC_TABLES[($SYNC_TABLES.Count - 1)..0] } else { $SYNC_TABLES }
+$mirrorDeletes = New-Object System.Collections.Generic.List[string]
+$mirrorDeletes.Add("-- ===== MIRROR MODE: local == live for the synced tables =====")
+foreach ($t in $reverseTables) { $mirrorDeletes.Add("DELETE FROM $t;") }
+$mirrorDeletes.Add("-- ===== end of mirror deletes =====")
+
+$processedContent = ($mirrorDeletes -join [Environment]::NewLine) + [Environment]::NewLine + ($filteredSqlLines -join [Environment]::NewLine)
 Set-Content -LiteralPath $PROCESSED_SQL -Value $processedContent -Encoding UTF8 -NoNewline
+Write-Info ("Mirror mode: {0} synced tables will be emptied and reloaded from LIVE." -f $SYNC_TABLES.Count)
 
 $insertsCnt = ([regex]::Matches($processedContent, 'ON CONFLICT \(')).Count
 $nothingCnt = ([regex]::Matches($processedContent, 'ON CONFLICT DO NOTHING')).Count
@@ -431,19 +446,14 @@ $debugLast | ForEach-Object { Write-Info ("  | " + $_) }
 # ====================================================================
 # STEP 4: Import into LOCAL db
 # ====================================================================
-Write-Step "Step 4/6 : Importing into LOCAL PostgreSQL (existing data preserved)"
-# FIX #3: NO explicit BEGIN/COMMIT wrap, NO psql -1 (--single-transaction).
-#   Why: ANY error inside a single explicit transaction (or -1) aborts the
-#   ENTIRE tx -> every subsequent statement prints
-#   "current transaction is aborted, commands ignored until end of transaction block".
-#   Solution: each INSERT runs in its OWN IMPLICIT mini-transaction.
-#   - UPSERT on each table's real unique key handles duplicate PK/natural keys → no rollback needed
-#     (rows deleted on LIVE are intentionally NOT deleted locally - local-only data is preserved)
-#   - FK-dependency order is enforced via $SYNC_TABLES ordering
-#   - Isolated FK/constraint errors will only fail THAT row; remaining 72392 rows OK
-#   - This "partial success" behavior is EXACTLY what we want vs. 0 rows inserted.
+Write-Step "Step 4/6 : Importing into LOCAL PostgreSQL (MIRROR: local becomes identical to LIVE)"
+# MIRROR MODE: the whole file runs in ONE transaction (psql -1) with ON_ERROR_STOP=1.
+#   - the processed SQL starts with DELETE FROM <table> for every synced table
+#     (reverse FK order), then re-inserts LIVE's rows
+#   - if ANY statement fails the entire transaction rolls back, so local is never
+#     left half-empty - it either becomes live's exact copy or keeps its old data
 try {
-    $output = @(& cmd /c "$psql -U $LOCAL_DB_USER -d $LOCAL_DB_NAME -v ON_ERROR_STOP=0 -f `"$($PROCESSED_SQL.Replace('\','/'))`" 2>&1")
+    $output = @(& cmd /c "$psql -U $LOCAL_DB_USER -d $LOCAL_DB_NAME -v ON_ERROR_STOP=1 -1 -f `"$($PROCESSED_SQL.Replace('\','/'))`" 2>&1")
     $errorHits = 0
     foreach ($line in $output) {
         if ($line -match 'ERROR' -or $line -match 'FATAL' -or $line -match 'PANIC') {
@@ -469,7 +479,11 @@ try {
             $ROWS_WRITTEN += [int]$Matches[1]
         }
     }
-    Write-Info ("Import phase done  (SQL errors: {0}; rows written/updated: {1})." -f $errorHits, $ROWS_WRITTEN)
+    if ($errorHits -gt 0) {
+        Write-Err "Import FAILED inside the single transaction -> EVERYTHING was rolled back; local data is unchanged."
+    } else {
+        Write-Info ("Import phase done  (rows written: {0}). Local now mirrors LIVE for the synced tables." -f $ROWS_WRITTEN)
+    }
 } catch {
     Write-Err "Import crashed: $_"
 }
