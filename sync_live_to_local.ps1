@@ -47,6 +47,8 @@ $SYNC_TABLES = @(
     "public.academics_subject_sections",
     "public.users_profile",
     "public.academics_studentprofile",
+    "public.attendance_attendancerecord",
+    "public.attendance_studentattendancesummary",
     "public.academics_building",
     "public.academics_room",
     "public.results_examination",
@@ -55,8 +57,7 @@ $SYNC_TABLES = @(
     "public.results_result",
     "public.results_studentoverallresult",
     "public.academics_teacherassignment",
-    "public.academics_virtualclass",
-    "public.academics_studentyearrecord"
+    "public.academics_virtualclass"
 )
 
 # ---------------- UTILITY: find psql ----------------
@@ -120,7 +121,8 @@ try {
 # psql process - which is why the summary always printed 0 for every table.
 $COUNT_TABLES = @(
     'schools_school','users_user','users_profile','academics_classroom','academics_section',
-    'academics_subject','academics_studentprofile','results_examination','results_examslot',
+    'academics_subject','academics_studentprofile','attendance_attendancerecord','attendance_studentattendancesummary',
+    'results_examination','results_examslot',
     'results_result','results_studentoverallresult'
 )
 
@@ -289,8 +291,10 @@ $droppedCount   = 0
 #       swallowed the row. We now upsert on each table's REAL unique key.
 # ---------------------------------------------------------------------
 $NATURAL_CONFLICT_KEYS = @{
-    'results_studentoverallresult' = @('examination_id', 'student_id')
-    'results_result'               = @('examination_id', 'student_id', 'subject_id')
+    'results_studentoverallresult'       = @('examination_id', 'student_id')
+    'results_result'                     = @('examination_id', 'student_id', 'subject_id')
+    'attendance_attendancerecord'        = @('student_id', 'date')
+    'attendance_studentattendancesummary' = @('student_id', 'year')
 }
 
 function Get-UpsertClause([string]$stmt) {
