@@ -144,9 +144,6 @@ api.interceptors.response.use(
   async (response) => {
     const method = response.config.method?.toLowerCase();
     if (method === 'get') {
-      if (response.config.url?.includes('/api/results/')) {
-        response.config._skipCache = true;
-      }
       if (!response.config._skipCache) {
         const cacheKey = getCacheKey(response.config);
         try {
@@ -156,20 +153,6 @@ api.interceptors.response.use(
           }
         } catch (e) {
           console.warn('Cache write failed:', e);
-        }
-      }
-    } else if (['post', 'put', 'patch', 'delete'].includes(method)) {
-      // Clear cache on mutations to avoid stale data,
-      // EXCEPT for known "Read-only" POST requests or attendance/results bulk save
-      const url = response.config.url || '';
-      const isSafePost = url.includes('/translate_card/') || url.includes('/export_csv/') || url.includes('/search/') || url.includes('/api/attendance/');
-
-      if (!isSafePost) {
-        try {
-          await db.genericCache.clear();
-          console.log('🧹 Generic cache cleared due to mutation:', url);
-        } catch (e) {
-          console.warn('Cache clear failed:', e);
         }
       }
     }
@@ -184,46 +167,43 @@ api.interceptors.response.use(
     const isServerError = error.response && [500, 502, 503, 504].includes(error.response.status);
     const isAuthError = error.response && error.response.status === 401;
 
-    // 1. If GET failed, try to use cached data as fallback
+    // 1. If GET failed or offline, try to use cached data as fallback
     // Don't fallback for auth errors (401) to prevent showing stale private data
     if (originalRequest.method?.toLowerCase() === 'get' && !isAuthError) {
-      if (originalRequest.url?.includes('/api/results/')) {
-        originalRequest._skipCache = true;
-      }
       if (!originalRequest._skipCache) {
-      const cacheKey = getCacheKey(originalRequest);
-      try {
-        // Try exact URL match first
-        let cached = await getCachedApiResponse(cacheKey);
+        const cacheKey = getCacheKey(originalRequest);
+        try {
+          // Try exact URL match first
+          let cached = await getCachedApiResponse(cacheKey);
 
-        // If exact match fails, try Smart Fallback for known endpoints
-        if (!cached) {
-          cached = await smartOfflineFallback(originalRequest);
-        }
+          // If exact match fails, try Smart Fallback for known endpoints
+          if (!cached) {
+            cached = await smartOfflineFallback(originalRequest);
+          }
 
-        // Stricter validation: Ensure data is not null, empty object, or empty array
-        const hasData = cached && (
-          (Array.isArray(cached) && cached.length > 0) ||
-          (Array.isArray(cached?.results) && cached.results.length > 0) ||
-          (typeof cached === 'object' && Object.keys(cached).length > 0 && !(cached instanceof Date))
-        );
+          // Stricter validation: Ensure data is not null, empty object, or empty array
+          const hasData = cached && (
+            (Array.isArray(cached) && cached.length > 0) ||
+            (Array.isArray(cached?.results) && cached.results.length > 0) ||
+            (typeof cached === 'object' && Object.keys(cached).length > 0 && !(cached instanceof Date))
+          );
 
-        if (hasData) {
-          console.log('📦 Serving from Offline Cache fallback:', cacheKey);
-          return {
-            data: cached,
-            status: 200,
-            statusText: 'OK (From Cache)',
-            headers: { 'x-from-cache': 'true' },
-            config: originalRequest,
-            request: {},
-          };
-        } else {
+          if (hasData) {
+            console.log('📦 Serving from Offline Cache fallback:', cacheKey);
+            return {
+              data: cached,
+              status: 200,
+              statusText: 'OK (From Cache)',
+              headers: { 'x-from-cache': 'true' },
+              config: originalRequest,
+              request: {},
+            };
+          } else {
             console.warn('📦 Cache miss or invalid data for:', cacheKey);
+          }
+        } catch (e) {
+          console.warn('Fallback cache read failed:', e);
         }
-      } catch (e) {
-        console.warn('Fallback cache read failed:', e);
-      }
       }
     }
 

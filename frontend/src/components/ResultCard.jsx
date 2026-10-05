@@ -238,7 +238,7 @@ const isCoCurricular = (name, isClassNineOrTen) => {
     'চারু ও কারুকলা', 'Arts and Crafts', 'Continuous Assessment', 'ধারাবাহিক মূল্যায়ন', 'Life and Work',
     'Work and Life', 'Work and Life Education', 'কর্ম ও জীবনমুখী শিক্ষা', 'কর্ম ও জীবনমুখী'
   ];
-  if (!isClassNineOrTen && (subjStr.includes('কৃষি') || subjStr.includes('agriculture') || subjStr.includes('গার্হস্থ্য') || subjStr.includes('home economics'))) return true;
+  if (!isClassNineOrTen && (subjStr.includes('কৃষি') || subjStr.includes('agriculture') || subjStr.includes('গার্হস্থ্য') || subjStr.includes('home economics') || subjStr.includes('home science'))) return true;
   return baseList.some(sub => subjStr.includes(sub.toLowerCase()));
 };
 
@@ -705,6 +705,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
   }, [student, examination]);
 
   const inferredGroup = useMemo(() => {
+    const stripInv = (s) => String(s || '').replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, '');
     const clsSources = [
       student?.classroom?.name,
       student?.classroom_name,
@@ -713,9 +714,9 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       studentData?.classroom_name,
       studentData?.student?.classroom?.name,
       typeof student?.classroom === 'string' ? student.classroom : ''
-    ].filter(Boolean).map(s => String(s).toLowerCase());
+    ].filter(Boolean).map(s => stripInv(s).toLowerCase());
     const clsText = clsSources.join(' ');
-    const PRIMARY_REGEX = /play|shishu|nursery|প্লে|শিশু|প্রথম|১ম|\bone\b|\b1\b|দ্বিতীয়|দ্বিতীয়|২য়|\btwo\b|\b2\b|তৃতীয়|তৃতীয়|৩য়|\bthree\b|\b3\b|চতুর্থ|৪র্থ|\bfour\b|\b4\b|পঞ্চম|৫ম|\bfive\b|\b5\b|class\s*[1-5]/i;
+    const PRIMARY_REGEX = /play|shishu|nursery|প্লে|শিশু|প্রথম|১ম|\bone\b|\b1\b|দ্বিতীয়|২য়|\btwo\b|\b2\b|তৃতীয়|৩য়|\bthree\b|\b3\b|চতুর্থ|৪র্থ|\bfour\b|\b4\b|পঞ্চম|৫ম|\bfive\b|\b5\b|class\s*[1-5]/i;
     if (PRIMARY_REGEX.test(clsText)) {
       return 'primary';
     }
@@ -750,33 +751,48 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         }
     }
 
-    if (!isClassNineOrTen || results.length === 0) return '';
-
-    const countPerGroup = { science: 0, commerce: 0, humanities: 0 };
-    results.forEach(r => {
-        const rawName = r.subject?.name || r.subject_name || '';
-        const parts = String(rawName).includes('/')
-            ? String(rawName).split(/\s*\/\s*/).filter(Boolean)
-            : [rawName];
-        const seen = new Set();
-        parts.forEach(pt => {
-            const c = classifyPart(pt);
-            if (c && !seen.has(c)) { countPerGroup[c] += 1; seen.add(c); }
-        });
-    });
-
-    const scienceCount = countPerGroup.science;
-    const commerceCount = countPerGroup.commerce;
-    const humanitiesCount = countPerGroup.humanities;
-
-    if (commerceCount > 0) return 'Business Studies';
-    if (humanitiesCount > 0) return 'Humanities';
-    if (scienceCount > 0) return 'Science';
-
-    // Fallback: If not 6-8 and not 9-10, assume it is Primary section (Play/Shishu/Class 1-5)
+    // Detect 6-8 explicitly (not primary, not 9-10, not empty) return '' only when 6-8
     const SIX_TO_EIGHT_REGEX = /ষষ্ঠ|six|\b6\b|সপ্তম|seven|\b7\b|অষ্টম|eight|\b8\b/i;
-    if (!isClassNineOrTen && !SIX_TO_EIGHT_REGEX.test(clsText)) {
-      return 'primary';
+    if (SIX_TO_EIGHT_REGEX.test(clsText)) return '';
+
+    // Fallback for Class 9-10
+    if (isClassNineOrTen && results.length > 0) {
+      const countPerGroup = { science: 0, commerce: 0, humanities: 0 };
+      results.forEach(r => {
+          const rawName = r.subject?.name || r.subject_name || '';
+          const parts = String(rawName).includes('/')
+              ? String(rawName).split(/\s*\/\s*/).filter(Boolean)
+              : [rawName];
+          const seen = new Set();
+          parts.forEach(pt => {
+              const c = classifyPart(pt);
+              if (c && !seen.has(c)) { countPerGroup[c] += 1; seen.add(c); }
+          });
+      });
+
+      const scienceCount = countPerGroup.science;
+      const commerceCount = countPerGroup.commerce;
+      const humanitiesCount = countPerGroup.humanities;
+
+      if (commerceCount > 0) return 'Business Studies';
+      if (humanitiesCount > 0) return 'Humanities';
+      if (scienceCount > 0) return 'Science';
+    }
+
+    // Ultra-safe fallback: If NOT 9-10, AND has primary-ish marks pattern (any result with mcq_marks tutorial
+    // non-zero while practical is zero AND written max is 50 or 100) → treat as primary (the backend primary group uses mcq_marks
+    // to store tutorial, whereas 6-8 / 9-10 use mcq_marks as real MCQ and practical is often zero.
+    // Primary telltale: 100-based written marks + any tutorial mark for multiple subjects, so if ANY result has mcq > 0
+    // and written <= 100, treat as primary (since 6-8 also has mcq but usually in different spec).
+    // Additionally: if not 9-10 and not 6-8 matched regex, assume primary (covers all Play/Shishu/1-5 range)
+    if (!isClassNineOrTen) {
+      const anyTutorialMarks = results.some(r => {
+        const m = parseFloat(r?.mcq_marks);
+        return isFinite(m) && m > 0;
+      });
+      if (anyTutorialMarks || !SIX_TO_EIGHT_REGEX.test(clsText)) {
+        return 'primary';
+      }
     }
 
     return '';
@@ -1182,8 +1198,23 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
   }, [displayMainSubjects, isPrimary]);
 
   const finalSummary = useMemo(() => {
-    const isPrimaryGroup = inferredGroup === 'primary';
-    if (overallResult && (overallResult.total_marks_obtained !== undefined || overallResult.totalObtained !== undefined) && !isPrimaryGroup) {
+    // Ultra-safe primary detection (beyond inferredGroup):
+    // If the main results have tutorial-like MCQ marks (non-zero) and primary-style ceiling written (max 100), treat as primary.
+    // This avoids relying on backend overallResult.cgpa (which may be stale/old from before EXCLUDED_SUBJECTS sync).
+    const looksPrimary = (() => {
+      if (inferredGroup === 'primary') return true;
+      const rs = displayResults.main;
+      if (!rs || rs.length === 0) return false;
+      const anyMcqTutorial = rs.some(r => (parseFloat(r.mcq_marks) || 0) > 0);
+      const allWrittenPrimary = rs.every(r => {
+        const w = parseFloat(r.written_marks);
+        return !isFinite(w) || w <= 100;
+      });
+      const hasBangla = rs.some(r => /bangla|বাংলা/.test(String(r.subject?.name || r.subject_name || '')));
+      return anyMcqTutorial && allWrittenPrimary && hasBangla;
+    })();
+
+    if (overallResult && (overallResult.total_marks_obtained !== undefined || overallResult.totalObtained !== undefined) && !looksPrimary) {
       const obt = parseFloat(overallResult.total_marks_obtained ?? overallResult.totalObtained ?? 0);
       const poss = parseFloat(overallResult.total_marks_possible ?? overallResult.totalPossible ?? (displayResults.main.length * 100));
       const cg = String(overallResult.cgpa ?? overallResult.gpa ?? '0.00');
@@ -1201,7 +1232,14 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     displayResults.main.forEach(r => {
       totalObtained += r.total_obtained; totalPossible += r.total_possible;
       const gpa = parseFloat(r.gpa);
-      if (gpa === 0) hasFail = true;
+      const isAbsent = r.isActuallyAbsent === true;
+      const hasMarks = (parseFloat(r.total_obtained) || 0) > 0 ||
+                       (parseFloat(r.written_marks) || 0) > 0 ||
+                       (parseFloat(r.mcq_marks) || 0) > 0 ||
+                       (parseFloat(r.practical_marks) || 0) > 0;
+      if (isAbsent && !hasMarks) return;
+      if (!Number.isFinite(gpa)) return;
+      if (gpa <= 0) { hasFail = true; sumGpa += 0; count++; return; }
       sumGpa += gpa; count++;
     });
     const opt = displayResults.optional[0];

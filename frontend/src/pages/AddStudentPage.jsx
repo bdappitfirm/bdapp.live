@@ -73,16 +73,29 @@ export default function AddStudentPage() {
   const updateStep = () => {};
 
   useEffect(() => {
+    const activeSchoolId = (id && id !== 'undefined') ? id : (localStorage.getItem('active_school_id') || '');
+    if (!activeSchoolId) return;
+
     const load = async () => {
       try {
         const [classes, secs, subjs] = await Promise.all([
-          api.get(`/api/academics/classrooms/?school=${id}&page_size=1000`),
-          api.get(`/api/academics/sections/?school=${id}&page_size=1000`),
-          api.get(`/api/academics/subjects/?school=${id}&page_size=1000`)
+          api.get(`/api/academics/classrooms/?school=${activeSchoolId}&page_size=1000`),
+          api.get(`/api/academics/sections/?school=${activeSchoolId}&page_size=1000`),
+          api.get(`/api/academics/subjects/?school=${activeSchoolId}&page_size=1000`)
         ]);
-        setClassrooms(Array.isArray(classes.data) ? classes.data : (classes.data?.results || []));
-        setSections(Array.isArray(secs.data) ? secs.data : (secs.data?.results || []));
-        setSubjects(Array.isArray(subjs.data) ? subjs.data : (subjs.data?.results || []));
+
+        const rawClasses = Array.isArray(classes.data) ? classes.data : (classes.data?.results || []);
+        const rawSecs = Array.isArray(secs.data) ? secs.data : (secs.data?.results || []);
+        const rawSubjs = Array.isArray(subjs.data) ? subjs.data : (subjs.data?.results || []);
+
+        // Filter to ensure only current school's classrooms, sections, and subjects are listed
+        const filteredClasses = rawClasses.filter(c => !c.school || String(c.school?.id || c.school) === String(activeSchoolId));
+        const filteredSecs = rawSecs.filter(s => !s.classroom?.school || String(s.classroom?.school?.id || s.classroom?.school) === String(activeSchoolId));
+        const filteredSubjs = rawSubjs.filter(s => !s.school || String(s.school?.id || s.school) === String(activeSchoolId));
+
+        setClassrooms(filteredClasses);
+        setSections(filteredSecs);
+        setSubjects(filteredSubjs);
       } catch (e) {
         console.error("Error loading dropdown data:", e);
       }
@@ -227,6 +240,9 @@ export default function AddStudentPage() {
 
       <Paper sx={{ p: 3, borderRadius: 3 }}>
         <form autoComplete="off">
+          {/* Anti-autofill hidden inputs to prevent browser password managers from auto-filling admin credentials */}
+          <input type="text" name="prevent_autofill_username" style={{ display: 'none' }} tabIndex={-1} />
+          <input type="password" name="prevent_autofill_password" style={{ display: 'none' }} tabIndex={-1} />
           <Stack spacing={3}>
             {error && <Alert severity="error">{error}</Alert>}
 
@@ -279,10 +295,10 @@ export default function AddStudentPage() {
                 <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({...form, first_name_en: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField id="username-input" fullWidth label="ইউজার আইডি (Username)" value={form.username} onChange={e => setForm({...form, username: e.target.value})} helperText="খালি রাখলে স্বয়ংক্রিয়ভাবে তৈরি হবে" error={usernameCheck.available === false} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
+                <TextField id="username-input" fullWidth label="ইউজার আইডি (Username)" value={form.username} onChange={e => setForm({...form, username: e.target.value})} helperText="খালি রাখলে স্বয়ংক্রিয়ভাবে তৈরি হবে" error={usernameCheck.available === false} autoComplete="off" inputProps={{ autoComplete: 'new-username' }} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField id="password-input" fullWidth label="পাসওয়ার্ড" type="password" value={form.password} onFocus={() => updateStep('#password-input')} onChange={e => setForm({...form, password: e.target.value})} placeholder="ডিফল্ট: 12345678" />
+                <TextField id="password-input" fullWidth label="পাসওয়ার্ড" type="password" value={form.password} onFocus={() => updateStep('#password-input')} onChange={e => setForm({...form, password: e.target.value})} placeholder="ডিফল্ট: 12345678" autoComplete="new-password" inputProps={{ autoComplete: 'new-password' }} />
               </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField id="gender-select" select fullWidth label="লিঙ্গ" value={form.gender} onFocus={() => updateStep('#gender-select')} onChange={e => { setForm({...form, gender: e.target.value}); updateStep('#blood-group-select'); }}>

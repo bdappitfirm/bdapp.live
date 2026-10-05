@@ -242,7 +242,7 @@ const isCoCurricular = (name, isClassNineOrTen) => {
     'চারু ও কারুকলা', 'Arts and Crafts', 'Continuous Assessment', 'ধারাবাহিক মূল্যায়ন', 'Life and Work',
     'Work and Life', 'Work and Life Education', 'কর্ম ও জীবনমুখী শিক্ষা', 'কর্ম ও জীবনমুখী'
   ];
-  if (!isClassNineOrTen && (subjStr.includes('কৃষি') || subjStr.includes('agriculture') || subjStr.includes('গার্হস্থ্য') || subjStr.includes('home economics'))) return true;
+  if (!isClassNineOrTen && (subjStr.includes('কৃষি') || subjStr.includes('agriculture') || subjStr.includes('গার্হস্থ্য') || subjStr.includes('home economics') || subjStr.includes('home science'))) return true;
   return baseList.some(sub => subjStr.includes(sub.toLowerCase()));
 };
 
@@ -709,6 +709,7 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
   }, [student, examination]);
 
   const inferredGroup = useMemo(() => {
+    const stripInv = (s) => String(s || '').replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, '');
     const clsSources = [
       student?.classroom?.name,
       student?.classroom_name,
@@ -717,12 +718,14 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
       studentData?.classroom_name,
       studentData?.student?.classroom?.name,
       typeof student?.classroom === 'string' ? student.classroom : ''
-    ].filter(Boolean).map(s => String(s).toLowerCase());
+    ].filter(Boolean).map(s => stripInv(s).toLowerCase());
     const clsText = clsSources.join(' ');
-    if (/play|shishu|nursery|প্লে|শিশু|প্রথম|১ম|1|দ্বিতীয়|দ্বিতীয়|২য়|2|তৃতীয়|তৃতীয়|৩য়|3|চতুর্থ|৪র্থ|4|পঞ্চম|৫ম|5|class\s*[1-5]/i.test(clsText)) {
+    const PRIMARY_REGEX = /play|shishu|nursery|প্লে|শিশু|প্রথম|১ম|\bone\b|\b1\b|দ্বিতীয়|২য়|\btwo\b|\b2\b|তৃতীয়|৩য়|\bthree\b|\b3\b|চতুর্থ|৪র্থ|\bfour\b|\b4\b|পঞ্চম|৫ম|\bfive\b|\b5\b|class\s*[1-5]/i;
+    if (PRIMARY_REGEX.test(clsText)) {
       return 'primary';
     }
-
+    const SIX_TO_EIGHT_REGEX = /ষষ্ঠ|six|\b6\b|সপ্তম|seven|\b7\b|অষ্টম|eight|\b8\b/i;
+    if (SIX_TO_EIGHT_REGEX.test(clsText)) return '';
     const results = Array.isArray(rawResults) ? rawResults : (studentData?.results || []);
 
     const sources = [
@@ -753,7 +756,7 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
         }
     }
 
-    if (!isClassNineOrTen || results.length === 0) return '';
+    if (isClassNineOrTen && results.length > 0) {
 
     const countPerGroup = { science: 0, commerce: 0, humanities: 0 };
     results.forEach(r => {
@@ -775,6 +778,16 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
     if (commerceCount > 0) return 'Business Studies';
     if (humanitiesCount > 0) return 'Humanities';
     if (scienceCount > 0) return 'Science';
+
+    }
+
+    if (!isClassNineOrTen) {
+      const anyTutorialMarks = results.some(r => {
+        const m = parseFloat(r?.mcq_marks);
+        return isFinite(m) && m > 0;
+      });
+      if (anyTutorialMarks || !SIX_TO_EIGHT_REGEX.test(clsText)) return 'primary';
+    }
 
     return '';
   }, [rawResults, studentData, isClassNineOrTen, student, examination, overallResult]);
@@ -1181,7 +1194,19 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
   }, [displayMainSubjects, isPrimary]);
 
   const finalSummary = useMemo(() => {
-    if (overallResult && (overallResult.total_marks_obtained !== undefined || overallResult.totalObtained !== undefined)) {
+    const looksPrimary = (() => {
+      if (inferredGroup === 'primary') return true;
+      const rs = displayResults.main;
+      if (!rs || rs.length === 0) return false;
+      const anyMcqTutorial = rs.some(r => (parseFloat(r.mcq_marks) || 0) > 0);
+      const allWrittenPrimary = rs.every(r => {
+        const w = parseFloat(r.written_marks);
+        return !isFinite(w) || w <= 100;
+      });
+      const hasBangla = rs.some(r => /bangla|বাংলা/.test(String(r.subject?.name || r.subject_name || '')));
+      return anyMcqTutorial && allWrittenPrimary && hasBangla;
+    })();
+    if (overallResult && (overallResult.total_marks_obtained !== undefined || overallResult.totalObtained !== undefined) && !looksPrimary) {
       const obt = parseFloat(overallResult.total_marks_obtained ?? overallResult.totalObtained ?? 0);
       const poss = parseFloat(overallResult.total_marks_possible ?? overallResult.totalPossible ?? (displayResults.main.length * 100));
       const cg = String(overallResult.cgpa ?? overallResult.gpa ?? '0.00');
@@ -1199,7 +1224,14 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
     displayResults.main.forEach(r => {
       totalObtained += r.total_obtained; totalPossible += r.total_possible;
       const gpa = parseFloat(r.gpa);
-      if (gpa === 0) hasFail = true;
+      const isAbsent = r.isActuallyAbsent === true;
+      const hasMarks = (parseFloat(r.total_obtained) || 0) > 0 ||
+                       (parseFloat(r.written_marks) || 0) > 0 ||
+                       (parseFloat(r.mcq_marks) || 0) > 0 ||
+                       (parseFloat(r.practical_marks) || 0) > 0;
+      if (isAbsent && !hasMarks) return;
+      if (!Number.isFinite(gpa)) return;
+      if (gpa <= 0) { hasFail = true; sumGpa += 0; count++; return; }
       sumGpa += gpa; count++;
     });
     const opt = displayResults.optional[0];
@@ -1214,7 +1246,7 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
     const cgpa = (count > 0 && !hasFail) ? Math.min(5.0, (sumGpa + bonus) / count) : 0;
     const finalCgpaStr = cgpa.toFixed(2);
     return { obtained: Math.round(totalObtained), possible: Math.round(totalPossible), cgpa: finalCgpaStr, isPassed: !hasFail && count > 0, grade: getGradeFromCgpa(finalCgpaStr) };
-  }, [displayResults.main, displayResults.optional, overallResult]);
+  }, [displayResults.main, displayResults.optional, overallResult, inferredGroup]);
 
   const cleanClassName = useMemo(() => {
     let name = (student?.classroom?.name || '');

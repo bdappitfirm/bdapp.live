@@ -414,6 +414,7 @@ export default function TeachersPage() {
       formData.append('phone_number', editFormData.phone_number || '');
       formData.append('educational_qualification', editFormData.educational_qualification || '');
       formData.append('designation', editFormData.designation || '');
+      formData.append('designation_en', editFormData.designation_en || '');
       formData.append('blood_group', editFormData.blood_group || '');
       formData.append('index_number', editFormData.index_number || '');
       formData.append('joining_date', editFormData.joining_date || '');
@@ -1077,6 +1078,23 @@ export default function TeachersPage() {
               onChange={(e) => setEditFormData({...editFormData, educational_qualification: e.target.value})}
               placeholder="e.g., B.A., M.A., B.Ed., এম.এ., বি.এড."
               helperText="Optional - শিক্ষাগত যোগ্যতা লিখুন"
+            />
+
+            <TextField
+              label="পদবী (Designation)"
+              fullWidth
+              value={editFormData.designation || ''}
+              onChange={(e) => setEditFormData({...editFormData, designation: e.target.value})}
+              placeholder="যেমন: সহকারী শিক্ষক, প্রধান শিক্ষক, ইত্যাদি"
+              helperText="ফাঁকা রাখলে ডিফল্ট: সহকারী শিক্ষক"
+            />
+
+            <TextField
+              label="পদবী (ইংরেজিতে) (Designation in English)"
+              fullWidth
+              value={editFormData.designation_en || ''}
+              onChange={(e) => setEditFormData({...editFormData, designation_en: e.target.value})}
+              placeholder="e.g., Assistant Teacher, Headmaster, etc."
             />
             
             <TextField

@@ -44,10 +44,11 @@ import { isAuthenticated } from '../utils/auth';
 const EXAM_TYPES = [
   { value: 'half_yearly', label: 'অর্ধবার্ষিক' },
   { value: 'annual', label: 'বার্ষিক' },
-  { value: 'test', label: 'বিশেষ মূল্যায়ন' },
+  { value: 'pre_test', label: 'প্রাক-নির্বাচনী' },
+  { value: 'test', label: 'নির্বাচনী' },
   { value: 'terminal', label: 'টার্মিনাল' },
   { value: 'model', label: 'মডেল টেস্ট' },
-  { value: 'pre_test', label: 'প্রাক-নির্বাচনী' },
+  { value: 'special_test', label: 'বিশেষ মূল্যায়ন' },
   { value: 'Midterm-2', label: 'মিডটার্ম-২' }
 ];
 

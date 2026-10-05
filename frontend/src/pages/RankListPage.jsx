@@ -31,9 +31,11 @@ import InputGuidance from '../components/InputGuidance';
 const EXAM_TYPE_LABELS = {
   'half_yearly': 'অর্ধবার্ষিক',
   'annual': 'বার্ষিক',
-  'test': 'বিশেষ মূল্যায়ন',
-  'model_test': 'মডেল টেস্ট',
   'pre_test': 'প্রাক-নির্বাচনী',
+  'test': 'নির্বাচনী',
+  'special_test': 'বিশেষ মূল্যায়ন',
+  'model_test': 'মডেল টেস্ট',
+  'model': 'মডেল টেস্ট',
   'final': 'চূড়ান্ত পরীক্ষা'
 };
 

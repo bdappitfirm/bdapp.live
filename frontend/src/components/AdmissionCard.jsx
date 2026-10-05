@@ -55,6 +55,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
   const toBnDigits = (v) => {
     return String(v ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
   };
+
   const getExamTypeBn = () => {
     const raw = String(exam?.name || exam?.exam_type || '').toLowerCase();
     if (/(প্রাক|pre)/.test(raw)) return 'প্রাক নির্বাচনী';
@@ -65,12 +66,97 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     if (/(test|টেস্ট|বিশেষ)/.test(raw)) return 'বিশেষ মূল্যায়ন';
     return exam?.name || '';
   };
+
   const getExamYearBn = () => {
     const yr =
       (exam?.academic_year && parseInt(exam.academic_year, 10)) ||
       (exam?.start_date && (() => { const d = new Date(exam.start_date); return d.getFullYear(); })()) ||
       new Date().getFullYear();
     return toBnDigits(yr);
+  };
+
+  const getExamTitleBn = () => {
+    let typeStr = (getExamTypeBn() || '').trim();
+    // Remove duplicate/trailing "পরীক্ষা"
+    typeStr = typeStr.replace(/\s*পরীক্ষা\s*$/i, '');
+    if (typeStr) {
+      return `${typeStr} পরীক্ষা-${getExamYearBn()}খ্রিঃ`;
+    }
+    return `পরীক্ষা-${getExamYearBn()}খ্রিঃ`;
+  };
+
+  const schoolName = school?.bn_name || school?.name || '';
+
+  const getStudentGroup = (student) => {
+    const g = String(student?.student_group || student?.group || '').toLowerCase();
+    if (g.includes('sci') || g.includes('বিজ্ঞান')) return 'science';
+    if (g.includes('com') || g.includes('bus') || g.includes('ব্যবসায়') || g.includes('ব্যবসায়')) return 'commerce';
+    if (g.includes('art') || g.includes('hum') || g.includes('মানবিক')) return 'humanities';
+
+    const secName = String(student?.section?.name || student?.section_name || '').toLowerCase();
+    const className = String(student?.classroom?.name || student?.classroom_name || '').toLowerCase();
+    const combined = `${className} ${secName}`;
+
+    if (combined.includes('বিজ্ঞান') || combined.includes('science')) return 'science';
+    if (combined.includes('ব্যবসায়') || combined.includes('ব্যবসায়') || combined.includes('commerce') || combined.includes('business')) return 'commerce';
+    if (combined.includes('মানবিক') || combined.includes('arts') || combined.includes('humanities')) return 'humanities';
+
+    return null;
+  };
+
+  const isSubjectMatchingStudent = (slot, student) => {
+    if (!slot) return false;
+    const subjName = (slot.subject_name || slot.subject?.name || '').trim();
+    if (!subjName) return false;
+
+    const group = getStudentGroup(student);
+    if (!group) return true; // General class without stream/group
+
+    const name = subjName.toLowerCase();
+    const optionalName = String(
+      student?.optional_subject?.name || student?.optional_subject_name || ''
+    ).toLowerCase();
+
+    // Science specific subjects
+    const isScienceSubject = /physics|chemistry|biology|পদার্থ|রসায়|রসায়|জীব|উচ্চতর|higher\s*math/i.test(name);
+
+    // Commerce specific subjects
+    const isCommerceSubject = /accounting|finance|business|entrepreneurship|হিসাব|হিশাব|ব্যবসায়|ব্যবসায়|ব্যবসা|ফিন্যান্স|ফাইনান্স|কারবার/i.test(name);
+
+    // Humanities/Arts specific subjects
+    const isHumanitiesSubject = /history|geography|civics|economics|sociology|logic|ইতিহাস|বিশ্বসভ্যতা|ভ[ূু]গোল|পৌর|নাগরিকতা|অর্থ\s*নীতি|অর্থনীতি|সমাজ|যুক্তিবিদ্যা|দর্শন/i.test(name);
+
+    // General Science (বিজ্ঞান) vs BGS (বাংলাদেশ ও বিশ্বপরিচয়)
+    const isGeneralScience = /^বিজ্ঞান$|^science$/i.test(name.trim()) || (/বিজ্ঞান/i.test(name) && !/পদার্থ|রসায়|রসায়|জীব|হিসাব|হিশাব|পৌর|ইতিহাস|ভ[ূু]গোল/i.test(name));
+    const isBGS = /bgs|bangladesh\s*&\s*global|বাংলাদেশ\s*ও\s*বিশ্বপরিচয়|বাংলাদেশ\s*ও\s*বিশ্বপরিচয়|বাংলাদেশ\s*ও\s*বিশ্ব/i.test(name);
+
+    if (group === 'commerce') {
+      if (isScienceSubject) return false;
+      if (isHumanitiesSubject) return false;
+      if (isBGS && !isGeneralScience) return false;
+      return true;
+    }
+
+    if (group === 'science') {
+      if (isCommerceSubject) return false;
+      if (isHumanitiesSubject) return false;
+      if (isGeneralScience) return false;
+      if (optionalName && (name.includes('কৃষি') || name.includes('agri') || name.includes('গার্হস্থ্য') || name.includes('home'))) {
+        if (!optionalName.includes('কৃষি') && !optionalName.includes('agri') && !optionalName.includes('গার্হস্থ্য')) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (group === 'humanities') {
+      if (isScienceSubject) return false;
+      if (isCommerceSubject) return false;
+      if (isBGS) return false;
+      return true;
+    }
+
+    return true;
   };
 
   return (
@@ -116,8 +202,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
       }}>
         {/* QR Code */}
         <Box sx={{
-          width: { xs: '85px', sm: '115px' },
-          height: { xs: '85px', sm: '115px' },
+          width: { xs: '75px', sm: '95px' },
+          height: { xs: '75px', sm: '95px' },
           border: '1.5px solid #1a237e',
           borderRadius: '5px',
           display: 'flex',
@@ -126,42 +212,52 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
           backgroundColor: 'white',
           p: 0.3
         }}>
-          <QRCode value={qrData} size={isMobile ? 80 : 105} level="H" />
+          <QRCode value={qrData} size={isMobile ? 70 : 88} level="H" />
         </Box>
         
         {/* School Info */}
-        <Box sx={{ textAlign: 'center', flex: 1, px: { xs: 0.5, sm: 1.5 } }}>
+        <Box sx={{ textAlign: 'center', flex: 1, px: { xs: 0.5, sm: 1.5 }, minWidth: 0 }}>
           <Typography sx={{
             fontWeight: 'bold', 
-            fontSize: { xs: '1.0rem', sm: '1.35rem' },
-            lineHeight: 1.1,
+            fontSize: schoolName.length > 30 ? { xs: '0.75rem', sm: '0.95rem' } : (schoolName.length > 20 ? { xs: '0.85rem', sm: '1.1rem' } : { xs: '1.0rem', sm: '1.3rem' }),
+            lineHeight: 1.35,
+            pt: '3px',
+            pb: '1px',
             color: '#000',
-            mb: 0.5
+            mb: 0.2,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
           }}>
-            {school?.bn_name || school?.name}
+            {schoolName}
           </Typography>
           <Typography sx={{
             fontSize: { xs: '1.4rem', sm: '1.8rem' },
             fontWeight: '900',
             color: '#1a237e',
-            my: 0.2,
+            my: 0.1,
+            lineHeight: 1.25,
             letterSpacing: '1px'
           }}>
             প্রবেশপত্র
           </Typography>
           <Typography sx={{
-            fontSize: { xs: '0.9rem', sm: '1.1rem' },
+            fontSize: { xs: '0.85rem', sm: '1.05rem' },
             fontWeight: 700,
-            color: '#000'
+            lineHeight: 1.35,
+            pt: '2px',
+            pb: '1px',
+            color: '#000',
+            whiteSpace: 'nowrap'
           }}>
-            {(getExamTypeBn() ? `${getExamTypeBn()} পরীক্ষা-` : 'পরীক্ষা ') + getExamYearBn() + 'খ্রিঃ'}
+            {getExamTitleBn()}
           </Typography>
         </Box>
         
         {/* Student Photo */}
         <Box sx={{
-          width: { xs: '85px', sm: '110px' },
-          height: { xs: '105px', sm: '135px' },
+          width: { xs: '72px', sm: '92px' },
+          height: { xs: '90px', sm: '112px' },
           border: '1.5px solid #1a237e',
           borderRadius: '5px',
           overflow: 'hidden',
@@ -259,15 +355,25 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
           {/* Exam Routine Table - Four Columns */}
           {(() => {
-                // Filter slots to match student's classroom and section
+                // Filter slots to match student's classroom, section, and stream/group
                 const studentClassroomId = data?.classroom?.id;
                 const studentSectionId = data?.section?.id;
+
                 const filteredSlots = examSlots.filter(slot => {
-                  // Match classroom if set
                   const classroomMatch = !slot.classroom || String(slot.classroom) === String(studentClassroomId);
-                  // Match section if set, else match any section (including null)
                   const sectionMatch = !slot.section || String(slot.section) === String(studentSectionId);
-                  return classroomMatch && sectionMatch;
+                  const groupMatch = isSubjectMatchingStudent(slot, data);
+                  return classroomMatch && sectionMatch && groupMatch;
+                });
+
+                // Sort slots chronologically
+                filteredSlots.sort((a, b) => {
+                  const dateA = a.exam_date || '';
+                  const dateB = b.exam_date || '';
+                  if (dateA !== dateB) return dateA.localeCompare(dateB);
+                  const timeA = a.start_time || '';
+                  const timeB = b.start_time || '';
+                  return timeA.localeCompare(timeB);
                 });
 
                 if (filteredSlots.length === 0) {
@@ -278,20 +384,23 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   );
                 }
 
-                // Helper to format date in Bengali
-        const formatDate = (dateStr) => {
-          if (!dateStr) return '-';
-          const [year, month, day] = dateStr.split('-').map(Number);
-          const d = new Date(year, month - 1, day);
-          const dayBn = toBnDigits(d.getDate());
-          const monthBn = toBnDigits(d.getMonth() + 1);
-          return `${dayBn}/${monthBn}`;
-        };
+                // Helper to format date with English digits and full year
+                const formatDate = (dateStr) => {
+                  if (!dateStr) return '-';
+                  const parts = String(dateStr).split('-');
+                  if (parts.length < 3) return dateStr;
+                  const year = parseInt(parts[0], 10);
+                  const month = parseInt(parts[1], 10);
+                  const day = parseInt(parts[2], 10);
+                  const dayEn = String(day).padStart(2, '0');
+                  const monthEn = String(month).padStart(2, '0');
+                  return `${dayEn}/${monthEn}/${year}`;
+                };
 
-                // Helper to format time
+                // Helper to format time with English digits
                 const formatTime = (timeStr) => {
                   if (!timeStr) return '';
-                  const [hStr, mStr] = timeStr.split(':');
+                  const [hStr, mStr] = String(timeStr).split(':');
                   const h = parseInt(hStr, 10) || 0;
                   const m = mStr ? mStr.padStart(2, '0') : '00';
                   const ampm = h >= 12 ? 'PM' : 'AM';
@@ -302,116 +411,121 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   return `${period} ${h12}${minPart} ${ampm}`;
                 };
 
+                // Column-first row rendering
+                const numRows = Math.ceil(filteredSlots.length / 2);
+
                 return (
                   <Box sx={{
                     display: 'grid',
-                    gridTemplateColumns: '0.8fr 1.7fr 0.8fr 1.7fr',
+                    gridTemplateColumns: '1.2fr 1.6fr 1.2fr 1.6fr',
                     gridAutoRows: 'auto',
                     gap: 0.2,
                     border: '1px solid #e0e8ff',
                     borderRadius: '4px',
                     overflow: 'visible',
-                    fontSize: '11.5px !important'
+                    fontSize: '11px !important'
                   }}>
                     {/* Header */}
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.3,
+                      py: 0.4,
                       px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '11px !important',
-                      lineHeight: 1.1
+                      fontSize: '10.5px !important',
+                      lineHeight: 1.3
                     }}>
                       তারিখ
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.3,
+                      py: 0.4,
                       px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '11px !important',
-                      lineHeight: 1.1
+                      fontSize: '10.5px !important',
+                      lineHeight: 1.3
                     }}>
                       বিষয়
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.3,
+                      py: 0.4,
                       px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '11px !important',
-                      lineHeight: 1.1
+                      fontSize: '10.5px !important',
+                      lineHeight: 1.3
                     }}>
                       তারিখ
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.3,
+                      py: 0.4,
                       px: 0.1,
                       fontWeight: 'bold',
                       textAlign: 'center',
-                      fontSize: '11px !important',
-                      lineHeight: 1.1
+                      fontSize: '10.5px !important',
+                      lineHeight: 1.3
                     }}>
                       বিষয়
                     </Box>
 
-                    {/* Rows */}
+                    {/* Column-first Rows */}
                     {(() => {
                       const rows = [];
-                      for (let i = 0; i < filteredSlots.length; i += 2) {
-                        const slot1 = filteredSlots[i];
-                        const slot2 = filteredSlots[i + 1];
+                      for (let r = 0; r < numRows; r++) {
+                        const slot1 = filteredSlots[r];
+                        const slot2 = filteredSlots[r + numRows];
                         rows.push(
-                          <React.Fragment key={`row-${i}`}>
+                          <React.Fragment key={`row-${r}`}>
                             <Box sx={{
-                              py: 0.3,
+                              py: 0.2,
                               px: 0.1,
-                              backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
-                              borderBottom: '0.5px solid #e0e8ff'
+                              borderBottom: '0.5px solid #e0e8ff',
+                              fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
                                 {slot1 ? formatDate(slot1.exam_date) + (formatTime(slot1.start_time) ? ` (${formatTime(slot1.start_time)})` : '') : ''}
                               </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.3,
+                              py: 0.2,
                               px: 0.1,
-                              backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.1 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
                                 {slot1?.subject_name || ''}
                               </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.3,
+                              py: 0.2,
                               px: 0.1,
-                              backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
-                              borderBottom: '0.5px solid #e0e8ff'
+                              borderBottom: '0.5px solid #e0e8ff',
+                              fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
                                 {slot2 ? formatDate(slot2.exam_date) + (formatTime(slot2.start_time) ? ` (${formatTime(slot2.start_time)})` : '') : ''}
                               </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.3,
+                              py: 0.2,
                               px: 0.1,
-                              backgroundColor: (i/2) % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '11px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.1 }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
                                 {slot2?.subject_name || ''}
                               </Box>
                             </Box>
@@ -497,12 +611,6 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
             }}>
               শ্রেণি শিক্ষক
             </Typography>
-            <Typography variant="body1" sx={{
-              fontSize: '0.75rem', // Reduced
-              lineHeight: 1.2
-            }}>
-              তাং
-            </Typography>
           </Box>
 
           {/* Principal's Signature (Right) */}
@@ -560,22 +668,13 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
               mb: 0.2
             }} />
             {String(school?.id) !== '51' && (
-              <>
-                <Typography variant="body1" sx={{
-                  fontWeight: 'bold',
-                  fontSize: '0.9rem', // Reduced
-                  lineHeight: 1.2
-                }}>
-                  প্রধান শিক্ষক
-                </Typography>
-                <Typography variant="body1" sx={{
-                  fontSize: '0.75rem', // Reduced
-                  lineHeight: 1.2,
-                  mt: 0.2
-                }}>
-                  {school?.bn_name || school?.name || 'স্কুলের নাম'}
-                </Typography>
-              </>
+              <Typography variant="body1" sx={{
+                fontWeight: 'bold',
+                fontSize: '0.9rem',
+                lineHeight: 1.2
+              }}>
+                প্রধান শিক্ষক
+              </Typography>
             )}
           </Box>
         </Box>

@@ -1,5 +1,5 @@
 import api from './api';
-import { db, cacheData } from './offlineDb';
+import { cacheData } from './offlineDb';
 
 /**
  * Super Prefetcher: Aggressively downloads all school data to local storage.
@@ -49,7 +49,7 @@ export const prefetchEverything = async (schoolId) => {
         }
 
         // 3. Fee Assignments & Results Summary
-        const [feeRes, resultRes, teacherRes, examsRes] = await Promise.all([
+        const [feeRes, , teacherRes, examsRes] = await Promise.all([
             api.get(`/api/fees/assignments/?school=${schoolId}&page_size=1000`),
             api.get(`/api/results/overall/dashboard_result_summary/?school=${schoolId}&year=${new Date().getFullYear()}&exam_type=annual`),
             api.get(`/api/users/teachers/?school=${schoolId}&page_size=1000`),

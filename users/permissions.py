@@ -69,29 +69,40 @@ def get_user_school_id(user, request=None):
     if not user or not user.is_authenticated:
         return None
 
-    # 1. Global Admin: can specify school via query params or POST data
+    sid = None
+    if request:
+        # Check query params first (GET/DELETE)
+        sid = request.query_params.get('school') or request.query_params.get('school_id')
+
+        # Check parser context (URL kwargs like school_id, id, etc.)
+        if not sid:
+            try:
+                view = getattr(request, 'parser_context', {}).get('view')
+                if view and hasattr(view, 'kwargs'):
+                    sid = view.kwargs.get('school_id') or view.kwargs.get('school_pk') or view.kwargs.get('id')
+            except Exception:
+                pass
+
+        # Check Referer header if available (e.g., /school/12/...)
+        if not sid and hasattr(request, 'headers') and request.headers.get('referer'):
+            try:
+                referer = request.headers.get('referer', '')
+                import re
+                m = re.search(r'/school/(\d+)', referer)
+                if m:
+                    sid = m.group(1)
+            except Exception:
+                pass
+
+        # Check POST/PATCH/PUT data if not found in query params
+        if not sid and request.method not in permissions.SAFE_METHODS and hasattr(request, 'data') and isinstance(request.data, dict):
+            sid = request.data.get('school') or request.data.get('school_id')
+
+    if sid and str(sid).isdigit():
+        return int(sid)
+
+    # 1. Global Admin without explicit school:
     if is_global_admin(user):
-        sid = None
-        if request:
-            # Check query params first (GET/DELETE)
-            sid = request.query_params.get('school') or request.query_params.get('school_id')
-
-            # Check parser context (URL kwargs like school_id)
-            if not sid:
-                try:
-                    view = getattr(request, 'parser_context', {}).get('view')
-                    if view and hasattr(view, 'kwargs'):
-                        sid = view.kwargs.get('school_id') or view.kwargs.get('school_pk')
-                except Exception:
-                    pass
-
-            # Check POST/PATCH/PUT data if not found in query params (only for non-GET methods)
-            if not sid and request.method not in permissions.SAFE_METHODS and hasattr(request, 'data') and isinstance(request.data, dict):
-                sid = request.data.get('school') or request.data.get('school_id')
-
-        if sid and str(sid).isdigit():
-            return int(sid)
-
         return None
 
     # 2. Regular User: Always restricted to their own school

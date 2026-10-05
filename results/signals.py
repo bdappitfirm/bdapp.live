@@ -126,13 +126,17 @@ def calculate_student_overall_result(examination, student):
         results_to_process = [r for r in results_to_process if not is_religion(r.subject.name)] + [best_rel]
 
     # Filter out excluded subjects for GPA
+    # NOTE: Keep this list SYNCED with frontend ResultCard.jsx / AcademicTranscriptCard.jsx isCoCurricular()
     EXCLUDED_SUBJECTS = [
-        'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'physical education',
-        'ক্যারিয়ার শিক্ষা', 'career education', 'ক্যারিয়ার',
-        'word collection achievement test', 'wcat',
-        'বই পড়া', 'বই পড়া'
+        'শারীরিক শিক্ষা ও স্বাস্থ্য', 'শারীরিক শিক্ষা', 'physical education', 'physical education and health',
+        'ক্যারিয়ার শিক্ষা', 'career education', 'ক্যারিয়ার',
+        'word collection achievement test', 'wcat', 'word achievement',
+        'বই পড়া',
+        'চারু ও কারুকলা', 'arts and crafts',
+        'continuous assessment', 'ধারাবাহিক মূল্যায়ন',
+        'life and work', 'work and life', 'work and life education',
+        'কর্ম ও জীবনমুখী শিক্ষা', 'কর্ম ও জীবনমুখী'
     ]
-
     main_results = []
     optional_result = None
     optional_subject_id = student.optional_subject_id
@@ -143,6 +147,12 @@ def calculate_student_overall_result(examination, student):
         is_excluded = any(ex in subject_name for ex in EXCLUDED_SUBJECTS)
         if is_excluded:
             continue
+
+        # Co-curricular: Agriculture / Home Economics excluded for non 9-10 only (synced with frontend)
+        if not is_910:
+            sn = subject_name
+            if any(k in sn for k in ['কৃষি', 'agriculture', 'গার্হস্থ্য', 'home economics', 'home science']):
+                continue
 
         is_optional = False
         if optional_subject_id and r.subject_id == optional_subject_id:
@@ -313,6 +323,17 @@ def calculate_student_overall_result(examination, student):
             failed_subjects_list.append(r.subject.name)
 
     # Check for missing mandatory subjects (Bangla/English/Math/Religion/ICT/Science/BGS)
+    # ----------------------------------------------------------------
+    # Safety guard: only consider a subject MANDATORY for this class/exam if AT LEAST ONE
+    # result row exists for ANY student in this examination. This prevents a primary class
+    # (শিশু–পঞ্চম) that never taught ICT / Science / BGS from reporting those as "missing".
+    try:
+        _all_res = Result.objects.filter(examination=examination).select_related('subject').only('subject__name')
+        all_names_for_exam = " ".join(str(getattr(r.subject, 'name', '') or '').lower() for r in _all_res)
+    except Exception:
+        all_names_for_exam = ''
+    all_names_for_exam = "".join(c for c in all_names_for_exam if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+
     mandatory_keywords = {
         'bangla': (['bangla', 'বাংলা'], 'বাংলা'),
         'english': (['english', 'ইংরেজি', 'ইংরেজী'], 'ইংরেজি'),
@@ -332,6 +353,9 @@ def calculate_student_overall_result(examination, student):
     present_names_str = "".join(c for c in present_names_str if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
 
     for m, (keywords, label) in mandatory_keywords.items():
+        # If NO student in this exam has this subject, treat as NOT offered and SKIP.
+        if all_names_for_exam and not any(kw in all_names_for_exam for kw in keywords):
+            continue
         # Check if ANY keyword from this mandatory group is present in the student's results
         if not any(kw in present_names_str for kw in keywords):
             # Special case for 9-10 science: they take BGS, others take Science

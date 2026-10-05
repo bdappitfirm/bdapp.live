@@ -53,17 +53,19 @@ class ClassRoomViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            sid = get_user_school_id(self.request.user, self.request)
-            if not sid:
-                if is_global_admin(self.request.user):
-                    return ClassRoom.objects.all().prefetch_related('sections').annotate(
-                        annotated_student_count=Count('students', distinct=True)
-                    )
-                return ClassRoom.objects.none()
+            school_param = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+            sid = int(school_param) if (school_param and str(school_param).isdigit()) else get_user_school_id(self.request.user, self.request)
 
-            return ClassRoom.objects.filter(school_id=sid).prefetch_related('sections').annotate(
-                annotated_student_count=Count('students', distinct=True)
-            )
+            if sid:
+                return ClassRoom.objects.filter(school_id=sid).prefetch_related('sections').annotate(
+                    annotated_student_count=Count('students', distinct=True)
+                )
+
+            if is_global_admin(self.request.user):
+                return ClassRoom.objects.all().prefetch_related('sections').annotate(
+                    annotated_student_count=Count('students', distinct=True)
+                )
+            return ClassRoom.objects.none()
         except Exception as e:
             print(f"ClassRoom Queryset Fatal Error: {e}")
             return ClassRoom.objects.none()
@@ -142,17 +144,24 @@ class SectionViewSet(viewsets.ModelViewSet):
     permission_classes = [RolePermission]
 
     def get_queryset(self):
-        sid = get_user_school_id(self.request.user, self.request)
-        if not sid:
-            if is_global_admin(self.request.user):
-                return Section.objects.all().select_related('classroom')
-            return Section.objects.none()
+        school_param = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        sid = int(school_param) if (school_param and str(school_param).isdigit()) else get_user_school_id(self.request.user, self.request)
 
-        qs = Section.objects.filter(classroom__school_id=sid).select_related('classroom')
         cid = self.request.query_params.get('classroom')
-        if cid and str(cid).isdigit():
-            qs = qs.filter(classroom_id=int(cid))
-        return qs
+
+        if sid:
+            qs = Section.objects.filter(classroom__school_id=sid).select_related('classroom')
+            if cid and str(cid).isdigit():
+                qs = qs.filter(classroom_id=int(cid))
+            return qs
+
+        if is_global_admin(self.request.user):
+            qs = Section.objects.all().select_related('classroom')
+            if cid and str(cid).isdigit():
+                qs = qs.filter(classroom_id=int(cid))
+            return qs
+
+        return Section.objects.none()
 
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all()
@@ -161,10 +170,16 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            sid = get_user_school_id(self.request.user, self.request)
-            if not sid: return Subject.objects.none()
+            school_param = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+            sid = int(school_param) if (school_param and str(school_param).isdigit()) else get_user_school_id(self.request.user, self.request)
 
-            qs = Subject.objects.filter(school_id=sid).select_related('school').prefetch_related('classrooms', 'sections', 'assignments', 'assignments__teacher')
+            if sid:
+                qs = Subject.objects.filter(school_id=sid).select_related('school').prefetch_related('classrooms', 'sections', 'assignments', 'assignments__teacher')
+            elif is_global_admin(self.request.user):
+                qs = Subject.objects.all().select_related('school').prefetch_related('classrooms', 'sections', 'assignments', 'assignments__teacher')
+            else:
+                return Subject.objects.none()
+
             cid = self.request.query_params.get('classroom')
             sid_param = self.request.query_params.get('section')
 

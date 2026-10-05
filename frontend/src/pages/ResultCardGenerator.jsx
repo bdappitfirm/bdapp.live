@@ -323,12 +323,13 @@ export default function ResultCardGenerator() {
   const { classrooms, subjects: contextSubjects, refreshClassrooms } = useAcademics();
   
   const [examTypes] = useState([
-    { value: 'test', label: 'বিশেষ মূল্যায়ন' },
     { value: 'half_yearly', label: 'অর্ধবার্ষিক' },
     { value: 'annual', label: 'বার্ষিক' },
+    { value: 'pre_test', label: 'প্রাক-নির্বাচনী' },
+    { value: 'test', label: 'নির্বাচনী' },
     { value: 'terminal', label: 'টার্মিনাল' },
     { value: 'model', label: 'মডেল টেস্ট' },
-    { value: 'pre_test', label: 'প্রাক-নির্বাচনী' },
+    { value: 'special_test', label: 'বিশেষ মূল্যায়ন' },
     { value: 'first_term', label: 'প্রথম টার্ম' },
     { value: 'final', label: 'ফাইনাল' }
   ]);

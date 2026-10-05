@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import { 
@@ -104,21 +104,7 @@ export default function TeacherCard({ teacher, onPhotoUploaded, onEdit, onDelete
     return `Class Teacher: ${classroomName}${sectionName ? ` (${sectionName})` : ''}`;
   }, [teacher]);
 
-  const [designationState, setDesignationState] = useState(designation || '');
-
-  useEffect(() => { if (designation) setDesignationState(designation); }, [designation]);
-
-  useEffect(() => {
-    if (designationState) return;
-    const uid = teacher?.id || teacher?.user?.id;
-    if (!uid) return;
-    const schoolId = teacher?.assignments?.[0]?.classroom?.school?.id || teacher?.classes?.[0]?.school?.id || null;
-    const url = schoolId ? `/api/users/teachers/?user=${uid}&school=${schoolId}` : `/api/users/teachers/?user=${uid}`;
-    api.get(url).then(res => {
-      const arr = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-      if (arr[0]?.designation) setDesignationState(arr[0].designation);
-    }).catch(() => {});
-  }, [teacher, designationState]);
+  const designationState = teacher?.designation || teacher?.profile?.designation || teacher?.user?.profile?.designation || designation || '';
 
   return (
     <Card sx={{ borderRadius: 4, overflow: 'hidden', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)', transition: 'all 0.4s', '&:hover': { transform: 'translateY(-8px)', boxShadow: '0 16px 48px rgba(102, 126, 234, 0.4)' } }}>

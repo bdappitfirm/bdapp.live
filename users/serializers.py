@@ -336,6 +336,8 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             validated_data['school'] = school
         photo = validated_data.pop('photo', None)
         designation = validated_data.pop('designation', '')
+        if not designation or designation.strip() == '':
+            designation = 'সহকারী শিক্ষক'
         user = self._ensure_user(validated_data)
         # Pop user from validated_data so it doesn't cause issues in update_or_create
         validated_data.pop('user', None)
@@ -472,7 +474,10 @@ class BaseRoleProfileSerializer(serializers.ModelSerializer):
             user.save()
         
         # Update profile fields
-        instance.designation = validated_data.get('designation', instance.designation)
+        new_designation = validated_data.get('designation', instance.designation)
+        if not new_designation or str(new_designation).strip() == '':
+            new_designation = 'সহকারী শিক্ষক'
+        instance.designation = new_designation
         instance.designation_en = validated_data.get('designation_en', instance.designation_en)
         instance.blood_group = validated_data.get('blood_group', instance.blood_group)
         instance.occupation = validated_data.get('occupation', instance.occupation)

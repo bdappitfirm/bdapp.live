@@ -100,18 +100,29 @@ export default function EditStudentPage() {
   }, [loading]);
 
   useEffect(() => {
+    const activeSchoolId = (id && id !== 'undefined') ? id : (localStorage.getItem('active_school_id') || '');
+    if (!studentId) return;
+
     const load = async () => {
       try {
         const [classes, secs, studentRes, subjsRes] = await Promise.all([
-          api.get(`/api/academics/classrooms/?school=${id}&page_size=1000`),
-          api.get(`/api/academics/sections/?school=${id}&page_size=1000`),
+          activeSchoolId ? api.get(`/api/academics/classrooms/?school=${activeSchoolId}&page_size=1000`) : Promise.resolve({ data: [] }),
+          activeSchoolId ? api.get(`/api/academics/sections/?school=${activeSchoolId}&page_size=1000`) : Promise.resolve({ data: [] }),
           api.get(`/api/academics/students/${studentId}/`),
-          api.get(`/api/academics/subjects/?school=${id}&page_size=1000`)
+          activeSchoolId ? api.get(`/api/academics/subjects/?school=${activeSchoolId}&page_size=1000`) : Promise.resolve({ data: [] })
         ]);
 
-        setClassrooms(Array.isArray(classes.data) ? classes.data : (classes.data?.results || []));
-        setSections(Array.isArray(secs.data) ? secs.data : (secs.data?.results || []));
-        setSubjects(Array.isArray(subjsRes.data) ? subjsRes.data : (subjsRes.data?.results || []));
+        const rawClasses = Array.isArray(classes.data) ? classes.data : (classes.data?.results || []);
+        const rawSecs = Array.isArray(secs.data) ? secs.data : (secs.data?.results || []);
+        const rawSubjs = Array.isArray(subjsRes.data) ? subjsRes.data : (subjsRes.data?.results || []);
+
+        const filteredClasses = rawClasses.filter(c => !c.school || String(c.school?.id || c.school) === String(activeSchoolId));
+        const filteredSecs = rawSecs.filter(s => !s.classroom?.school || String(s.classroom?.school?.id || s.classroom?.school) === String(activeSchoolId));
+        const filteredSubjs = rawSubjs.filter(s => !s.school || String(s.school?.id || s.school) === String(activeSchoolId));
+
+        setClassrooms(filteredClasses);
+        setSections(filteredSecs);
+        setSubjects(filteredSubjs);
 
         const s = studentRes.data;
 
@@ -265,6 +276,9 @@ export default function EditStudentPage() {
 
       <Paper sx={{ p: 3, borderRadius: 3 }}>
         <form autoComplete="off">
+          {/* Anti-autofill hidden inputs to prevent browser password managers from auto-filling admin credentials */}
+          <input type="text" name="prevent_autofill_username" style={{ display: 'none' }} tabIndex={-1} />
+          <input type="password" name="prevent_autofill_password" style={{ display: 'none' }} tabIndex={-1} />
           <Stack spacing={3}>
             {error && <Alert severity="error">{error}</Alert>}
 
@@ -349,7 +363,7 @@ export default function EditStudentPage() {
                 <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({...form, first_name_en: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
               </Grid>
               <Grid item xs={12} sm={4}>
-                <TextField id="username-edit" fullWidth label="ইউজার আইডি (Username)" value={form.username} onChange={e => setForm({...form, username: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
+                <TextField id="username-edit" fullWidth label="ইউজার আইডি (Username)" value={form.username} onChange={e => setForm({...form, username: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'new-username' }} />
               </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField id="gender-edit" select fullWidth label="লিঙ্গ" value={form.gender} onFocus={() => updateStep('#gender-edit')} onChange={e => { setForm({...form, gender: e.target.value}); updateStep('#blood-group-edit'); }}>

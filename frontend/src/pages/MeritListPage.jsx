@@ -94,6 +94,13 @@ const normalizeSubjKey = (n) => {
         if (is2 && has1) return 'english_combined';
         return 'english';
     }
+    if (low.includes('arabic') || low.includes('আরবি')) {
+        if (is2 && !has1) return 'arabic_p2';
+        if (has1 && !is2) return 'arabic_p1';
+        if (is2 && has1) return 'arabic_combined';
+        return 'arabic';
+    }
+    if (low.includes('drawing') || low.includes('অংকন') || low.includes('আঁকা')) return 'drawing';
 
     if (low.includes('religion') || low.includes('islam') || low.includes('hindu') || low.includes('ধর্ম') || low.includes('ইসলাম') || low.includes('হিন্দু') || low.includes('moral') || low.includes('নৈতিক')) return 'religion';
     if (low.includes('ict') || low.includes('তথ্য') || low.includes('information') || low.includes('communication') || low.includes('technology')) return 'ict';
@@ -119,8 +126,12 @@ const isScienceGroup = (g) => { const l = String(g || '').toLowerCase(); return 
 const isCommerceGroup = (g) => { const l = String(g || '').toLowerCase(); return l.includes('commerce') || l.includes('business') || l.includes('ব্যবসায়') || l.includes('ব্যবসায়'); };
 const isHumanitiesGroup = (g) => { const l = String(g || '').toLowerCase(); return l.includes('arts') || l.includes('humanities') || l.includes('মানবিক'); };
 
-const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
-    const subjects = new Set(['math', 'religion', 'ict']);
+const getExpectedSubjects = (studentGroup, isNT, classSubjs, religionInPlay, onlyPrimary) => {
+    const normKeys = new Set(Array.from(classSubjs).map(s => normalizeSubjKey(s)));
+    const classHas = (base) => normKeys.has(base) || Array.from(normKeys).some(k => k.startsWith(base + '_'));
+    const subjects = new Set();
+    ['math', 'ict'].forEach(k => { if (classHas(k)) subjects.add(k); });
+    if (religionInPlay === undefined ? classHas('religion') : religionInPlay) subjects.add('religion');
     const g = String(studentGroup || '').toLowerCase();
     const checkPaper = (base) => {
         if (isNT) return [base];
@@ -137,6 +148,7 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
     };
     checkPaper('bangla').forEach(s => subjects.add(s));
     checkPaper('english').forEach(s => subjects.add(s));
+
     if (isNT) {
         if (isScienceGroup(g)) {
             ['physics', 'chemistry', 'biology', 'bgs'].forEach(s => subjects.add(s));
@@ -151,16 +163,24 @@ const getExpectedSubjects = (studentGroup, isNT, classSubjs) => {
                 if (classSubjs.has('civics')) subjects.add('civics');
             }
         }
-    } else { ['science', 'bgs'].forEach(s => subjects.add(s)); }
+    } else {
+        if (onlyPrimary) {
+            normKeys.forEach(k => subjects.add(k));
+        }
+        ['science', 'bgs'].forEach(k => { if (classHas(k)) subjects.add(k); });
+    }
     return subjects;
 };
 
 const CO_CURRICULAR = [
-  'শারীরিক', 'বই পড়া', 'achievement', 'continuous', 'wcat', 'শারিরীক',
-  'ক্যারিয়ার', 'ক্যারিয়ার', 'career', 'চারু', 'কারুকলা', 'arts', 'crafts',
-  'life and work', 'জীবনমুখী', 'কর্ম', 'word collection', 'ওয়ার্ড কালেকশন'
+  'শারীরিক', 'বই পড়া', 'achievement', 'continuous', 'wcat', 'শারিরীক',
+  'ক্যারিয়ার', 'ক্যারিয়ার', 'career', 'চারু', 'কারুকলা', 'arts', 'crafts',
+  'life and work', 'জীবনমুখী', 'কর্ম', 'word collection', 'ওয়ার্ড কালেকশন'
 ];
 const isRelSubj = (n) => /religion|islam|hindu|buddhist|christian|ধর্ম|ইসলাম|হিন্দু|বৌদ্ধ|খ্রিস্ট/i.test(String(n));
+const isArabicSubj = (n) => /arabic|আরবি|আরবী/i.test(String(n));
+const EARLY_PRIMARY_PAT = /প্লে|play|nursery|শিশু|প্রথম|১ম|\b1st\b|\b1\b|দ্বিতীয়|দ্বিতীয়|২য়|২য়|\b2nd\b|\b2\b|class\s*[12]\b|শ্রেণি\s*[১২]|শ্রেণী\s*[১২]/i;
+const isEarlyPrimaryName = (n) => EARLY_PRIMARY_PAT.test(String(n || ''));
 
 const translateSub = (n) => {
     const low = String(n).toLowerCase().trim();
@@ -452,6 +472,11 @@ const MeritListPage = () => {
             const fetchedSections = Array.isArray(secRes.data) ? secRes.data : (secRes.data?.results || []);
             setSections(fetchedSections);
 
+            // 1b. Fetch Subjects for this class/section (used to decide Religion vs Arabic & primary curriculum)
+            const subRes = await scopedGet('/api/academics/subjects/', id, { classroom: selectedClass, section: selectedSection, page_size: 200 }).catch(() => ({ data: [] }));
+            if (!isMounted.current) return;
+            const assignedList = Array.isArray(subRes.data) ? subRes.data : (subRes.data?.results || []);
+
             // Determine effective group dynamically inside async fetch
             let activeGroup = effectiveGroup;
             if (!activeGroup && isNT && selectedSection) {
@@ -657,7 +682,13 @@ const MeritListPage = () => {
                     classGroupFromAllResults ||
                     classLevelGroup
                 ).toLowerCase();
-                const expectedKeys = getExpectedSubjects(group, isNT, classSubjects);
+                const religionAssigned = assignedList.some(s => isRelSubj(s?.name));
+                const arabicAssigned = assignedList.some(s => isArabicSubj(s?.name));
+                const religionHasResults = allResults.some(r => isRelSubj(r.subject?.name || r.subject_name || ''));
+                const classLabelForReligion = (classrooms.find(c => String(c.id) === String(selectedClass)) || {}).name || '';
+                const religionInPlay = religionAssigned &&
+                    !(arabicAssigned && !religionHasResults && isEarlyPrimaryName(classLabelForReligion));
+                const expectedKeys = getExpectedSubjects(group, isNT, classSubjects, religionInPlay, isPrimary);
 
                 let score = 0, fails = 0, failedList = [], hasAnyMarks = false, totalPoints = 0, subCount = 0;
 

@@ -23,6 +23,7 @@ export default function AddTeacherPage() {
     email: '',
     phone_number: '',
     educational_qualification: '',
+    gender: '',
     designation: '',
     designation_en: '',
     blood_group: '',
@@ -159,6 +160,7 @@ export default function AddTeacherPage() {
       fd.append('email', form.email || '');
       fd.append('phone_number', form.phone_number || '');
       fd.append('educational_qualification', form.educational_qualification || '');
+      fd.append('gender', form.gender || '');
       fd.append('designation', form.designation || '');
       fd.append('designation_en', form.designation_en || '');
       fd.append('blood_group', form.blood_group || '');
@@ -275,8 +277,36 @@ export default function AddTeacherPage() {
             error={!!formErrors.educational_qualification} 
             helperText={formErrors.educational_qualification || 'Optional - শিক্ষাগত যোগ্যতা লিখুন'} 
           />
-          
 
+          <TextField
+            select
+            label="লিঙ্গ (Gender)"
+            value={form.gender}
+            onChange={e => setForm({ ...form, gender: e.target.value })}
+            fullWidth
+          >
+            <MenuItem value="">নির্বাচন করুন</MenuItem>
+            <MenuItem value="male">পুরুষ (Male)</MenuItem>
+            <MenuItem value="female">নারী (Female)</MenuItem>
+            <MenuItem value="other">অন্যান্য (Other)</MenuItem>
+          </TextField>
+
+          <TextField 
+            label="পদবী (Designation)" 
+            value={form.designation} 
+            onChange={e => setForm({ ...form, designation: e.target.value })} 
+            placeholder="যেমন: সহকারী শিক্ষক, প্রধান শিক্ষক, ইত্যাদি"
+            fullWidth
+            helperText="ফাঁকা রাখলে ডিফল্ট: সহকারী শিক্ষক"
+          />
+
+          <TextField 
+            label="পদবী (ইংরেজিতে) (Designation in English)" 
+            value={form.designation_en} 
+            onChange={e => setForm({ ...form, designation_en: e.target.value })} 
+            placeholder="e.g., Assistant Teacher, Headmaster, etc."
+            fullWidth
+          />
           
           <TextField 
             select

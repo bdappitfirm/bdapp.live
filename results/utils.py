@@ -12,7 +12,11 @@ def _round_half_up(x):
 
 def _class_group(n):
     """Determines the class group (six_to_eight, nine_ten, or primary) based on class name."""
-    x = (n or "").lower().strip()
+    raw = n or ""
+    # Strip invisible Unicode (zero-width spaces, BOM, RTL/LTR overrides, etc.) and normalize
+    x = "".join(c for c in str(raw) if not (0x200B <= ord(c) <= 0x200F or
+                                            0x202A <= ord(c) <= 0x202E or
+                                            ord(c) == 0xFEFF)).lower().strip()
     if not x:
         return None
         
