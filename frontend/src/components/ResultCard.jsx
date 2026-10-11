@@ -12,7 +12,7 @@ const toBn = (v) => {
   return String(v).replace(/[0-9]/g, match => bnDigits[match] || match);
 };
 
-const CLASS_9_10_REGEX = /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9|class\s*10|৯ম|১০ম/i;
+const CLASS_9_10_REGEX = /নবম|দশম|ssc|\b9\b|\b10\b|\bnine\b|\bten\b|\bix\b|\bx\b|class\s*9\b|class\s*10\b|৯ম|১০ম/i;
 
 const getSubjectOrderWeight = (r, isOptional, group = '') => {
   if (!r) return 9999;
@@ -212,16 +212,17 @@ const BN_TO_EN_PAPER_REGEX_1 = /[- ]?([১1]ম|1st|first|প্রথম)\s*(�
 const BN_TO_EN_PAPER_REGEX_2 = /[- ]?([২2][য়য]়?|2nd|second|দ্বিতীয়|দ্বীতিয়|second|2nd|দ্বিতীয়)\s*(পত্র|paper|part)?/gi;
 
 const BN_TO_EN_CLASS_MAP = {
-  'প্লে': 'Play', 'Play': 'Play',
-  'শিশু': 'Shishu', 'Shishu': 'Shishu',
-  'নার্সারি': 'Nursery', 'Nursery': 'Nursery',
-  'প্রথম': 'One', '১ম': 'One', 'Class 1': 'One', '১': 'One',
-  'দ্বিতীয়': 'Two', 'দ্বিতীয়': 'Two', '২য়': 'Two', 'Class 2': 'Two', '২': 'Two',
-  'তৃতীয়': 'Three', 'তৃতীয়': 'Three', '৩য়': 'Three', 'Class 3': 'Three', '৩': 'Three',
-  'চতুর্থ': 'Four', '৪র্থ': 'Four', 'Class 4': 'Four', '৪': 'Four',
-  'পঞ্চম': 'Five', '৫ম': 'Five', 'Class 5': 'Five', '৫': 'Five',
-  'ষষ্ঠ': 'Six', 'সপ্তম': 'Seven', 'অষ্টম': 'Eight', 'নবম': 'Nine', 'দশম': 'Ten',
-  'শ্রেণী': '', 'শ্রেণি': '', 'শেণি': '', 'Class': ''
+  'Class 12': 'Twelve', 'Class 11': 'Eleven', 'Class 10': 'Ten', 'Class 9': 'Nine',
+  'Class 8': 'Eight', 'Class 7': 'Seven', 'Class 6': 'Six', 'Class 5': 'Five',
+  'Class 4': 'Four', 'Class 3': 'Three', 'Class 2': 'Two', 'Class 1': 'One',
+  'দ্বাদশ': 'Twelve', 'একাদশ': 'Eleven', 'দশম': 'Ten', 'নবম': 'Nine',
+  'অষ্টম': 'Eight', 'সপ্তম': 'Seven', 'ষষ্ঠ': 'Six', 'পঞ্চম': 'Five',
+  'চতুর্থ': 'Four', 'তৃতীয়': 'Three', 'তৃতীয়': 'Three', 'দ্বিতীয়': 'Two', ' his': 'Two', 'দ্বিতীয়': 'Two',
+  'প্রথম': 'One', 'প্লে': 'Play', 'শিশু': 'Shishu', 'নার্সারি': 'Nursery',
+  '১২শ': 'Twelve', '১১শ': 'Eleven', '১০ম': 'Ten', '৯ম': 'Nine',
+  '৮ম': 'Eight', '৭ম': 'Seven', '৬ষ্ঠ': 'Six', '৫ম': 'Five',
+  '৪র্থ': 'Four', '৩য়': 'Three', '২য়': 'Two', '১ম': 'One',
+  'শ্রেণী': '', 'শ্রেণি': '', 'শেণি': ''
 };
 const ORD_MAP = { 'Sixth': 'Six', 'Seventh': 'Seven', 'Eighth': 'Eight', 'Ninth': 'Nine', 'Tenth': 'Ten' };
 
@@ -716,8 +717,8 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       typeof student?.classroom === 'string' ? student.classroom : ''
     ].filter(Boolean).map(s => stripInv(s).toLowerCase());
     const clsText = clsSources.join(' ');
-    const PRIMARY_REGEX = /play|shishu|nursery|প্লে|শিশু|প্রথম|১ম|\bone\b|\b1\b|দ্বিতীয়|২য়|\btwo\b|\b2\b|তৃতীয়|৩য়|\bthree\b|\b3\b|চতুর্থ|৪র্থ|\bfour\b|\b4\b|পঞ্চম|৫ম|\bfive\b|\b5\b|class\s*[1-5]/i;
-    if (PRIMARY_REGEX.test(clsText)) {
+    const PRIMARY_REGEX = /play|shishu|nursery|প্লে|শিশু|প্রথম|১ম|\bone\b|\b[1-5]\b(?![\d0-9])|দ্বীতিয়|দ্বিতীয়|২য়|\btwo\b|তৃতীয়|৩য়|\bthree\b|চতুর্থ|৪র্থ|\bfour\b|পঞ্চম|৫ম|\bfive\b|class\s*[1-5]\b(?![\d0-9])/i;
+    if (!isClassNineOrTen && PRIMARY_REGEX.test(clsText)) {
       return 'primary';
     }
 
@@ -811,7 +812,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       const m = sumStr(r.mcq_marks);
       const p = sumStr(r.practical_marks);
 
-      const isPrimaryGroup = inferredGroup === 'primary';
+      const isPrimaryGroup = !isClassNineOrTen && inferredGroup === 'primary';
       const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen, inferredGroup);
 
       let totalPossible = spec.cq + spec.mcq + spec.pr || 100;
@@ -1142,7 +1143,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             return s + val;
         }, 0);
 
-        // Board rules: 33% pass marks.
+        // Board rules: combined CQ+CQ, MCQ+MCQ (both papers merged), 33% each + total 33%
         const cqPass = totalCQMax === 0 || sumW >= Math.round(totalCQMax * 0.33 - 0.5);
         const mcqPass = totalMCQMax === 0 || sumM >= Math.round(totalMCQMax * 0.33 - 0.5);
         const prPass = totalPRMax === 0 || sumP >= Math.round(totalPRMax * 0.33 - 0.5);
@@ -1168,6 +1169,9 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       mainResults.forEach(r => {
           const sid = r.subject?.id || r.subject;
           const sname = (r.subject?.name || r.subject_name || '').toLowerCase().trim();
+          const isBanglaPaper = (sname.includes('বাংলা') || sname.includes('bangla')) && !sname.includes('বাংলাদেশ') && !sname.includes('দেশ') && !sname.includes('bgs');
+          const isEnglishPaper = sname.includes('english') || sname.includes('ইংরেজি') || sname.includes('ইংরেজী');
+          if (isBanglaPaper || isEnglishPaper) return;
           if (!handledSubjectIds.has(String(sid)) && !handledSubjectIds.has(sname)) merged.push(r);
       });
       return { main: sortSubjectsByOrder(merged, allRecalculated, studentGroup), optional: sortSubjectsByOrder(optionalResults, allRecalculated, studentGroup), coCurricular: sortSubjectsByOrder(coCurricularResults, allRecalculated, studentGroup) };
@@ -1176,8 +1180,8 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
   }, [allRecalculated, isClassNineOrTen, student, inferredGroup]);
 
   const isPrimary = useMemo(() => {
-    return inferredGroup === 'primary';
-  }, [inferredGroup]);
+    return !isClassNineOrTen && inferredGroup === 'primary';
+  }, [inferredGroup, isClassNineOrTen]);
 
   const displayMainSubjects = useMemo(() => {
     return displayResults.main;
@@ -1202,6 +1206,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     // If the main results have tutorial-like MCQ marks (non-zero) and primary-style ceiling written (max 100), treat as primary.
     // This avoids relying on backend overallResult.cgpa (which may be stale/old from before EXCLUDED_SUBJECTS sync).
     const looksPrimary = (() => {
+      if (isClassNineOrTen) return false;
       if (inferredGroup === 'primary') return true;
       const rs = displayResults.main;
       if (!rs || rs.length === 0) return false;
@@ -1215,16 +1220,53 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     })();
 
     if (overallResult && (overallResult.total_marks_obtained !== undefined || overallResult.totalObtained !== undefined) && !looksPrimary) {
+      const hasFailInRecalculated = displayResults.main.some(r => {
+        const isAbsent = r.isActuallyAbsent === true;
+        const tot = parseFloat(r.total_obtained) || 0;
+        const w = parseFloat(r.written_marks) || 0;
+        const m = parseFloat(r.mcq_marks) || 0;
+        const p = parseFloat(r.practical_marks) || 0;
+        const hasMarks = tot > 0 || w > 0 || m > 0 || p > 0;
+        if (isAbsent || !hasMarks) return false;
+        const g = parseFloat(r.gpa);
+        if (!Number.isFinite(g)) return false;
+        return r.is_passed === false || g <= 0;
+      });
       const obt = parseFloat(overallResult.total_marks_obtained ?? overallResult.totalObtained ?? 0);
       const poss = parseFloat(overallResult.total_marks_possible ?? overallResult.totalPossible ?? (displayResults.main.length * 100));
-      const cg = String(overallResult.cgpa ?? overallResult.gpa ?? '0.00');
-      const passed = overallResult.is_passed !== false && overallResult.grade !== 'Failed' && !overallResult.hasFail;
+      let cg = String(overallResult.cgpa ?? overallResult.gpa ?? '0.00');
+      let passed = !hasFailInRecalculated;
+
+      if (passed) {
+        let sumGpa = 0, count = 0;
+        displayResults.main.forEach(r => {
+          const gpa = parseFloat(r.gpa);
+          if (Number.isFinite(gpa) && gpa > 0) {
+            sumGpa += gpa; count++;
+          }
+        });
+        const opt = displayResults.optional[0];
+        let bonus = 0;
+        if (opt) {
+          const optGpa = parseFloat(opt.gpa);
+          bonus = Math.max(0, optGpa - 2.0);
+        }
+        const calcCgpa = (count > 0) ? Math.min(5.0, (sumGpa + bonus) / count).toFixed(2) : '0.00';
+        return {
+          obtained: Math.round(obt),
+          possible: Math.round(poss),
+          cgpa: calcCgpa,
+          isPassed: true,
+          grade: getGradeFromCgpa(calcCgpa)
+        };
+      }
+
       return {
         obtained: Math.round(obt),
         possible: Math.round(poss),
         cgpa: cg,
-        isPassed: passed,
-        grade: overallResult.grade || getGradeFromCgpa(cg)
+        isPassed: false,
+        grade: 'F'
       };
     }
 
@@ -1254,7 +1296,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     const cgpa = (count > 0 && !hasFail) ? Math.min(5.0, (sumGpa + bonus) / count) : 0;
     const finalCgpaStr = cgpa.toFixed(2);
     return { obtained: Math.round(totalObtained), possible: Math.round(totalPossible), cgpa: finalCgpaStr, isPassed: !hasFail && count > 0, grade: getGradeFromCgpa(finalCgpaStr) };
-  }, [displayResults.main, displayResults.optional, overallResult, inferredGroup]);
+  }, [displayResults.main, displayResults.optional, overallResult, inferredGroup, isClassNineOrTen]);
 
   const cleanClassName = useMemo(() => {
     let name = (student?.classroom?.name || '');

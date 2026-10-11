@@ -96,14 +96,21 @@ class PaymentViewSet(viewsets.ModelViewSet):
         school = self.request.query_params.get('school') or self.request.query_params.get('school_id')
         student = self.request.query_params.get('student') or self.request.query_params.get('student_id')
         status_filter = self.request.query_params.get('status')
+
+        if student:
+            qs = qs.filter(student_id=student)
+            if school:
+                qs = qs.filter(student__school_id=school)
+            if status_filter:
+                qs = qs.filter(payment_status=status_filter)
+            return qs
+
         if not school:
             school = get_user_school_id(self.request.user, self.request)
         if school:
             qs = qs.filter(student__school_id=school)
         elif not is_global_admin(self.request.user):
             return Payment.objects.none()
-        if student:
-            qs = qs.filter(student_id=student)
         if status_filter:
             qs = qs.filter(payment_status=status_filter)
         return qs

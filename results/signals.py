@@ -239,6 +239,7 @@ def calculate_student_overall_result(examination, student):
 
     sum_gpa = 0
     grouped_subjects = {}
+    grouped_papers = {}
 
     for r in results_to_calculate:
         name = r.subject.name
@@ -246,31 +247,79 @@ def calculate_student_overall_result(examination, student):
         group_key = f"__id_{r.subject_id}"
 
         # Only do Bangla/English 2-paper merge when BOTH 1st AND 2nd paper patterns EXIST
+        grp_detected = None
         if BANGLA_PAT.search(name):
             grp = 'bangla'
             if paper_detector.get(grp, {}).get(1) and paper_detector.get(grp, {}).get(2):
                 if PAPER_1_PAT.search(name) or PAPER_2_PAT.search(name):
                     group_key = grp
+                    grp_detected = grp
         elif ENGLISH_PAT.search(name):
             grp = 'english'
             if paper_detector.get(grp, {}).get(1) and paper_detector.get(grp, {}).get(2):
                 if PAPER_1_PAT.search(name) or PAPER_2_PAT.search(name):
                     group_key = grp
+                    grp_detected = grp
+
+        if grp_detected:
+            if grp_detected not in grouped_papers:
+                grouped_papers[grp_detected] = []
+            grouped_papers[grp_detected].append(r)
 
         if group_key not in grouped_subjects:
             grouped_subjects[group_key] = []
         grouped_subjects[group_key].append(float(r.gpa))
 
+    # Evaluate combined pass status for grouped 2-paper subjects (Bangla / English)
+    grouped_pass_status = {}
+    for grp, paper_list in grouped_papers.items():
+        sum_w = sum(float(r.written_marks or 0) for r in paper_list)
+        sum_m = sum(float(r.mcq_marks or 0) for r in paper_list)
+        sum_p = sum(float(r.practical_marks or 0) for r in paper_list)
+        sum_tot = sum(float(r.total_obtained or 0) for r in paper_list)
+
+        max_cq = 0
+        max_mcq = 0
+        max_pr = 0
+        max_tot = 0
+        for r in paper_list:
+            maxima = get_subject_maxima(group, getattr(r.subject, "name", None), student_group if is_910 else None)
+            if maxima:
+                max_cq += int(maxima.get("written", 0))
+                max_mcq += int(maxima.get("mcq", 0))
+                max_pr += int(maxima.get("practical", 0))
+            else:
+                max_tot += float(examination.total_marks)
+        if max_cq + max_mcq + max_pr > 0:
+            max_tot = max_cq + max_mcq + max_pr
+
+        cq_pass = max_cq == 0 or sum_w >= round(max_cq * 0.33 - 0.5)
+        mcq_pass = max_mcq == 0 or sum_m >= round(max_mcq * 0.33 - 0.5)
+        pr_pass = max_pr == 0 or sum_p >= round(max_pr * 0.33 - 0.5)
+        tot_pass = max_tot == 0 or sum_tot >= round(max_tot * 0.33 - 0.5)
+
+        grouped_pass_status[grp] = cq_pass and mcq_pass and pr_pass and tot_pass
+
+    def check_result_passed(r):
+        name = r.subject.name
+        if BANGLA_PAT.search(name) and 'bangla' in grouped_pass_status:
+            return grouped_pass_status['bangla']
+        if ENGLISH_PAT.search(name) and 'english' in grouped_pass_status:
+            return grouped_pass_status['english']
+        return r.is_passed
+
     # Calculate average GPA for grouped subjects and add others
     total_gp = 0
     subject_count = len(grouped_subjects)
 
-    is_passed = all(r.is_passed for r in results_to_calculate)
-    has_fail = not is_passed
+    has_fail = False
 
     for gk, gpas in grouped_subjects.items():
         avg_subject_gp = sum(gpas) / len(gpas)
-        if avg_subject_gp < 1.0:
+        if gk in grouped_pass_status:
+            if not grouped_pass_status[gk]:
+                has_fail = True
+        elif avg_subject_gp < 1.0:
             has_fail = True
         total_gp += avg_subject_gp
 
@@ -282,8 +331,7 @@ def calculate_student_overall_result(examination, student):
     cgpa = min(5.0, cgpa) # Cap at 5.0
     
     # Update is_passed based on potential failure in grouped average GPA
-    if has_fail:
-        is_passed = False
+    is_passed = not has_fail
 
     # Determine overall grade based on CGPA
     if cgpa >= 5.0:
@@ -302,7 +350,6 @@ def calculate_student_overall_result(examination, student):
         grade = 'F'
 
     # Calculate failed subjects count for ranking
-    # Improved logic: count both actual F and missing mandatory subjects
     failed_subjects_count = 0
     failed_subjects_list = []
 
@@ -314,13 +361,17 @@ def calculate_student_overall_result(examination, student):
         if is_religion(r.subject.name):
             # Only count as fail if ALL religion subjects are failed
             if not has_any_religion_pass:
-                # To avoid duplicate 'Religion' in failed list, only add for the first record
                 if r == religion_subjects[0]:
                     failed_subjects_count += 1
                     failed_subjects_list.append("ধর্ম")
-        elif not r.is_passed:
-            failed_subjects_count += 1
-            failed_subjects_list.append(r.subject.name)
+        elif not check_result_passed(r):
+            name = r.subject.name
+            grp_label = "বাংলা" if BANGLA_PAT.search(name) else ("ইংরেজি" if ENGLISH_PAT.search(name) else r.subject.name)
+            if r.grade == 'AB':
+                grp_label = f"{grp_label} (অনুপস্থিত)"
+            if grp_label not in failed_subjects_list:
+                failed_subjects_count += 1
+                failed_subjects_list.append(grp_label)
 
     # Check for missing mandatory subjects (Bangla/English/Math/Religion/ICT/Science/BGS)
     # ----------------------------------------------------------------

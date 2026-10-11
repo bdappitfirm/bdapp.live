@@ -150,6 +150,7 @@ const AddCommitteePage = React.lazy(() => import('./pages/AddCommitteePage'));
 const AttendancePageNew = React.lazy(() => import('./pages/AttendancePageNew'));
 const AttendanceReportCard = React.lazy(() => import('./pages/AttendanceReportCard'));
 const FeesPage = React.lazy(() => import('./pages/FeesPage'));
+const DailyCollectionRegisterPage = React.lazy(() => import('./pages/DailyCollectionRegisterPage.jsx'));
 const FeePaymentReceipt = React.lazy(() => import('./components/FeePaymentReceipt'));
 const ReceiptBook = React.lazy(() => import('./components/ReceiptBook'));
 const GroupsPage = React.lazy(() => import('./pages/GroupsPage'));
@@ -305,6 +306,7 @@ function App() {
           <Route path="results" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ResultsPage /></ProtectedRoute>} />
           <Route path="examinations" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ExaminationsPage /></ProtectedRoute>} />
           <Route path="fees" element={<ProtectedRoute allowedRoles={['admin','teacher']}><FeesPage /></ProtectedRoute>} />
+          <Route path="daily-collection-register" element={<ProtectedRoute><DailyCollectionRegisterPage /></ProtectedRoute>} />
           <Route path="fee-receipt" element={<ProtectedRoute allowedRoles={['admin','teacher']}><FeePaymentReceipt /></ProtectedRoute>} />
           <Route path="receipt-book" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ReceiptBook /></ProtectedRoute>} />
           <Route path="groups" element={<ProtectedRoute allowedRoles={['admin','teacher']}><GroupsPage /></ProtectedRoute>} />

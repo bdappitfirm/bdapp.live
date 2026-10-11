@@ -38,15 +38,19 @@ class ExamSlotViewSet(viewsets.ModelViewSet):
         eid = self.request.query_params.get('examination')
         if eid: qs = qs.filter(examination_id=eid)
 
+        classroom_id = self.request.query_params.get('classroom')
+        if classroom_id and classroom_id.isdigit():
+            qs = qs.filter(classroom_id=int(classroom_id))
+
         section_id = self.request.query_params.get('section')
         if section_id and section_id != 'null':
             if ',' in section_id:
                 ids = [s.strip() for s in section_id.split(',') if s.strip().isdigit()]
-                if ids: qs = qs.filter(student__section_id__in=ids)
+                if ids: qs = qs.filter(section_id__in=ids)
             elif section_id.isdigit():
-                qs = qs.filter(student__section_id=int(section_id))
+                qs = qs.filter(section_id=int(section_id))
         elif section_id == 'null':
-            qs = qs.filter(student__section__isnull=True)
+            qs = qs.filter(section__isnull=True)
 
         return qs
 

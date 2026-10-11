@@ -196,7 +196,21 @@ class Payment(models.Model):
     payment_date = models.DateField(default=timezone.now)
     transaction_id = models.CharField(max_length=200, blank=True)
     reference = models.CharField(max_length=200, blank=True, help_text="Cheque number, receipt number, etc.")
-    
+
+    # Daily collection fee head breakdown
+    due_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    sports_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    admission_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    admission_print_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    cert_reg_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    tuition_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    religion_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    session_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    exam_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    culture_library_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    refreshment_poor_fund_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    misc_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
     # For installments
     installment_number = models.PositiveIntegerField(default=1)
     remarks = models.TextField(blank=True)

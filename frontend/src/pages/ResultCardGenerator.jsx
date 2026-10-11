@@ -1651,9 +1651,9 @@ export default function ResultCardGenerator() {
         } catch (_) {}
       }
 
-      if (fetchedResults.length === 0 && chosenExam) {
+      if (fetchedResults.length === 0) {
         try {
-          const params = { examination: chosenExam.id, student: student.id, page_size: 1000 };
+          const params = { student: student.id, classroom: selectedClass, page_size: 1000 };
           const p1 = scopedGet('/api/results/results/', id, params, { timeout: 15000 }).catch(() => null);
           const p2 = api.get('/api/results/results/', { params: { ...params, school: id }, timeout: 15000 }).catch(() => null);
           const [resultsRes, directRes] = await Promise.all([p1, p2]);
@@ -1747,7 +1747,10 @@ export default function ResultCardGenerator() {
             })
           : fetchedResults;
 
-        const useResults = strictFiltered;
+        let useResults = strictFiltered;
+        if (useResults.length === 0 && fetchedResults.length > 0) {
+          useResults = fetchedResults;
+        }
 
         const classSubjs = new Set(useResults.map(r => r.subject?.name || r.subject_name));
         const group = getStudentAcademicGroup(student, studentData, useResults);

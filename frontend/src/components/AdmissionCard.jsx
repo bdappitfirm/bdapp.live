@@ -87,6 +87,53 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
   const schoolName = school?.bn_name || school?.name || '';
 
+  const resolveGroupStr = (g) => {
+    const s = String(g || '').toLowerCase();
+    if (s.includes('science') || s.includes('বিজ্ঞান')) return 'science';
+    if (s.includes('commerce') || s.includes('business') || s.includes('ব্যবসায়') || s.includes('ব্যবসায়') || s.includes('ব্যবসা')) return 'commerce';
+    if (s.includes('arts') || s.includes('humanities') || s.includes('মানবিক')) return 'humanities';
+    return '';
+  };
+
+  const SCI_KW = /physics|chemistry|biology|higher math|পদার্থ|রসায়ন|রসায়|জীব|উচ্চতর/i;
+  const COM_KW = /accounting|finance|entrepreneurship|business|ব্যবসায়|ব্যবসায়|ব্যবসা|হিসাব|ফিন্যান্স/i;
+  const HUM_KW = /history|geography|civics|economics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|পৌরণীতি|অর্থনীতি/i;
+  const AGRI_KW = /কৃষি|agri|গার্হস্থ্য|home/i;
+
+  const classifyPart = (part) => {
+    const s = String(part || '').trim();
+    if (!s) return null;
+    if (AGRI_KW.test(s)) return 'agri';
+    if (SCI_KW.test(s)) return 'science';
+    if (COM_KW.test(s)) return 'commerce';
+    if (HUM_KW.test(s)) return 'humanities';
+    return null;
+  };
+
+  const getEffectiveSubjectForGroup = (subjectName, group) => {
+    const name = String(subjectName || '').trim();
+    if (!name || !name.includes('/')) return name;
+    const parts = name.split(/\s*\/\s*/).filter(Boolean);
+    const g = resolveGroupStr(group);
+
+    const hasAgri = parts.some(p => AGRI_KW.test(p));
+    const hasHigherMath = parts.some(p => /উচ্চতর|higher/i.test(p));
+    if (hasAgri && hasHigherMath) {
+      if (g === 'science') {
+        return parts.find(p => /উচ্চতর|higher/i.test(p)) || parts[0];
+      } else {
+        return parts.find(p => AGRI_KW.test(p)) || parts[0];
+      }
+    }
+
+    if (!g) return parts[0] || name;
+    for (const p of parts) {
+      const c = classifyPart(p);
+      if (c === g || c === 'agri') return p;
+    }
+    return parts[0] || name;
+  };
+
   const getStudentGroup = (student) => {
     const g = String(student?.student_group || student?.group || '').toLowerCase();
     if (g.includes('sci') || g.includes('বিজ্ঞান')) return 'science';
@@ -110,6 +157,20 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     if (!subjName) return false;
 
     const group = getStudentGroup(student);
+
+    if (subjName.includes('/')) {
+      if (!group) return true;
+      const parts = subjName.split(/\s*\/\s*/).filter(Boolean);
+      const hasAgri = parts.some(p => AGRI_KW.test(p));
+      const hasHigherMath = parts.some(p => /উচ্চতর|higher/i.test(p));
+      if (hasAgri && hasHigherMath) return true;
+      if (hasAgri && !hasHigherMath && group === 'science') return false;
+      return parts.some(p => {
+        const c = classifyPart(p);
+        return c === group || c === 'agri';
+      });
+    }
+
     if (!group) return true; // General class without stream/group
 
     const name = subjName.toLowerCase();
@@ -179,7 +240,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         WebkitPrintColorAdjust: 'exact',
         printColorAdjust: 'exact',
         boxSizing: 'border-box',
-        overflow: 'hidden', // Avoid scroll inside card
+        overflow: 'visible', // Avoid clipping content
         '&:hover': {
           boxShadow: '0 6px 20px rgba(26, 35, 126, 0.12)',
         }
@@ -332,10 +393,10 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
         {/* Exam Details */}
         <Box sx={{
-          mb: 0.8,
+          mb: 1.2,
           border: '1.5px solid #d1d9ff',
           borderRadius: '8px',
-          p: 1.2,
+          p: 1.8,
           backgroundColor: 'rgba(248, 249, 255, 0.75)',
           boxShadow: '0 2px 8px rgba(26, 35, 126, 0.05)',
           position: 'relative',
@@ -343,12 +404,12 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         }}>
           <Typography variant="h6" sx={{
               fontWeight: 'bold',
-              mb: 0.8,
+              mb: 1.2,
               textAlign: 'center',
               borderBottom: '2px solid #e0e0e0',
-              pb: 0.5,
+              pb: 0.8,
               fontSize: '1.1rem',
-              lineHeight: 1.3
+              lineHeight: 1.4
             }}>
               পরীক্ষার রুটিনঃ
             </Typography>
@@ -366,8 +427,20 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   return classroomMatch && sectionMatch && groupMatch;
                 });
 
+                const studentGroup = getStudentGroup(data);
+                const seenSubjects = new Set();
+                const uniqueFilteredSlots = [];
+                for (const slot of filteredSlots) {
+                  const effName = getEffectiveSubjectForGroup(slot.subject_name || slot.subject?.name, studentGroup).trim().toLowerCase();
+                  if (!seenSubjects.has(effName)) {
+                    seenSubjects.add(effName);
+                    uniqueFilteredSlots.push(slot);
+                  }
+                }
+                const finalSlots = uniqueFilteredSlots;
+
                 // Sort slots chronologically
-                filteredSlots.sort((a, b) => {
+                finalSlots.sort((a, b) => {
                   const dateA = a.exam_date || '';
                   const dateB = b.exam_date || '';
                   if (dateA !== dateB) return dateA.localeCompare(dateB);
@@ -376,7 +449,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   return timeA.localeCompare(timeB);
                 });
 
-                if (filteredSlots.length === 0) {
+                if (finalSlots.length === 0) {
                   return (
                     <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '0.9rem' }}>
                       রুটিন পাওয়া যায়নি
@@ -412,7 +485,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                 };
 
                 // Column-first row rendering
-                const numRows = Math.ceil(filteredSlots.length / 2);
+                const numRows = Math.ceil(finalSlots.length / 2);
 
                 return (
                   <Box sx={{
@@ -429,104 +502,107 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.4,
-                      px: 0.1,
+                      py: 0.8,
+                      px: 0.2,
                       fontWeight: 'bold',
                       textAlign: 'center',
                       fontSize: '10.5px !important',
-                      lineHeight: 1.3
+                      lineHeight: 1.5
                     }}>
                       তারিখ
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.4,
-                      px: 0.1,
+                      py: 0.8,
+                      px: 0.2,
                       fontWeight: 'bold',
                       textAlign: 'center',
                       fontSize: '10.5px !important',
-                      lineHeight: 1.3
+                      lineHeight: 1.5
                     }}>
                       বিষয়
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.4,
-                      px: 0.1,
+                      py: 0.8,
+                      px: 0.2,
                       fontWeight: 'bold',
                       textAlign: 'center',
                       fontSize: '10.5px !important',
-                      lineHeight: 1.3
+                      lineHeight: 1.5
                     }}>
                       তারিখ
                     </Box>
                     <Box sx={{
                       backgroundColor: '#1a237e',
                       color: 'white',
-                      py: 0.4,
-                      px: 0.1,
+                      py: 0.8,
+                      px: 0.2,
                       fontWeight: 'bold',
                       textAlign: 'center',
                       fontSize: '10.5px !important',
-                      lineHeight: 1.3
+                      lineHeight: 1.5
                     }}>
                       বিষয়
                     </Box>
 
                     {/* Column-first Rows */}
                     {(() => {
+                      const studentGroup = getStudentGroup(data);
                       const rows = [];
                       for (let r = 0; r < numRows; r++) {
-                        const slot1 = filteredSlots[r];
-                        const slot2 = filteredSlots[r + numRows];
+                        const slot1 = finalSlots[r];
+                        const slot2 = finalSlots[r + numRows];
+                        const subName1 = getEffectiveSubjectForGroup(slot1?.subject_name || slot1?.subject?.name, studentGroup);
+                        const subName2 = getEffectiveSubjectForGroup(slot2?.subject_name || slot2?.subject?.name, studentGroup);
                         rows.push(
                           <React.Fragment key={`row-${r}`}>
                             <Box sx={{
-                              py: 0.2,
-                              px: 0.1,
+                              py: 0.6,
+                              px: 0.2,
                               backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff',
                               fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
                                 {slot1 ? formatDate(slot1.exam_date) + (formatTime(slot1.start_time) ? ` (${formatTime(slot1.start_time)})` : '') : ''}
                               </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.2,
-                              px: 0.1,
+                              py: 0.6,
+                              px: 0.2,
                               backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
-                                {slot1?.subject_name || ''}
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
+                                {subName1}
                               </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.2,
-                              px: 0.1,
+                              py: 0.6,
+                              px: 0.2,
                               backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff',
                               fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
                                 {slot2 ? formatDate(slot2.exam_date) + (formatTime(slot2.start_time) ? ` (${formatTime(slot2.start_time)})` : '') : ''}
                               </Box>
                             </Box>
                             <Box sx={{
-                              py: 0.2,
-                              px: 0.1,
+                              py: 0.6,
+                              px: 0.2,
                               backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                               textAlign: 'center',
                               borderBottom: '0.5px solid #e0e8ff'
                             }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.35, pt: '2px', pb: '1px' }}>
-                                {slot2?.subject_name || ''}
+                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
+                                {subName2}
                               </Box>
                             </Box>
                           </React.Fragment>

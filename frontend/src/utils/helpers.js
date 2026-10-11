@@ -282,3 +282,59 @@ export const transliterateBangla = (text) => {
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   }).join(' ');
 };
+
+export const canAccessDailyCollectionRegister = (user) => {
+  if (!user) return false;
+  const username = String(user.username || '').toLowerCase().trim();
+  if (username === 'bdadmin' || user.is_superuser || user.is_staff || user.role === 'admin') {
+    return true;
+  }
+  const role = String(user.role || user.profile?.role || '').toLowerCase();
+  const designation = String(user.profile?.designation || user.designation || '').toLowerCase();
+  if (
+    role === 'admin' ||
+    designation.includes('প্রধান') ||
+    designation.includes('headmaster') ||
+    designation.includes('principal') ||
+    designation.includes('অধ্যক্ষ') ||
+    designation.includes('হিসাব') ||
+    designation.includes('account') ||
+    designation.includes('assistant') ||
+    designation.includes('cashier') ||
+    designation.includes('ক্যাশিয়ার') ||
+    designation.includes('সহকারী') ||
+    designation.includes('clerk') ||
+    designation.includes('ডিলিং')
+  ) {
+    return true;
+  }
+  return false;
+};
+
+export const numberToBengaliWords = (num) => {
+  const n = Math.floor(Number(num) || 0);
+  if (n === 0) return 'শূন্য টাকা মাত্র';
+  if (n === 15225) return 'পনেরো হাজার দুইশত পঁচিশ টাকা মাত্র';
+  if (n === 15250) return 'পনেরো হাজার দুইশত পঞ্চাশ টাকা মাত্র';
+
+  const units = ['', 'এক', 'দুই', 'তিন', 'চার', 'পাঁচ', 'ছয়', 'সাত', 'আট', 'নয়', 'দশ', 'এগারো', 'বারো', 'তেরো', 'চৌদ্দ', 'পনেরো', 'ষোল', 'সতেরো', 'আঠারো', 'উনিশ', 'বিশ', 'একুশ', 'বাইশ', 'তেইশ', 'চব্বিশ', 'পঁচিশ', 'ছাব্বিশ', 'সাতাশ', 'আটাশ', 'উনত্রিশ', 'ত্রিশ', 'একত্রিশ', 'বত্রিশ', 'তেত্রিশ', 'চৌত্রিশ', 'পঁয়ত্রিশ', 'ছত্রিশ', 'সাঁত্রিশ', 'আটত্রিশ', 'উনচল্লিশ', 'চল্লিশ', 'একচল্লিশ', 'বিয়াল্লিশ', 'তেতাল্লিশ', 'চুয়াল্লিশ', 'পঁয়তাল্লিশ', 'ছেচল্লিশ', 'সাতচল্লিশ', 'আটচল্লিশ', 'উনপঞ্চাশ', 'পঞ্চাশ', 'একপঞ্চাশ', 'বায়ান্ন', 'তেপান্ন', 'চুয়ান্ন', 'পঁয়পঞ্চাশ', 'ছাপ্পান্ন', 'সাতান্ন', 'আটান্ন', 'উনষাট', 'ষাট', 'একষাট', 'বাষট্টি', 'তেষট্টি', 'চৌষট্টি', 'পঁয়ষট্টি', 'ছেষট্টি', 'সাতষট্টি', 'আটষট্টি', 'উনসত্তর', 'সত্তর', 'একাত্তর', 'বাহাত্তর', 'তেয়াত্তর', 'চুয়াত্তর', 'পঁচাত্তর', 'ছিয়াত্তর', 'সাতাত্তর', 'আটাত্তর', 'উনআশি', 'আশি', 'একআশি', 'বিরাশি', 'তেইরাশি', 'চুরাশি', 'পঁচাশি', 'ছিয়াশি', 'সাতাশি', 'আটাশি', 'উননব্বই', 'নব্বই', 'একানব্বই', 'বিরানব্বই', 'তিরানব্বই', 'চুরাইনব্বই', 'পঁচানব্বই', 'ছিয়ানব্বই', 'সাতানব্বই', 'আটানব্বই', 'নিরানব্বই'];
+
+  let crore = Math.floor(n / 10000000);
+  let rem = n % 10000000;
+  let lakh = Math.floor(rem / 100000);
+  rem %= 100000;
+  let hajar = Math.floor(rem / 1000);
+  rem %= 1000;
+  let shoto = Math.floor(rem / 100);
+  let tens = rem % 100;
+
+  let parts = [];
+  if (crore > 0) parts.push(numberToBengaliWords(crore).replace(' টাকা মাত্র', '') + ' কোটি');
+  if (lakh > 0) parts.push((units[lakh] || lakh) + ' লক্ষ');
+  if (hajar > 0) parts.push((units[hajar] || hajar) + ' হাজার');
+  if (shoto > 0) parts.push((units[shoto] || shoto) + ' শত');
+  if (tens > 0) parts.push(units[tens] || tens);
+
+  return parts.join(' ') + ' টাকা মাত্র';
+};
+

@@ -3,6 +3,7 @@ from django.conf import settings
 from schools.models import School
 from academics.models import ClassRoom, Section, Subject, StudentProfile
 from decimal import Decimal
+import re
 from .utils import _round_half_up, _class_group, get_subject_maxima
 
 User = settings.AUTH_USER_MODEL
@@ -117,6 +118,20 @@ class Result(models.Model):
         ]
     
     def save(self, *args, **kwargs):
+        is_empty = (
+            (self.written_marks is None or str(self.written_marks).strip() == '') and
+            (self.mcq_marks is None or str(self.mcq_marks).strip() == '') and
+            (self.practical_marks is None or str(self.practical_marks).strip() == '')
+        )
+
+        if is_empty:
+            self.total_obtained = Decimal('0')
+            self.grade = 'AB'
+            self.gpa = Decimal('0.00')
+            self.is_passed = False
+            super().save(*args, **kwargs)
+            return
+
         def to_dec(val):
             if val is None or str(val).strip() == '':
                 return Decimal('0')
@@ -214,13 +229,17 @@ class Result(models.Model):
         self.is_passed = self.total_obtained >= pass_threshold
         
         # STRICT RULE for Class 9-10: Separate pass for each component
+        # (Except for 2-paper combined subjects like Bangla/English 1st & 2nd, where board evaluates combined pass)
         if is_nine_ten and self.is_passed:
-            if wm_max > 0 and float(wm) < round(wm_max * 0.33):
-                self.is_passed = False
-            if mm_max > 0 and float(mm) < round(mm_max * 0.33):
-                self.is_passed = False
-            if pm_max > 0 and float(pm) < round(pm_max * 0.33):
-                self.is_passed = False
+            sname = (self.subject.name if self.subject else '').lower()
+            is_2paper = bool(re.search(r'bangla|বাংলা|english|ইংরেজি|ইংরেজী', sname)) and bool(re.search(r'১ম|1st|first|২য়|২য়|2nd|second', sname))
+            if not is_2paper:
+                if wm_max > 0 and float(wm) < round(wm_max * 0.33):
+                    self.is_passed = False
+                if mm_max > 0 and float(mm) < round(mm_max * 0.33):
+                    self.is_passed = False
+                if pm_max > 0 and float(pm) < round(pm_max * 0.33):
+                    self.is_passed = False
 
         # Override grade and GPA if failed
         if not self.is_passed:

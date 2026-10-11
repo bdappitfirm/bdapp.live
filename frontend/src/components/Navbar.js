@@ -18,6 +18,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { canAccessDailyCollectionRegister } from '../utils/helpers';
 
 const Navbar = ({ role }) => {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ const Navbar = ({ role }) => {
     'পরীক্ষা': 'examinations',
     'ফলাফল': 'results',
     'ফি': 'fees',
+    'দৈনিক আদায় রেজিস্টার': 'daily-collection-register',
     'প্রোফাইল': 'profile',
     'আমার সন্তান': 'parent/dashboard',
     'স্কুল তথ্য': 'schools',
@@ -83,6 +85,10 @@ const Navbar = ({ role }) => {
       break;
     default:
       menuItems = [];
+  }
+
+  if (canAccessDailyCollectionRegister(user) && !menuItems.includes('দৈনিক আদায় রেজিস্টার')) {
+    menuItems.splice(menuItems.indexOf('ফি') !== -1 ? menuItems.indexOf('ফি') + 1 : menuItems.length, 0, 'দৈনিক আদায় রেজিস্টার');
   }
 
   return (

@@ -273,6 +273,13 @@ def get_subject_maxima(group, subject_name, student_group=None, target_total=Non
 
     raw = (subject_name or "").strip().lower()
 
+    if group == 'nine_ten':
+        if any(k in raw for k in ['1st+2nd', '১ম+২য়', '1+2', '১+২']):
+            if any(k in raw for k in ['bangla', 'বাংলা']):
+                return {"written": 140, "mcq": 60, "practical": 0}
+            if any(k in raw for k in ['english', 'ইংরেজি', 'ইংরেজী']):
+                return {"written": 200, "mcq": 0, "practical": 0}
+
     # Handle combined subjects if student_group is provided
     s = raw
     if '/' in raw and student_group:

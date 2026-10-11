@@ -67,6 +67,7 @@ export default function ExaminationsPage() {
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [selectedExamForSlots, setSelectedExamForSlots] = useState(null);
   const [examSlots, setExamSlots] = useState([]);
+  const [editingSlot, setEditingSlot] = useState(null);
   const [newSlotData, setNewSlotData] = useState({
     subject: '',
     exam_date: null,
@@ -269,6 +270,7 @@ export default function ExaminationsPage() {
 
   const loadExamSlots = useCallback(async (exam) => {
     setSelectedExamForSlots(exam);
+    setEditingSlot(null);
     setNewSlotData({
       subject: '',
       exam_date: exam.exam_date ? new Date(exam.exam_date) : null,
@@ -280,6 +282,26 @@ export default function ExaminationsPage() {
       setExamSlots(Array.isArray(res.data) ? res.data : (res.data?.results || []));
     } catch (error) { toast.error('Failed to load routine'); }
   }, [id, toast]);
+
+  const handleEditSlot = useCallback((slot) => {
+    setEditingSlot(slot);
+    setNewSlotData({
+      subject: slot.subject,
+      exam_date: slot.exam_date ? new Date(slot.exam_date) : null,
+      start_time: slot.start_time || '10:00',
+      room: slot.room || ''
+    });
+  }, []);
+
+  const handleCancelEditSlot = useCallback(() => {
+    setEditingSlot(null);
+    setNewSlotData({
+      subject: '',
+      exam_date: selectedExamForSlots?.exam_date ? new Date(selectedExamForSlots.exam_date) : null,
+      start_time: '10:00',
+      room: ''
+    });
+  }, [selectedExamForSlots]);
 
   const handleSaveSlot = async () => {
     if (!selectedExamForSlots) return;
@@ -307,11 +329,23 @@ export default function ExaminationsPage() {
         school: parseInt(id)
       };
 
-      await api.post('/api/results/exam-slots/', payload);
-      toast.success('Slot added successfully');
+      if (editingSlot) {
+        await api.put(`/api/results/exam-slots/${editingSlot.id}/`, payload);
+        toast.success('Slot updated successfully');
+      } else {
+        await api.post('/api/results/exam-slots/', payload);
+        toast.success('Slot added successfully');
+      }
+      setEditingSlot(null);
+      setNewSlotData({
+        subject: '',
+        exam_date: selectedExamForSlots.exam_date ? new Date(selectedExamForSlots.exam_date) : null,
+        start_time: '10:00',
+        room: ''
+      });
       loadExamSlots(selectedExamForSlots);
     } catch (error) {
-      toast.error('Failed to add slot');
+      toast.error(editingSlot ? 'Failed to update slot' : 'Failed to add slot');
     } finally {
       setSavingSlot(false);
     }
@@ -456,10 +490,21 @@ export default function ExaminationsPage() {
 
         <ConfirmDialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, exam: null })} onConfirm={handleDelete} title="মুছে ফেলুন" message="আপনি কি নিশ্চিত?" />
 
-        <Dialog open={slotDialogOpen} onClose={() => setSlotDialogOpen(false)} fullWidth maxWidth="md">
-          <DialogTitle>পরীক্ষার রুটিন সেট করুন: {selectedExamForSlots?.name}</DialogTitle>
+        <Dialog open={slotDialogOpen} onClose={() => { setSlotDialogOpen(false); setEditingSlot(null); }} fullWidth maxWidth="md">
+          <DialogTitle>
+            {editingSlot ? `রুটিন সম্পাদনা: ${selectedExamForSlots?.name}` : `পরীক্ষার রুটিন সেট করুন: ${selectedExamForSlots?.name}`}
+          </DialogTitle>
           <DialogContent dividers>
-            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>নতুন বিষয় যোগ করুন</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                {editingSlot ? 'বিষয় সম্পাদনা করুন' : 'নতুন বিষয় যোগ করুন'}
+              </Typography>
+              {editingSlot && (
+                <Button size="small" onClick={handleCancelEditSlot}>
+                  বাতিল (Cancel Edit)
+                </Button>
+              )}
+            </Box>
             <Grid container spacing={2} sx={{ mb: 4, mt: 0.5 }}>
               <Grid item xs={12} md={4}>
                 <TextField
@@ -502,8 +547,8 @@ export default function ExaminationsPage() {
                 />
               </Grid>
               <Grid item xs={12} md={1}>
-                <Button variant="contained" fullWidth onClick={handleSaveSlot} disabled={savingSlot} sx={{ height: '40px' }}>
-                  {savingSlot ? '...' : <AddIcon />}
+                <Button variant="contained" fullWidth onClick={handleSaveSlot} disabled={savingSlot} sx={{ height: '40px' }} color={editingSlot ? 'success' : 'primary'}>
+                  {savingSlot ? '...' : (editingSlot ? <EditIcon /> : <AddIcon />)}
                 </Button>
               </Grid>
             </Grid>
@@ -525,13 +570,20 @@ export default function ExaminationsPage() {
                     <TableRow><TableCell colSpan={5} align="center">কোনো বিষয় যোগ করা হয়নি</TableCell></TableRow>
                   ) : (
                     examSlots.map((slot) => (
-                      <TableRow key={slot.id}>
+                      <TableRow key={slot.id} hover sx={editingSlot?.id === slot.id ? { bgcolor: 'action.selected' } : {}}>
                         <TableCell>{slot.exam_date}</TableCell>
                         <TableCell>{slot.subject_name || slot.subject?.name}</TableCell>
                         <TableCell>{slot.start_time}</TableCell>
                         <TableCell>{slot.room || '-'}</TableCell>
                         <TableCell align="center">
-                          <IconButton size="small" color="error" onClick={() => handleDeleteSlot(slot.id)}><DeleteIcon fontSize="small" /></IconButton>
+                          <Stack direction="row" spacing={1} justifyContent="center">
+                            <Tooltip title="সম্পাদনা">
+                              <IconButton size="small" color="primary" onClick={() => handleEditSlot(slot)}><EditIcon fontSize="small" /></IconButton>
+                            </Tooltip>
+                            <Tooltip title="মুছে ফেলুন">
+                              <IconButton size="small" color="error" onClick={() => handleDeleteSlot(slot.id)}><DeleteIcon fontSize="small" /></IconButton>
+                            </Tooltip>
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     ))
@@ -541,7 +593,7 @@ export default function ExaminationsPage() {
             </TableContainer>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setSlotDialogOpen(false)}>বন্ধ করুন</Button>
+            <Button onClick={() => { setSlotDialogOpen(false); setEditingSlot(null); }}>বন্ধ করুন</Button>
           </DialogActions>
         </Dialog>
       </Box>

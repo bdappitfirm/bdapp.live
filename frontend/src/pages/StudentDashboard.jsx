@@ -778,16 +778,29 @@ class StudentDashboard extends React.Component {
           });
           this.setState({ feePayments: payments });
 
-          if (!assignments || assignments.length === 0) {
-            // Nothing to show even after fallback
-          }
-
           const sumByAssign = {};
           for (const pay of payments) {
             const aidRaw = pay.assignment_id || pay.assignment || pay.fee_assignment || pay.student_fee_assignment || pay.fee_assignment_id || pay.assignment?.id;
             const aid = aidRaw != null ? String(aidRaw) : '';
             if (!aid) continue;
             sumByAssign[aid] = (sumByAssign[aid] || 0) + Number(pay.amount || pay.paid_amount || 0);
+          }
+
+          if ((!assignments || assignments.length === 0) && payments.length > 0) {
+            assignments = payments.map((p, idx) => {
+              const synId = `pay-syn-${p.id || idx}`;
+              sumByAssign[synId] = Number(p.amount || 0);
+              return {
+                id: synId,
+                fee_structure: { name: p.reference ? `ফি আদায় (${p.reference})` : 'দৈনিক আদায় / ফি পেমেন্ট', frequency: 'monthly' },
+                amount: Number(p.amount || 0),
+                custom_amount: Number(p.amount || 0),
+                discount_amount: 0,
+                discount_percentage: 0,
+                due_date: p.payment_date || null
+              };
+            });
+            usedFallbackAssignments = true;
           }
 
           // If monthly items have no month info, infer an order-based month mapping
@@ -864,9 +877,11 @@ class StudentDashboard extends React.Component {
             }
           } catch (_) {}
 
-          // Remove non-tuition items entirely per requirement
+          // Remove non-tuition items entirely per requirement (unless usedFallbackAssignments)
           try {
-            rows = rows.filter(r => String(r.type || '').toLowerCase() === 'tuition');
+            if (!usedFallbackAssignments) {
+              rows = rows.filter(r => String(r.type || '').toLowerCase() === 'tuition');
+            }
           } catch (_) {}
 
           // Deduplicate monthly fees for the same month (common issue with multiple structures or generation bugs)

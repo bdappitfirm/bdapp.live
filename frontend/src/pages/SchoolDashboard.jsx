@@ -42,6 +42,7 @@ import { useAuth } from '../context/AuthContext';
 import { setCurrentSchoolId, getDashboardStats } from '../services/dashboardService';
 import api from '../utils/api';
 import { getMediaUrl } from '../utils/media';
+import { canAccessDailyCollectionRegister } from '../utils/helpers';
 
 // Dashboard Components
 import AttendanceChart from '../components/dashboard/AttendanceChart';
@@ -98,6 +99,7 @@ const SchoolDashboard = () => {
     { label: 'ভোটার তালিকা', icon: <DescriptionIcon />, key: 'voter-list' },
     { label: 'টট লিস্ট', icon: <DescriptionIcon />, key: 'tot-list' },
     { label: 'ফি', icon: <PaymentIcon />, key: 'fees' },
+    { label: 'দৈনিক আদায় রেজিস্টার', icon: <ReceiptIcon />, key: 'daily-collection-register' },
     { label: 'ফি পরিশোধ', icon: <ReceiptIcon />, key: 'fee-receipt' },
     { label: 'রিসিট বই', icon: <ReceiptIcon />, key: 'receipt-book' },
     { label: 'ব্যানবেইস',
@@ -133,8 +135,11 @@ const SchoolDashboard = () => {
     if (item.key === 'rank-list') {
         return username === 'bdadmin';
     }
+    if (item.key === 'daily-collection-register') {
+        return canAccessDailyCollectionRegister(user);
+    }
     return true;
-  }), [menuItems, isSuperUser, id, username]);
+  }), [menuItems, isSuperUser, id, username, user]);
 
   const toggleSubmenu = (label) => {
     setOpenSubmenus(prev => ({ ...prev, [label]: !prev[label] }));

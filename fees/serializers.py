@@ -47,6 +47,9 @@ class PaymentSerializer(serializers.ModelSerializer):
             'fee_assignment', 'fee_assignment_id',
             'amount', 'payment_method', 'payment_status', 'payment_date',
             'reference', 'transaction_id', 'receipt_number',
+            'due_amount', 'sports_fee', 'admission_fee', 'admission_print_fee',
+            'cert_reg_fee', 'tuition_fee', 'religion_fee', 'session_fee',
+            'exam_fee', 'culture_library_fee', 'refreshment_poor_fund_fee', 'misc_fee',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'receipt_number', 'created_at', 'updated_at', 'student', 'fee_assignment']
