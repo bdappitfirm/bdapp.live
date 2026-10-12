@@ -404,7 +404,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         }}>
           <Typography variant="h6" sx={{
               fontWeight: 'bold',
-              mb: 1.2,
+              mb: 0.5,
               textAlign: 'center',
               borderBottom: '2px solid #e0e0e0',
               pb: 0.8,
@@ -413,6 +413,19 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
             }}>
               পরীক্ষার রুটিনঃ
             </Typography>
+
+            {String(school?.id) === '19' && (
+              <Typography sx={{
+                textAlign: 'center',
+                fontSize: '0.95rem',
+                fontWeight: 'bold',
+                color: '#1a237e',
+                mb: 1.0,
+                lineHeight: 1.3
+              }}>
+                সময়: সকাল ১০ঃ০০ টা থেকে দুপুর ১ঃ০০ টা
+              </Typography>
+            )}
 
           {/* Exam Routine Table - Four Columns */}
           {(() => {
@@ -568,7 +581,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                               fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
                             }}>
                               <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
-                                {slot1 ? formatDate(slot1.exam_date) + (formatTime(slot1.start_time) ? ` (${formatTime(slot1.start_time)})` : '') : ''}
+                                {slot1 ? formatDate(slot1.exam_date) : ''}
                               </Box>
                             </Box>
                             <Box sx={{
@@ -591,7 +604,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                               fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
                             }}>
                               <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
-                                {slot2 ? formatDate(slot2.exam_date) + (formatTime(slot2.start_time) ? ` (${formatTime(slot2.start_time)})` : '') : ''}
+                                {slot2 ? formatDate(slot2.exam_date) : ''}
                               </Box>
                             </Box>
                             <Box sx={{
