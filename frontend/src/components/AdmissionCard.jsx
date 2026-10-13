@@ -202,11 +202,14 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
       if (isCommerceSubject) return false;
       if (isHumanitiesSubject) return false;
       if (isGeneralScience) return false;
-      if (optionalName && (name.includes('কৃষি') || name.includes('agri') || name.includes('গার্হস্থ্য') || name.includes('home'))) {
-        if (!optionalName.includes('কৃষি') && !optionalName.includes('agri') && !optionalName.includes('গার্হস্থ্য')) {
+
+      const isAgriOrHome = /কৃষি|agri|গার্হস্থ্য|home/i.test(name);
+      if (isAgriOrHome) {
+        if (!optionalName || (!optionalName.includes('কৃষি') && !optionalName.includes('agri') && !optionalName.includes('গার্হস্থ্য') && !optionalName.includes('home'))) {
           return false;
         }
       }
+
       return true;
     }
 
@@ -219,6 +222,41 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
     return true;
   };
+
+  // Filter slots to match student's classroom, section, and stream/group
+  const studentClassroomId = data?.classroom?.id;
+  const studentSectionId = data?.section?.id;
+
+  const filteredSlots = examSlots.filter(slot => {
+    const classroomMatch = !slot.classroom || String(slot.classroom) === String(studentClassroomId);
+    const sectionMatch = !slot.section || String(slot.section) === String(studentSectionId);
+    const groupMatch = isSubjectMatchingStudent(slot, data);
+    return classroomMatch && sectionMatch && groupMatch;
+  });
+
+  const studentGroup = getStudentGroup(data);
+  const seenSubjects = new Set();
+  const uniqueFilteredSlots = [];
+  for (const slot of filteredSlots) {
+    const effName = getEffectiveSubjectForGroup(slot.subject_name || slot.subject?.name, studentGroup).trim().toLowerCase();
+    if (!seenSubjects.has(effName)) {
+      seenSubjects.add(effName);
+      uniqueFilteredSlots.push(slot);
+    }
+  }
+  const finalSlots = uniqueFilteredSlots;
+
+  // Sort slots chronologically
+  finalSlots.sort((a, b) => {
+    const dateA = a.exam_date || '';
+    const dateB = b.exam_date || '';
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+    const timeA = a.start_time || '';
+    const timeB = b.start_time || '';
+    return timeA.localeCompare(timeB);
+  });
+
+  const isCompact = finalSlots.length > 12;
 
   return (
     <Box 
@@ -234,7 +272,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         position: 'relative',
         fontFamily: 'Hind Siliguri, Arial, sans-serif',
         border: '1.5px solid #1a237e',
-        p: { xs: 0.5, sm: 1 }, // Increased padding
+        p: { xs: 0.5, sm: isCompact ? 0.8 : 1 }, // Dynamic padding
         lineHeight: 1.4, // Increased line height
         display: 'block',
         WebkitPrintColorAdjust: 'exact',
@@ -359,8 +397,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
         {/* Student Info */}
         <Box sx={{
-          mb: 0.8,
-          padding: '12px 10px',
+          mb: isCompact ? 0.6 : 0.8,
+          padding: isCompact ? '9px 10px' : '12px 10px',
           backgroundColor: 'rgba(255,255,255,0.75)',
           borderRadius: '8px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
@@ -392,241 +430,207 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
         </Box>
 
         {/* Exam Details */}
-        <Box sx={{
-          mb: 1.2,
-          border: '1.5px solid #d1d9ff',
-          borderRadius: '8px',
-          p: 1.8,
-          backgroundColor: 'rgba(248, 249, 255, 0.75)',
-          boxShadow: '0 2px 8px rgba(26, 35, 126, 0.05)',
-          position: 'relative',
-          zIndex: 1
-        }}>
-          <Typography variant="h6" sx={{
-              fontWeight: 'bold',
-              mb: 0.5,
-              textAlign: 'center',
-              borderBottom: '2px solid #e0e0e0',
-              pb: 0.8,
-              fontSize: '1.1rem',
-              lineHeight: 1.4
+        {(() => {
+          const examDetailsP = isCompact ? 1.25 : 1.8;
+          const examDetailsMb = isCompact ? 0.8 : 1.2;
+          const routineTitleMb = isCompact ? 0.35 : 0.5;
+          const routineTitlePb = isCompact ? 0.55 : 0.8;
+          const headerPy = isCompact ? 0.55 : 0.8;
+          const headerFontSize = isCompact ? '9.8px !important' : '10.5px !important';
+          const rowPy = isCompact ? 0.4 : 0.6;
+          const rowPtPb = isCompact ? '3.5px' : '5px';
+          const rowLineHeight = isCompact ? 1.35 : 1.6;
+          const rowFontSize = isCompact ? '9.5px !important' : '10px !important';
+
+          return (
+            <Box sx={{
+              mb: examDetailsMb,
+              border: '1.5px solid #d1d9ff',
+              borderRadius: '8px',
+              p: examDetailsP,
+              backgroundColor: 'rgba(248, 249, 255, 0.75)',
+              boxShadow: '0 2px 8px rgba(26, 35, 126, 0.05)',
+              position: 'relative',
+              zIndex: 1
             }}>
-              পরীক্ষার রুটিনঃ
-            </Typography>
+              <Typography variant="h6" sx={{
+                  fontWeight: 'bold',
+                  mb: routineTitleMb,
+                  textAlign: 'center',
+                  borderBottom: '2px solid #e0e0e0',
+                  pb: routineTitlePb,
+                  fontSize: '1.1rem',
+                  lineHeight: 1.4
+                }}>
+                  পরীক্ষার রুটিনঃ
+                </Typography>
 
-            {String(school?.id) === '19' && (
-              <Typography sx={{
-                textAlign: 'center',
-                fontSize: '0.95rem',
-                fontWeight: 'bold',
-                color: '#1a237e',
-                mb: 1.0,
-                lineHeight: 1.3
-              }}>
-                সময়: সকাল ১০ঃ০০ টা থেকে দুপুর ১ঃ০০ টা
-              </Typography>
-            )}
-
-          {/* Exam Routine Table - Four Columns */}
-          {(() => {
-                // Filter slots to match student's classroom, section, and stream/group
-                const studentClassroomId = data?.classroom?.id;
-                const studentSectionId = data?.section?.id;
-
-                const filteredSlots = examSlots.filter(slot => {
-                  const classroomMatch = !slot.classroom || String(slot.classroom) === String(studentClassroomId);
-                  const sectionMatch = !slot.section || String(slot.section) === String(studentSectionId);
-                  const groupMatch = isSubjectMatchingStudent(slot, data);
-                  return classroomMatch && sectionMatch && groupMatch;
-                });
-
-                const studentGroup = getStudentGroup(data);
-                const seenSubjects = new Set();
-                const uniqueFilteredSlots = [];
-                for (const slot of filteredSlots) {
-                  const effName = getEffectiveSubjectForGroup(slot.subject_name || slot.subject?.name, studentGroup).trim().toLowerCase();
-                  if (!seenSubjects.has(effName)) {
-                    seenSubjects.add(effName);
-                    uniqueFilteredSlots.push(slot);
-                  }
-                }
-                const finalSlots = uniqueFilteredSlots;
-
-                // Sort slots chronologically
-                finalSlots.sort((a, b) => {
-                  const dateA = a.exam_date || '';
-                  const dateB = b.exam_date || '';
-                  if (dateA !== dateB) return dateA.localeCompare(dateB);
-                  const timeA = a.start_time || '';
-                  const timeB = b.start_time || '';
-                  return timeA.localeCompare(timeB);
-                });
-
-                if (finalSlots.length === 0) {
-                  return (
-                    <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '0.9rem' }}>
-                      রুটিন পাওয়া যায়নি
-                    </Typography>
-                  );
-                }
-
-                // Helper to format date with English digits and full year
-                const formatDate = (dateStr) => {
-                  if (!dateStr) return '-';
-                  const parts = String(dateStr).split('-');
-                  if (parts.length < 3) return dateStr;
-                  const year = parseInt(parts[0], 10);
-                  const month = parseInt(parts[1], 10);
-                  const day = parseInt(parts[2], 10);
-                  const dayEn = String(day).padStart(2, '0');
-                  const monthEn = String(month).padStart(2, '0');
-                  return `${dayEn}/${monthEn}/${year}`;
-                };
-
-                // Helper to format time with English digits
-                const formatTime = (timeStr) => {
-                  if (!timeStr) return '';
-                  const [hStr, mStr] = String(timeStr).split(':');
-                  const h = parseInt(hStr, 10) || 0;
-                  const m = mStr ? mStr.padStart(2, '0') : '00';
-                  const ampm = h >= 12 ? 'PM' : 'AM';
-                  let h12 = h % 12;
-                  if (h12 === 0) h12 = 12;
-                  const period = h < 12 ? 'সকাল' : (h < 15 ? 'দুপুর' : 'বিকাল');
-                  const minPart = m !== '00' ? `:${m}` : '';
-                  return `${period} ${h12}${minPart} ${ampm}`;
-                };
-
-                // Column-first row rendering
-                const numRows = Math.ceil(finalSlots.length / 2);
-
-                return (
-                  <Box sx={{
-                    display: 'grid',
-                    gridTemplateColumns: '1.2fr 1.6fr 1.2fr 1.6fr',
-                    gridAutoRows: 'auto',
-                    gap: 0.2,
-                    border: '1px solid #e0e8ff',
-                    borderRadius: '4px',
-                    overflow: 'visible',
-                    fontSize: '11px !important'
+                {String(school?.id) === '19' && (
+                  <Typography sx={{
+                    textAlign: 'center',
+                    fontSize: '0.95rem',
+                    fontWeight: 'bold',
+                    color: '#1a237e',
+                    mb: isCompact ? 0.5 : 1.0,
+                    lineHeight: 1.3
                   }}>
-                    {/* Header */}
-                    <Box sx={{
-                      backgroundColor: '#1a237e',
-                      color: 'white',
-                      py: 0.8,
-                      px: 0.2,
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      fontSize: '10.5px !important',
-                      lineHeight: 1.5
-                    }}>
-                      তারিখ
-                    </Box>
-                    <Box sx={{
-                      backgroundColor: '#1a237e',
-                      color: 'white',
-                      py: 0.8,
-                      px: 0.2,
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      fontSize: '10.5px !important',
-                      lineHeight: 1.5
-                    }}>
-                      বিষয়
-                    </Box>
-                    <Box sx={{
-                      backgroundColor: '#1a237e',
-                      color: 'white',
-                      py: 0.8,
-                      px: 0.2,
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      fontSize: '10.5px !important',
-                      lineHeight: 1.5
-                    }}>
-                      তারিখ
-                    </Box>
-                    <Box sx={{
-                      backgroundColor: '#1a237e',
-                      color: 'white',
-                      py: 0.8,
-                      px: 0.2,
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      fontSize: '10.5px !important',
-                      lineHeight: 1.5
-                    }}>
-                      বিষয়
-                    </Box>
+                    সময়: সকাল ১০ঃ০০ টা থেকে দুপুর ১ঃ০০ টা
+                  </Typography>
+                )}
 
-                    {/* Column-first Rows */}
-                    {(() => {
-                      const studentGroup = getStudentGroup(data);
-                      const rows = [];
-                      for (let r = 0; r < numRows; r++) {
-                        const slot1 = finalSlots[r];
-                        const slot2 = finalSlots[r + numRows];
-                        const subName1 = getEffectiveSubjectForGroup(slot1?.subject_name || slot1?.subject?.name, studentGroup);
-                        const subName2 = getEffectiveSubjectForGroup(slot2?.subject_name || slot2?.subject?.name, studentGroup);
-                        rows.push(
-                          <React.Fragment key={`row-${r}`}>
-                            <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
-                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
-                              textAlign: 'center',
-                              borderBottom: '0.5px solid #e0e8ff',
-                              fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
-                            }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
-                                {slot1 ? formatDate(slot1.exam_date) : ''}
+              {/* Exam Routine Table - Four Columns */}
+              {finalSlots.length === 0 ? (
+                <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '0.9rem' }}>
+                  রুটিন পাওয়া যায়নি
+                </Typography>
+              ) : (
+                (() => {
+                  // Helper to format date with English digits and full year
+                  const formatDate = (dateStr) => {
+                    if (!dateStr) return '-';
+                    const parts = String(dateStr).split('-');
+                    if (parts.length < 3) return dateStr;
+                    const year = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10);
+                    const day = parseInt(parts[2], 10);
+                    const dayEn = String(day).padStart(2, '0');
+                    const monthEn = String(month).padStart(2, '0');
+                    return `${dayEn}/${monthEn}/${year}`;
+                  };
+
+                  // Column-first row rendering
+                  const numRows = Math.ceil(finalSlots.length / 2);
+
+                  return (
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.2fr 1.6fr 1.2fr 1.6fr',
+                      gridAutoRows: 'auto',
+                      gap: 0.2,
+                      border: '1px solid #e0e8ff',
+                      borderRadius: '4px',
+                      overflow: 'visible',
+                      fontSize: '11px !important'
+                    }}>
+                      {/* Header */}
+                      <Box sx={{
+                        backgroundColor: '#1a237e',
+                        color: 'white',
+                        py: headerPy,
+                        px: 0.2,
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        fontSize: headerFontSize,
+                        lineHeight: 1.5
+                      }}>
+                        তারিখ
+                      </Box>
+                      <Box sx={{
+                        backgroundColor: '#1a237e',
+                        color: 'white',
+                        py: headerPy,
+                        px: 0.2,
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        fontSize: headerFontSize,
+                        lineHeight: 1.5
+                      }}>
+                        বিষয়
+                      </Box>
+                      <Box sx={{
+                        backgroundColor: '#1a237e',
+                        color: 'white',
+                        py: headerPy,
+                        px: 0.2,
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        fontSize: headerFontSize,
+                        lineHeight: 1.5
+                      }}>
+                        তারিখ
+                      </Box>
+                      <Box sx={{
+                        backgroundColor: '#1a237e',
+                        color: 'white',
+                        py: headerPy,
+                        px: 0.2,
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        fontSize: headerFontSize,
+                        lineHeight: 1.5
+                      }}>
+                        বিষয়
+                      </Box>
+
+                      {/* Column-first Rows */}
+                      {(() => {
+                        const studentGroup = getStudentGroup(data);
+                        const rows = [];
+                        for (let r = 0; r < numRows; r++) {
+                          const slot1 = finalSlots[r];
+                          const slot2 = finalSlots[r + numRows];
+                          const subName1 = getEffectiveSubjectForGroup(slot1?.subject_name || slot1?.subject?.name, studentGroup);
+                          const subName2 = getEffectiveSubjectForGroup(slot2?.subject_name || slot2?.subject?.name, studentGroup);
+                          rows.push(
+                            <React.Fragment key={`row-${r}`}>
+                              <Box sx={{
+                                py: rowPy,
+                                px: 0.2,
+                                backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                                textAlign: 'center',
+                                borderBottom: '0.5px solid #e0e8ff',
+                                fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
+                              }}>
+                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
+                                  {slot1 ? formatDate(slot1.exam_date) : ''}
+                                </Box>
                               </Box>
-                            </Box>
-                            <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
-                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
-                              textAlign: 'center',
-                              borderBottom: '0.5px solid #e0e8ff'
-                            }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
-                                {subName1}
+                              <Box sx={{
+                                py: rowPy,
+                                px: 0.2,
+                                backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                                textAlign: 'center',
+                                borderBottom: '0.5px solid #e0e8ff'
+                              }}>
+                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
+                                  {subName1}
+                                </Box>
                               </Box>
-                            </Box>
-                            <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
-                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
-                              textAlign: 'center',
-                              borderBottom: '0.5px solid #e0e8ff',
-                              fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
-                            }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
-                                {slot2 ? formatDate(slot2.exam_date) : ''}
+                              <Box sx={{
+                                py: rowPy,
+                                px: 0.2,
+                                backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                                textAlign: 'center',
+                                borderBottom: '0.5px solid #e0e8ff',
+                                fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
+                              }}>
+                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
+                                  {slot2 ? formatDate(slot2.exam_date) : ''}
+                                </Box>
                               </Box>
-                            </Box>
-                            <Box sx={{
-                              py: 0.6,
-                              px: 0.2,
-                              backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
-                              textAlign: 'center',
-                              borderBottom: '0.5px solid #e0e8ff'
-                            }}>
-                              <Box sx={{ fontWeight: '600', fontSize: '10px !important', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.6, pt: '5px', pb: '5px' }}>
-                                {subName2}
+                              <Box sx={{
+                                py: rowPy,
+                                px: 0.2,
+                                backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
+                                textAlign: 'center',
+                                borderBottom: '0.5px solid #e0e8ff'
+                              }}>
+                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
+                                  {subName2}
+                                </Box>
                               </Box>
-                            </Box>
-                          </React.Fragment>
-                        );
-                      }
-                      return rows;
-                    })()}
-                  </Box>
-                );
-              })()}
-        </Box>
+                            </React.Fragment>
+                          );
+                        }
+                        return rows;
+                      })()}
+                    </Box>
+                  );
+                })()
+              )}
+            </Box>
+          );
+        })()}
       </Box>
 
       {/* Valid For removed per requirement */}

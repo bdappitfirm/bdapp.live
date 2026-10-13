@@ -750,6 +750,7 @@ export default function ClassResultsPage() {
 
             // Optional subject priority logic:
             const assignedOpt = stu?.optional_subject;
+
             const assignedOptId = String(assignedOpt?.id || assignedOpt || '');
             const assignedOptName = String(assignedOpt?.name || '').toLowerCase();
 

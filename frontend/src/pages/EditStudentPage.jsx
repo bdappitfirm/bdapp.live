@@ -14,6 +14,14 @@ export default function EditStudentPage() {
   const navigate = useNavigate();
   const toast = useToast();
 
+  const manualEdit = React.useRef({
+    first_name: false,
+    father_name: false,
+    mother_name: false,
+    guardian_name: false,
+    address: false
+  });
+
   const [form, setForm] = useState({
     username: '',
     first_name: '',
@@ -125,6 +133,20 @@ export default function EditStudentPage() {
         setSubjects(filteredSubjs);
 
         const s = studentRes.data;
+
+        const fnEn = s.user?.first_name_en || s.first_name_en || '';
+        const fatEn = s.father_name_en || '';
+        const motEn = s.mother_name_en || '';
+        const gurEn = s.guardian_name_en || '';
+        const addEn = s.address_en || '';
+
+        manualEdit.current = {
+          first_name: !!fnEn,
+          father_name: !!fatEn,
+          mother_name: !!motEn,
+          guardian_name: !!gurEn,
+          address: !!addEn
+        };
 
         const formatToDisplay = (dateStr) => {
           if (!dateStr) return '';
@@ -302,7 +324,7 @@ export default function EditStudentPage() {
                 </TextField>
               </Grid>
               <Grid item xs={12} sm={2}>
-                <TextField id="roll-edit" fullWidth label="রোল নম্বর" value={form.roll_number} onChange={e => setForm({...form, roll_number: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
+                <TextField id="roll-edit" fullWidth label="রোল নম্বর" value={form.roll_number} onChange={e => setForm({...form, roll_number: e.target.value})} autoComplete="off" />
               </Grid>
               {isSecondaryOrHigher && (
                 <>
@@ -336,7 +358,6 @@ export default function EditStudentPage() {
                       setForm({...form, admission_date: formatted});
                     }}
                     autoComplete="off"
-                    inputProps={{ autoComplete: 'one-time-code' }}
                   />
               </Grid>
             </Grid>
@@ -354,13 +375,22 @@ export default function EditStudentPage() {
                   onFocus={() => updateStep('#student-name-edit')}
                   onChange={e => {
                     const val = e.target.value;
-                    setForm({...form, first_name: val, first_name_en: transliterateBangla(val)});
+                    setForm(prev => {
+                      const expectedEn = transliterateBangla(prev.first_name);
+                      const shouldUpdate = !prev.first_name_en || prev.first_name_en === expectedEn;
+                      return {
+                        ...prev,
+                        first_name: val,
+                        first_name_en: shouldUpdate ? transliterateBangla(val) : prev.first_name_en
+                      };
+                    });
                   }}
-                  inputProps={{ autoComplete: 'one-time-code' }}
                 />
               </Grid>
               <Grid item xs={12} sm={4}>
-                <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => setForm({...form, first_name_en: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
+                <TextField fullWidth label="নাম (ইংরেজিতে)" value={form.first_name_en} onChange={e => {
+                  setForm({...form, first_name_en: e.target.value});
+                }} autoComplete="off" />
               </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField id="username-edit" fullWidth label="ইউজার আইডি (Username)" value={form.username} onChange={e => setForm({...form, username: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'new-username' }} />
@@ -393,7 +423,6 @@ export default function EditStudentPage() {
                       setForm({...form, birth_date: formatted});
                     }}
                     autoComplete="off"
-                    inputProps={{ autoComplete: 'one-time-code' }}
                   />
               </Grid>
             </Grid>
@@ -403,7 +432,7 @@ export default function EditStudentPage() {
             <Typography variant="h6">পিতা-মাতা ও অভিভাবকের তথ্য</Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={12}>
-                <TextField fullWidth label="মোবাইল নম্বর" value={form.phone_number} onChange={e => setForm({...form, phone_number: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
+                <TextField fullWidth label="মোবাইল নম্বর" value={form.phone_number} onChange={e => setForm({...form, phone_number: e.target.value})} autoComplete="off" />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -412,13 +441,23 @@ export default function EditStudentPage() {
                   value={form.father_name}
                   onChange={e => {
                     const val = e.target.value;
-                    setForm({...form, father_name: val, father_name_en: transliterateBangla(val)});
+                    setForm(prev => {
+                      const expectedEn = transliterateBangla(prev.father_name);
+                      const shouldUpdate = !prev.father_name_en || prev.father_name_en === expectedEn;
+                      return {
+                        ...prev,
+                        father_name: val,
+                        father_name_en: shouldUpdate ? transliterateBangla(val) : prev.father_name_en
+                      };
+                    });
                   }}
                   autoComplete="off"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField fullWidth label="পিতার নাম (ইংরেজিতে)" value={form.father_name_en} onChange={e => setForm({...form, father_name_en: e.target.value})} autoComplete="off" />
+                <TextField fullWidth label="পিতার নাম (ইংরেজিতে)" value={form.father_name_en} onChange={e => {
+                  setForm({...form, father_name_en: e.target.value});
+                }} autoComplete="off" />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -427,13 +466,23 @@ export default function EditStudentPage() {
                   value={form.mother_name}
                   onChange={e => {
                     const val = e.target.value;
-                    setForm({...form, mother_name: val, mother_name_en: transliterateBangla(val)});
+                    setForm(prev => {
+                      const expectedEn = transliterateBangla(prev.mother_name);
+                      const shouldUpdate = !prev.mother_name_en || prev.mother_name_en === expectedEn;
+                      return {
+                        ...prev,
+                        mother_name: val,
+                        mother_name_en: shouldUpdate ? transliterateBangla(val) : prev.mother_name_en
+                      };
+                    });
                   }}
                   autoComplete="off"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField fullWidth label="মাতার নাম (ইংরেজিতে)" value={form.mother_name_en} onChange={e => setForm({...form, mother_name_en: e.target.value})} autoComplete="off" />
+                <TextField fullWidth label="মাতার নাম (ইংরেজিতে)" value={form.mother_name_en} onChange={e => {
+                  setForm({...form, mother_name_en: e.target.value});
+                }} autoComplete="off" />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -444,14 +493,23 @@ export default function EditStudentPage() {
                   onFocus={() => updateStep('#guardian-name-edit')}
                   onChange={e => {
                     const val = e.target.value;
-                    setForm({...form, guardian_name: val, guardian_name_en: transliterateBangla(val)});
+                    setForm(prev => {
+                      const expectedEn = transliterateBangla(prev.guardian_name);
+                      const shouldUpdate = !prev.guardian_name_en || prev.guardian_name_en === expectedEn;
+                      return {
+                        ...prev,
+                        guardian_name: val,
+                        guardian_name_en: shouldUpdate ? transliterateBangla(val) : prev.guardian_name_en
+                      };
+                    });
                   }}
                   autoComplete="off"
-                  inputProps={{ autoComplete: 'one-time-code' }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField fullWidth label="অভিভাবকের নাম (ইংরেজিতে)" value={form.guardian_name_en} onChange={e => setForm({...form, guardian_name_en: e.target.value})} autoComplete="off" inputProps={{ autoComplete: 'one-time-code' }} />
+                <TextField fullWidth label="অভিভাবকের নাম (ইংরেজিতে)" value={form.guardian_name_en} onChange={e => {
+                  setForm({...form, guardian_name_en: e.target.value});
+                }} autoComplete="off" />
               </Grid>
             </Grid>
 
@@ -469,13 +527,24 @@ export default function EditStudentPage() {
                   value={form.address}
                   onChange={e => {
                     const val = e.target.value;
-                    setForm({...form, address: val, address_en: transliterateBangla(val)});
+                    setForm(prev => {
+                      const expectedEn = transliterateBangla(prev.address);
+                      const shouldUpdate = !prev.address_en || prev.address_en === expectedEn;
+                      return {
+                        ...prev,
+                        address: val,
+                        address_en: shouldUpdate ? transliterateBangla(val) : prev.address_en
+                      };
+                    });
                   }}
                   autoComplete="off"
                 />
               </Grid>
               <Grid item xs={12}>
-                <TextField id="address-en-edit" fullWidth multiline rows={2} label="ঠিকানা (ইংরেজিতে)" value={form.address_en} onChange={e => setForm({...form, address_en: e.target.value})} autoComplete="off" />
+                <TextField id="address-en-edit" fullWidth multiline rows={2} label="ঠিকানা (ইংরেজিতে)" value={form.address_en} onChange={e => {
+                  manualEdit.current.address = true;
+                  setForm({...form, address_en: e.target.value});
+                }} autoComplete="off" />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField fullWidth label="ভোটার আইডি/জন্ম নিবন্ধন নম্বর" value={form.voter_number} onChange={e => setForm({...form, voter_number: e.target.value})} autoComplete="off" />

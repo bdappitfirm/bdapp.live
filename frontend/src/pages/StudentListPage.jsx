@@ -128,6 +128,8 @@ export default function StudentListPage() {
         // Auto-transliterate fields
         if (field === 'first_name') {
             updated.first_name_en = transliterateBangla(value);
+        } else if (field === 'first_name_en') {
+            updated.first_name_en = value;
         } else if (field === 'address') {
             updated.address_en = transliterateBangla(value);
         }
@@ -266,11 +268,11 @@ export default function StudentListPage() {
                 {schoolInfo?.logo && <Box component="img" src={schoolInfo.logo} sx={{ height: '16mm', ml: 2 }} />}
             </Box>
             <TableContainer component={Paper} sx={{ mb: 2, boxShadow: 'none', p: 0 }}>
-              <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1350px' : '1150px', borderCollapse: 'collapse' }}>
+              <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1500px' : '1300px', borderCollapse: 'collapse' }}>
                 <colgroup>
                   <col style={{ width: '30px' }} />
-                  <col style={{ width: '180px' }} />
-                  <col style={{ width: '115px' }} />
+                  <col style={{ width: '160px' }} />
+                  <col style={{ width: '160px' }} />
                   <col style={{ width: '115px' }} />
                   <col style={{ width: '115px' }} />
                   <col style={{ width: '75px' }} />
@@ -291,6 +293,7 @@ export default function StudentListPage() {
                     <TableRow sx={{ bgcolor: '#1976d2' }}>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ক্র.</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>নাম (First Name)</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>নাম (ইংরেজিতে)</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>পিতার নাম</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>মাতার নাম</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>জন্ম তারিখ</TableCell>
@@ -314,6 +317,9 @@ export default function StudentListPage() {
                         <TableCell sx={{ textAlign: 'center', p: 0, m: 0 }}>{cIdx * 17 + idx + 1}</TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.first_name || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'first_name', e.target.value)} style={{ fontWeight: 600 }} />
+                        </TableCell>
+                        <TableCell sx={{ p: 0, m: 0 }}>
+                          <input className="sl-cell-input" value={s.first_name_en || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'first_name_en', e.target.value)} />
                         </TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.father_name || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'father_name', e.target.value)} />
