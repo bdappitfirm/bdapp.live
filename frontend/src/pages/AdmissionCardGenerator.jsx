@@ -748,7 +748,7 @@ export default function AdmissionCardGenerator() {
           <Grid container spacing={3}>
             {searchResults.map((student) => (
               <Grid item xs={12} sm={6} md={4} key={student.id}>
-                <Box position="relative">
+                <Box position="relative" sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                   <Box id={`admission-card-${student.id}`}>
                     <AdmissionCard 
                       data={student} 
@@ -817,8 +817,8 @@ export default function AdmissionCardGenerator() {
         </DialogTitle>
         <DialogContent>
           {selectedStudent && (
-            <Box display="flex" justifyContent="center" p={2}>
-              <Box maxWidth="400px" width="100%">
+            <Box display="flex" justifyContent="center" p={2} sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <Box sx={{ minWidth: '380px', width: '100%', maxWidth: '640px' }}>
                 <AdmissionCard 
                   data={selectedStudent} 
                   school={school} 

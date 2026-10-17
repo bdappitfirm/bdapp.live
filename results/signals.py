@@ -55,14 +55,15 @@ def calculate_student_overall_result(examination, student):
     is_910 = _class_group(getattr(examination.classroom, "name", None)) == 'nine_ten'
 
     # Helpers for combined slash-separated subject names (e.g. Physics/Geography/Accounting)
-    SCI_KW = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর']
-    COM_KW = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়']
-    ART_KW = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি']
+    SCI_KW = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর', 'bgs', 'bangladesh', 'বাংলাদেশ']
+    COM_KW = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়', 'বিজ্ঞান']
+    ART_KW = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি', 'বিজ্ঞান']
 
     def _classify_part(part):
         p = (part or '').strip().lower()
         if not p: return None
-        if any(k in p for k in SCI_KW): return 'science'
+        if any(k in p for k in SCI_KW) and not ('বিজ্ঞান' in p and not any(x in p for x in ['পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর'])):
+            return 'science'
         if any(k in p for k in COM_KW): return 'commerce'
         if any(k in p for k in ART_KW): return 'arts'
         return None

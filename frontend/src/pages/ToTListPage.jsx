@@ -196,6 +196,7 @@ export default function ToTListPage() {
           father_name: s.father_name,
           mother_name: s.mother_name,
           admission_date: parseDate(s.manual_admission_date),
+          section_id: s.section_id || s.section?.id || s.section,
           subjects_list: s.manual_subjects
       }));
       await scopedPost(`/api/academics/students/bulk_update_students/`, id, { updates });
@@ -289,6 +290,7 @@ export default function ToTListPage() {
           father_name: s.father_name,
           mother_name: s.mother_name,
           admission_date: parseDate(s.manual_admission_date),
+          section_id: s.section_id || s.section?.id || s.section,
           subjects_list: s.manual_subjects
       }));
       await scopedPost(`/api/academics/students/bulk_update_students/`, id, { updates });

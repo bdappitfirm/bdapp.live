@@ -34,6 +34,7 @@ pip install gunicorn
 
 # Run migrations and collectstatic
 python manage.py collectstatic --noinput
+python manage.py migrate academics --fake || true
 python manage.py migrate --noinput
 
 # Set permissions

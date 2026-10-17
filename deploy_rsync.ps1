@@ -89,10 +89,10 @@ $tarArgs = @(
     "--exclude=db_*.json",
     "--exclude=*.sql",
     "--exclude=*.dump",
-    "backend", "users", "schools", "academics", "attendance", "fees", "results",
+    "backend", "users", "schools", "academics", "attendance", "fees", "results", "software_accounts",
     "manage.py", "requirements.txt", "scripts",
     "fix_all.sh", "fix_database_marks.py", "auto_translate.py",
-    "fix_db_schema.py", "cleanup_orphaned_students.py", "school_19_students.json",
+    "fix_db_schema.py", "cleanup_orphaned_students.py",
     "frontend/build",
     "templates"
 )

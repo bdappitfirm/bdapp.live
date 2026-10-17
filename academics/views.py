@@ -466,11 +466,22 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                     sec_ids = [str(s) for s in secid_param if str(s).strip()]
 
                 digit_ids = [int(s) for s in sec_ids if s.isdigit()]
+                name_queries = [s for s in sec_ids if not s.isdigit() and s.lower() not in ['science', 'arts', 'commerce', 'humanities']]
                 group_names = [s.lower() for s in sec_ids if not s.isdigit() and s.lower() in ['science', 'arts', 'commerce', 'humanities']]
 
                 q_filter = Q()
                 if digit_ids:
                     q_filter |= Q(section_id__in=digit_ids)
+
+                if name_queries:
+                    sec_name_query = Q()
+                    for name_q in name_queries:
+                        sec_name_query |= Q(section__name__iexact=name_q)
+                    if cid and str(cid).isdigit():
+                        sec_name_query &= Q(section__classroom_id=int(cid))
+                    else:
+                        sec_name_query &= Q(section__classroom__school_id=sid)
+                    q_filter |= sec_name_query
 
                 if group_names:
                     q_filter |= Q(student_group__in=group_names)
@@ -573,7 +584,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                                 instance.user.save()
 
                         # 2. Update StudentProfile
-                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'address_en', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks', 'optional_subject_id', 'ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']
+                        profile_fields = ['father_name', 'mother_name', 'guardian_name', 'address', 'address_en', 'admission_date', 'birth_date', 'roll_number', 'student_group', 'blood_group', 'gender', 'subjects_list', 'voter_number', 'remarks', 'optional_subject_id', 'section_id', 'ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']
                         safe_data = {}
                         profile_changed = False
 

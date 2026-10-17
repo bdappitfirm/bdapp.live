@@ -30,6 +30,7 @@ export default function BillingPage() {
   const [isMonthlyPerStudent, setIsMonthlyPerStudent] = useState(true);
   const [commission, setCommission] = useState(0);
   const [previouslyPaid, setPreviouslyPaid] = useState(0);
+  const [schoolIncomes, setSchoolIncomes] = useState([]);
   const [billDate, setBillDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [billNo] = useState(`INV-${dayjs().format('YYYY')}-SR-${Math.floor(Math.random() * 900) + 100}`);
   const [loading, setLoading] = useState(false);
@@ -61,6 +62,19 @@ export default function BillingPage() {
     }
   };
 
+  const fetchSchoolIncomes = async (schoolId) => {
+    try {
+      const res = await api.get(`/api/software-accounts/incomes/?school_id=${schoolId}`);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setSchoolIncomes(list);
+      const manualTotal = list.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const billingPaid = Number(selectedSchool?.billing?.total_paid || 0);
+      setPreviouslyPaid(manualTotal > 0 ? manualTotal : billingPaid);
+    } catch (err) {
+      console.error('Failed to fetch school incomes', err);
+    }
+  };
+
   const handleSavePayment = async () => {
     if (!selectedSchool) return;
     try {
@@ -68,7 +82,18 @@ export default function BillingPage() {
       await api.post(`/api/schools/${selectedSchool.id}/update_billing/`, {
         total_paid: previouslyPaid
       });
-      toast.success('পরিশোধিত টাকা আপডেট হয়েছে');
+      if (Number(previouslyPaid) > 0) {
+        await api.post('/api/software-accounts/incomes/', {
+          school: selectedSchool.id,
+          title: 'সফটওয়্যার ফি প্রদান (বিল জেনারেটর)',
+          amount: previouslyPaid,
+          income_date: billDate,
+          payment_method: 'Cash',
+          income_type: 'one_time'
+        }).catch(() => {});
+      }
+      toast.success('পরিশোধিত টাকা সফলভাবে আপডেট ও সেভ হয়েছে');
+      fetchSchoolIncomes(selectedSchool.id);
     } catch (err) {
       toast.error('আপডেট করতে সমস্যা হয়েছে');
     } finally {
@@ -130,7 +155,10 @@ export default function BillingPage() {
                 if (newValue) {
                   setSchoolLink(`https://bdapp.live/school/${newValue.id}`);
                   setStudentCount(newValue.student_count || 0);
-                  setPreviouslyPaid(newValue.billing?.total_paid || 0);
+                  fetchSchoolIncomes(newValue.id);
+                } else {
+                  setSchoolIncomes([]);
+                  setPreviouslyPaid(0);
                 }
               }}
               renderInput={(params) => <TextField {...params} label="স্কুল নির্বাচন করুন" fullWidth />}
@@ -408,6 +436,34 @@ export default function BillingPage() {
             </TableRow>
           </TableBody>
         </Table>
+
+        {schoolIncomes.length > 0 && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+              পরিশোধের ইতিহাস (Payment History with Dates):
+            </Typography>
+            <Table size="small" sx={{ border: '1px solid black' }}>
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }}>তারিখ</TableCell>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }}>শিরোনাম / বিবরণ</TableCell>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }}>মাধ্যম</TableCell>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }} align="right">পরিমাণ</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {schoolIncomes.map((inc, i) => (
+                  <TableRow key={i}>
+                    <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }}>{inc.income_date}</TableCell>
+                    <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }}>{inc.title}</TableCell>
+                    <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }}>{inc.payment_method}</TableCell>
+                    <TableCell sx={{ border: '1px solid black', fontSize: '0.75rem', py: 0.5 }} align="right">৳ {Number(inc.amount).toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
 
         <Box sx={{ mb: 3 }}>
           <Typography variant="body2">

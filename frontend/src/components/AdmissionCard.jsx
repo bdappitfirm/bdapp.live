@@ -95,7 +95,8 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     return '';
   };
 
-  const SCI_KW = /physics|chemistry|biology|higher math|পদার্থ|রসায়ন|রসায়|জীব|উচ্চতর/i;
+  const SCI_KW = /physics|chemistry|biology|higher math|পদার্থ|রসায়ন|রসায়|জীব|উচ্চতর|বাংলাদেশ\s*ও\s*বিশ্ব|bgs/i;
+  const GEN_SCI_KW = /^বিজ্ঞান$|^সাধারণ\s*বিজ্ঞান$|^science$|^general\s*science$/i;
   const COM_KW = /accounting|finance|entrepreneurship|business|ব্যবসায়|ব্যবসায়|ব্যবসা|হিসাব|ফিন্যান্স/i;
   const HUM_KW = /history|geography|civics|economics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|পৌরণীতি|অর্থনীতি/i;
   const AGRI_KW = /কৃষি|agri|গার্হস্থ্য|home/i;
@@ -105,6 +106,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     if (!s) return null;
     if (AGRI_KW.test(s)) return 'agri';
     if (SCI_KW.test(s)) return 'science';
+    if (GEN_SCI_KW.test(s)) return 'general_science';
     if (COM_KW.test(s)) return 'commerce';
     if (HUM_KW.test(s)) return 'humanities';
     return null;
@@ -130,6 +132,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     for (const p of parts) {
       const c = classifyPart(p);
       if (c === g || c === 'agri') return p;
+      if (c === 'general_science' && (g === 'commerce' || g === 'humanities')) return p;
     }
     return parts[0] || name;
   };
@@ -167,7 +170,9 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
       if (hasAgri && !hasHigherMath && group === 'science') return false;
       return parts.some(p => {
         const c = classifyPart(p);
-        return c === group || c === 'agri';
+        if (c === group || c === 'agri') return true;
+        if (c === 'general_science' && (group === 'commerce' || group === 'humanities')) return true;
+        return false;
       });
     }
 
@@ -257,6 +262,68 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
   });
 
   const isCompact = finalSlots.length > 12;
+
+  const formatBnDigits = (str) => {
+    return String(str ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
+  };
+
+  const formatSingleTime = (timeStr) => {
+    if (!timeStr) return '';
+    const parts = String(timeStr).trim().split(':');
+    if (parts.length < 2) return timeStr;
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return timeStr;
+
+    let period = 'সকাল';
+    if (h < 6) period = 'রাত';
+    else if (h >= 6 && h < 12) period = 'সকাল';
+    else if (h >= 12 && h < 15) period = 'দুপুর';
+    else if (h >= 15 && h < 18) period = 'বিকাল';
+    else if (h >= 18 && h < 20) period = 'সন্ধ্যা';
+    else period = 'রাত';
+
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const hBn = formatBnDigits(h12);
+    const mBn = formatBnDigits(String(m).padStart(2, '0'));
+
+    return `${period} ${hBn}:${mBn} টা`;
+  };
+
+  const getExamTimeRangeStr = () => {
+    const primarySlot = finalSlots.length > 0 ? finalSlots[0] : null;
+    let startTime = primarySlot?.start_time || exam?.start_time;
+    let endTime = primarySlot?.end_time || exam?.end_time;
+
+    if (!startTime) {
+      if (String(school?.id) === '19') {
+        return 'সময়: সকাল ১০ঃ০০ টা থেকে দুপুর ১ঃ০০ টা';
+      }
+      return null;
+    }
+
+    if (!endTime) {
+      const parts = String(startTime).trim().split(':');
+      if (parts.length >= 2) {
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (!isNaN(h) && !isNaN(m)) {
+          const endH = (h + 3) % 24;
+          endTime = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+        }
+      }
+    }
+
+    const startFormatted = formatSingleTime(startTime);
+    const endFormatted = endTime ? formatSingleTime(endTime) : '';
+
+    if (startFormatted && endFormatted) {
+      return `সময়: ${startFormatted} থেকে ${endFormatted}`;
+    } else if (startFormatted) {
+      return `সময়: ${startFormatted}`;
+    }
+    return null;
+  };
 
   return (
     <Box 
@@ -465,18 +532,22 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   পরীক্ষার রুটিনঃ
                 </Typography>
 
-                {String(school?.id) === '19' && (
-                  <Typography sx={{
-                    textAlign: 'center',
-                    fontSize: '0.95rem',
-                    fontWeight: 'bold',
-                    color: '#1a237e',
-                    mb: isCompact ? 0.5 : 1.0,
-                    lineHeight: 1.3
-                  }}>
-                    সময়: সকাল ১০ঃ০০ টা থেকে দুপুর ১ঃ০০ টা
-                  </Typography>
-                )}
+                {(() => {
+                  const timeStr = getExamTimeRangeStr();
+                  if (!timeStr) return null;
+                  return (
+                    <Typography sx={{
+                      textAlign: 'center',
+                      fontSize: '0.95rem',
+                      fontWeight: 'bold',
+                      color: '#1a237e',
+                      mb: isCompact ? 0.5 : 1.0,
+                      lineHeight: 1.3
+                    }}>
+                      {timeStr}
+                    </Typography>
+                  );
+                })()}
 
               {/* Exam Routine Table - Four Columns */}
               {finalSlots.length === 0 ? (

@@ -176,12 +176,23 @@ export default function AddStudentPage() {
 
       // Helper to convert DD-MM-YYYY to YYYY-MM-DD
       const formatToISO = (dateStr) => {
-        if (!dateStr) return '';
-        const parts = dateStr.split('-');
-        if (parts.length === 3 && parts[2].length === 4) {
-          return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        if (!dateStr || typeof dateStr !== 'string') return '';
+        const trimmed = dateStr.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          const [y, m, d] = trimmed.split('-').map(Number);
+          if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return trimmed;
+          return '';
         }
-        return dateStr;
+        const parts = trimmed.split('-');
+        if (parts.length === 3 && parts[2].length === 4) {
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          const y = parseInt(parts[2], 10);
+          if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          }
+        }
+        return '';
       };
 
       Object.entries(form).forEach(([k, v]) => {

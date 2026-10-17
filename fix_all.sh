@@ -39,10 +39,9 @@ cd "$BACKEND_DIR"
 echo "[1/7] Running Django migrations (--noinput, no data loss)..."
 # Safety: never use --fake-initial here; only regular migrate.
 "$VENV_PYTHON" manage.py migrate --noinput || {
-    # Very specific workaround for historical academics 0010 constraint
-    # conflict already present on some older installations.
-    echo "Migration reported conflict; attempting targeted fake of 0010 only."
-    "$VENV_PYTHON" manage.py migrate academics 0010 --fake --noinput 2>/dev/null || true
+    echo "Migration reported conflict; attempting targeted fake of academics migrations..."
+    "$VENV_PYTHON" manage.py migrate academics 0011 --fake --noinput 2>/dev/null || true
+    "$VENV_PYTHON" manage.py migrate academics --fake --noinput 2>/dev/null || true
     "$VENV_PYTHON" manage.py migrate --noinput
 }
 

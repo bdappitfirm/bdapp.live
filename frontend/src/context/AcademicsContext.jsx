@@ -77,6 +77,7 @@ export const AcademicsProvider = ({ children }) => {
     try {
       const response = await scopedGet('/api/academics/sections/', sId, {}, { timeout: 15000 });
       const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+
       setSections(data);
       if (data.length > 0) await cacheData('sections', data);
       return data;
@@ -199,8 +200,12 @@ export const AcademicsProvider = ({ children }) => {
         force = true;
     }
 
-    // If not forced and we have data for the current school, skip
+    // If not forced and we have students, skip re-fetching students, but ALWAYS refresh classrooms and sections
     if (!force && studentsCountRef.current > 0 && String(prevSchoolId) === sId) {
+      await Promise.all([
+        refreshClassrooms(sId, true),
+        refreshSections(sId, true)
+      ]);
       return;
     }
 

@@ -247,7 +247,8 @@ const isCoCurricular = (name, isClassNineOrTen) => {
   return baseList.some(sub => subjStr.includes(sub.toLowerCase()));
 };
 
-const SCI_KW = /physics|chemistry|biology|higher math|পদার্থ|রসায়ন|জীব|উচ্চতর/i;
+const SCI_KW = /physics|chemistry|biology|higher math|পদার্থ|রসায়ন|রসায়|জীব|উচ্চতর|বাংলাদেশ\s*ও\s*বিশ্ব|bgs/i;
+const GEN_SCI_KW = /^বিজ্ঞান$|^সাধারণ\s*বিজ্ঞান$|^science$|^general\s*science$/i;
 const COM_KW = /accounting|finance|entrepreneurship|business|ব্যবসায়|ব্যবসায়|ব্যবসা|হিসাব|ফিন্যান্স/i;
 const HUM_KW = /history|geography|civics|economics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|পৌরণীতি|অর্থনীতি/i;
 
@@ -255,6 +256,7 @@ const classifyPart = (part) => {
   const s = String(part || '').trim();
   if (!s) return null;
   if (SCI_KW.test(s)) return 'science';
+  if (GEN_SCI_KW.test(s)) return 'general_science';
   if (COM_KW.test(s)) return 'commerce';
   if (HUM_KW.test(s)) return 'humanities';
   return null;
@@ -275,7 +277,9 @@ const getEffectiveSubjectForGroup = (subjectName, group) => {
   const parts = name.split(/\s*\/\s*/).filter(Boolean);
   if (!g) return parts[0] || name;
   for (const p of parts) {
-    if (classifyPart(p) === g) return p;
+    const c = classifyPart(p);
+    if (c === g) return p;
+    if (c === 'general_science' && (g === 'commerce' || g === 'humanities')) return p;
   }
   return parts[0] || name;
 };

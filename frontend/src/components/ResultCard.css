@@ -1,6 +1,6 @@
 /* Result Card Final Stable CSS */
 .result-card-container {
-  font-family: 'Times New Roman', 'Kalpurush', 'Siyam Rupali', 'SolaimanLipi', Times, serif;
+  font-family: 'Hind Siliguri', 'SolaimanLipi', 'Noto Sans Bengali', 'Times New Roman', Times, serif;
   -webkit-print-color-adjust: exact !important;
   print-color-adjust: exact !important;
   color: #000;
@@ -78,7 +78,7 @@
 }
 
 .school-name-header {
-  font-family: 'Times New Roman', 'Kalpurush', 'Siyam Rupali', 'SolaimanLipi', Times, serif !important;
+  font-family: 'Hind Siliguri', 'SolaimanLipi', 'Noto Sans Bengali', 'Times New Roman', Times, serif !important;
   font-weight: 900 !important;
   color: #000 !important;
   text-align: center !important;

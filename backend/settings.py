@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     'fees',
     'users.apps.UsersConfig',
     'results.apps.ResultsConfig',
+    'software_accounts',
 ]
 
 try:

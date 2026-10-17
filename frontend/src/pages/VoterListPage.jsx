@@ -205,7 +205,8 @@ export default function VoterListPage() {
           phone_number: v.mobile,
           remarks: v.remarks,
           roll_number: v.roll,
-          voter_number: v.voterNumber
+          voter_number: v.voterNumber,
+          section_id: v.section_id || v.section?.id || v.section
       }));
       await scopedPost(`/api/academics/students/bulk_update_students/`, id, { updates });
       setAutoSaveStatus('saved');
@@ -237,7 +238,8 @@ export default function VoterListPage() {
           phone_number: v.mobile,
           remarks: v.remarks,
           roll_number: v.roll,
-          voter_number: v.voterNumber
+          voter_number: v.voterNumber,
+          section_id: v.section_id || v.section?.id || v.section
       }));
       await scopedPost(`/api/academics/students/bulk_update_students/`, id, { updates });
       toast.success('সকল তথ্য সংরক্ষিত হয়েছে');

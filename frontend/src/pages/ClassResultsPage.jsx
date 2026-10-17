@@ -1371,7 +1371,7 @@ export default function ClassResultsPage() {
           <Typography variant="h6" sx={{ fontSize: '1rem' }}>শ্রেণি: {currentClassLabel} | শাখা: {currentSectionLabel} | পরীক্ষা: {currentExamLabel} | বছর: {selectedYear}</Typography>
       </Box>
       {loading ? <CircularProgress /> : (
-        <TableContainer component={Paper} sx={{ boxShadow: 'none' }}>
+        <TableContainer component={Paper} sx={{ boxShadow: 'none', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <Table size="small" sx={{ borderCollapse: 'collapse', '& td, & th': { border: '1.2px solid black !important', fontSize: { xs: '0.8rem', print: '7pt' }, py: 0.5, px: 0.3 } }}>
             <TableHead><TableRow sx={{ bgcolor: '#eee', "@media print": { bgcolor: '#eee !important', WebkitPrintColorAdjust: 'exact' } }}><TableCell align="center">রোল</TableCell><TableCell>Name</TableCell>{displaySubjects.map(s => <TableCell key={s.key} align="center" sx={{ fontWeight: 'bold' }}>{s.label}</TableCell>)}{isPrimaryClass && <TableCell align="center" sx={{ fontWeight: 'bold' }}>টিউটোরিয়াল</TableCell>}<TableCell align="center" sx={{ fontWeight: 'bold' }}>মোট</TableCell><TableCell align="center" sx={{ fontWeight: 'bold' }}>মেধাক্রম</TableCell></TableRow></TableHead>
             <TableBody>{studentListSortedByRoll.map(stu => {

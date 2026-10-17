@@ -445,7 +445,7 @@ const RankListPage = () => {
                 <Button variant="contained" startIcon={<DownloadIcon />} onClick={downloadPDF}>Download PDF</Button>
                 <Button variant="outlined" startIcon={<PrintIcon />} onClick={handlePrint}>Print</Button>
               </Stack>
-              <TableContainer component={Paper} ref={printRef} sx={{ p: 2 }}>
+              <TableContainer component={Paper} ref={printRef} sx={{ p: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ bgcolor: '#f5f5f5' }}>

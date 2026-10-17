@@ -163,6 +163,7 @@ const SchoolSettings = React.lazy(() => import('./pages/SchoolSettings.jsx'));
 const SeatAllocationPage = React.lazy(() => import('./pages/SeatAllocationPage.jsx'));
 const WhatsAppSettings = React.lazy(() => import('./pages/WhatsAppSettings.jsx'));
 const BillingPage = React.lazy(() => import('./pages/billing/BillingPage.jsx'));
+const SoftwareAccountsPage = React.lazy(() => import('./pages/SoftwareAccountsPage.jsx'));
 const BanbeisPage = React.lazy(() => import('./pages/BanbeisPage.jsx'));
 const PayrollPage = React.lazy(() => import('./pages/PayrollPage.jsx'));
 const PayslipGenerator = React.lazy(() => import('./pages/PayslipGenerator.jsx'));
@@ -293,6 +294,7 @@ function App() {
           <Route path="student/add" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AddStudentPage /></ProtectedRoute>} />
           <Route path="student/:studentId/edit" element={<ProtectedRoute allowedRoles={['admin','teacher']}><EditStudentPage /></ProtectedRoute>} />
           <Route path="billing" element={<ProtectedRoute allowedRoles={['admin']}><BillingPage /></ProtectedRoute>} />
+          <Route path="accounts" element={<ProtectedRoute allowedRoles={['admin']}><SoftwareAccountsPage /></ProtectedRoute>} />
           <Route path="banbeis" element={<ProtectedRoute allowedRoles={['admin','teacher']}><BanbeisPage /></ProtectedRoute>} />
           <Route path="promotion" element={<ProtectedRoute allowedRoles={['admin','teacher']}><StudentsPage /></ProtectedRoute>} />
           <Route path="year-report" element={<ProtectedRoute allowedRoles={['admin','teacher']}><YearReportPage /></ProtectedRoute>} />

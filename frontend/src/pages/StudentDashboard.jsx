@@ -336,13 +336,15 @@ const StudentResults = ({
           <CircularProgress />
         </Box>
       ) : resultCardData && resultCardData.studentData && resultCardData.results && resultCardData.results.length > 0 ? (
-        <AcademicTranscriptCard
-          studentData={resultCardData.studentData}
-          results={resultCardData.results}
-          overallResult={resultCardData.overallResult}
-          examination={resultCardData.examination}
-          school={schoolInfo}
-        />
+        <Box sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', justifyContent: 'center', py: 1 }}>
+          <AcademicTranscriptCard
+            studentData={resultCardData.studentData}
+            results={resultCardData.results}
+            overallResult={resultCardData.overallResult}
+            examination={resultCardData.examination}
+            school={schoolInfo}
+          />
+        </Box>
       ) : resultCardData && resultCardData.studentData ? (
         <Alert severity="info">No results found for the selected exam type.</Alert>
       ) : (

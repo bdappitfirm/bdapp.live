@@ -120,6 +120,7 @@ if (-not $NoBackend) {
         "attendance",
         "fees",
         "results",
+        "software_accounts",
         "manage.py",
         "requirements.txt",
         "scripts",
@@ -137,7 +138,6 @@ if (-not $NoBackend) {
         "nginx_setup.sh",
         "gunicorn_setup.sh",
         "deploy_rsync_vps.sh",
-        "school_19_students.json",
         "static",
         "templates"
     )

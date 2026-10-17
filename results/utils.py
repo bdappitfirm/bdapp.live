@@ -286,9 +286,9 @@ def get_subject_maxima(group, subject_name, student_group=None, target_total=Non
         parts = [p.strip() for p in raw.split('/')]
 
         # Keywords for group detection
-        SCI_KW = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর']
-        COM_KW = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়']
-        ART_KW = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি']
+        SCI_KW = ['physics', 'chemistry', 'biology', 'higher math', 'পদার্থ', 'রসায়ন', 'জীব', 'উচ্চতর', 'bgs', 'bangladesh', 'বাংলাদেশ']
+        COM_KW = ['accounting', 'finance', 'business', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়', 'বিজ্ঞান']
+        ART_KW = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি', 'বিজ্ঞান']
 
         target_part = None
         for p in parts:

@@ -20,6 +20,9 @@ class Section(models.Model):
     classroom = models.ForeignKey(ClassRoom, on_delete=models.CASCADE, related_name='sections')
     name = models.CharField(max_length=100)
 
+    class Meta:
+        unique_together = ('classroom', 'name')
+
     def __str__(self):
         return f"{self.classroom.name} ({self.name})"
 

@@ -107,6 +107,7 @@ export default function StudentListPage() {
               admission_date: aDate,
               roll_number: s.roll_number,
               student_group: s.student_group,
+              section_id: s.section_id || s.section?.id || s.section,
               optional_subject_id: s.optional_subject_id || s.optional_subject?.id || s.optional_subject
           };
       });

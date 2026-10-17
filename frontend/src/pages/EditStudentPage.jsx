@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import api from '../utils/api';
+import { scopedGet } from '../utils/schoolApi';
 import { Box, Paper, Typography, TextField, Stack, Button, Alert, MenuItem, Grid, Divider, CircularProgress } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import PhotoUpload from '../components/PhotoUpload';
@@ -108,31 +109,28 @@ export default function EditStudentPage() {
   }, [loading]);
 
   useEffect(() => {
-    const activeSchoolId = (id && id !== 'undefined') ? id : (localStorage.getItem('active_school_id') || '');
+    const routeSchoolId = (id && id !== 'undefined') ? id : (localStorage.getItem('currentSchoolId') || localStorage.getItem('active_school_id') || '');
     if (!studentId) return;
 
     const load = async () => {
       try {
-        const [classes, secs, studentRes, subjsRes] = await Promise.all([
-          activeSchoolId ? api.get(`/api/academics/classrooms/?school=${activeSchoolId}&page_size=1000`) : Promise.resolve({ data: [] }),
-          activeSchoolId ? api.get(`/api/academics/sections/?school=${activeSchoolId}&page_size=1000`) : Promise.resolve({ data: [] }),
-          api.get(`/api/academics/students/${studentId}/`),
-          activeSchoolId ? api.get(`/api/academics/subjects/?school=${activeSchoolId}&page_size=1000`) : Promise.resolve({ data: [] })
+        const studentRes = await api.get(`/api/academics/students/${studentId}/`);
+        const s = studentRes.data;
+        const studentSchoolId = s.school?.id || s.school || routeSchoolId;
+
+        const [classes, secs, subjsRes] = await Promise.all([
+          studentSchoolId ? scopedGet('/api/academics/classrooms/', studentSchoolId, { page_size: 1000 }) : Promise.resolve({ data: [] }),
+          studentSchoolId ? scopedGet('/api/academics/sections/', studentSchoolId, { page_size: 1000 }) : Promise.resolve({ data: [] }),
+          studentSchoolId ? scopedGet('/api/academics/subjects/', studentSchoolId, { page_size: 1000 }) : Promise.resolve({ data: [] })
         ]);
 
         const rawClasses = Array.isArray(classes.data) ? classes.data : (classes.data?.results || []);
         const rawSecs = Array.isArray(secs.data) ? secs.data : (secs.data?.results || []);
         const rawSubjs = Array.isArray(subjsRes.data) ? subjsRes.data : (subjsRes.data?.results || []);
 
-        const filteredClasses = rawClasses.filter(c => !c.school || String(c.school?.id || c.school) === String(activeSchoolId));
-        const filteredSecs = rawSecs.filter(s => !s.classroom?.school || String(s.classroom?.school?.id || s.classroom?.school) === String(activeSchoolId));
-        const filteredSubjs = rawSubjs.filter(s => !s.school || String(s.school?.id || s.school) === String(activeSchoolId));
-
-        setClassrooms(filteredClasses);
-        setSections(filteredSecs);
-        setSubjects(filteredSubjs);
-
-        const s = studentRes.data;
+        setClassrooms(rawClasses);
+        setSections(rawSecs);
+        setSubjects(rawSubjs);
 
         const fnEn = s.user?.first_name_en || s.first_name_en || '';
         const fatEn = s.father_name_en || '';
@@ -243,12 +241,23 @@ export default function EditStudentPage() {
       const fd = new FormData();
 
       const formatToISO = (dateStr) => {
-        if (!dateStr) return '';
-        const parts = dateStr.split('-');
-        if (parts.length === 3 && parts[2].length === 4) {
-          return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        if (!dateStr || typeof dateStr !== 'string') return '';
+        const trimmed = dateStr.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          const [y, m, d] = trimmed.split('-').map(Number);
+          if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return trimmed;
+          return '';
         }
-        return dateStr;
+        const parts = trimmed.split('-');
+        if (parts.length === 3 && parts[2].length === 4) {
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          const y = parseInt(parts[2], 10);
+          if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          }
+        }
+        return '';
       };
 
       Object.entries(form).forEach(([k, v]) => {

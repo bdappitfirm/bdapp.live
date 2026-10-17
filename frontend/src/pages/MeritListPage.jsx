@@ -1030,7 +1030,7 @@ const MeritListPage = () => {
       </Box>
 
       {loading ? <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress color="success" /><Typography sx={{ mt: 2, fontWeight: 'bold' }}>তথ্য প্রস্তুত করা হচ্ছে...</Typography></Box> : rankings.length > 0 ? (
-        <TableContainer component={Paper} sx={{ boxShadow: 3, width: '100%', borderRadius: 2 }}>
+        <TableContainer component={Paper} sx={{ boxShadow: 3, width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: 2 }}>
           <Table size="small" sx={{ width: '100%', borderCollapse: 'collapse', '& td, & th': { border: '1px solid #ddd', py: 1.2, px: 1.5 } }}>
             <TableHead><TableRow sx={{ bgcolor: '#2e7d32', "& th": { color: 'white !important', fontWeight: 'bold' }, "@media print": { bgcolor: '#eee !important', "& th": { color: 'black !important' }, WebkitPrintColorAdjust: 'exact' } }}><TableCell align="center">রোল</TableCell><TableCell>শিক্ষার্থীর নাম</TableCell>{!selectedSection && <TableCell align="center">শাখা</TableCell>}<TableCell align="center">মোট নম্বর</TableCell><TableCell align="center">GPA</TableCell><TableCell align="center">মেধাক্রম</TableCell><TableCell>ফেইল করা বিষয়সমূহ</TableCell></TableRow></TableHead>
             <TableBody>{rankings.map((r, idx) => (

@@ -123,14 +123,15 @@ const SchoolDashboard = () => {
     { label: 'স্কুল সেটিংস', icon: <SchoolIcon />, key: 'settings' },
     { label: 'WhatsApp গেটওয়ে', icon: <WhatsAppIcon />, key: 'whatsapp' },
     { label: 'বিল জেনারেটর', icon: <ReceiptIcon />, key: 'billing' },
+    { label: 'আয়-ব্যয় হিসাব নিকাশ', icon: <AccountBalanceIcon />, key: 'accounts' },
     { label: 'সফটওয়ার এ্যাসিসটেন্ট', icon: <SupportAgentIcon />, key: 'assistant' },
     { label: 'সাপোর্ট লাইভ', icon: <SupportAgentIcon />, key: 'support-live' },
     { label: 'প্রফাইল', icon: <AccountCircleIcon />, key: 'profile' },
   ], []);
 
   const filteredMenuItems = useMemo(() => menuItems.filter(item => {
-    if (item.key === 'billing') {
-        return String(id) === '6' || isSuperUser;
+    if (item.key === 'billing' || item.key === 'accounts') {
+        return String(id) === '6' && (isSuperUser || username.includes('bdadmin') || role === 'admin');
     }
     if (item.key === 'rank-list') {
         return username === 'bdadmin';
