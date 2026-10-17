@@ -2946,7 +2946,7 @@ export default function ResultCardGenerator() {
       </Backdrop>
 
       {/* Result Card Display */}
-      <Box className="result-display-area" sx={{ minHeight: '600px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', px: { xs: 1, sm: 2 } }}>
+      <Box className="result-display-area" sx={{ minHeight: '600px', display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', md: 'center' }, width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', px: { xs: 1, sm: 2 } }}>
         {studentData && (
           <Box className="single-card-view">
             {layout === 'ssc' ? (

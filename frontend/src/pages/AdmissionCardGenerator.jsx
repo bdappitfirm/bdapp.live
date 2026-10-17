@@ -817,7 +817,7 @@ export default function AdmissionCardGenerator() {
         </DialogTitle>
         <DialogContent>
           {selectedStudent && (
-            <Box display="flex" justifyContent="center" p={2} sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <Box display="flex" justifyContent={{ xs: 'flex-start', md: 'center' }} p={2} sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <Box sx={{ minWidth: '380px', width: '100%', maxWidth: '640px' }}>
                 <AdmissionCard 
                   data={selectedStudent} 

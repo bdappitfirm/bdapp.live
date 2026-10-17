@@ -1035,7 +1035,7 @@ export default function CertificateGenerator() {
             <Button variant="contained" onClick={handlePrintCertificate}>Print</Button>
             <Button variant="contained" onClick={handleDownloadCertificate} sx={{ bgcolor: '#2c3e50' }}>Download</Button>
           </Stack>
-          <Box sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Box sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', md: 'center' } }}>
             <Box ref={certificateRef}><Certificate data={student} school={school} session={session || String(new Date().getFullYear())} /></Box>
           </Box>
         </Box>
@@ -1048,10 +1048,10 @@ export default function CertificateGenerator() {
             <Button variant="contained" onClick={handlePrintBulkCertificates}>Print All</Button>
             <Button variant="contained" onClick={handleDownloadBulkCertificates} sx={{ bgcolor: '#2c3e50' }}>Download All (PDF)</Button>
           </Stack>
-          <Box sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Box sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', md: 'center' } }}>
             <Box ref={bulkCertificatesRef}>
               {students.filter(s => selectedStudents.has(s.id)).map(student => (
-                <Box key={student.id} sx={{ mb: 6, display: 'flex', justifyContent: 'center' }}>
+                <Box key={student.id} sx={{ mb: 6, display: 'flex', justifyContent: { xs: 'flex-start', md: 'center' } }}>
                   <Certificate
                     data={student}
                     school={school}

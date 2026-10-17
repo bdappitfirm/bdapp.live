@@ -336,7 +336,7 @@ const StudentResults = ({
           <CircularProgress />
         </Box>
       ) : resultCardData && resultCardData.studentData && resultCardData.results && resultCardData.results.length > 0 ? (
-        <Box sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', justifyContent: 'center', py: 1 }}>
+        <Box sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', justifyContent: { xs: 'flex-start', md: 'center' }, py: 1 }}>
           <AcademicTranscriptCard
             studentData={resultCardData.studentData}
             results={resultCardData.results}
