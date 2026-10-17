@@ -14,6 +14,12 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        const savedUser = localStorage.getItem('cached_user_profile');
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+          } catch (_) {}
+        }
         const token = getAccessToken();
         if (token) {
           await fetchUser();
@@ -32,21 +38,29 @@ export const AuthProvider = ({ children }) => {
       const response = await api.get('/api/users/me/', { timeout: 15000 });
       if (response.data && Object.keys(response.data).length > 0) {
         const data = response.data;
+        let userData = data;
         if (data.user && typeof data.user === 'object') {
-          const flattened = {
+          userData = {
             ...data.user,
             profile: data.profile || {},
             role: data.profile?.effective_role || data.profile?.role || data.user.role || (data.user.is_superuser ? 'admin' : 'student')
           };
-          setUser(flattened);
-        } else {
-          setUser(data);
         }
+        setUser(userData);
+        localStorage.setItem('cached_user_profile', JSON.stringify(userData));
       }
     } catch (error) {
       console.error('Failed to fetch user:', error);
+      const savedUser = localStorage.getItem('cached_user_profile');
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+          return;
+        } catch (_) {}
+      }
       if (error.response && error.response.status === 401) {
         clearTokens();
+        localStorage.removeItem('cached_user_profile');
         setUser(null);
       }
     } finally {

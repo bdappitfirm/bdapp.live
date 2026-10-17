@@ -54,13 +54,17 @@ root.render(
   </ThemeProvider>
 );
 
-// Unregister service workers to prevent stale chunk caching errors
+// Register service worker for offline support and PWA caching
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (let registration of registrations) {
-      registration.unregister();
-    }
-  }).catch(() => {});
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then((reg) => {
+        console.log('✅ ServiceWorker registered with scope:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('⚠️ ServiceWorker registration failed:', err);
+      });
+  });
 }
 
 // If you want to start measuring performance in your app, pass a function

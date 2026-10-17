@@ -8,12 +8,130 @@ import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
-import { CircularProgress, Box, Typography } from '@mui/material';
+import { CircularProgress, Box, Typography, Paper, Stack, Button } from '@mui/material';
+import SignalWifiOffIcon from '@mui/icons-material/SignalWifiOff';
 import SyncManager from './components/SyncManager';
 import { startAutoSync } from './utils/offlineDb';
-import {
-  Paper, Stack, Button
-} from '@mui/material';
+
+// Offline Page Fallback Component (shows clean message instead of white blank screen)
+const OfflinePageFallback = () => (
+  <Box
+    sx={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '60vh',
+      p: 3,
+      textAlign: 'center'
+    }}
+  >
+    <Paper elevation={3} sx={{ p: 4, borderRadius: 3, maxWidth: 460 }}>
+      <SignalWifiOffIcon sx={{ fontSize: 56, color: '#f44336', mb: 1.5 }} />
+      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+        পেজটি অফলাইনে ডাউনলোডেড নেই
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        আপনি অনলাইনে থাকাকালীন এই পেজে প্রবেশ করেননি। প্রথমবার অনলাইনে একবার লোড করার পর পেজটি সবসময় অফলাইনে পাওয়া যাবে।
+      </Typography>
+      <Button variant="contained" onClick={() => window.history.back()}>
+        পিছনে ফিরে যান
+      </Button>
+    </Paper>
+  </Box>
+);
+
+// Safe Lazy Component Loader that catches chunk import errors offline
+export const safeLazy = (importFn) => {
+  return React.lazy(async () => {
+    try {
+      const module = await importFn();
+      if (module && (module.default || typeof module === 'function')) {
+        return module;
+      }
+      return { default: OfflinePageFallback };
+    } catch (error) {
+      console.warn('SafeLazy: Module chunk failed to load offline', error);
+      return { default: OfflinePageFallback };
+    }
+  });
+};
+
+// Preload all page component JS chunks into SW / browser cache when online
+const pageImports = [
+  () => import('./pages/PublicVerify'),
+  () => import('./pages/WelcomePage'),
+  () => import('./pages/SchoolDashboard.jsx'),
+  () => import('./pages/Dashboard'),
+  () => import('./pages/RoleDashboard'),
+  () => import('./pages/RoleDetail'),
+  () => import('./pages/LoginPage'),
+  () => import('./pages/SignupPage'),
+  () => import('./pages/ForgotPasswordPage'),
+  () => import('./pages/ResetPasswordPage'),
+  () => import('./pages/ChangePasswordPage'),
+  () => import('./pages/TeachersPage'),
+  () => import('./pages/AddTeacherPage'),
+  () => import('./pages/CredentialsPage'),
+  () => import('./pages/TeacherCardsPage'),
+  () => import('./pages/SoftwareAssistant.jsx'),
+  () => import('./pages/StudentsPage'),
+  () => import('./pages/AddStudentPage'),
+  () => import('./pages/EditStudentPage'),
+  () => import('./pages/AcademicsPage'),
+  () => import('./pages/ParentsPage'),
+  () => import('./pages/AddParentPage'),
+  () => import('./pages/ParentDashboard'),
+  () => import('./pages/StudentDashboard'),
+  () => import('./pages/ResultsPage'),
+  () => import('./pages/ExaminationsPage'),
+  () => import('./pages/ResultCardGenerator'),
+  () => import('./pages/MeritListPage'),
+  () => import('./pages/RankListPage'),
+  () => import('./pages/ToTListPage'),
+  () => import('./pages/VoterListPage'),
+  () => import('./pages/StudentListPage'),
+  () => import('./pages/SiblingsPage.jsx'),
+  () => import('./pages/ClassResultsPage'),
+  () => import('./pages/IDCardGenerator'),
+  () => import('./pages/CertificateGenerator'),
+  () => import('./pages/AdmissionCardGenerator'),
+  () => import('./pages/ProfilePage'),
+  () => import('./pages/SMSPage'),
+  () => import('./pages/SubjectsPage'),
+  () => import('./pages/ClassroomsPage'),
+  () => import('./pages/AddCommitteePage'),
+  () => import('./pages/AttendancePageNew'),
+  () => import('./pages/AttendanceReportCard'),
+  () => import('./pages/FeesPage'),
+  () => import('./pages/DailyCollectionRegisterPage.jsx'),
+  () => import('./components/FeePaymentReceipt'),
+  () => import('./components/ReceiptBook'),
+  () => import('./pages/GroupsPage'),
+  () => import('./pages/SchoolsPage'),
+  () => import('./pages/AttendanceRecordsPage'),
+  () => import('./pages/YearReportPage'),
+  () => import('./pages/VirtualClassPage'),
+  () => import('./pages/SupportLive.jsx'),
+  () => import('./pages/SchoolSettings.jsx'),
+  () => import('./pages/SeatAllocationPage.jsx'),
+  () => import('./pages/WhatsAppSettings.jsx'),
+  () => import('./pages/billing/BillingPage.jsx'),
+  () => import('./pages/SoftwareAccountsPage.jsx'),
+  () => import('./pages/BanbeisPage.jsx'),
+  () => import('./pages/PayrollPage.jsx'),
+  () => import('./pages/PayslipGenerator.jsx')
+];
+
+export const preloadAllPages = () => {
+  if (typeof window === 'undefined') return;
+  if (!navigator.onLine) return;
+  setTimeout(() => {
+    pageImports.forEach(importFn => {
+      importFn().catch(() => {});
+    });
+  }, 1000);
+};
 
 const GlobalInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = React.useState(null);
@@ -21,11 +139,8 @@ const GlobalInstallPrompt = () => {
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
-      // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
-      // Stash the event so it can be triggered later.
       setDeferredPrompt(e);
-      // Update UI notify the user they can install the PWA
       setShowPrompt(true);
     };
 
@@ -38,12 +153,9 @@ const GlobalInstallPrompt = () => {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
-    // Show the install prompt
     deferredPrompt.prompt();
-    // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
     console.log(`User response to the install prompt: ${outcome}`);
-    // We've used the prompt, and can't use it again, throw it away
     setDeferredPrompt(null);
     setShowPrompt(false);
   };
@@ -89,7 +201,6 @@ const GlobalInstallPrompt = () => {
 const APP_VERSION = '2.1.3';
 const CACHE_VERSION_KEY = 'bdapp_cache_version';
 
-// Cleaned up CacheClearer - no more redirect loops
 const CacheClearer = () => {
   useEffect(() => {
     try {
@@ -105,68 +216,68 @@ const CacheClearer = () => {
   return null;
 };
 
-const PublicVerify = React.lazy(() => import('./pages/PublicVerify'));
-const WelcomePage = React.lazy(() => import('./pages/WelcomePage'));
-const SchoolDashboard = React.lazy(() => import('./pages/SchoolDashboard.jsx'));
-const Dashboard = React.lazy(() => import('./pages/Dashboard'));
-const RoleDashboard = React.lazy(() => import('./pages/RoleDashboard'));
-const RoleDetail = React.lazy(() => import('./pages/RoleDetail'));
-const LoginPage = React.lazy(() => import('./pages/LoginPage'));
-const SignupPage = React.lazy(() => import('./pages/SignupPage'));
-const ForgotPasswordPage = React.lazy(() => import('./pages/ForgotPasswordPage'));
-const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
-const ChangePasswordPage = React.lazy(() => import('./pages/ChangePasswordPage'));
-const TeachersPage = React.lazy(() => import('./pages/TeachersPage'));
-const AddTeacherPage = React.lazy(() => import('./pages/AddTeacherPage'));
-const CredentialsPage = React.lazy(() => import('./pages/CredentialsPage'));
-const TeacherCardsPage = React.lazy(() => import('./pages/TeacherCardsPage'));
-const SoftwareAssistant = React.lazy(() => import('./pages/SoftwareAssistant.jsx'));
-const StudentsPage = React.lazy(() => import('./pages/StudentsPage'));
-const AddStudentPage = React.lazy(() => import('./pages/AddStudentPage'));
-const EditStudentPage = React.lazy(() => import('./pages/EditStudentPage'));
-const AcademicsPage = React.lazy(() => import('./pages/AcademicsPage'));
-const ParentsPage = React.lazy(() => import('./pages/ParentsPage'));
-const AddParentPage = React.lazy(() => import('./pages/AddParentPage'));
-const ParentDashboard = React.lazy(() => import('./pages/ParentDashboard'));
-const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
-const ResultsPage = React.lazy(() => import('./pages/ResultsPage'));
-const ExaminationsPage = React.lazy(() => import('./pages/ExaminationsPage'));
-const ResultCardGenerator = React.lazy(() => import('./pages/ResultCardGenerator'));
-const MeritListPage = React.lazy(() => import('./pages/MeritListPage'));
-const RankListPage = React.lazy(() => import('./pages/RankListPage'));
-const ToTListPage = React.lazy(() => import('./pages/ToTListPage'));
-const VoterListPage = React.lazy(() => import('./pages/VoterListPage'));
-const StudentListPage = React.lazy(() => import('./pages/StudentListPage'));
-const SiblingsPage = React.lazy(() => import('./pages/SiblingsPage.jsx'));
-const ClassResultsPage = React.lazy(() => import('./pages/ClassResultsPage'));
-const IDCardGenerator = React.lazy(() => import('./pages/IDCardGenerator'));
-const CertificateGenerator = React.lazy(() => import('./pages/CertificateGenerator'));
-const AdmissionCardGenerator = React.lazy(() => import('./pages/AdmissionCardGenerator'));
-const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
-const SMSPage = React.lazy(() => import('./pages/SMSPage'));
-const SubjectsPage = React.lazy(() => import('./pages/SubjectsPage'));
-const ClassroomsPage = React.lazy(() => import('./pages/ClassroomsPage'));
-const AddCommitteePage = React.lazy(() => import('./pages/AddCommitteePage'));
-const AttendancePageNew = React.lazy(() => import('./pages/AttendancePageNew'));
-const AttendanceReportCard = React.lazy(() => import('./pages/AttendanceReportCard'));
-const FeesPage = React.lazy(() => import('./pages/FeesPage'));
-const DailyCollectionRegisterPage = React.lazy(() => import('./pages/DailyCollectionRegisterPage.jsx'));
-const FeePaymentReceipt = React.lazy(() => import('./components/FeePaymentReceipt'));
-const ReceiptBook = React.lazy(() => import('./components/ReceiptBook'));
-const GroupsPage = React.lazy(() => import('./pages/GroupsPage'));
-const SchoolsPage = React.lazy(() => import('./pages/SchoolsPage'));
-const AttendanceRecordsPage = React.lazy(() => import('./pages/AttendanceRecordsPage'));
-const YearReportPage = React.lazy(() => import('./pages/YearReportPage'));
-const VirtualClassPage = React.lazy(() => import('./pages/VirtualClassPage'));
-const SupportLivePage = React.lazy(() => import('./pages/SupportLive.jsx'));
-const SchoolSettings = React.lazy(() => import('./pages/SchoolSettings.jsx'));
-const SeatAllocationPage = React.lazy(() => import('./pages/SeatAllocationPage.jsx'));
-const WhatsAppSettings = React.lazy(() => import('./pages/WhatsAppSettings.jsx'));
-const BillingPage = React.lazy(() => import('./pages/billing/BillingPage.jsx'));
-const SoftwareAccountsPage = React.lazy(() => import('./pages/SoftwareAccountsPage.jsx'));
-const BanbeisPage = React.lazy(() => import('./pages/BanbeisPage.jsx'));
-const PayrollPage = React.lazy(() => import('./pages/PayrollPage.jsx'));
-const PayslipGenerator = React.lazy(() => import('./pages/PayslipGenerator.jsx'));
+const PublicVerify = safeLazy(() => import('./pages/PublicVerify'));
+const WelcomePage = safeLazy(() => import('./pages/WelcomePage'));
+const SchoolDashboard = safeLazy(() => import('./pages/SchoolDashboard.jsx'));
+const Dashboard = safeLazy(() => import('./pages/Dashboard'));
+const RoleDashboard = safeLazy(() => import('./pages/RoleDashboard'));
+const RoleDetail = safeLazy(() => import('./pages/RoleDetail'));
+const LoginPage = safeLazy(() => import('./pages/LoginPage'));
+const SignupPage = safeLazy(() => import('./pages/SignupPage'));
+const ForgotPasswordPage = safeLazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = safeLazy(() => import('./pages/ResetPasswordPage'));
+const ChangePasswordPage = safeLazy(() => import('./pages/ChangePasswordPage'));
+const TeachersPage = safeLazy(() => import('./pages/TeachersPage'));
+const AddTeacherPage = safeLazy(() => import('./pages/AddTeacherPage'));
+const CredentialsPage = safeLazy(() => import('./pages/CredentialsPage'));
+const TeacherCardsPage = safeLazy(() => import('./pages/TeacherCardsPage'));
+const SoftwareAssistant = safeLazy(() => import('./pages/SoftwareAssistant.jsx'));
+const StudentsPage = safeLazy(() => import('./pages/StudentsPage'));
+const AddStudentPage = safeLazy(() => import('./pages/AddStudentPage'));
+const EditStudentPage = safeLazy(() => import('./pages/EditStudentPage'));
+const AcademicsPage = safeLazy(() => import('./pages/AcademicsPage'));
+const ParentsPage = safeLazy(() => import('./pages/ParentsPage'));
+const AddParentPage = safeLazy(() => import('./pages/AddParentPage'));
+const ParentDashboard = safeLazy(() => import('./pages/ParentDashboard'));
+const StudentDashboard = safeLazy(() => import('./pages/StudentDashboard'));
+const ResultsPage = safeLazy(() => import('./pages/ResultsPage'));
+const ExaminationsPage = safeLazy(() => import('./pages/ExaminationsPage'));
+const ResultCardGenerator = safeLazy(() => import('./pages/ResultCardGenerator'));
+const MeritListPage = safeLazy(() => import('./pages/MeritListPage'));
+const RankListPage = safeLazy(() => import('./pages/RankListPage'));
+const ToTListPage = safeLazy(() => import('./pages/ToTListPage'));
+const VoterListPage = safeLazy(() => import('./pages/VoterListPage'));
+const StudentListPage = safeLazy(() => import('./pages/StudentListPage'));
+const SiblingsPage = safeLazy(() => import('./pages/SiblingsPage.jsx'));
+const ClassResultsPage = safeLazy(() => import('./pages/ClassResultsPage'));
+const IDCardGenerator = safeLazy(() => import('./pages/IDCardGenerator'));
+const CertificateGenerator = safeLazy(() => import('./pages/CertificateGenerator'));
+const AdmissionCardGenerator = safeLazy(() => import('./pages/AdmissionCardGenerator'));
+const ProfilePage = safeLazy(() => import('./pages/ProfilePage'));
+const SMSPage = safeLazy(() => import('./pages/SMSPage'));
+const SubjectsPage = safeLazy(() => import('./pages/SubjectsPage'));
+const ClassroomsPage = safeLazy(() => import('./pages/ClassroomsPage'));
+const AddCommitteePage = safeLazy(() => import('./pages/AddCommitteePage'));
+const AttendancePageNew = safeLazy(() => import('./pages/AttendancePageNew'));
+const AttendanceReportCard = safeLazy(() => import('./pages/AttendanceReportCard'));
+const FeesPage = safeLazy(() => import('./pages/FeesPage'));
+const DailyCollectionRegisterPage = safeLazy(() => import('./pages/DailyCollectionRegisterPage.jsx'));
+const FeePaymentReceipt = safeLazy(() => import('./components/FeePaymentReceipt'));
+const ReceiptBook = safeLazy(() => import('./components/ReceiptBook'));
+const GroupsPage = safeLazy(() => import('./pages/GroupsPage'));
+const SchoolsPage = safeLazy(() => import('./pages/SchoolsPage'));
+const AttendanceRecordsPage = safeLazy(() => import('./pages/AttendanceRecordsPage'));
+const YearReportPage = safeLazy(() => import('./pages/YearReportPage'));
+const VirtualClassPage = safeLazy(() => import('./pages/VirtualClassPage'));
+const SupportLivePage = safeLazy(() => import('./pages/SupportLive.jsx'));
+const SchoolSettings = safeLazy(() => import('./pages/SchoolSettings.jsx'));
+const SeatAllocationPage = safeLazy(() => import('./pages/SeatAllocationPage.jsx'));
+const WhatsAppSettings = safeLazy(() => import('./pages/WhatsAppSettings.jsx'));
+const BillingPage = safeLazy(() => import('./pages/billing/BillingPage.jsx'));
+const SoftwareAccountsPage = safeLazy(() => import('./pages/SoftwareAccountsPage.jsx'));
+const BanbeisPage = safeLazy(() => import('./pages/BanbeisPage.jsx'));
+const PayrollPage = safeLazy(() => import('./pages/PayrollPage.jsx'));
+const PayslipGenerator = safeLazy(() => import('./pages/PayslipGenerator.jsx'));
 
 const PathTracker = () => {
   const location = useLocation();
@@ -196,59 +307,21 @@ const ScrollToTop = () => {
 };
 
 const OfflineIndicator = () => {
-  const [isOffline, setIsOffline] = React.useState(!navigator.onLine);
-
   useEffect(() => {
-    const handleStatusChange = () => setIsOffline(!navigator.onLine);
-    window.addEventListener('online', handleStatusChange);
-    window.addEventListener('offline', handleStatusChange);
-
     const stopAutoSync = startAutoSync(30000);
-
     return () => {
-      window.removeEventListener('online', handleStatusChange);
-      window.removeEventListener('offline', handleStatusChange);
       stopAutoSync();
     };
   }, []);
 
-  if (!isOffline) return null;
-
-  return (
-    <Box
-      sx={{
-        position: 'fixed',
-        bottom: 20,
-        right: 20,
-        bgcolor: '#f44336',
-        color: 'white',
-        px: 2,
-        py: 1,
-        borderRadius: 2,
-        zIndex: 10000,
-        boxShadow: 3,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        maxWidth: 420
-      }}
-    >
-      <Box sx={{ width: 10, height: 10, bgcolor: 'white', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
-      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-        অফলাইন মোড
-      </Typography>
-      <style>{`
-        @keyframes pulse {
-          0% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(1.2); }
-          100% { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
-    </Box>
-  );
+  return null;
 };
 
 function App() {
+  useEffect(() => {
+    preloadAllPages();
+  }, []);
+
   return (
     <Router>
       <CacheClearer />

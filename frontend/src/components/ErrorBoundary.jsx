@@ -18,9 +18,9 @@ class ErrorBoundary extends React.Component {
     console.error("Uncaught error:", error, errorInfo);
     this.setState({ errorInfo });
     
-    // Auto-reload on chunk load errors
-    if (error.name === 'ChunkLoadError' || error.message?.includes('Loading chunk')) {
-      console.log('Chunk load error detected - reloading page...');
+    // Auto-reload on chunk load errors ONLY when online
+    if ((error.name === 'ChunkLoadError' || error.message?.includes('Loading chunk')) && navigator.onLine) {
+      console.log('Chunk load error detected online - reloading page...');
       setTimeout(() => {
         window.location.reload();
       }, 1000);
