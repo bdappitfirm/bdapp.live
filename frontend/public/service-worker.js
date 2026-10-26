@@ -39,8 +39,8 @@ self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Skip API calls - IndexedDB / api.js handles all API caching and offline fallbacks
-    if (url.pathname.includes('/api/')) {
+    // Skip API and Admin calls
+    if (url.pathname.includes('/api/') || url.pathname.startsWith('/admin')) {
         return;
     }
 

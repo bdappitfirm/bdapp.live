@@ -248,7 +248,7 @@ export default function StudentsPage() {
         }
         return String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true });
     });
-  }, [sliceStudents, contextStudents, selectedClass, selectedSection, q]);
+  }, [sliceStudents, contextStudents, contextSections, selectedClass, selectedSection, q]);
 
   const currentClassSections = useMemo(() => {
     if (!selectedClass) return [];

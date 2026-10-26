@@ -278,7 +278,7 @@ export default function SchoolSettings() {
 
       <Grid container spacing={3}>
         {/* Basic Information */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ xs: 12, md: 8 }}>
           <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>সাধারণ তথ্য</Typography>
             <Divider sx={{ mb: 3 }} />
@@ -300,7 +300,7 @@ export default function SchoolSettings() {
                 fullWidth
               />
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="EIIN (ইন নাম্বার)"
                     name="ein"
@@ -309,7 +309,7 @@ export default function SchoolSettings() {
                     fullWidth
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="ইমেইল"
                     name="email"
@@ -320,7 +320,7 @@ export default function SchoolSettings() {
                 </Grid>
               </Grid>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="মোবাইল নম্বর"
                     name="phone_number"
@@ -329,7 +329,7 @@ export default function SchoolSettings() {
                     fullWidth
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="প্রধান শিক্ষকের নাম"
                     name="principal_name"
@@ -418,7 +418,7 @@ export default function SchoolSettings() {
         </Grid>
 
         {/* Media / Images */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Stack spacing={3}>
             {/* Logo */}
             <Card elevation={3} sx={{ borderRadius: 2 }}>
@@ -532,7 +532,7 @@ export default function SchoolSettings() {
         </Grid>
 
         {/* Action Button */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Paper elevation={0} sx={{ p: 2, display: 'flex', justifyContent: 'flex-end', bgcolor: 'transparent' }}>
             <Button
               variant="contained"

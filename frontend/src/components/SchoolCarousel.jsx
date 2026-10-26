@@ -12,12 +12,12 @@ const SchoolCarousel = ({ schools }) => {
 
   const settings = {
     dots: true,
-    infinite: true,
+    infinite: schools.length > 1,
     speed: 1200, // Slower, more cinematic speed
     slidesToShow: 1,
     slidesToScroll: 1,
     arrows: true,
-    autoplay: true,
+    autoplay: schools.length > 1,
     autoplaySpeed: 4000,
     centerMode: true,
     centerPadding: '20%', // Shows parts of left/right cards
@@ -50,21 +50,20 @@ const SchoolCarousel = ({ schools }) => {
             transform: scale(0.8);
             opacity: 0.4;
             filter: blur(2px);
+            outline: none;
+          }
+          .slick-slide > div, .slick-slide > div > div {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            width: 100% !important;
+            padding: 10px 0;
           }
           .slick-center {
             transform: scale(1.15);
             opacity: 1;
             filter: blur(0);
             z-index: 10;
-          }
-          .slick-track {
-            display: flex !important;
-            align-items: center;
-          }
-          .slick-slide > div {
-            display: flex;
-            justify-content: center;
-            padding: 10px;
           }
           .slick-prev:before, .slick-next:before {
             color: #1a237e;
@@ -81,7 +80,7 @@ const SchoolCarousel = ({ schools }) => {
         `}</style>
         <Slider {...settings}>
           {schools.map((school) => (
-            <div key={school.id}>
+            <div key={school.id} style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
               <SchoolCard school={school} />
             </div>
           ))}

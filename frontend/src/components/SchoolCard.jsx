@@ -27,7 +27,7 @@ const SchoolCard = ({ school }) => {
       onClick={handleCardClick}
       sx={{
         width: 250,
-        margin: 0,
+        margin: '0 auto',
         borderRadius: 3,
         boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
         transition: 'transform 0.3s, box-shadow 0.3s',

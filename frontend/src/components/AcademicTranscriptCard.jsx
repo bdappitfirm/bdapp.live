@@ -1627,7 +1627,7 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.2, mt: 0.5 }}>
             <Box sx={{ width: '110px', height: '135px', border: '1.5px solid #000', p: '2px', bgcolor: '#fff' }}>
-              <ImageWithFallback src={studentPhotoUrl} alt="Student" width="100%" height="100%" />
+              <ImageWithFallback src={studentPhotoUrl} fallbackSrc={logoUrl} alt="Student" width="100%" height="100%" />
             </Box>
             <Box sx={{ width: '100px', display: 'flex', justifyContent: 'center' }}>
                 <ImageWithFallback src={logoUrl} alt="Logo" width="90px" height="auto" />

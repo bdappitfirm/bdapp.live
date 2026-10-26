@@ -309,15 +309,18 @@ def process_class_configs(school, onboarding):
 
 def create_sample_student_and_result(school, onboarding):
     count = onboarding.sample_student_count
+    if count <= 0:
+        return
+
     is_madrasah = onboarding.school_type == 'madrasah'
 
-    # Specifically target Class 10 (Dakhil 10 for Madrasah)
-    if is_madrasah:
-        classroom, _ = ClassRoom.objects.get_or_create(school=school, name='Dakhil 10')
-        section, _ = Section.objects.get_or_create(classroom=classroom, name='বিজ্ঞান')
-    else:
-        classroom, _ = ClassRoom.objects.get_or_create(school=school, name='Class 10')
-        section, _ = Section.objects.get_or_create(classroom=classroom, name='বিজ্ঞান' if is_madrasah else 'ক')
+    # Dynamically target the FIRST (lowest) classroom created for this school (e.g. Class 11 for Colleges, Class 9 or Class 6 for Schools)
+    classroom = ClassRoom.objects.filter(school=school).order_by('id').first()
+    if not classroom:
+        classroom_name = 'Alim 1st Year' if is_madrasah else 'Class 11'
+        classroom, _ = ClassRoom.objects.get_or_create(school=school, name=classroom_name)
+
+    section, _ = Section.objects.get_or_create(classroom=classroom, name='বিজ্ঞান')
 
     for i in range(count):
         roll = f"{i+101}"

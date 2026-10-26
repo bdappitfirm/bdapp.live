@@ -145,12 +145,24 @@ const optimisticallySaveMutation = async (url, method, data) => {
   }
 };
 
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://127.0.0.1:8000';
+    }
+    const saved = localStorage.getItem('api_base_url');
+    if (saved) return saved;
+    return window.location.origin;
+  }
+  return process.env.REACT_APP_API_URL || '';
+};
+
 /**
  * API Engine with Local-First & Offline Support.
  */
 const api = axios.create({
-  baseURL: localStorage.getItem('api_base_url') || process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : ''),
-  timeout: 60000,
+  baseURL: getBaseUrl(),
+  timeout: 300000,
   withCredentials: true,
 });
 

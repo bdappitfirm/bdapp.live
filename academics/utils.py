@@ -109,50 +109,60 @@ def generate_exam_buildings_and_rooms(school, buildings_config):
     return all_rooms
 
 
-def generate_exam_seat_plan(examination, school, buildings_config):
+def generate_exam_seat_plan(examination, school, buildings_config, selected_classroom_ids=None):
     from results.models import Examination, ExamSlot
     from academics.models import StudentProfile, ExamSeatPlan
     from users.models import Profile
 
     update_student_genders(school=school)
     rooms = generate_exam_buildings_and_rooms(school, buildings_config)
-    if not rooms: raise ValueError("No rooms available")
+    if not rooms: raise ValueError("No rooms available in building configuration")
 
-    # 1. Identify all exams in the same session across all classes (6-10)
+    # 1. Identify all exams in the same session across selected classes
     is_morning = False
     ref_slots = ExamSlot.objects.filter(examination=examination)
     if any(s.start_time and s.start_time.hour < 12 for s in ref_slots):
         is_morning = True
 
-    # Get all exams of this type and year in the same school
     all_exams_in_group = Examination.objects.filter(
         school=school,
         exam_type=examination.exam_type,
         year=examination.year
     )
 
-    # Filter to only include exams belonging to this specific morning/afternoon session
+    if selected_classroom_ids:
+        all_exams_in_group = all_exams_in_group.filter(classroom_id__in=selected_classroom_ids)
+
     session_exam_ids = []
     for ex in all_exams_in_group:
         ex_slots = ExamSlot.objects.filter(examination=ex)
-        if is_morning:
+        if not ex_slots.exists():
+            session_exam_ids.append(ex.id)
+        elif is_morning:
             if any(s.start_time and s.start_time.hour < 12 for s in ex_slots):
                 session_exam_ids.append(ex.id)
         else:
             if any(s.start_time and s.start_time.hour >= 12 for s in ex_slots):
                 session_exam_ids.append(ex.id)
 
-    # If no slots defined, fallback to just the current exam's group
     if not session_exam_ids:
         session_exam_ids = [examination.id]
 
-    # Clear existing plans for the entire session pool
+    # Clear existing plans for the session pool
     ExamSeatPlan.objects.filter(examination_id__in=session_exam_ids).delete()
 
     # 2. Collect all students in the session and separate by gender
     session_exams = Examination.objects.filter(id__in=session_exam_ids)
-    classroom_ids = list(session_exams.values_list('classroom_id', flat=True))
-    students_qs = StudentProfile.objects.filter(school=school, classroom_id__in=classroom_ids)
+
+    if selected_classroom_ids:
+        students_qs = StudentProfile.objects.filter(school=school, classroom_id__in=selected_classroom_ids)
+    else:
+        classroom_ids = list(session_exams.values_list('classroom_id', flat=True))
+        classroom_ids = [cid for cid in classroom_ids if cid is not None]
+        if classroom_ids:
+            students_qs = StudentProfile.objects.filter(school=school, classroom_id__in=classroom_ids)
+        else:
+            students_qs = StudentProfile.objects.filter(school=school)
 
     def arrange_globally(students_list):
         """Advanced Round-Robin interleaving to ensure NO same-class adjacency"""
@@ -165,7 +175,7 @@ def generate_exam_seat_plan(examination, school, buildings_config):
 
         # Sort each class by roll
         for cid in by_class:
-            by_class[cid].sort(key=lambda x: (int(''.join(filter(str.isdigit, x.roll_number or '0')) or '0')))
+            by_class[cid].sort(key=lambda x: (int(''.join(filter(str.isdigit, str(x.roll_number or '0'))) or '0')))
 
         # Prepare for Round-Robin
         arranged = []
@@ -173,8 +183,6 @@ def generate_exam_seat_plan(examination, school, buildings_config):
         max_count = max([len(v) for v in by_class.values()]) if by_class else 0
 
         for i in range(max_count):
-            # In each cycle, pick one student from each class
-            # We shuffle the order of classes in each cycle to prevent predictable patterns
             current_cycle_classes = list(class_ids)
             random.shuffle(current_cycle_classes)
 
@@ -183,12 +191,69 @@ def generate_exam_seat_plan(examination, school, buildings_config):
                     arranged.append(by_class[cid][i])
         return arranged
 
+    def arrange_same_class(students_list):
+        """Arrange students such that Bench 1 has [Science, Humanities, Commerce] and Bench 2 is reversed [Commerce, Humanities, Science]"""
+        if not students_list: return []
+        sci = [s for s in students_list if s.student_group == 'science']
+        art = [s for s in students_list if s.student_group in ['arts', 'humanities']]
+        com = [s for s in students_list if s.student_group == 'commerce']
+        oth = [s for s in students_list if s.student_group not in ['science', 'arts', 'humanities', 'commerce']]
+
+        def roll_key(x):
+            digits = ''.join(filter(str.isdigit, str(x.roll_number or '0')))
+            return int(digits) if digits else 0
+
+        sci.sort(key=roll_key)
+        art.sort(key=roll_key)
+        com.sort(key=roll_key)
+        oth.sort(key=roll_key)
+
+        arranged = []
+        bench_idx = 0
+        streams = [sci, art, com, oth]
+
+        while any(streams):
+            triplet = []
+            order = [0, 1, 2] if bench_idx % 2 == 0 else [2, 1, 0]
+
+            for stream_pos in order:
+                added = False
+                pref_stream_idx = stream_pos # 0:sci, 1:art, 2:com
+                if streams[pref_stream_idx]:
+                    triplet.append(streams[pref_stream_idx].pop(0))
+                    added = True
+                else:
+                    for alt_idx in range(4):
+                        if streams[alt_idx]:
+                            triplet.append(streams[alt_idx].pop(0))
+                            added = True
+                            break
+                if not added:
+                    break
+
+            if triplet:
+                arranged.extend(triplet)
+                bench_idx += 1
+            else:
+                break
+        return arranged
+
     # Separate rooms for Boys and Girls
     boys = list(students_qs.filter(gender='male')) + list(students_qs.exclude(gender__in=['male', 'female']))
     girls = list(students_qs.filter(gender='female'))
 
-    final_boys = arrange_globally(boys)
-    final_girls = arrange_globally(girls)
+    is_single_class = False
+    if selected_classroom_ids and len(selected_classroom_ids) == 1:
+        is_single_class = True
+    elif not selected_classroom_ids:
+        cids = list(students_qs.values_list('classroom_id', flat=True).distinct())
+        if len(cids) == 1:
+            is_single_class = True
+
+    arrange_func = arrange_same_class if is_single_class else arrange_globally
+
+    final_boys = arrange_func(boys)
+    final_girls = arrange_func(girls)
 
     # 3. Room Distribution
     total_rooms = len(rooms)
@@ -211,7 +276,6 @@ def generate_exam_seat_plan(examination, school, buildings_config):
             for seat_num in range(1, r.capacity + 1):
                 if s_ptr >= len(students): break
                 s = students[s_ptr]
-                # Match correct exam object for this student
                 ex = next((e for e in session_exams if e.classroom_id == s.classroom_id), examination)
                 res.append(ExamSeatPlan.objects.create(
                     examination=ex, student=s, room=r, seat_number=str(seat_num), session=session_label

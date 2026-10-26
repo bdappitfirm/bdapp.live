@@ -56,9 +56,24 @@ export const cacheData = async (storeName, data) => {
             return;
         }
         if (Array.isArray(data)) {
-            await db[storeName].bulkPut(data);
+            const sanitized = data.map((item, index) => {
+                if (item && typeof item === 'object') {
+                    if (!item.id) {
+                        return {
+                            ...item,
+                            id: item.student_id ? `${item.student_id}_${item.date || item.examination_id || index}` : `item_${index}_${Date.now()}`
+                        };
+                    }
+                }
+                return item;
+            });
+            await db[storeName].bulkPut(sanitized);
         } else if (data && typeof data === 'object') {
-            await db[storeName].put(data);
+            const item = { ...data };
+            if (!item.id) {
+                item.id = item.student_id ? `${item.student_id}_${item.date || item.examination_id || 0}` : `item_${Date.now()}`;
+            }
+            await db[storeName].put(item);
         }
     } catch (error) {
         console.error(`Failed to cache ${storeName}:`, error);
@@ -72,7 +87,18 @@ export const optimisticSave = async (storeName, data) => {
     try {
         if (!db[storeName]) return;
         if (Array.isArray(data)) {
-            await db[storeName].bulkPut(data);
+            const sanitized = data.map((item, index) => {
+                if (item && typeof item === 'object') {
+                    if (!item.id) {
+                        return {
+                            ...item,
+                            id: 'temp_' + Date.now() + '_' + index + '_' + Math.random().toString(36).substring(2, 7)
+                        };
+                    }
+                }
+                return item;
+            });
+            await db[storeName].bulkPut(sanitized);
         } else if (data && typeof data === 'object') {
             const item = { ...data };
             if (!item.id) {
@@ -157,10 +183,12 @@ export const processSyncQueue = async () => {
                 dataToSync = fd;
             }
 
+            const isLargeUpload = item.url.includes('/api/ads/') || (item.body && item.body._isFormData);
             await api({
                 url: item.url,
                 method: item.method,
                 data: dataToSync,
+                timeout: isLargeUpload ? 300000 : 60000,
                 _isSyncRetry: true
             });
             await db.syncQueue.delete(item.id);

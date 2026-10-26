@@ -160,7 +160,9 @@ export default function StudentFeeSlipCard({ school, student, rows = [], totals 
         action={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {studentPhoto ? (
-              <Avatar variant="rounded" sx={{ width: { xs: 56, sm: 72 }, height: { xs: 56, sm: 72 } }} src={studentPhoto} />
+              <Avatar variant="rounded" sx={{ width: { xs: 56, sm: 72 }, height: { xs: 56, sm: 72 } }} src={resolveMediaUrl(studentPhoto)} imgProps={{ onError: (e) => { if (logoUrl) e.target.src = logoUrl; } }} />
+            ) : logoUrl ? (
+              <Avatar variant="rounded" sx={{ width: { xs: 56, sm: 72 }, height: { xs: 56, sm: 72 } }} src={logoUrl} />
             ) : (
               <Avatar variant="rounded" sx={{ width: { xs: 56, sm: 72 }, height: { xs: 56, sm: 72 } }}>{studentName?.[0] || 'S'}</Avatar>
             )}

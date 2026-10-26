@@ -93,6 +93,7 @@ const pageImports = [
   () => import('./pages/StudentListPage'),
   () => import('./pages/SiblingsPage.jsx'),
   () => import('./pages/ClassResultsPage'),
+  () => import('./pages/TopSheetPage'),
   () => import('./pages/IDCardGenerator'),
   () => import('./pages/CertificateGenerator'),
   () => import('./pages/AdmissionCardGenerator'),
@@ -250,6 +251,7 @@ const VoterListPage = safeLazy(() => import('./pages/VoterListPage'));
 const StudentListPage = safeLazy(() => import('./pages/StudentListPage'));
 const SiblingsPage = safeLazy(() => import('./pages/SiblingsPage.jsx'));
 const ClassResultsPage = safeLazy(() => import('./pages/ClassResultsPage'));
+const TopSheetPage = safeLazy(() => import('./pages/TopSheetPage'));
 const IDCardGenerator = safeLazy(() => import('./pages/IDCardGenerator'));
 const CertificateGenerator = safeLazy(() => import('./pages/CertificateGenerator'));
 const AdmissionCardGenerator = safeLazy(() => import('./pages/AdmissionCardGenerator'));
@@ -388,6 +390,7 @@ function App() {
           <Route path="schools" element={<ProtectedRoute allowedRoles={['admin']}><SchoolsPage /></ProtectedRoute>} />
           <Route path="result-card" element={<ProtectedRoute allowedRoles={['admin','teacher','student','parent']}><ResultCardGenerator /></ProtectedRoute>} />
           <Route path="class-results" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ClassResultsPage /></ProtectedRoute>} />
+          <Route path="top-sheet" element={<ProtectedRoute allowedRoles={['admin','teacher']}><TopSheetPage /></ProtectedRoute>} />
           <Route path="rank-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><RankListPage /></ProtectedRoute>} />
           <Route path="merit-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><MeritListPage /></ProtectedRoute>} />
           <Route path="tot-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ToTListPage /></ProtectedRoute>} />

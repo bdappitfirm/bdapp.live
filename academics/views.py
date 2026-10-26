@@ -920,4 +920,34 @@ class UpdateStudentGendersAPI(APIView):
 
 class GenerateExamSeatPlanAPI(APIView):
     permission_classes = [IsSchoolMember, AdminOrReadOnly]
-    def post(self, request): return Response({"detail": "Restored"})
+    def post(self, request):
+        exam_id = request.data.get('examination_id')
+        school_id = request.data.get('school_id') or get_user_school_id(request.user, request)
+        buildings_config = request.data.get('buildings', [])
+        classroom_ids = request.data.get('classroom_ids', [])
+
+        if not exam_id or not school_id:
+            return Response({"detail": "examination_id and school_id are required"}, status=400)
+
+        try:
+            from .models import School, ExamSeatPlan
+            from results.models import Examination
+            from .serializers import ExamSeatPlanSerializer
+            from .utils import generate_exam_seat_plan
+
+            school = School.objects.get(pk=school_id)
+            examination = Examination.objects.get(pk=exam_id)
+
+            plans = generate_exam_seat_plan(
+                examination=examination,
+                school=school,
+                buildings_config=buildings_config,
+                selected_classroom_ids=classroom_ids if classroom_ids else None
+            )
+
+            serializer = ExamSeatPlanSerializer(plans, many=True)
+            return Response({"status": "success", "seat_plans": serializer.data})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({"detail": str(e)}, status=400)

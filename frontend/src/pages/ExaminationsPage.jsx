@@ -22,7 +22,10 @@ import {
   DialogActions,
   Chip,
   IconButton,
-  Tooltip
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select
 } from '@mui/material';
 import {
   Assignment as ExamIcon,
@@ -105,20 +108,37 @@ export default function ExaminationsPage() {
     practical_max: 0
   });
 
+  // Load all pagination pages so no examinations are missed
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [examsRes, classroomsRes, subjectsRes] = await Promise.all([
-        api.get(`/api/results/examinations/?school=${id}&page_size=200`),
-        api.get(`/api/academics/classrooms/?school=${id}`),
-        api.get(`/api/academics/subjects/?school=${id}`)
+      let allExams = [];
+      let page = 1;
+      let hasNext = true;
+
+      while (hasNext && page <= 20) {
+        const examsRes = await api.get(`/api/results/examinations/?school=${id}&page=${page}&page_size=500`);
+        const data = examsRes.data;
+        const arr = Array.isArray(data) ? data : (data?.results || []);
+        allExams = [...allExams, ...arr];
+        hasNext = Boolean(data?.next);
+        page++;
+        if (!arr.length) break;
+      }
+
+      const [classroomsRes, subjectsRes] = await Promise.all([
+        api.get(`/api/academics/classrooms/?school=${id}&page_size=1000`),
+        api.get(`/api/academics/subjects/?school=${id}&page_size=1000`)
       ]);
-      setExaminations(Array.isArray(examsRes.data) ? examsRes.data : (examsRes.data.results || []));
+
+      setExaminations(allExams);
       const subjectsData = Array.isArray(subjectsRes.data) ? subjectsRes.data : (subjectsRes.data?.results || []);
       setSubjects(subjectsData);
-      setClassrooms(Array.isArray(classroomsRes.data) ? classroomsRes.data : (classroomsRes.data.results || []));
+      const clsData = Array.isArray(classroomsRes.data) ? classroomsRes.data : (classroomsRes.data?.results || []);
+      setClassrooms(clsData);
     } catch (error) {
-      toast.error('Failed to load data');
+      console.error('Failed to load examinations data:', error);
+      toast.error('পরীক্ষার তথ্য লোড করতে সমস্যা হয়েছে');
     } finally {
       setLoading(false);
     }
@@ -203,7 +223,7 @@ export default function ExaminationsPage() {
       setFormData({
         name: exam.name,
         exam_type: exam.exam_type,
-        classroom: exam.classroom,
+        classroom: typeof exam.classroom === 'object' ? exam.classroom?.id : exam.classroom,
         section: exam.section || '',
         exam_date: exam.exam_date ? new Date(exam.exam_date) : null,
         total_marks: exam.total_marks,
@@ -214,10 +234,10 @@ export default function ExaminationsPage() {
       });
     } else {
       setEditingExam(null);
-      setFormData({ name: '', exam_type: 'test', classroom: '', section: '', exam_date: null, total_marks: 100, pass_marks: 33, written_max: 0, mcq_max: 0, practical_max: 0 });
+      setFormData({ name: '', exam_type: 'test', classroom: selectedClassroom ? selectedClassroom.id : '', section: '', exam_date: null, total_marks: 100, pass_marks: 33, written_max: 0, mcq_max: 0, practical_max: 0 });
     }
     setDialogOpen(true);
-  }, [navigate]);
+  }, [navigate, selectedClassroom]);
 
   const handleDialogClose = useCallback(() => {
     setDialogOpen(false);
@@ -324,7 +344,7 @@ export default function ExaminationsPage() {
         exam_date: formatDate(newSlotData.exam_date),
         start_time: newSlotData.start_time,
         room: newSlotData.room,
-        classroom: selectedExamForSlots.classroom,
+        classroom: typeof selectedExamForSlots.classroom === 'object' ? selectedExamForSlots.classroom?.id : selectedExamForSlots.classroom,
         section: selectedExamForSlots.section || null,
         school: parseInt(id)
       };
@@ -363,55 +383,165 @@ export default function ExaminationsPage() {
 
   const getExamTypeLabel = (type) => EXAM_TYPES.find(t => t.value === type)?.label || type;
 
+  const getExamClassroomName = (exam) => {
+    if (!exam) return '-';
+    if (exam.classroom_name) return exam.classroom_name;
+    if (typeof exam.classroom === 'object' && exam.classroom !== null) {
+      return exam.classroom.name || '-';
+    }
+    const cls = classrooms.find(c => String(c.id) === String(exam.classroom));
+    return cls ? cls.name : '-';
+  };
+
+  const matchExamClassroom = (exam, classId) => {
+    if (!exam || !classId) return false;
+    const examClsId = typeof exam.classroom === 'object' ? exam.classroom?.id : exam.classroom;
+    return String(examClsId) === String(classId);
+  };
+
+  const filteredExaminations = selectedClassroom
+    ? examinations.filter(ex => matchExamClassroom(ex, selectedClassroom.id))
+    : examinations;
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box sx={{ p: 3 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} alignItems="center" justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
-          <Typography variant="h4"><ExamIcon sx={{ mr: 1, verticalAlign: 'middle' }} />পরীক্ষাসমূহ</Typography>
+          <Typography variant="h4"><ExamIcon sx={{ mr: 1, verticalAlign: 'middle' }} />পরীক্ষাসমূহ ({filteredExaminations.length})</Typography>
           <Stack direction="row" spacing={2}>
             <Button variant="outlined" onClick={() => { if (!isAuthenticated()) navigate('/login'); setBulkDialogOpen(true); }}>বাল্ক সেট</Button>
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleDialogOpen()}>যোগ করুন</Button>
           </Stack>
         </Stack>
 
-        {!selectedClassroom && (
-          <Grid container spacing={2} mb={4}>
-            {classrooms.map(c => (
-              <Grid item xs={12} sm={6} md={3} key={c.id}>
-                <Paper sx={{ p: 3, cursor: 'pointer', textAlign: 'center', '&:hover': { borderColor: 'primary.main', border: '1px solid' } }} onClick={() => setSelectedClassroom(c)}>
-                  <SchoolIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h6">{c.name}</Typography>
-                  <Chip label={`${examinations.filter(ex => ex.classroom === c.id).length} পরীক্ষা`} size="small" />
+        {/* Classroom Filter Select & Controls */}
+        <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} sm={6} md={4}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="classroom-select-label">শ্রেণি নির্বাচন করুন (Classroom)</InputLabel>
+                <Select
+                  labelId="classroom-select-label"
+                  value={selectedClassroom ? String(selectedClassroom.id) : ''}
+                  label="শ্রেণি নির্বাচন করুন (Classroom)"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      setSelectedClassroom(null);
+                    } else {
+                      const cls = classrooms.find(c => String(c.id) === String(val));
+                      setSelectedClassroom(cls || null);
+                    }
+                  }}
+                >
+                  <MenuItem value="">সকল শ্রেণি (All Classrooms)</MenuItem>
+                  {classrooms.map((c) => {
+                    const count = examinations.filter(ex => matchExamClassroom(ex, c.id)).length;
+                    return (
+                      <MenuItem key={c.id} value={String(c.id)}>
+                        {c.name} ({count}টি পরীক্ষা)
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {selectedClassroom && (
+              <Grid item xs={12} sm={6} md={3}>
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  size="small"
+                  onClick={() => setSelectedClassroom(null)}
+                >
+                  সকল শ্রেণি দেখুন (Reset Filter)
+                </Button>
+              </Grid>
+            )}
+          </Grid>
+        </Paper>
+
+        {/* Quick Classroom Cards Grid */}
+        <Grid container spacing={2} mb={3}>
+          {classrooms.map(c => {
+            const count = examinations.filter(ex => matchExamClassroom(ex, c.id)).length;
+            const isSelected = selectedClassroom?.id === c.id;
+            return (
+              <Grid item xs={6} sm={4} md={2.4} key={c.id}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    borderRadius: 2,
+                    border: isSelected ? '2px solid #1a237e' : '1px solid #e0e0e0',
+                    bgcolor: isSelected ? '#e8eaf6' : 'white',
+                    '&:hover': { borderColor: '#1a237e', boxShadow: 2 }
+                  }}
+                  onClick={() => setSelectedClassroom(isSelected ? null : c)}
+                >
+                  <SchoolIcon sx={{ fontSize: 32, color: isSelected ? '#1a237e' : 'primary.main', mb: 0.5 }} />
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>{c.name}</Typography>
+                  <Chip
+                    label={`${count} পরীক্ষা`}
+                    size="small"
+                    color={isSelected ? 'primary' : 'default'}
+                    sx={{ mt: 0.5 }}
+                  />
                 </Paper>
               </Grid>
-            ))}
-          </Grid>
-        )}
+            );
+          })}
+        </Grid>
 
         {loading ? <TableSkeleton rows={5} columns={6} /> : (
-          <TableContainer component={Paper}>
+          <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
             <Table>
-              <TableHead><TableRow sx={{ bgcolor: 'primary.main' }}>
-                <TableCell sx={{ color: 'white' }}>নাম</TableCell>
-                <TableCell sx={{ color: 'white' }}>ধরন</TableCell>
-                <TableCell sx={{ color: 'white' }}>তারিখ</TableCell>
-                <TableCell sx={{ color: 'white' }} align="center">অ্যাকশন</TableCell>
-              </TableRow></TableHead>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'primary.main' }}>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>পরীক্ষার নাম</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শ্রেণি</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>ধরন</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>তারিখ</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">অ্যাকশন</TableCell>
+                </TableRow>
+              </TableHead>
               <TableBody>
-                {(selectedClassroom ? examinations.filter(ex => ex.classroom === selectedClassroom.id) : examinations).map(exam => (
-                  <TableRow key={exam.id} hover>
-                    <TableCell>{exam.name}</TableCell>
-                    <TableCell><Chip label={getExamTypeLabel(exam.exam_type)} size="small" /></TableCell>
-                    <TableCell>{exam.exam_date || '-'}</TableCell>
-                    <TableCell align="center"><Stack direction="row" spacing={1} justifyContent="center">
-                      <Tooltip title="রুটিন সেট করুন">
-                        <IconButton size="small" onClick={() => { loadExamSlots(exam); setSlotDialogOpen(true); }} color="secondary"><RoutineIcon /></IconButton>
-                      </Tooltip>
-                      <IconButton size="small" onClick={() => handleDialogOpen(exam)} color="primary"><EditIcon /></IconButton>
-                      <IconButton size="small" onClick={() => setDeleteDialog({ open: true, exam })} color="error"><DeleteIcon /></IconButton>
-                    </Stack></TableCell>
+                {filteredExaminations.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                      <Typography variant="body1" color="textSecondary">
+                        কোন পরীক্ষা পাওয়া যায়নি।
+                      </Typography>
+                    </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredExaminations.map(exam => (
+                    <TableRow key={exam.id} hover>
+                      <TableCell sx={{ fontWeight: 600 }}>{exam.name}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={getExamClassroomName(exam)}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell><Chip label={getExamTypeLabel(exam.exam_type)} size="small" /></TableCell>
+                      <TableCell>{exam.exam_date || '-'}</TableCell>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={1} justifyContent="center">
+                          <Tooltip title="রুটিন সেট করুন">
+                            <IconButton size="small" onClick={() => { loadExamSlots(exam); setSlotDialogOpen(true); }} color="secondary"><RoutineIcon /></IconButton>
+                          </Tooltip>
+                          <IconButton size="small" onClick={() => handleDialogOpen(exam)} color="primary"><EditIcon /></IconButton>
+                          <IconButton size="small" onClick={() => setDeleteDialog({ open: true, exam })} color="error"><DeleteIcon /></IconButton>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </TableContainer>

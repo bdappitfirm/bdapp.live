@@ -48,6 +48,14 @@ export default function AdmissionCardGenerator() {
   const [examSlots, setExamSlots] = useState([]);
   const [activeStep, setActiveStep] = useState(0);
 
+  const printPairs = useMemo(() => {
+    const pairs = [];
+    for (let i = 0; i < searchResults.length; i += 2) {
+      pairs.push(searchResults.slice(i, i + 2));
+    }
+    return pairs;
+  }, [searchResults]);
+
   const guidanceSteps = [
     { selector: '#class-select', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
     { selector: '#section-select', text: 'সেকশন নির্বাচন করুন', autoNext: false },
@@ -204,181 +212,19 @@ export default function AdmissionCardGenerator() {
     }
   };
 
-  const handlePrint = async (student = null) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      showSnackbar('Please allow popups for this website', 'error');
-      return;
-    }
-
-    const writeLoadingPage = () => {
-      try {
-        printWindow.document.open();
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Preparing Print</title>
-              <style>
-                body { font-family: Arial, sans-serif; margin: 0; padding: 24px; }
-                .box { max-width: 520px; margin: 0 auto; padding: 18px; border: 1px solid #e5e7eb; border-radius: 12px; }
-                .title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-                .text { color: #374151; line-height: 1.5; }
-              </style>
-            </head>
-            <body>
-              <div class="box">
-                <div class="title">Preparing your print…</div>
-                <div class="text">Please wait. This window will print automatically when ready.</div>
-              </div>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      } catch (_) {}
-    };
-
-    writeLoadingPage();
-
+  const handlePrint = (student = null) => {
     const studentsToPrint = student ? [student] : searchResults;
     if (studentsToPrint.length === 0) {
       showSnackbar('No students to print', 'warning');
-      try { printWindow.close(); } catch (_) {}
       return;
     }
-
-    setLoading(true);
-
-    try {
-      showSnackbar(student ? 'Preparing print…' : `Preparing ${studentsToPrint.length} cards…`, 'info');
-
-      const images = [];
-      for (let idx = 0; idx < studentsToPrint.length; idx++) {
-        const s = studentsToPrint[idx];
-        const element = document.getElementById(`admission-card-${s.id}`);
-        if (!element) continue;
-        const canvas = await html2canvas(element, {
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                backgroundColor: '#ffffff',
-                logging: false,
-                imageTimeout: 0,
-                removeContainer: true,
-                windowWidth: element.scrollWidth,
-                windowHeight: element.scrollHeight
-              });
-        images.push(canvas.toDataURL('image/png'));
-        if (!student && (idx + 1) % 6 === 0) {
-          showSnackbar(`Preparing ${idx + 1}/${studentsToPrint.length}…`, 'info');
-        }
-      }
-
-      if (images.length === 0) {
-        showSnackbar('No cards found to print', 'warning');
-        try { printWindow.close(); } catch (_) {}
-        return;
-      }
-
-      const cardsPerPage = 2;
-      const totalPages = Math.ceil(images.length / cardsPerPage);
-
-      let htmlContent = `
-        <html>
-          <head>
-            <title>Admission Cards</title>
-            <style>
-              @page { size: landscape; margin: 8mm; }
-              body {
-                margin: 0;
-                padding: 0;
-                background: white;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              .print-page {
-                width: 100%;
-                height: auto;
-                page-break-after: always;
-                box-sizing: border-box;
-              }
-              .print-container {
-                display: flex;
-                flex-direction: row;
-                flex-wrap: nowrap;
-                gap: 5mm;
-                width: 100%;
-                box-sizing: border-box;
-                align-items: stretch;
-                justify-content: center;
-              }
-              .card-slot {
-                width: calc(50% - 5mm);
-                box-sizing: border-box;
-                break-inside: avoid;
-                page-break-inside: avoid;
-                height: 100%;
-              }
-              .card-slot img {
-                width: 100%;
-                height: auto;
-                display: block;
-                border: 1px solid #e5e7eb;
-                border-radius: 10px;
-                object-fit: contain;
-              }
-              @media print {
-                .print-page { page-break-after: always; }
-              }
-            </style>
-          </head>
-          <body>
-      `;
-
-      for (let page = 0; page < totalPages; page++) {
-        const startIndex = page * cardsPerPage;
-        const endIndex = Math.min(startIndex + cardsPerPage, images.length);
-
-        htmlContent += `<div class="print-page"><div class="print-container">`;
-        for (let i = startIndex; i < endIndex; i++) {
-          htmlContent += `
-            <div class="card-slot">
-              <img src="${images[i]}" alt="Admission Card" />
-            </div>
-          `;
-        }
-        htmlContent += `</div></div>`;
-      }
-
-      htmlContent += `
-          </body>
-        </html>
-      `;
-
-      printWindow.document.open();
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-
-      printWindow.onload = async () => {
-        try {
-          const imgs = Array.from(printWindow.document.images || []);
-          await Promise.all(imgs.map(img => (img.complete ? Promise.resolve() : new Promise(res => { img.onload = res; img.onerror = res; }))));
-          if (printWindow.document.fonts?.ready) {
-            await printWindow.document.fonts.ready.catch(() => {});
-          }
-        } catch (_) {}
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-        }, 300);
-      };
-
-    } catch (err) {
-      console.error('Print error:', err);
-      showSnackbar('Failed to print. Please try again.', 'error');
-      try { printWindow.close(); } catch (_) {}
-    } finally {
-      setLoading(false);
+    if (student) {
+      setSelectedStudent(student);
+      setOpenPreview(true);
+      setTimeout(() => window.print(), 200);
+      return;
     }
+    window.print();
   };
 
   const handleExportPDF = async (student = null) => {
@@ -730,7 +576,51 @@ export default function AdmissionCardGenerator() {
       {/* Results */}
       {searchResults.length > 0 ? (
         <Box>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <style>{`
+            @media screen {
+              .print-all-admission-cards { display: none !important; }
+            }
+            @media print {
+              @page { size: A4 landscape; margin: 8mm; }
+              .no-print { display: none !important; }
+              .screen-admission-cards { display: none !important; }
+              .print-all-admission-cards {
+                display: block !important;
+                width: 100% !important;
+              }
+              .print-page-row {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                justify-content: flex-start !important;
+                padding-top: 5mm !important;
+                height: auto !important;
+                max-height: none !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                box-sizing: border-box !important;
+              }
+              .print-grid-pair {
+                display: grid !important;
+                grid-template-columns: repeat(2, 130mm) !important;
+                gap: 8mm !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+              }
+              .print-card-item {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                width: 130mm !important;
+                max-width: 130mm !important;
+              }
+            }
+          `}</style>
+
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} className="no-print">
             <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
               Found {searchResults.length} Student(s)
             </Typography>
@@ -745,49 +635,72 @@ export default function AdmissionCardGenerator() {
             </Button>
           </Box>
           
-          <Grid container spacing={3}>
-            {searchResults.map((student) => (
-              <Grid item xs={12} sm={6} md={4} key={student.id}>
-                <Box position="relative" sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                  <Box id={`admission-card-${student.id}`}>
-                    <AdmissionCard 
-                      data={student} 
-                      school={school} 
-                      exam={selectedExamData}
-                      examSlots={examSlots}
-                    />
-                  </Box>
-                  <Box 
-                    sx={{ 
-                      position: 'absolute', 
-                      top: 10, 
-                      right: 10,
-                      display: 'flex',
-                      gap: 1,
-                      '& .MuiIconButton-root': {
-                        bgcolor: 'rgba(0,0,0,0.6)',
-                        color: 'white',
-                        '&:hover': {
-                          bgcolor: 'rgba(0,0,0,0.8)'
+          {/* Screen Grid */}
+          <Box className="screen-admission-cards">
+            <Grid container spacing={3}>
+              {searchResults.map((student) => (
+                <Grid item xs={12} sm={6} md={4} key={student.id}>
+                  <Box position="relative" sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <Box id={`admission-card-${student.id}`}>
+                      <AdmissionCard
+                        data={student}
+                        school={school}
+                        exam={selectedExamData}
+                        examSlots={examSlots}
+                      />
+                    </Box>
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 10,
+                        right: 10,
+                        display: 'flex',
+                        gap: 1,
+                        '& .MuiIconButton-root': {
+                          bgcolor: 'rgba(0,0,0,0.6)',
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: 'rgba(0,0,0,0.8)'
+                          }
                         }
-                      }
-                    }}
-                  >
-                    <Tooltip title="Preview">
-                      <IconButton size="small" onClick={() => handlePreview(student)}>
-                        <SearchIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Print">
-                      <IconButton size="small" onClick={() => handlePrint(student)}>
-                        <PrintIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                      }}
+                    >
+                      <Tooltip title="Preview">
+                        <IconButton size="small" onClick={() => handlePreview(student)}>
+                          <SearchIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Print">
+                        <IconButton size="small" onClick={() => handlePrint(student)}>
+                          <PrintIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </Box>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+
+          {/* Print-All Always-Mounted Container (Instantaneous Direct DOM Printing, 2 per page in A4 landscape, centered without cutoffs) */}
+          <Box className="print-all-admission-cards">
+            {printPairs.map((pair, pageIdx) => (
+              <Box key={`print-page-${pageIdx}`} className="print-page-row">
+                <Box className="print-grid-pair">
+                  {pair.map((student) => (
+                    <Box key={`print-card-${student.id}`} className="print-card-item">
+                      <AdmissionCard
+                        data={student}
+                        school={school}
+                        exam={selectedExamData}
+                        examSlots={examSlots}
+                      />
+                    </Box>
+                  ))}
                 </Box>
-              </Grid>
+              </Box>
             ))}
-          </Grid>
+          </Box>
         </Box>
       ) : (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
@@ -873,6 +786,22 @@ export default function AdmissionCardGenerator() {
         activeStep={activeStep}
         onStepComplete={() => setActiveStep(prev => prev + 1)}
       />
+
+      {/* Hidden offscreen container so html2canvas can access ALL searchResults elements */}
+      {searchResults.length > 0 && (
+        <Box sx={{ position: 'absolute', left: '-9999px', top: 0, width: '640px', visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
+          {searchResults.map((student) => (
+            <Box key={`hidden-card-${student.id}`} id={`admission-card-${student.id}`}>
+              <AdmissionCard
+                data={student}
+                school={school}
+                exam={selectedExamData}
+                examSlots={examSlots}
+              />
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }

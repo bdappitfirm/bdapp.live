@@ -2561,14 +2561,9 @@ export default function ResultCardGenerator() {
     }
 
     toast.info('প্রিন্ট ডায়ালগ খুলছে...');
-
-    // Ensure all cards are visible in the DOM before printing
     document.body.classList.add('bulk-print-active');
-
-    // Faster response
     setTimeout(() => {
       window.print();
-      // We don't remove the class immediately to avoid layout shifts if the user cancels
       setTimeout(() => {
         document.body.classList.remove('bulk-print-active');
       }, 1000);

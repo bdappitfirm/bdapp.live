@@ -4,7 +4,7 @@ server {
     listen 80;
     server_name bdapp.live www.bdapp.live;
 
-    client_max_body_size 20M;
+    client_max_body_size 200M;
     client_body_timeout 300s;
     client_header_timeout 300s;
     keepalive_timeout 300s;
@@ -60,6 +60,8 @@ server {
     location /admin/ {
         include proxy_params;
         proxy_pass http://unix:/run/gunicorn.sock;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_connect_timeout 300s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;

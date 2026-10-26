@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Avatar, IconButton, Tooltip } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import { QRCodeCanvas } from 'qrcode.react';
 import './IDCard.css';
 import api from '../utils/api';
+import { resolveSchoolLogo, resolveStudentPhoto, getMediaUrl } from '../utils/media';
+import fallbackLogo from './fallback_logo.png';
 
 // Helper function to convert Bangla class name to numeric class
 const getNumericClass = (className) => {
@@ -251,17 +253,17 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
   const processPhotoUrl = (url) => {
     if (!url) return null;
     if (typeof url !== 'string') return url;
-    if (url.startsWith('http')) return url;
-    const base = api.defaults?.baseURL || (process.env.REACT_APP_API_URL || window.location.origin);
-    const cleanedBase = String(base).replace(/\/+$/,'');
-    if (url.startsWith('/media/')) return `${cleanedBase}${url}`;
-    if (url.startsWith('media/')) return `${cleanedBase}/${url}`;
-    return `${cleanedBase}/media/${url.replace(/^\/+|\/+$/g, '')}`;
+    const cleanUrl = url.trim();
+    const lower = cleanUrl.toLowerCase();
+    if (!cleanUrl || cleanUrl === '/' || lower === 'null' || lower === 'undefined' || lower === 'none' || cleanUrl === '/media/') return null;
+    return getMediaUrl(cleanUrl);
   };
 
-  const schoolLogo = processPhotoUrl(school?.logo);
-  const userPhoto = processPhotoUrl(user.photo_url || user.photo || data.photo);
-  
+  const schoolLogo = resolveSchoolLogo(school) || resolveSchoolLogo(data?.school) || resolveSchoolLogo(data?.examination?.school) || processPhotoUrl(school?.logo) || fallbackLogo;
+  const userPhoto = resolveStudentPhoto(data) || resolveStudentPhoto({ user }) || resolveStudentPhoto(user) || processPhotoUrl(user.photo_url || user.photo || data.photo);
+  const [studentPhotoError, setStudentPhotoError] = useState(false);
+  const studentPhotoToDisplay = (!studentPhotoError && userPhoto) ? userPhoto : schoolLogo;
+
   // Generate custom ID card number
   let customIdNumber = '';
   if (type === 'student') {
@@ -413,9 +415,9 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
               }}>
                 {type === 'student' ? 'Student ID Card' : type === 'teacher' ? 'Teacher ID Card' : 'Committee ID Card'}
               </Box>
-              {userPhoto ? (
+              {studentPhotoToDisplay ? (
                 <img
-                  src={userPhoto}
+                  src={studentPhotoToDisplay}
                   alt={name}
                   style={{
                     width: '100%',
@@ -424,26 +426,24 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                     objectFit: 'cover',
                     display: 'block'
                   }}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
-                  }}
+                  onError={() => setStudentPhotoError(true)}
                 />
-              ) : null}
-              <Box sx={{
-                display: userPhoto ? 'none' : 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                height: 'calc(100% - 1.5rem)',
-                marginTop: '1.5rem',
-                backgroundColor: '#f0f4f8',
-                color: '#0a4b94',
-                fontSize: '1.2rem',
-                fontWeight: 'bold'
-              }}>
-                {name && name.charAt(0) ? name.charAt(0).toUpperCase() : '?'}
-              </Box>
+              ) : (
+                <Box sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                  height: 'calc(100% - 1.5rem)',
+                  marginTop: '1.5rem',
+                  backgroundColor: '#f0f4f8',
+                  color: '#0a4b94',
+                  fontSize: '1.2rem',
+                  fontWeight: 'bold'
+                }}>
+                  {name && name.charAt(0) ? name.charAt(0).toUpperCase() : '?'}
+                </Box>
+              )}
             </Box>
           </Box>
 

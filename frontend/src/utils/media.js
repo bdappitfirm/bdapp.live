@@ -11,7 +11,19 @@ export const getMediaUrl = (path, type = 'media') => {
   if (typeof path !== 'string') return null;
 
   let val = path.trim();
-  if (!val || val === '/' || val === 'media' || val === '/media' || val === '/media/') return null;
+  const lowerVal = val.toLowerCase();
+  if (
+    !val ||
+    val === '/' ||
+    val === 'media' ||
+    val === '/media' ||
+    val === '/media/' ||
+    lowerVal === 'null' ||
+    lowerVal === 'undefined' ||
+    lowerVal === 'none'
+  ) {
+    return null;
+  }
 
   // Extract relative media path if an absolute URL is given (strip domain/protocol)
   if (/^https?:\/\//i.test(val)) {
@@ -42,7 +54,6 @@ export const getMediaUrl = (path, type = 'media') => {
   let normalized = val.replace(/\\/g, '/');
 
   // If the path already contains /media/, extract only the part after /media/
-  // or handle it appropriately.
   if (type === 'media') {
     if (normalized.startsWith('/media/')) {
       return `${base}${normalized}`;
@@ -50,7 +61,6 @@ export const getMediaUrl = (path, type = 'media') => {
     if (normalized.startsWith('media/')) {
       return `${base}/${normalized}`;
     }
-    // Check for nested media/ paths in absolute-looking strings that aren't actually URLs
     if (normalized.includes('/media/')) {
       const parts = normalized.split('/media/');
       return `${base}/media/${parts[parts.length - 1]}`;
@@ -61,11 +71,9 @@ export const getMediaUrl = (path, type = 'media') => {
       return `${base}/media/school_logos/${normalized}`;
     }
     
-    // If it has a path but no /media/, try to prepend /media/
     return `${base}/media/${normalized.replace(/^\/+/, '')}`;
   }
 
-  // Handle static files if needed
   if (type === 'static') {
     if (normalized.startsWith('/static/')) return `${base}${normalized}`;
     if (normalized.startsWith('static/')) return `${base}/${normalized}`;
@@ -84,10 +92,15 @@ export const resolveStudentPhoto = (student) => {
     student.user?.thumbnail_url,
     student.user?.photo_url,
     student.user?.photo,
+    student.user?.profile_picture,
+    student.student?.user?.photo_url,
+    student.student?.user?.photo,
+    student.student?.photo_url,
+    student.student?.photo,
     student.photo_url,
     student.photo,
     student.profile_picture,
-    student.user?.profile_picture
+    student.avatar
   ];
   
   for (const path of candidates) {
@@ -105,11 +118,14 @@ export const resolveSchoolLogo = (school) => {
   const candidates = [
     school.logo_url,
     school.logo,
+    school.school_logo,
     school.image_url,
     school.image,
     school.img,
     school.photo_url,
-    school.photo
+    school.photo,
+    school.logo_thumbnail_url,
+    school.logo_thumbnail
   ];
   
   for (const path of candidates) {

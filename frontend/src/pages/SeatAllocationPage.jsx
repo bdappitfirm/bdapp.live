@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Box, Typography, Paper, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -15,10 +15,174 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import QRCode from 'qrcode.react';
 
+const BenchSticker = React.memo(({ plan, examName, schoolId }) => {
+  const s = plan.student || {};
+  const u = s.user || {};
+  const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
+  const photo = getMediaUrl(u.photo_url || u.photo || s.photo);
+  const benchNum = Math.floor((parseInt(plan.seat_number) - 1) / 3) + 1;
+  const qrData = `STU|${s.id}|${name}|${schoolId}`;
+
+  return (
+    <Box sx={{
+      width: '65mm',
+      height: '46mm',
+      border: '1px solid #000',
+      borderRadius: '3px',
+      boxSizing: 'border-box',
+      display: 'flex',
+      flexDirection: 'column',
+      bgcolor: 'white',
+      position: 'relative',
+      breakInside: 'avoid',
+      pageBreakInside: 'avoid',
+      overflow: 'hidden',
+      p: '3px'
+    }}>
+      {/* Header - Very Compact */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.2, borderBottom: '0.5px solid #ccc', pb: 0.1 }}>
+        <Box sx={{ border: '0.5px solid #000', p: 0.1, bgcolor: '#fff' }}>
+           <QRCode value={qrData} size={20} level="L" renderAs="svg" />
+        </Box>
+        <Typography sx={{ fontSize: '8px', fontWeight: 'bold', color: '#000', textAlign: 'center', flex: 1, px: 0.1, lineHeight: 1 }}>{examName}</Typography>
+        <Avatar
+          src={photo}
+          variant="rounded"
+          sx={{ width: 26, height: 30, border: '1px solid #ccc' }}
+          imgProps={{ onError: (e) => { e.target.style.display = 'none'; } }}
+        />
+      </Box>
+
+      {/* Student Info */}
+      <Box sx={{ textAlign: 'center', flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <Typography sx={{ fontSize: '10.5px', fontWeight: 'bold', color: '#000', lineHeight: 1.1 }}>{name}</Typography>
+        <Typography sx={{ fontSize: '8.5px', color: '#333', lineHeight: 1.1 }}>শ্রেণি: {s.classroom?.name || '—'}</Typography>
+        <Typography sx={{ fontSize: '8.5px', color: '#333', lineHeight: 1.1 }}>রোল:{normalizeNumberInput(s.roll_number)} | শাখা:{s.section?.name || 'N/A'}</Typography>
+      </Box>
+
+      {/* Footer - FORCED SINGLE LINE */}
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        px: '5px',
+        bgcolor: '#000',
+        color: '#fff',
+        borderRadius: '2px',
+        py: '2px',
+        mt: 0.1,
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        <Typography sx={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+          {plan.session === 'morning' ? 'সকাল' : 'বিকাল'}
+        </Typography>
+        <Typography sx={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+          রুম:{plan.room?.name}
+        </Typography>
+        <Typography sx={{ fontSize: '11px', fontWeight: '900', whiteSpace: 'nowrap' }}>
+          বেঞ্চ:{benchNum}
+        </Typography>
+      </Box>
+    </Box>
+  );
+});
+
+const getPlansForSession = (plans, sessionLabel) => {
+  const target = String(sessionLabel || '').toLowerCase();
+  return plans.filter(p => {
+    const s = String(p.session || '').toLowerCase();
+    if (!s) {
+      return target === 'morning';
+    }
+    return s === target;
+  });
+};
+
+const StickerGrid = React.memo(({ seatPlans, session, examName, schoolId, isPrinting }) => {
+  const [currentPage, setCurrentPage] = useState(0);
+
+  const plans = getPlansForSession(seatPlans, session);
+  if (plans.length === 0) return null;
+
+  const pageSize = 15;
+  const pages = [];
+  for (let i = 0; i < plans.length; i += pageSize) {
+    pages.push(plans.slice(i, i + pageSize));
+  }
+
+  const renderedPages = isPrinting ? pages : [pages[currentPage]];
+
+  return (
+    <Box className="stickers-container">
+      {!isPrinting && pages.length > 1 && (
+        <Stack direction="row" spacing={2} alignItems="center" justifyContent="center" sx={{ mb: 2 }} className="no-print">
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={currentPage === 0}
+            onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+          >
+            পূর্ববর্তী পেজ (Prev)
+          </Button>
+          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+            পেজ {currentPage + 1} / {pages.length} ({session === 'morning' ? 'সকাল' : 'বিকাল'} সেশন)
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={currentPage === pages.length - 1}
+            onClick={() => setCurrentPage(prev => Math.min(pages.length - 1, prev + 1))}
+          >
+            পরবর্তী পেজ (Next)
+          </Button>
+        </Stack>
+      )}
+
+      {renderedPages.map((pagePlans, idx) => {
+        const pageIdx = isPrinting ? idx : currentPage;
+        return (
+          <Box
+            key={pageIdx}
+            className="sticker-page-wrapper"
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 65mm)',
+              gridAutoRows: '46mm',
+              columnGap: '4mm',
+              rowGap: '6.5mm',
+              justifyContent: 'center',
+              mb: 3,
+              pageBreakAfter: pageIdx < pages.length - 1 ? 'always' : 'auto',
+              bgcolor: 'white',
+              p: isPrinting ? 0 : 1.5,
+              borderRadius: 2,
+              border: isPrinting ? 'none' : '1px solid #e0e0e0',
+              '@media print': {
+                display: 'grid !important',
+                p: 0,
+                border: 'none',
+                mb: 0,
+                boxShadow: 'none'
+              }
+            }}
+          >
+            {pagePlans.map(plan => (
+              <BenchSticker key={plan.id} plan={plan} examName={examName} schoolId={schoolId} />
+            ))}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+});
+
 const SeatAllocationPage = () => {
   const { id: schoolId } = useParams();
   const [loading, setLoading] = useState(false);
   const [exams, setExams] = useState([]);
+  const [classrooms, setClassrooms] = useState([]);
+  const [selectedClassrooms, setSelectedClassrooms] = useState([]);
   const [school, setSchool] = useState(null);
   const [selectedExam, setSelectedExam] = useState('');
   const [selectedBuildings, setSelectedBuildings] = useState([]);
@@ -26,6 +190,7 @@ const SeatAllocationPage = () => {
   const [roomBenches, setRoomBenches] = useState({});
   const [buildingRoomDetails, setBuildingRoomDetails] = useState({}); // { 1: [{room_number: 1, room_name: "101", bench_count: 15}, ...] }
   const [seatPlans, setSeatPlans] = useState([]);
+  const [viewMode, setViewMode] = useState('door'); // 'door' or 'bench'
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
   const [, setExamSlots] = useState([]);
@@ -54,7 +219,14 @@ const SeatAllocationPage = () => {
       try {
         const schoolResponse = await api.get(`/api/schools/${schoolId}/`);
         setSchool(schoolResponse.data);
-        
+
+        // Fetch Classrooms
+        try {
+          const clsRes = await api.get(`/api/academics/classrooms/?school=${schoolId}`);
+          const clsData = clsRes.data.results || clsRes.data || [];
+          setClassrooms(clsData);
+        } catch (_) {}
+
         try {
           const buildingsRes = await api.get(`/api/academics/buildings/?school=${schoolId}`);
           const buildingsData = buildingsRes.data || [];
@@ -88,14 +260,28 @@ const SeatAllocationPage = () => {
           }
         } catch (_) {}
 
-        const response = await api.get(`/api/results/examinations/?school=${schoolId}`);
-        const allExams = response.data.results || response.data || [];
-        const targetExams = allExams.filter(exam => {
-          const name = (exam.name || '').toLowerCase();
-          return name.includes('অর্ধ') || name.includes('বার্ষিক') || name.includes('half') || name.includes('yearly');
-        });
-        setExams(targetExams);
-        if (targetExams.length > 0) setSelectedExam(targetExams[0].id);
+        // Fetch ALL examinations across all pages
+        let allExams = [];
+        let page = 1;
+        let hasNext = true;
+
+        while (hasNext && page <= 20) {
+          try {
+            const response = await api.get(`/api/results/examinations/?school=${schoolId}&page=${page}&page_size=500`);
+            const data = response.data;
+            const arr = Array.isArray(data) ? data : (data?.results || []);
+            allExams = [...allExams, ...arr];
+            hasNext = Boolean(data?.next);
+            page++;
+            if (!arr.length) break;
+          } catch (err) {
+            console.error('Error fetching exams page:', page, err);
+            break;
+          }
+        }
+
+        setExams(allExams);
+        if (allExams.length > 0) setSelectedExam(allExams[0].id);
 
         // Fetch all slots to get dates
         const slotsRes = await api.get(`/api/results/exam-slots/?school=${schoolId}`);
@@ -113,6 +299,11 @@ const SeatAllocationPage = () => {
   const handleBuildingChange = (event) => {
     const { target: { value } } = event;
     setSelectedBuildings(typeof value === 'string' ? value.split(',').map(Number) : value);
+  };
+
+  const handleClassroomChange = (event) => {
+    const { target: { value } } = event;
+    setSelectedClassrooms(typeof value === 'string' ? value.split(',') : value);
   };
 
   const handleRoomCountChange = (buildingNum, count) => {
@@ -154,6 +345,17 @@ const SeatAllocationPage = () => {
     return buildings;
   };
 
+  const filteredExams = useMemo(() => {
+    if (!selectedClassrooms || selectedClassrooms.length === 0) {
+      return exams;
+    }
+    return exams.filter(exam => {
+      if (!exam.classroom) return true;
+      const cid = typeof exam.classroom === 'object' ? exam.classroom.id : exam.classroom;
+      return selectedClassrooms.some(sc => String(sc) === String(cid));
+    });
+  }, [exams, selectedClassrooms]);
+
   const handleGenerateSeatPlan = async () => {
     if (!selectedExam || selectedBuildings.length === 0) {
       setMessage('পরীক্ষা এবং ভবন নির্বাচন করুন!');
@@ -166,7 +368,8 @@ const SeatAllocationPage = () => {
       const response = await api.post('/api/academics/generate-seat-plan/', {
         examination_id: selectedExam,
         school_id: schoolId,
-        buildings: prepareBuildingData()
+        buildings: prepareBuildingData(),
+        classroom_ids: selectedClassrooms
       });
 
       const plans = response.data.seat_plans || response.data || [];
@@ -186,16 +389,6 @@ const SeatAllocationPage = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handlePrint = () => {
-    document.body.classList.remove('printing-stickers');
-    window.print();
-  };
-
-  const handlePrintStickers = () => {
-    document.body.classList.add('printing-stickers');
-    window.print();
   };
 
   const handleDownloadPDF = async () => {
@@ -219,105 +412,41 @@ const SeatAllocationPage = () => {
     }
   };
 
-  const BenchSticker = ({ plan }) => {
-    const s = plan.student || {};
-    const u = s.user || {};
-    const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
-    const photo = getMediaUrl(u.photo_url || u.photo || s.photo);
-    const benchNum = Math.floor((parseInt(plan.seat_number) - 1) / 3) + 1;
-    const qrData = `STU|${s.id}|${name}|${schoolId}`;
-
-    return (
-      <Box sx={{
-        width: '65mm',
-        height: '49mm', // Slightly less than 50mm to be safe
-        border: '1px solid #000',
-        borderRadius: '3px',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        bgcolor: 'white',
-        position: 'relative',
-        breakInside: 'avoid',
-        overflow: 'hidden',
-        p: '3px' // Minimal padding
-      }}>
-        {/* Header - Very Compact */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.2, borderBottom: '0.5px solid #eee', pb: 0.1 }}>
-          <Box sx={{ border: '0.5px solid #000', p: 0.1, bgcolor: '#fff' }}>
-             <QRCode value={qrData} size={22} level="L" />
-          </Box>
-          <Typography sx={{ fontSize: '8px', fontWeight: 'bold', color: '#000', textAlign: 'center', flex: 1, px: 0.1, lineHeight: 1 }}>{examName}</Typography>
-          <Avatar src={photo} variant="rounded" sx={{ width: 28, height: 32, border: '1px solid #eee' }} />
-        </Box>
-
-        {/* Student Info */}
-        <Box sx={{ textAlign: 'center', flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <Typography sx={{ fontSize: '10.5px', fontWeight: 'bold', color: '#000', lineHeight: 1 }}>{name}</Typography>
-          <Typography sx={{ fontSize: '8.5px', color: '#333', lineHeight: 1 }}>শ্রেণি: {s.classroom?.name}</Typography>
-          <Typography sx={{ fontSize: '8.5px', color: '#333', lineHeight: 1 }}>রোল:{normalizeNumberInput(s.roll_number)} | শাখা:{s.section?.name || 'N/A'}</Typography>
-        </Box>
-
-        {/* Footer - FORCED SINGLE LINE */}
-        <Box sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          px: '5px',
-          bgcolor: '#000',
-          color: '#fff',
-          borderRadius: '2px',
-          py: '2px',
-          mt: 0.1,
-          width: '100%',
-          boxSizing: 'border-box'
-        }}>
-          <Typography sx={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-            {plan.session === 'morning' ? 'সকাল' : 'বিকাল'}
-          </Typography>
-          <Typography sx={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-            রুম:{plan.room?.name}
-          </Typography>
-          <Typography sx={{ fontSize: '11px', fontWeight: '900', whiteSpace: 'nowrap' }}>
-            বেঞ্চ:{benchNum}
-          </Typography>
-        </Box>
-      </Box>
-    );
-  };
-
   const examName = exams.find(e => String(e.id) === String(selectedExam))?.name || 'সিট প্ল্যান';
   const principalSig = getMediaUrl(school?.principal_signature);
   const schoolSeal = getMediaUrl(school?.school_seal);
 
-  const StickerGrid = ({ session }) => {
-    const plans = seatPlans.filter(p => p.session === session);
-    if (plans.length === 0) return null;
+  const [isPrinting, setIsPrinting] = useState(false);
 
-    return (
-      <Box sx={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 65mm)',
-        gap: '2mm',
-        justifyContent: 'center',
-        pageBreakAfter: 'always'
-      }} className="stickers-only">
-        {plans.map(plan => (
-          <BenchSticker key={plan.id} plan={plan} />
-        ))}
-      </Box>
-    );
+  useEffect(() => {
+    const handleBeforePrint = () => setIsPrinting(true);
+    const handleAfterPrint = () => {
+      setIsPrinting(false);
+      document.body.classList.remove('printing-stickers');
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, []);
+
+  const handlePrintBenchStickers = () => {
+    if (!seatPlans.length) return;
+    setIsPrinting(true);
+    document.body.classList.add('printing-stickers');
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        setIsPrinting(false);
+        document.body.classList.remove('printing-stickers');
+      }, 500);
+    }, 250);
   };
 
   const SeatPlanTable = ({ session }) => {
-    // Robust filtering: handle case-insensitivity and potential missing session field
-    const plans = seatPlans.filter(p => {
-        const s = String(p.session || '').toLowerCase();
-        // If p.session is missing, we might want to include it in the default session
-        if (!s) return session === 'morning';
-        return s === session.toLowerCase();
-    });
-
+    const plans = getPlansForSession(seatPlans, session);
     if (plans.length === 0) return null;
 
     const selectedExamData = exams.find(exam => String(exam.id) === String(selectedExam)) || {};
@@ -391,35 +520,53 @@ const SeatAllocationPage = () => {
   return (
     <Box sx={{ p: 3 }}>
       <style>{`
+        @media screen {
+          .sticker-page-wrapper.screen-hidden {
+            display: none !important;
+          }
+          .sticker-page-wrapper.screen-visible {
+            display: grid !important;
+          }
+        }
         @media print {
           @page {
-            margin: 8mm 5mm; /* Apply margin to EVERY page */
-            size: A4;
+            margin: 5mm 5mm;
+            size: A4 portrait;
           }
-          body { margin: 0; padding: 0; }
+          html, body, #root {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           #printable-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+            position: static !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
           }
           .no-print { display: none !important; }
 
-          /* Show/Hide based on which button was clicked */
+          /* Show/Hide based on which mode is being printed */
           body.printing-stickers .door-list-only { display: none !important; }
-          body:not(.printing-stickers) .stickers-only { display: none !important; }
+          body.printing-stickers .stickers-preview { display: block !important; }
+          body:not(.printing-stickers) .stickers-preview { display: none !important; }
+          body:not(.printing-stickers) .door-list-only { display: block !important; }
 
-          /* Fixed grid for stickers */
-          body.printing-stickers .stickers-only {
+          .stickers-container {
+            display: block !important;
+            width: 100% !important;
+            overflow: visible !important;
+          }
+          .sticker-page-wrapper {
             display: grid !important;
-            grid-template-columns: repeat(3, 65mm) !important;
-            grid-auto-rows: 49mm !important;
-            gap: 1.5mm !important;
-            justify-content: center !important;
-            margin: 0 auto !important;
+            padding: 0 !important;
+            border: none !important;
+            margin-bottom: 0 !important;
+            box-shadow: none !important;
           }
         }
       `}</style>
@@ -433,10 +580,72 @@ const SeatAllocationPage = () => {
           <Card elevation={3}>
             <CardContent>
               <Typography variant="h6" gutterBottom>সিট প্ল্যান তৈরি করুন</Typography>
-              <TextField select label="পরীক্ষা নির্বাচন করুন" value={selectedExam} onChange={(e) => setSelectedExam(e.target.value)} fullWidth margin="normal" SelectProps={{ native: true }}>
-                <option value="">নির্বাচন করুন</option>
-                {exams.map((exam) => <option key={exam.id} value={exam.id}>{exam.name}</option>)}
-              </TextField>
+
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="exam-select-label">পরীক্ষা নির্বাচন করুন *</InputLabel>
+                <Select
+                  labelId="exam-select-label"
+                  value={selectedExam}
+                  label="পরীক্ষা নির্বাচন করুন *"
+                  onChange={(e) => {
+                    const examId = e.target.value;
+                    setSelectedExam(examId);
+                    const examObj = exams.find(ex => String(ex.id) === String(examId));
+                    if (examObj && examObj.classroom && selectedClassrooms.length === 0) {
+                      const cid = typeof examObj.classroom === 'object' ? examObj.classroom.id : examObj.classroom;
+                      if (cid) setSelectedClassrooms([cid]);
+                    }
+                  }}
+                >
+                  <MenuItem value="">-- পরীক্ষা নির্বাচন করুন ({filteredExams.length}টি পরীক্ষা) --</MenuItem>
+                  {filteredExams.map((exam) => {
+                    const clsName = typeof exam.classroom === 'object' ? exam.classroom?.name : (classrooms.find(c => String(c.id) === String(exam.classroom))?.name || '');
+                    return (
+                      <MenuItem key={exam.id} value={exam.id}>
+                        {exam.name} {clsName ? `(${clsName})` : ''} {exam.year ? `[${exam.year}]` : ''}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="classroom-select-label">শ্রেণি নির্বাচন করুন (এক বা একাধিক)</InputLabel>
+                <Select
+                  labelId="classroom-select-label"
+                  multiple
+                  value={selectedClassrooms}
+                  onChange={handleClassroomChange}
+                  input={<OutlinedInput label="শ্রেণি নির্বাচন করুন (এক বা একাধিক)" />}
+                  renderValue={(selected) => {
+                    if (selected.length === 0) return 'সকল শ্রেণি (All Classes)';
+                    return selected.map(cid => {
+                      const cls = classrooms.find(c => String(c.id) === String(cid));
+                      return cls ? cls.name : cid;
+                    }).join(', ');
+                  }}
+                >
+                  <MenuItem
+                    value="ALL"
+                    onClick={() => {
+                      if (selectedClassrooms.length === classrooms.length) {
+                        setSelectedClassrooms([]);
+                      } else {
+                        setSelectedClassrooms(classrooms.map(c => c.id));
+                      }
+                    }}
+                  >
+                    <Checkbox checked={classrooms.length > 0 && selectedClassrooms.length === classrooms.length} />
+                    <ListItemText primary="সকল শ্রেণি (Select All)" />
+                  </MenuItem>
+                  {classrooms.map((cls) => (
+                    <MenuItem key={cls.id} value={cls.id}>
+                      <Checkbox checked={selectedClassrooms.indexOf(cls.id) > -1} />
+                      <ListItemText primary={cls.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
               <FormControl fullWidth margin="normal">
                 <InputLabel>ভবন নির্বাচন করুন</InputLabel>
@@ -478,22 +687,64 @@ const SeatAllocationPage = () => {
 
       {seatPlans.length > 0 && (
         <Box sx={{ mt: 5 }}>
-          <Stack direction="row" spacing={2} sx={{ mb: 3 }} className="no-print">
-            <Button variant="contained" color="secondary" startIcon={<PrintIcon />} onClick={handlePrint}>হল রুম ভিত্তিক শিক্ষার্থী তালিকা</Button>
-            <Button variant="contained" color="success" startIcon={<PrintIcon />} onClick={handlePrintStickers}>বেঞ্চ ভিত্তিক শিক্ষার্থী তালিকা</Button>
-            <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownloadPDF}>ডাউনলোড PDF</Button>
-          </Stack>
+          <Paper sx={{ p: 2, mb: 3, bgcolor: '#fafafa', borderRadius: 2 }} className="no-print">
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
+              <Stack direction="row" spacing={1.5}>
+                <Button
+                  variant={viewMode === 'door' ? 'contained' : 'outlined'}
+                  color="primary"
+                  onClick={() => setViewMode('door')}
+                  sx={{ fontWeight: 'bold' }}
+                >
+                  হল রুম ভিত্তিক তালিকা ({seatPlans.length} জন)
+                </Button>
+
+                <Button
+                  variant={viewMode === 'bench' ? 'contained' : 'outlined'}
+                  color="success"
+                  onClick={() => setViewMode('bench')}
+                  sx={{ fontWeight: 'bold' }}
+                >
+                  বেঞ্চ ভিত্তিক তালিকা / স্টিকার ({seatPlans.length} জন)
+                </Button>
+              </Stack>
+
+              <Stack direction="row" spacing={1.5}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<PrintIcon />}
+                  onClick={() => {
+                    if (viewMode === 'bench') {
+                      handlePrintBenchStickers();
+                    } else {
+                      window.print();
+                    }
+                  }}
+                  sx={{ fontWeight: 'bold' }}
+                >
+                  {viewMode === 'bench' ? 'প্রিন্ট বেঞ্চ স্টিকার' : 'প্রিন্ট হল রুম তালিকা'}
+                </Button>
+
+                <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownloadPDF}>
+                  ডাউনলোড PDF
+                </Button>
+              </Stack>
+            </Stack>
+          </Paper>
 
           <Box id="printable-area">
-            <Box className="door-list-only">
-              <SeatPlanTable session="morning" />
-              <SeatPlanTable session="afternoon" />
-            </Box>
-
-            <Box sx={{ display: 'none', '@media print': { display: 'block' } }}>
-              <StickerGrid session="morning" />
-              <StickerGrid session="afternoon" />
-            </Box>
+            {viewMode === 'door' ? (
+              <Box className="door-list-only">
+                <SeatPlanTable session="morning" />
+                <SeatPlanTable session="afternoon" />
+              </Box>
+            ) : (
+              <Box className="stickers-preview">
+                <StickerGrid session="morning" seatPlans={seatPlans} examName={examName} schoolId={schoolId} isPrinting={isPrinting} />
+                <StickerGrid session="afternoon" seatPlans={seatPlans} examName={examName} schoolId={schoolId} isPrinting={isPrinting} />
+              </Box>
+            )}
           </Box>
         </Box>
       )}

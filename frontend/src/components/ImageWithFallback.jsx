@@ -5,9 +5,10 @@ import PersonIcon from '@mui/icons-material/Person';
 const ImageWithFallback = ({
   src,
   srcCandidates = null,
+  fallbackSrc = null,
   alt = 'Image',
-  width = 40,
-  height = 40,
+  width = '100%',
+  height = '100%',
   fallback = null,
   ...props
 }) => {
@@ -23,6 +24,16 @@ const ImageWithFallback = ({
   }, [src, srcCandidates]);
 
   if (imgError || !currentSrc) {
+    if (fallbackSrc) {
+      return (
+        <img
+          src={fallbackSrc}
+          alt={alt}
+          style={{ width: width || '100%', height: height || '100%', objectFit: 'cover' }}
+          {...props}
+        />
+      );
+    }
     return fallback || (
       <Box
         width={width}
@@ -31,7 +42,6 @@ const ImageWithFallback = ({
         alignItems="center"
         justifyContent="center"
         bgcolor="action.hover"
-        borderRadius="50%"
         {...props}
       >
         <PersonIcon />
@@ -55,7 +65,6 @@ const ImageWithFallback = ({
         width,
         height,
         objectFit: 'cover',
-        borderRadius: '50%',
       }}
       {...props}
     />

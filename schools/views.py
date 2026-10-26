@@ -96,17 +96,50 @@ class AdvertisementViewSet(viewsets.ModelViewSet):
     queryset = Advertisement.objects.all()
     serializer_class = AdvertisementSerializer
     permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
     def get_queryset(self):
         sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
-        qs = Advertisement.objects.all()
-        if sid:
-            qs = qs.filter(school_id=sid)
-        return qs.select_related('school').prefetch_related()
+        qs = Advertisement.objects.all().prefetch_related('schools').select_related('school')
+        if sid and str(sid) != '0':
+            qs = qs.filter(
+                Q(school_id=sid) |
+                Q(schools__id=sid) |
+                (Q(school__isnull=True) & Q(schools__isnull=True))
+            ).distinct()
+        return qs.order_by('-created_at', '-id')
 
 class AdvertisementBySchool(APIView):
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, school_id):
-        ads = Advertisement.objects.filter(school_id=school_id).order_by('-created_at', '-id')
+        qs = Advertisement.objects.all().prefetch_related('schools').select_related('school')
+        if school_id and str(school_id) != '0':
+            qs = qs.filter(
+                Q(school_id=school_id) |
+                Q(schools__id=school_id) |
+                (Q(school__isnull=True) & Q(schools__isnull=True))
+            ).distinct()
+        ads = qs.order_by('-created_at', '-id')
         return Response(AdvertisementSerializer(ads, many=True, context={'request': request}).data)
+
+    def post(self, request, school_id):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+        data = request.data.copy()
+        if school_id and str(school_id) != '0':
+            data['school'] = school_id
+        else:
+            data['school'] = None
+        serializer = AdvertisementSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AdvertisementBulk(APIView):
     permission_classes = [permissions.IsAdminUser]

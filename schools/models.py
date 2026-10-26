@@ -95,7 +95,14 @@ class Advertisement(models.Model):
         ('image', 'Image'),
         ('video', 'Video'),
     )
+    SLOT_CHOICES = (
+        ('slot1', 'প্রকাশনা'),
+        ('slot2', 'কর্পোরেট পার্টনার'),
+        ('slot3', 'ব্র্যান্ড ও সেবা'),
+    )
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='advertisements', null=True, blank=True)
+    schools = models.ManyToManyField(School, related_name='multi_advertisements', blank=True)
+    slot = models.CharField(max_length=20, choices=SLOT_CHOICES, default='slot1')
     text = models.CharField(max_length=255, blank=True)
     link = models.URLField(blank=True)
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='image')
@@ -106,7 +113,8 @@ class Advertisement(models.Model):
         ordering = ['-created_at', '-id']
 
     def __str__(self):
-        return f"{self.school.name} - {self.type} - {self.text[:20] if self.text else 'Ad'}"
+        sname = self.school.name if self.school else 'Global'
+        return f"{sname} - {self.slot} - {self.type} - {self.text[:20] if self.text else 'Ad'}"
 
 
 class SchoolOnboarding(models.Model):

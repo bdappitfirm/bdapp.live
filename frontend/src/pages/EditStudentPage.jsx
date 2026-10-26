@@ -244,7 +244,7 @@ export default function EditStudentPage() {
         if (!dateStr || typeof dateStr !== 'string') return '';
         const trimmed = dateStr.trim();
         if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-          const [y, m, d] = trimmed.split('-').map(Number);
+          const [, m, d] = trimmed.split('-').map(Number);
           if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return trimmed;
           return '';
         }

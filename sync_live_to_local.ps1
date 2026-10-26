@@ -52,6 +52,7 @@ $SYNC_TABLES = @(
     "public.schools_school",
     "public.schools_banbeisinfo",
     "public.schools_advertisement",
+    "public.schools_advertisement_schools",
     "public.schools_schoolbilling",
     "public.schools_schoolonboarding",
     "public.schools_onboardingclassconfig",
@@ -333,40 +334,44 @@ $NATURAL_CONFLICT_KEYS = @{
     'attendance_studentattendancesummary' = @('student_id', 'year')
 }
 
-function Get-UpsertClause([string]$stmt) {
-    # Read the column list straight out of: INSERT INTO public.<table> (<cols>) VALUES (
-    $m = [regex]::Match($stmt, '(?is)^\s*INSERT\s+INTO\s+(?:public\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?\s*\(([^)]*)\)\s*VALUES\s*\(')
-    if (-not $m.Success) { return ' ON CONFLICT DO NOTHING' }
+    $script:insertsCnt = 0
+    $script:nothingCnt = 0
 
-    $table = $m.Groups[1].Value
+    function Get-UpsertClause([string]$stmt) {
+        # Read the column list straight out of: INSERT INTO public.<table> (<cols>) VALUES (
+        $m = [regex]::Match($stmt, '(?is)^\s*INSERT\s+INTO\s+(?:public\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?\s*\(([^)]*)\)\s*VALUES\s*\(')
+        if (-not $m.Success) { $script:nothingCnt++; return ' ON CONFLICT DO NOTHING' }
 
-    # Keep the ORIGINAL token (pg_dump quotes identifiers that need it, e.g. the reserved
-    # word "group" in academics_studentprofile). Emitting the unquoted name produced
-    # `syntax error at or near "group"`. Name = unquoted form, used only for key matching.
-    $cols = @()
-    foreach ($tok in ($m.Groups[2].Value -split ',')) {
-        $raw = $tok.Trim()
-        if (-not $raw) { continue }
-        $cols += [pscustomobject]@{ Raw = $raw; Name = $raw.Trim('"') }
+        $table = $m.Groups[1].Value
+
+        # Keep the ORIGINAL token (pg_dump quotes identifiers that need it, e.g. the reserved
+        # word "group" in academics_studentprofile). Emitting the unquoted name produced
+        # `syntax error at or near "group"`. Name = unquoted form, used only for key matching.
+        $cols = @()
+        foreach ($tok in ($m.Groups[2].Value -split ',')) {
+            $raw = $tok.Trim()
+            if (-not $raw) { continue }
+            $cols += [pscustomobject]@{ Raw = $raw; Name = $raw.Trim('"') }
+        }
+        if ($cols.Count -eq 0) { $script:nothingCnt++; return ' ON CONFLICT DO NOTHING' }
+
+        if ($NATURAL_CONFLICT_KEYS.ContainsKey($table)) { $want = @($NATURAL_CONFLICT_KEYS[$table]) }
+        else                                            { $want = @('id') }
+
+        $keys = @($cols | Where-Object { $want -contains $_.Name })
+        if ($keys.Count -eq 0) { $script:nothingCnt++; return ' ON CONFLICT DO NOTHING' }
+        $keyNames = @($keys | ForEach-Object { $_.Name })
+
+        # Never rewrite the surrogate id: for natural-key tables the row keeps its LOCAL id, so a
+        # live id that already belongs to a different local row can never cause a PK collision.
+        $setCols = @($cols | Where-Object { $_.Name -ne 'id' -and $keyNames -notcontains $_.Name })
+        if ($setCols.Count -eq 0) { $script:nothingCnt++; return ' ON CONFLICT DO NOTHING' }
+
+        $keyList = ($keys    | ForEach-Object { $_.Raw }) -join ', '
+        $setList = ($setCols | ForEach-Object { "$($_.Raw) = EXCLUDED.$($_.Raw)" }) -join ', '
+        $script:insertsCnt++
+        return (' ON CONFLICT ({0}) DO UPDATE SET {1}' -f $keyList, $setList)
     }
-    if ($cols.Count -eq 0) { return ' ON CONFLICT DO NOTHING' }
-
-    if ($NATURAL_CONFLICT_KEYS.ContainsKey($table)) { $want = @($NATURAL_CONFLICT_KEYS[$table]) }
-    else                                            { $want = @('id') }
-
-    $keys = @($cols | Where-Object { $want -contains $_.Name })
-    if ($keys.Count -eq 0) { return ' ON CONFLICT DO NOTHING' }
-    $keyNames = @($keys | ForEach-Object { $_.Name })
-
-    # Never rewrite the surrogate id: for natural-key tables the row keeps its LOCAL id, so a
-    # live id that already belongs to a different local row can never cause a PK collision.
-    $setCols = @($cols | Where-Object { $_.Name -ne 'id' -and $keyNames -notcontains $_.Name })
-    if ($setCols.Count -eq 0) { return ' ON CONFLICT DO NOTHING' }
-
-    $keyList = ($keys    | ForEach-Object { $_.Raw }) -join ', '
-    $setList = ($setCols | ForEach-Object { "$($_.Raw) = EXCLUDED.$($_.Raw)" }) -join ', '
-    return (' ON CONFLICT ({0}) DO UPDATE SET {1}' -f $keyList, $setList)
-}
 
 foreach ($rawLine in [System.IO.File]::ReadLines($TMP_DUMP_SQL)) {
     if ($rawLine -eq $null) { continue }
@@ -462,13 +467,10 @@ $mirrorDeletes.Add("-- ===== MIRROR MODE: local == live for the synced tables ==
 foreach ($t in $reverseTables) { $mirrorDeletes.Add("DELETE FROM $t;") }
 $mirrorDeletes.Add("-- ===== end of mirror deletes =====")
 
-$processedContent = ($mirrorDeletes -join [Environment]::NewLine) + [Environment]::NewLine + ($filteredSqlLines -join [Environment]::NewLine)
-Set-Content -LiteralPath $PROCESSED_SQL -Value $processedContent -Encoding UTF8 -NoNewline
+[System.IO.File]::WriteAllLines($PROCESSED_SQL, $mirrorDeletes, [System.Text.Encoding]::UTF8)
+[System.IO.File]::AppendAllLines($PROCESSED_SQL, $filteredSqlLines, [System.Text.Encoding]::UTF8)
 Write-Info ("Mirror mode: {0} synced tables will be emptied and reloaded from LIVE." -f $SYNC_TABLES.Count)
-
-$insertsCnt = ([regex]::Matches($processedContent, 'ON CONFLICT \(')).Count
-$nothingCnt = ([regex]::Matches($processedContent, 'ON CONFLICT DO NOTHING')).Count
-Write-Info ("Processed {0} INSERT statements with UPSERT (key-targeted DO UPDATE); {1} fell back to DO NOTHING." -f $insertsCnt, $nothingCnt)
+Write-Info ("Processed {0} INSERT statements with UPSERT (key-targeted DO UPDATE); {1} fell back to DO NOTHING." -f $script:insertsCnt, $script:nothingCnt)
 
 # Small safety: dump first 20 + last 5 lines for forensic audit
 $debugFirst = @(Get-Content -LiteralPath $PROCESSED_SQL -TotalCount 20)

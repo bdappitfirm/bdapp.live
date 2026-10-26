@@ -195,8 +195,39 @@ export default function SoftwareAccountsPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 } }}>
-      <Paper sx={{ p: 3, mb: 3 }} elevation={2}>
+    <Box sx={{ p: { xs: 2, md: 4 }, '@media print': { p: 0 } }}>
+      <style>{`
+        @media print {
+          body {
+            background-color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .MuiPaper-root {
+            box-shadow: none !important;
+            border: 1px solid #ddd !important;
+            margin-bottom: 8px !important;
+            padding: 12px !important;
+          }
+          .MuiGrid-container {
+            margin-top: 0 !important;
+            margin-bottom: 8px !important;
+          }
+          table {
+            page-break-inside: auto;
+          }
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+        }
+      `}</style>
+      <Paper sx={{ p: 3, mb: 3, '@media print': { p: 1.5, mb: 15 } }} elevation={2}>
         <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" spacing={2}>
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -206,7 +237,7 @@ export default function SoftwareAccountsPage() {
               সকল স্কুল থেকে সফটওয়্যার ফি ও পেমেন্ট এবং সকল প্রকার ব্যয় (ভিপিএস, ইন্টারনেট, অফিসভাড়া, বেতন, টিএ, ডিএ, বোনাস ইত্যাদি) অটোমেটিক হিসাব
             </Typography>
           </Box>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} className="no-print">
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => {
               setEditingIncomeId(null);
               setIncomeForm({
@@ -244,9 +275,19 @@ export default function SoftwareAccountsPage() {
       </Paper>
 
       {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ background: 'linear-gradient(135deg, #2e7d32 0%, #4caf50 100%)', color: 'white' }}>
+      <Grid container spacing={3} sx={{ mb: 4, '@media print': { display: 'flex', flexWrap: 'nowrap', gap: '8px', mb: 2 } }}>
+        <Grid item xs={12} md={4} sx={{ '@media print': { flex: '1 1 33%' } }}>
+          <Card sx={{
+            background: 'linear-gradient(135deg, #2e7d32 0%, #4caf50 100%)',
+            color: 'white',
+            '@media print': {
+              background: '#2e7d32 !important',
+              color: 'white !important',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact',
+              boxShadow: 'none !important'
+            }
+          }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Box>
@@ -264,8 +305,18 @@ export default function SoftwareAccountsPage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Card sx={{ background: 'linear-gradient(135deg, #c62828 0%, #e53935 100%)', color: 'white' }}>
+        <Grid item xs={12} md={4} sx={{ '@media print': { flex: '1 1 33%' } }}>
+          <Card sx={{
+            background: 'linear-gradient(135deg, #c62828 0%, #e53935 100%)',
+            color: 'white',
+            '@media print': {
+              background: '#c62828 !important',
+              color: 'white !important',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact',
+              boxShadow: 'none !important'
+            }
+          }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Box>
@@ -283,8 +334,18 @@ export default function SoftwareAccountsPage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Card sx={{ background: summary.net_balance >= 0 ? 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)' : 'linear-gradient(135deg, #ef6c00 0%, #ffa726 100%)', color: 'white' }}>
+        <Grid item xs={12} md={4} sx={{ '@media print': { flex: '1 1 33%' } }}>
+          <Card sx={{
+            background: summary.net_balance >= 0 ? 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)' : 'linear-gradient(135deg, #ef6c00 0%, #ffa726 100%)',
+            color: 'white',
+            '@media print': {
+              background: (summary.net_balance >= 0 ? '#1565c0' : '#ef6c00') + ' !important',
+              color: 'white !important',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact',
+              boxShadow: 'none !important'
+            }
+          }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Box>
@@ -304,7 +365,7 @@ export default function SoftwareAccountsPage() {
       </Grid>
 
       {/* Tabs */}
-      <Paper sx={{ mb: 3 }}>
+      <Paper sx={{ mb: 3 }} className="no-print">
         <Tabs value={tabIndex} onChange={(_, val) => setTabIndex(val)} variant="scrollable" scrollButtons="auto">
           <Tab label="সকল স্কুলের আয় ও পেমেন্ট (School Incomes)" />
           <Tab label="সকল ব্যয় হিসাব (All Expenses - VPS, Salary, Rent etc.)" />

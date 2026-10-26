@@ -121,6 +121,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     const hasAgri = parts.some(p => AGRI_KW.test(p));
     const hasHigherMath = parts.some(p => /উচ্চতর|higher/i.test(p));
     if (hasAgri && hasHigherMath) {
+      if (!g) return name;
       if (g === 'science') {
         return parts.find(p => /উচ্চতর|higher/i.test(p)) || parts[0];
       } else {
@@ -128,7 +129,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
       }
     }
 
-    if (!g) return parts[0] || name;
+    if (!g) return name;
     for (const p of parts) {
       const c = classifyPart(p);
       if (c === g || c === 'agri') return p;
@@ -139,17 +140,11 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
   const getStudentGroup = (student) => {
     const g = String(student?.student_group || student?.group || '').toLowerCase();
+    if (!g) return null;
+
     if (g.includes('sci') || g.includes('বিজ্ঞান')) return 'science';
     if (g.includes('com') || g.includes('bus') || g.includes('ব্যবসায়') || g.includes('ব্যবসায়')) return 'commerce';
     if (g.includes('art') || g.includes('hum') || g.includes('মানবিক')) return 'humanities';
-
-    const secName = String(student?.section?.name || student?.section_name || '').toLowerCase();
-    const className = String(student?.classroom?.name || student?.classroom_name || '').toLowerCase();
-    const combined = `${className} ${secName}`;
-
-    if (combined.includes('বিজ্ঞান') || combined.includes('science')) return 'science';
-    if (combined.includes('ব্যবসায়') || combined.includes('ব্যবসায়') || combined.includes('commerce') || combined.includes('business')) return 'commerce';
-    if (combined.includes('মানবিক') || combined.includes('arts') || combined.includes('humanities')) return 'humanities';
 
     return null;
   };
@@ -160,6 +155,7 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     if (!subjName) return false;
 
     const group = getStudentGroup(student);
+    if (!group) return true;
 
     if (subjName.includes('/')) {
       if (!group) return true;
@@ -792,20 +788,22 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
               alignItems: 'center',
               justifyContent: 'flex-end',
               position: 'relative',
-              '&::before': {
-                content: '""',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundImage: `url("${schoolSealUrl || '/images/signatures/seal.png'}")`,
-                backgroundSize: 'contain',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                opacity: 0.5,
-                zIndex: 0
-              }
+              ...(schoolSealUrl ? {
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundImage: `url("${schoolSealUrl}")`,
+                  backgroundSize: 'contain',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                  opacity: 0.5,
+                  zIndex: 0
+                }
+              } : {})
             }}>
               {/* Signature Image */}
               {signatureUrl && (

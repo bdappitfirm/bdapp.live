@@ -6,9 +6,11 @@ import {
   CssBaseline, Divider, Grid, Paper, Card, CardHeader,
   CardContent, CircularProgress, Stack, IconButton,
   TextField, Chip, Button,
-  MenuItem, Dialog, DialogTitle, DialogActions,
-  Menu, MenuItem as MuiMenuItem, Collapse
+  MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
+  Menu, MenuItem as MuiMenuItem, Collapse,
+  FormControl, InputLabel, Select, OutlinedInput, Checkbox
 } from "@mui/material";
+import { useToast } from '../components/Toast';
 
 // Icons
 import PersonIcon from "@mui/icons-material/Person";
@@ -55,6 +57,7 @@ import StatCardsSection from '../components/dashboard/StatCardsSection';
 const drawerWidth = 260;
 
 const SchoolDashboard = () => {
+  const toast = useToast();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,7 +69,7 @@ const SchoolDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [, setSchoolsList] = useState([]);
+  const [schoolsList, setSchoolsList] = useState([]);
   const [openSubmenus, setOpenSubmenus] = useState({});
 
   // Auth & Permissions
@@ -90,6 +93,7 @@ const SchoolDashboard = () => {
     { label: 'রেজাল্ট', icon: <AssessmentIcon />, key: 'results' },
     { label: 'রেজাল্ট কার্ড', icon: <CardMembershipIcon />, key: 'result-card' },
     { label: 'ক্লাস রেজাল্টস', icon: <AssessmentIcon />, key: 'class-results' },
+    { label: 'টপ শিট (Top Sheet)', icon: <DescriptionIcon />, key: 'top-sheet' },
     { label: 'Rank List (মেধাক্রম)', icon: <CardMembershipIcon />, key: 'rank-list' },
     { label: 'Merit List(মেধাতালিকা)', icon: <CardMembershipIcon />, key: 'merit-list' },
     { label: 'স্টুডেন্ট তালিকা', icon: <GroupIcon />, key: 'student-list' },
@@ -140,7 +144,7 @@ const SchoolDashboard = () => {
         return canAccessDailyCollectionRegister(user);
     }
     return true;
-  }), [menuItems, isSuperUser, id, username, user]);
+  }), [menuItems, isSuperUser, id, username, user, role]);
 
   const toggleSubmenu = (label) => {
     setOpenSubmenus(prev => ({ ...prev, [label]: !prev[label] }));
@@ -162,6 +166,74 @@ const SchoolDashboard = () => {
   
   const [adsOpen, setAdsOpen] = useState(false);
   const [adsSlots, setAdsSlots] = useState([]);
+  const [adText, setAdText] = useState('');
+  const [adLink, setAdLink] = useState('');
+  const [adMediaType, setAdMediaType] = useState('image');
+  const [adSlot, setAdSlot] = useState('slot1');
+  const [selectedSchoolIds, setSelectedSchoolIds] = useState([String(id || '')]);
+  const [adMediaDataUrl, setAdMediaDataUrl] = useState('');
+  const [adMediaFile, setAdMediaFile] = useState(null);
+  const [savingAd, setSavingAd] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      setSelectedSchoolIds([String(id)]);
+    }
+  }, [id]);
+
+  const handleAdsFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAdMediaFile(file);
+    setAdMediaDataUrl(URL.createObjectURL(file));
+  };
+
+  const saveAds = async () => {
+    try {
+      setSavingAd(true);
+      const form = new FormData();
+      form.append('text', adText);
+      form.append('link', adLink);
+      form.append('type', adMediaType);
+      form.append('slot', adSlot);
+
+      if (selectedSchoolIds.includes('all') || selectedSchoolIds.length === 0) {
+        form.append('school', '');
+      } else {
+        selectedSchoolIds.forEach(sid => form.append('school_ids', sid));
+        form.append('school', selectedSchoolIds[0]);
+      }
+
+      if (adMediaFile) form.append('media', adMediaFile);
+      else if (adMediaDataUrl) form.append('media_data_url', adMediaDataUrl);
+
+      await api.post(`/api/ads/`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000 // 5 minutes timeout for large video/media uploads
+      });
+      await loadAdsFromApi(id);
+      setAdsOpen(false);
+      setAdText(''); setAdLink(''); setAdMediaDataUrl(''); setAdMediaFile(null);
+      toast.success('বিজ্ঞাপন সফলভাবে সংরক্ষণ করা হয়েছে');
+    } catch (err) {
+      console.error("Error saving ad:", err);
+      toast.error('বিজ্ঞাপন সংরক্ষণ করা যায়নি');
+    } finally {
+      setSavingAd(false);
+    }
+  };
+
+  const removeAd = async (adId) => {
+    if (!adId) return;
+    try {
+      await api.delete(`/api/ads/${adId}/`);
+      await loadAdsFromApi(id);
+      toast.success('বিজ্ঞাপন মুছে ফেলা হয়েছে');
+    } catch (err) {
+      console.error("Error removing ad:", err);
+      toast.error('বিজ্ঞাপন মোছা যায়নি');
+    }
+  };
 
   const loadInitialData = useCallback(async () => {
     if (!id || authLoading) return;
@@ -422,7 +494,7 @@ const SchoolDashboard = () => {
               <Typography variant="h4" sx={{ fontWeight: 'bold' }}>{schoolData?.name || 'স্কুল ড্যাশবোর্ড'}</Typography>
               <Typography variant="subtitle1">{schoolData?.address || 'স্বাগতম স্কুল ম্যানেজমেন্ট ড্যাশবোর্ডে'}</Typography>
             </Box>
-            <AdCarousel ads={adsSlots} schoolLogo={schoolData?.logo} schoolName={schoolData?.name} />
+            <AdCarousel ads={adsSlots} schoolLogo={schoolData?.logo} schoolName={schoolData?.name} onAddAdClick={isSuperUser ? () => setAdsOpen(true) : undefined} />
           </Stack>
         </Paper>
 
@@ -706,9 +778,145 @@ const SchoolDashboard = () => {
       </Box>
 
       <Dialog open={adsOpen} onClose={() => setAdsOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>বিজ্ঞাপন সেটিংস</DialogTitle>
-        <DialogActions>
-          <Button onClick={() => setAdsOpen(false)}>বন্ধ করুন</Button>
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold' }}>
+          বিজ্ঞাপন আপলোড ও ব্যবস্থাপনা
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="বিজ্ঞাপনের শিরোনাম / লেখা"
+              size="small"
+              fullWidth
+              value={adText}
+              onChange={(e) => setAdText(e.target.value)}
+            />
+            <TextField
+              label="ওয়েবসাইট / লিংক (Optional)"
+              size="small"
+              fullWidth
+              value={adLink}
+              onChange={(e) => setAdLink(e.target.value)}
+            />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                label="মিডিয়া টাইপ"
+                select
+                size="small"
+                value={adMediaType}
+                onChange={(e) => setAdMediaType(e.target.value)}
+                sx={{ minWidth: 140 }}
+              >
+                <MenuItem value="image">ছবি (Image)</MenuItem>
+                <MenuItem value="video">ভিডিও (Video)</MenuItem>
+              </TextField>
+              <TextField
+                label="স্লট নির্বাচন করুন"
+                select
+                size="small"
+                value={adSlot}
+                onChange={(e) => setAdSlot(e.target.value)}
+                sx={{ flex: 1 }}
+              >
+                <MenuItem value="slot1">স্লট-১: প্রকাশনা</MenuItem>
+                <MenuItem value="slot2">স্লট-২: কর্পোরেট পার্টনার</MenuItem>
+                <MenuItem value="slot3">স্লট-৩: ব্র্যান্ড ও সেবা</MenuItem>
+              </TextField>
+            </Stack>
+
+            {/* MULTI-SCHOOL SELECTOR */}
+            <FormControl fullWidth size="small">
+              <InputLabel id="sd-schools-label">স্কুল নির্বাচন করুন (একাধিক বা গ্লোবাল)</InputLabel>
+              <Select
+                labelId="sd-schools-label"
+                multiple
+                value={selectedSchoolIds}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.includes('all')) {
+                    if (!selectedSchoolIds.includes('all')) {
+                      setSelectedSchoolIds(['all']);
+                    } else {
+                      setSelectedSchoolIds(val.filter(v => v !== 'all'));
+                    }
+                  } else {
+                    setSelectedSchoolIds(val);
+                  }
+                }}
+                input={<OutlinedInput label="স্কুল নির্বাচন করুন (একাধিক বা গ্লোবাল)" />}
+                renderValue={(selected) => {
+                  if (selected.includes('all') || selected.length === 0) return 'সকল স্কুল (গ্লোবাল বিজ্ঞাপন)';
+                  return selected.map(sid => schoolsList.find(s => String(s.id) === String(sid))?.name || sid).join(', ');
+                }}
+              >
+                <MenuItem value="all">
+                  <Checkbox checked={selectedSchoolIds.includes('all')} />
+                  <ListItemText primary="সকল স্কুল (গ্লোবাল বিজ্ঞাপন)" />
+                </MenuItem>
+                {schoolsList.map((s) => (
+                  <MenuItem key={s.id} value={String(s.id)}>
+                    <Checkbox checked={selectedSchoolIds.includes(String(s.id)) && !selectedSchoolIds.includes('all')} />
+                    <ListItemText primary={`${s.name} (EIIN: ${s.ein || s.id})`} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Button variant="outlined" component="label" fullWidth sx={{ py: 1 }}>
+              {adMediaFile ? adMediaFile.name : 'ছবি অথবা ভিডিও ফাইল নির্বাচন করুন'}
+              <input
+                hidden
+                type="file"
+                accept={adMediaType === 'video' ? 'video/*' : 'image/*'}
+                onChange={handleAdsFile}
+              />
+            </Button>
+            {adMediaDataUrl && (
+              <Box sx={{ mt: 1, textAlign: 'center' }}>
+                {adMediaType === 'video' ? (
+                  <Box component="video" src={adMediaDataUrl} controls sx={{ maxHeight: 150, maxWidth: '100%', borderRadius: 2 }} />
+                ) : (
+                  <Box component="img" src={adMediaDataUrl} alt="Preview" sx={{ maxHeight: 150, maxWidth: '100%', borderRadius: 2 }} />
+                )}
+              </Box>
+            )}
+
+            {adsSlots.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  বর্তমান বিজ্ঞাপনসমূহ ({adsSlots.length})
+                </Typography>
+                <Stack spacing={1} sx={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {adsSlots.map((ad, idx) => {
+                    const slotNames = { slot1: 'প্রকাশনা', slot2: 'কর্পোরেট পার্টনার', slot3: 'ব্র্যান্ড ও সেবা' };
+                    return (
+                      <Stack key={ad.id || idx} direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ p: 1, border: '1px solid #ddd', borderRadius: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, overflow: 'hidden' }}>
+                          <Box
+                            component={ad.type === 'video' ? 'video' : 'img'}
+                            src={getMediaUrl(ad.src)}
+                            sx={{ width: 40, height: 40, borderRadius: 1, objectFit: 'cover' }}
+                          />
+                          <Box sx={{ overflow: 'hidden' }}>
+                            <Typography variant="body2" noWrap fontWeight="bold">{ad.text || 'বিজ্ঞাপন'}</Typography>
+                            <Chip label={slotNames[ad.slot] || 'প্রকাশনা'} size="small" color="primary" sx={{ fontSize: '0.65rem', height: 18 }} />
+                          </Box>
+                        </Box>
+                        <Button size="small" color="error" variant="outlined" onClick={() => removeAd(ad.id)}>
+                          মুছুন
+                        </Button>
+                      </Stack>
+                    );
+                  })}
+                </Stack>
+              </Box>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setAdsOpen(false)}>বাতিল</Button>
+          <Button variant="contained" onClick={saveAds} disabled={savingAd || (!adMediaFile && !adMediaDataUrl)}>
+            {savingAd ? 'সংরক্ষণ হচ্ছে...' : 'বিজ্ঞাপন সেভ করুন'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

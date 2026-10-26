@@ -70,14 +70,14 @@ export const prefetchEverything = async (schoolId) => {
         }
 
         // 5. Results
-        const resultRes = await api.get(`/api/results/results/?school=${schoolId}&page_size=5000`).catch(() => null);
+        const resultRes = await api.get(`/api/results/results/?school=${schoolId}&page_size=1000`).catch(() => null);
         if (resultRes?.data) {
             const results = Array.isArray(resultRes.data) ? resultRes.data : resultRes.data?.results || [];
             if (results.length > 0) await cacheData('results', results);
         }
 
         // 6. Attendance Records
-        const attRes = await api.get(`/api/attendance/records/?school=${schoolId}&page_size=5000`).catch(() => null);
+        const attRes = await api.get(`/api/attendance/records/?school=${schoolId}&page_size=1000`).catch(() => null);
         if (attRes?.data) {
             const attendance = Array.isArray(attRes.data) ? attRes.data : attRes.data?.results || [];
             if (attendance.length > 0) await cacheData('attendance', attendance);
@@ -90,9 +90,7 @@ export const prefetchEverything = async (schoolId) => {
             `/api/ads/?school=${schoolId}`,
             `/api/results/overall/?school=${schoolId}`,
             `/api/results/overall/dashboard_result_summary/?school=${schoolId}&year=${new Date().getFullYear()}&exam_type=annual`,
-            `/api/attendance/records/monthly_report/?school=${schoolId}&month=${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
-            `/api/sms/logs/?school=${schoolId}`,
-            `/api/billing/invoices/?school=${schoolId}`
+            `/api/attendance/records/monthly_report/?school=${schoolId}&month=${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
         ];
 
         endpoints.forEach(url => api.get(url).catch(() => {}));
