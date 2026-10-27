@@ -427,8 +427,25 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
           boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
         }}>
           {userPhoto ? (
-            <img src={userPhoto} alt="S" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Photo</Typography>}
+            <img
+              src={userPhoto}
+              alt="S"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => {
+                if (schoolLogo) e.target.src = schoolLogo;
+              }}
+            />
+          ) : (
+            schoolLogo ? (
+              <img
+                src={schoolLogo}
+                alt="School Logo"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }}
+              />
+            ) : (
+              <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Photo</Typography>
+            )
+          )}
         </Box>
       </Box>
 

@@ -366,15 +366,20 @@ export default function AttendancePageNew() {
   const handleQrScanSuccess = useCallback(async (text) => {
     try {
       let studentId;
-      if (text.startsWith('STU|')) {
-        const parts = text.split('|');
-        studentId = parseInt(parts[1]);
+      const cleanText = String(text || '').trim();
+      if (cleanText.startsWith('STU|')) {
+        const parts = cleanText.split('|');
+        studentId = parseInt(parts[1], 10);
       } else {
-        const data = JSON.parse(text);
-        studentId = data.id || data.student_id;
+        try {
+          const data = JSON.parse(cleanText);
+          studentId = data.id || data.student_id;
+        } catch (e) {
+          studentId = parseInt(cleanText, 10);
+        }
       }
 
-      if (!studentId) return;
+      if (!studentId || isNaN(studentId)) return;
 
       // Duplicate Check (Local State)
       if (attendance[studentId]) {
@@ -383,10 +388,18 @@ export default function AttendancePageNew() {
         return;
       }
 
-      // UNIVERSAL SEARCH (In current list OR in entire school cache)
+      // UNIVERSAL SEARCH (In current list OR in entire school cache OR fetch from API)
       let student = students.find(s => s.id === studentId);
       if (!student) {
           student = allStudentsCacheRef.current.find(s => s.id === studentId);
+      }
+      if (!student) {
+          try {
+              const res = await scopedGet(`/api/academics/students/${studentId}/`, id);
+              if (res.data) student = res.data;
+          } catch (err) {
+              // ignore
+          }
       }
 
       if (!student) {
@@ -435,7 +448,6 @@ export default function AttendancePageNew() {
         console.log('QR Attendance saved successfully');
       } catch (saveErr) {
         console.error('Failed to save QR attendance immediately:', saveErr);
-        // Interceptor in api.js will handle queuing if it was a network error
       }
 
     } catch (e) {
@@ -453,12 +465,55 @@ export default function AttendancePageNew() {
           html5QrCode = new Html5Qrcode("qr-reader");
           qrScannerRef.current = html5QrCode;
           const config = { fps: 25, qrbox: { width: 300, height: 300 }, aspectRatio: 1.0 };
-          await html5QrCode.start({ facingMode: "environment" }, config, handleQrScanSuccess).catch(async () => {
-            await html5QrCode.start({ facingMode: "user" }, config, handleQrScanSuccess);
-          });
-          scannerRunningRef.current = true;
+
+          let started = false;
+
+          // 1. Try listing cameras and using back/environment camera deviceId if available
+          try {
+            const devices = await Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+              const backCamera = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+              await html5QrCode.start(backCamera.id, config, handleQrScanSuccess);
+              started = true;
+            }
+          } catch (camErr) {
+            console.warn('getCameras failed, falling back to facingMode:', camErr);
+          }
+
+          // 2. Try facingMode environment
+          if (!started) {
+            try {
+              await html5QrCode.start({ facingMode: "environment" }, config, handleQrScanSuccess);
+              started = true;
+            } catch (envErr) {
+              console.warn('facingMode environment failed:', envErr);
+            }
+          }
+
+          // 3. Try facingMode user
+          if (!started) {
+            try {
+              await html5QrCode.start({ facingMode: "user" }, config, handleQrScanSuccess);
+              started = true;
+            } catch (userErr) {
+              console.warn('facingMode user failed:', userErr);
+            }
+          }
+
+          // 4. Try true (any default camera)
+          if (!started) {
+            await html5QrCode.start(true, config, handleQrScanSuccess);
+            started = true;
+          }
+
+          if (started) {
+            scannerRunningRef.current = true;
+          } else {
+            throw new Error('All camera start methods failed');
+          }
         } catch (err) {
-          toast.error("ক্যামেরা চালু করা যায়নি।");
+          console.error('Camera start error:', err);
+          toast.error("ক্যামেরা চালু করা যায়নি। ব্রাউজারের ক্যামেরা পারমিশন চেক করুন।");
           setQrScannerOpen(false);
         }
       };

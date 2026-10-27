@@ -130,6 +130,15 @@ class IsSchoolMember(permissions.BasePermission):
 
         user_school_id = str(profile.school_id)
         target_school_id = request.query_params.get('school') or request.query_params.get('school_id')
+        if not target_school_id:
+            try:
+                view = getattr(request, 'parser_context', {}).get('view')
+                if view and hasattr(view, 'kwargs'):
+                    target_school_id = view.kwargs.get('school_id') or view.kwargs.get('school_pk') or view.kwargs.get('id')
+            except Exception:
+                pass
+        if not target_school_id and request.method not in permissions.SAFE_METHODS and hasattr(request, 'data') and isinstance(request.data, dict):
+            target_school_id = request.data.get('school') or request.data.get('school_id')
 
         if target_school_id and str(target_school_id) != user_school_id:
             return False
@@ -143,7 +152,11 @@ class RolePermission(permissions.BasePermission):
         if is_effective_admin(user, request):
             return True
         profile = getattr(user, 'profile', None)
-        return profile and profile.role in ('teacher', 'admin', 'super_admin')
+        if not profile:
+            return False
+        role = str(getattr(profile, 'role', '')).lower().strip()
+        designation = str(getattr(profile, 'designation', '')).lower().strip()
+        return role in ('teacher', 'admin', 'super_admin', 'staff', 'headmaster', 'principal') or 'teacher' in role or 'admin' in role or 'প্রধান' in designation or 'teacher' in designation or 'principal' in designation
 
     def has_object_permission(self, request, view, obj):
         user = request.user
@@ -156,7 +169,9 @@ class RolePermission(permissions.BasePermission):
         if not profile:
             return False
 
-        if profile.role in ('teacher', 'admin', 'super_admin'):
+        role = str(getattr(profile, 'role', '')).lower().strip()
+        is_staff_role = role in ('teacher', 'admin', 'super_admin', 'staff', 'headmaster', 'principal') or 'teacher' in role or 'admin' in role
+        if is_staff_role:
             # Allow staff to modify/delete objects in their own school
             obj_school_id = getattr(obj, 'school_id', None) or (getattr(obj.school, 'id', None) if hasattr(obj, 'school') and obj.school else None)
             if obj_school_id and str(obj_school_id) == str(profile.school_id):
