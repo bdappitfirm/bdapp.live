@@ -37,7 +37,7 @@ from .serializers import (
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 100
     page_size_query_param = 'page_size'
-    max_page_size = 1000
+    max_page_size = 10000
 
 class SchoolListAPI(APIView):
     permission_classes = [permissions.AllowAny]
@@ -619,6 +619,86 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
             })
         except Exception as e:
             return Response({"detail": f"Fatal error during bulk update: {str(e)}"}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='auto-generate')
+    def auto_generate(self, request):
+        """
+        Auto-generates N students for a specific classroom and section where roll and name are 1, 2, 3...
+        Request payload:
+        {
+            "classroom_id": 211,
+            "section_id": 470,
+            "count": 50
+        }
+        """
+        school_param = request.query_params.get('school') or request.query_params.get('school_id') or request.data.get('school') or request.data.get('school_id')
+        sid = int(school_param) if (school_param and str(school_param).isdigit()) else get_user_school_id(request.user, request)
+        if not sid:
+            return Response({"detail": "School ID required"}, status=400)
+
+        classroom_id = request.data.get('classroom_id')
+        section_id = request.data.get('section_id')
+        count = request.data.get('count')
+
+        if not classroom_id or not section_id or not count:
+            return Response({"detail": "classroom_id, section_id, and count are required"}, status=400)
+
+        try:
+            count = int(count)
+            classroom_id = int(classroom_id)
+            section_id = int(section_id)
+        except ValueError:
+            return Response({"detail": "Invalid parameters"}, status=400)
+
+        school = School.objects.filter(pk=sid).first()
+        classroom = ClassRoom.objects.filter(pk=classroom_id, school_id=sid).first()
+        section = Section.objects.filter(pk=section_id, classroom_id=classroom_id).first()
+
+        if not school or not classroom or not section:
+            return Response({"detail": "School, classroom, or section not found"}, status=404)
+
+        created_count = 0
+        from users.models import User, Profile
+
+        with transaction.atomic():
+            for roll in range(1, count + 1):
+                roll_str = str(roll)
+                if StudentProfile.objects.filter(school=school, classroom=classroom, section=section, roll_number=roll_str).exists():
+                    continue
+
+                base_uname = f"s{sid}c{classroom_id}s{section_id}r{roll}"
+                uname = base_uname
+                c = 1
+                while User.objects.filter(username=uname).exists():
+                    uname = f"{base_uname}_{c}"
+                    c += 1
+
+                user = User.objects.create_user(
+                    username=uname,
+                    password="12345678",
+                    first_name=roll_str,
+                    last_name=""
+                )
+
+                Profile.objects.update_or_create(
+                    user=user,
+                    defaults={'school': school, 'role': 'student'}
+                )
+
+                StudentProfile.objects.create(
+                    user=user,
+                    school=school,
+                    classroom=classroom,
+                    section=section,
+                    roll_number=roll_str
+                )
+                created_count += 1
+
+        return Response({
+            "status": "success",
+            "created_count": created_count,
+            "message": f"Successfully auto-generated {created_count} students."
+        })
 
     @action(detail=False, methods=['get'])
     def history(self, request):

@@ -121,7 +121,8 @@ const pageImports = [
   () => import('./pages/SoftwareAccountsPage.jsx'),
   () => import('./pages/BanbeisPage.jsx'),
   () => import('./pages/PayrollPage.jsx'),
-  () => import('./pages/PayslipGenerator.jsx')
+  () => import('./pages/PayslipGenerator.jsx'),
+  () => import('./pages/AllStudentsOverviewPage.jsx')
 ];
 
 export const preloadAllPages = () => {
@@ -280,6 +281,7 @@ const SoftwareAccountsPage = safeLazy(() => import('./pages/SoftwareAccountsPage
 const BanbeisPage = safeLazy(() => import('./pages/BanbeisPage.jsx'));
 const PayrollPage = safeLazy(() => import('./pages/PayrollPage.jsx'));
 const PayslipGenerator = safeLazy(() => import('./pages/PayslipGenerator.jsx'));
+const AllStudentsOverviewPage = safeLazy(() => import('./pages/AllStudentsOverviewPage.jsx'));
 
 const PathTracker = () => {
   const location = useLocation();
@@ -396,6 +398,7 @@ function App() {
           <Route path="tot-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><ToTListPage /></ProtectedRoute>} />
           <Route path="voter-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><VoterListPage /></ProtectedRoute>} />
           <Route path="student-list" element={<ProtectedRoute allowedRoles={['admin','teacher']}><StudentListPage /></ProtectedRoute>} />
+          <Route path="all-students-overview" element={<ProtectedRoute allowedRoles={['admin','teacher','student','parent','committee']}><AllStudentsOverviewPage /></ProtectedRoute>} />
           <Route path="siblings" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SiblingsPage /></ProtectedRoute>} />
           <Route path="id-card" element={<ProtectedRoute allowedRoles={['admin','teacher']}><IDCardGenerator /></ProtectedRoute>} />
           <Route path="certificate" element={<ProtectedRoute allowedRoles={['admin','teacher']}><CertificateGenerator /></ProtectedRoute>} />

@@ -82,6 +82,7 @@ const SchoolDashboard = () => {
     { label: 'ড্যাশবোর্ড প্যানেল', icon: <AssessmentIcon />, key: 'dashboard-stats' },
     { label: 'শিক্ষক', icon: <PersonIcon />, key: 'teacher' },
     { label: 'ছাত্র-ছাত্রী', icon: <SchoolIcon />, key: 'student' },
+    { label: 'একনজরে সকল শিক্ষার্থী', icon: <SchoolIcon />, key: 'all-students-overview' },
     { label: 'অভিভাবক', icon: <PeopleIcon />, key: 'parent' },
     { label: 'শ্রেণি ব্যবস্থাপনা', icon: <ClassIcon />, key: 'classes' },
     { label: 'বিষয়/সাবজেক্ট', icon: <BookIcon />, key: 'subjects' },

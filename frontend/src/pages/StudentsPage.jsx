@@ -13,7 +13,6 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import StudentCard from '../components/StudentCard';
 import ImportDialog from '../components/ImportDialog';
-import EmptyState from '../components/EmptyState';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import InputGuidance from '../components/InputGuidance';
@@ -38,6 +37,8 @@ export default function StudentsPage() {
   const [selectedSection, setSelectedSection] = useState(null);
   const [sliceStudents, setSliceStudents] = useState(null);
   const [sliceLoading, setSliceLoading] = useState(false);
+  const [autoCount, setAutoCount] = useState('50');
+  const [autoLoading, setAutoLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const searchDebounceRef = useRef(null);
 
@@ -408,7 +409,54 @@ export default function StudentsPage() {
           {sliceLoading ? <CardSkeleton count={6} /> : (
             <>
               {filtered.length === 0 ? (
-                <EmptyState title="কোনো শিক্ষার্থী পাওয়া যায়নি" message="এই শাখায় কোনো শিক্ষার্থী নেই অথবা সার্চের সাথে মিলছে না।" />
+                <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3, my: 4, bgcolor: 'background.paper', boxShadow: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 1, fontWeight: 'bold', color: 'primary.main' }}>
+                    এই শাখায় কোনো শিক্ষার্থী নেই
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    শিক্ষার্থী সংখ্যা ইনপুট দিন। ইনপুট দেবার পর ওই সংখ্যক স্টুডেন্টের প্রফাইল রোল ও নাম হিসেবে ১, ২, ৩, ৪... এভাবে অটো ক্রিয়েট হয়ে যাবে। নাম ও রোল দুটো একই হবে।
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" alignItems="center">
+                    <TextField
+                      type="number"
+                      label="শিক্ষার্থীর সংখ্যা (যেমন: ৫০)"
+                      value={autoCount}
+                      onChange={(e) => setAutoCount(e.target.value)}
+                      inputProps={{ min: 1, max: 500 }}
+                      size="small"
+                      sx={{ width: 220, bgcolor: 'white' }}
+                    />
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      disabled={autoLoading || !autoCount || Number(autoCount) <= 0}
+                      onClick={async () => {
+                        if (!selectedClass || !selectedSection || selectedSection === 'ALL' || selectedSection === 'UNASSIGNED') {
+                          toast.error('দয়া করে নির্দিষ্ট একটি শাখা নির্বাচন করুন');
+                          return;
+                        }
+                        setAutoLoading(true);
+                        try {
+                          const res = await api.post(`/api/academics/students/auto-generate/?school=${id}`, {
+                            classroom_id: selectedClass,
+                            section_id: selectedSection,
+                            count: Number(autoCount),
+                            school_id: id
+                          });
+                          toast.success(res.data.message || 'শিক্ষার্থীরা সফলভাবে তৈরি হয়েছে');
+                          await loadStudents();
+                        } catch (err) {
+                          console.error(err);
+                          toast.error(err.response?.data?.detail || 'শিক্ষার্থী তৈরিতে সমস্যা হয়েছে');
+                        } finally {
+                          setAutoLoading(false);
+                        }
+                      }}
+                    >
+                      {autoLoading ? 'তৈরি হচ্ছে...' : 'অটো শিক্ষার্থী তৈরি করুন'}
+                    </Button>
+                  </Stack>
+                </Paper>
               ) : (
                 <Grid container spacing={2}>
                     {filtered.map(s => (
