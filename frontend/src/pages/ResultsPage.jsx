@@ -232,7 +232,7 @@ const MemoizedBulkMarkRow = React.memo(({
             onKeyDown={(e) => onKeyDown(e, student.id, 'written')}
             placeholder={isNineTen ? "100" : "50"}
             autoComplete="off"
-            inputProps={{ 'data-student-id': student.id, 'data-field': 'written', style: { textAlign: 'center', width: '80px' }, autoComplete: 'off' }}
+            inputProps={{ 'data-student-id': student.id, 'data-field': 'written', inputMode: 'decimal', pattern: '[0-9]*', style: { textAlign: 'center', width: '80px' }, autoComplete: 'off' }}
           />
         </TableCell>
       ) : (
@@ -246,7 +246,7 @@ const MemoizedBulkMarkRow = React.memo(({
                 onKeyDown={(e) => onKeyDown(e, student.id, 'written')}
                 placeholder={String(wMax)}
                 autoComplete="off"
-                inputProps={{ 'data-student-id': student.id, 'data-field': 'written', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+                inputProps={{ 'data-student-id': student.id, 'data-field': 'written', inputMode: 'decimal', pattern: '[0-9]*', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
               />
             </TableCell>
           )}
@@ -259,7 +259,7 @@ const MemoizedBulkMarkRow = React.memo(({
                 onKeyDown={(e) => onKeyDown(e, student.id, 'mcq')}
                 placeholder={String(mMax)}
                 autoComplete="off"
-                inputProps={{ 'data-student-id': student.id, 'data-field': 'mcq', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+                inputProps={{ 'data-student-id': student.id, 'data-field': 'mcq', inputMode: 'decimal', pattern: '[0-9]*', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
               />
             </TableCell>
           )}
@@ -272,7 +272,7 @@ const MemoizedBulkMarkRow = React.memo(({
                 onKeyDown={(e) => onKeyDown(e, student.id, 'practical')}
                 placeholder={String(pMax)}
                 autoComplete="off"
-                inputProps={{ 'data-student-id': student.id, 'data-field': 'practical', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
+                inputProps={{ 'data-student-id': student.id, 'data-field': 'practical', inputMode: 'decimal', pattern: '[0-9]*', style: { textAlign: 'center', width: '50px' }, autoComplete: 'off' }}
               />
             </TableCell>
           )}
@@ -357,7 +357,6 @@ export default function ResultsPage() {
   const [sectionSelectOpen, setSectionSelectOpen] = useState(false);
   const [examSelectOpen, setExamSelectOpen] = useState(false);
   const [subjectSelectOpen, setSubjectSelectOpen] = useState(false);
-  const autoSaveTimer = useRef(null);
   const dirtyMarksBuffer = useRef({});
   const inFlightAutoSaves = useRef(0);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -408,12 +407,7 @@ export default function ResultsPage() {
     if (!examId || !studentId || !subjectId) return;
     const key = `${studentId}-${subjectId}`;
     dirtyMarksBuffer.current[key] = { examId, studentId, subjectId, marks };
-
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      flushAutoSave();
-    }, 1500); // 1.5s debounce to give user time to type multiple fields
-  }, [flushAutoSave]);
+  }, []);
 
   const handleEditMarksChange = (field, value) => {
     const newEditMarks = { ...editMarks, [field]: value };
@@ -923,6 +917,18 @@ export default function ResultsPage() {
 
   const loadExistingBulkMarks = useCallback(async (examId, subjectId) => {
     if (!examId || !subjectId) return;
+
+    // 1. Instant load from local cache
+    try {
+      const cached = localStorage.getItem(`cache_marks_${examId}_${subjectId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === 'object') {
+          setBulkMarks(parsed);
+        }
+      }
+    } catch(e) {}
+
     try {
       const selectedSubj = subjects.find(s => s.id === parseInt(subjectId));
       const subjName = selectedSubj?.name;
@@ -1459,6 +1465,7 @@ export default function ResultsPage() {
   };
 
   const closeBulkDialog = () => {
+    flushAutoSave(); // Silently background sync cached marks
     setBulkDialogOpen(false);
     setBulkForm({ classroom: '', section: null, subject: '', exam: '' });
     setBulkStudents([]);
@@ -1556,22 +1563,44 @@ export default function ResultsPage() {
       const newMarksForStudent = { ...(prev[sid] || {}), [field]: v };
       const next = { ...prev, [sid]: newMarksForStudent };
 
-      queueAutoSave(bulkForm.exam || selectedExam, sid, bulkForm.subject, newMarksForStudent);
+      const examId = bulkForm.exam || selectedExam;
+      const subId = bulkForm.subject;
+      if (examId && subId) {
+        try {
+          localStorage.setItem(`cache_marks_${examId}_${subId}`, JSON.stringify(next));
+        } catch(e) {}
+      }
+
+      queueAutoSave(examId, sid, subId, newMarksForStudent);
 
       return next;
     });
   }, [bulkForm.exam, selectedExam, bulkForm.subject, bulkForm.classroom, subjects, getExamById, getMaxForField, queueAutoSave]);
 
   const handleKeyDown = useCallback((e, studentId, field) => {
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
+      const fields = ['written', 'mcq', 'practical'];
       const currentIndex = bulkStudents.findIndex(s => s.id === studentId);
-      if (currentIndex < bulkStudents.length - 1) {
-        const nextStudentId = bulkStudents[currentIndex + 1].id;
-        const nextInput = document.querySelector(`input[data-student-id="${nextStudentId}"][data-field="${field}"]`);
-        if (nextInput) {
-          nextInput.focus();
-          nextInput.select();
+      const fieldIndex = fields.indexOf(field);
+
+      if (e.key === 'Enter' || e.key === 'ArrowDown') {
+        if (e.key === 'Enter' && fieldIndex < fields.length - 1) {
+          const nextField = fields[fieldIndex + 1];
+          const input = document.querySelector(`input[data-student-id="${studentId}"][data-field="${nextField}"]`);
+          if (input) { input.focus(); input.select(); return; }
+        }
+        if (currentIndex < bulkStudents.length - 1) {
+          const nextStudentId = bulkStudents[currentIndex + 1].id;
+          const targetField = e.key === 'Enter' ? fields[0] : field;
+          const input = document.querySelector(`input[data-student-id="${nextStudentId}"][data-field="${targetField}"]`);
+          if (input) { input.focus(); input.select(); return; }
+        }
+      } else if (e.key === 'ArrowUp') {
+        if (currentIndex > 0) {
+          const prevStudentId = bulkStudents[currentIndex - 1].id;
+          const input = document.querySelector(`input[data-student-id="${prevStudentId}"][data-field="${field}"]`);
+          if (input) { input.focus(); input.select(); }
         }
       }
     }

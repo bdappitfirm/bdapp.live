@@ -148,9 +148,19 @@ class Result(models.Model):
         
         group = _class_group(getattr(self.examination.classroom, "name", None))
 
+        # Fetch school-specific pass percentage if configured, default to 33.00
+        pass_pct = 33.00
+        try:
+            if self.examination and self.examination.school:
+                policy = getattr(self.examination.school, 'grading_policy', None)
+                if policy:
+                    pass_pct = float(policy.pass_percentage)
+        except Exception:
+            pass_pct = 33.00
+
         if group == 'primary':
             wm_max = 50 if any(w in (self.subject.name or '').lower() for w in ['অংকন', 'drawing', 'চিত্রাংকন']) else 100
-            pass_threshold = Decimal(str(round(float(wm_max) * 0.33)))
+            pass_threshold = Decimal(str(round(float(wm_max) * (pass_pct / 100.0))))
             self.is_passed = wm >= pass_threshold
             percentage = (float(wm) / float(wm_max)) * 100 if wm_max > 0 else 0
 
@@ -159,7 +169,7 @@ class Result(models.Model):
             elif percentage >= 60: self.grade = 'A-'; self.gpa = Decimal('3.50')
             elif percentage >= 50: self.grade = 'B'; self.gpa = Decimal('3.00')
             elif percentage >= 40: self.grade = 'C'; self.gpa = Decimal('2.00')
-            elif percentage >= 33: self.grade = 'D'; self.gpa = Decimal('1.00')
+            elif percentage >= pass_pct: self.grade = 'D'; self.gpa = Decimal('1.00')
             else: self.grade = 'F'; self.gpa = Decimal('0.00')
 
             if not self.is_passed:
@@ -214,7 +224,7 @@ class Result(models.Model):
         elif percentage >= 40:
             self.grade = 'C'
             self.gpa = 2.00
-        elif percentage >= 33:
+        elif percentage >= pass_pct:
             self.grade = 'D'
             self.gpa = 1.00
         else:
@@ -224,8 +234,8 @@ class Result(models.Model):
         # Pass/Fail calculation
         is_nine_ten = group == 'nine_ten'
 
-        # Accurate Board Pass Rule: total_obtained >= round(denom * 0.33)
-        pass_threshold = Decimal(str(round(float(denom) * 0.33)))
+        # Accurate Board Pass Rule: total_obtained >= round(denom * pass_pct / 100.0)
+        pass_threshold = Decimal(str(round(float(denom) * (pass_pct / 100.0))))
         self.is_passed = self.total_obtained >= pass_threshold
         
         # STRICT RULE for Class 9-10: Separate pass for each component
@@ -234,11 +244,12 @@ class Result(models.Model):
             sname = (self.subject.name if self.subject else '').lower()
             is_2paper = bool(re.search(r'bangla|বাংলা|english|ইংরেজি|ইংরেজী', sname)) and bool(re.search(r'১ম|1st|first|২য়|২য়|2nd|second', sname))
             if not is_2paper:
-                if wm_max > 0 and float(wm) < round(wm_max * 0.33):
+                comp_pct = pass_pct / 100.0
+                if wm_max > 0 and float(wm) < round(wm_max * comp_pct):
                     self.is_passed = False
-                if mm_max > 0 and float(mm) < round(mm_max * 0.33):
+                if mm_max > 0 and float(mm) < round(mm_max * comp_pct):
                     self.is_passed = False
-                if pm_max > 0 and float(pm) < round(pm_max * 0.33):
+                if pm_max > 0 and float(pm) < round(pm_max * comp_pct):
                     self.is_passed = False
 
         # Override grade and GPA if failed
@@ -249,7 +260,7 @@ class Result(models.Model):
             # Recalculate grade if it was wrongly set to F before due to total %
             if self.grade == 'F':
                 if percentage >= 40: self.grade = 'C'
-                elif percentage >= 33: self.grade = 'D'
+                elif percentage >= pass_pct: self.grade = 'D'
         
         # If all marks are None, we shouldn't really have a grade/GPA,
         # but the model fields are not nullable for grade/gpa currently.

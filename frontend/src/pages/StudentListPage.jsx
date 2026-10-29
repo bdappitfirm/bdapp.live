@@ -351,10 +351,7 @@ export default function StudentListPage() {
                             <TableCell sx={{ p: 0, m: 0 }}>
                               <select className="sl-cell-select" value={s.optional_subject_id || s.optional_subject?.id || s.optional_subject || ''} onChange={(e) => handleFieldChange(s.id, 'optional_subject_id', e.target.value)}>
                                 <option value="">নির্বাচন করুন</option>
-                                {allSubjects.filter(sub => {
-                                  const n = String(sub.name || '').toLowerCase();
-                                  return n.includes('উচ্চতর') || n.includes('higher') || n.includes('কৃষি') || n.includes('agri');
-                                }).map(sub => (
+                                {allSubjects.map(sub => (
                                   <option key={sub.id} value={sub.id}>{sub.name}</option>
                                 ))}
                               </select>

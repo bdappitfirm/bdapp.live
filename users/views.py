@@ -26,7 +26,7 @@ from .serializers import (
     SalaryStructureSerializer,
     PayrollRecordSerializer,
 )
-from .sms_service import send_sms, send_bulk_sms, SMSTemplates
+from .sms_service import send_sms, send_bulk_sms, send_bulk_sms_async, SMSTemplates
 from django.core.files.storage import default_storage
 from django.conf import settings
 import os
@@ -289,16 +289,24 @@ def send_bulk_sms_view(request):
     if not phones or not isinstance(phones, list):
         return Response({"error": "phone_numbers list is required"}, status=400)
 
-    results = send_bulk_sms(phones, message, sender_mobile=sender)
+    is_async = data.get('async', False) or len(phones) > 20
+    if is_async:
+        success, msg = send_bulk_sms_async(phones, message, sender_mobile=sender)
+        return Response({
+            "success": success,
+            "message": msg,
+            "queued": len(phones)
+        })
+    else:
+        results = send_bulk_sms(phones, message, sender_mobile=sender)
+        sent_count = sum(1 for r in results if r['success'])
+        failed_count = len(results) - sent_count
 
-    sent_count = sum(1 for r in results if r['success'])
-    failed_count = len(results) - sent_count
-
-    return Response({
-        "sent": sent_count,
-        "failed": failed_count,
-        "results": results
-    })
+        return Response({
+            "sent": sent_count,
+            "failed": failed_count,
+            "results": results
+        })
 
 @api_view(['POST'])
 def send_template_sms_view(request):

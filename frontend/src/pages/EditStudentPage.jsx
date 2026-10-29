@@ -188,6 +188,7 @@ export default function EditStudentPage() {
           ssc_session: s.ssc_session || '',
           ssc_gpa: s.ssc_gpa || ''
         });
+        setPrevGroup(s.student_group || s.group || '');
         setCurrentPhoto(s.user?.photo_url || s.photo_url || s.photo);
       } catch (e) {
         console.error("Error loading data:", e);
@@ -208,6 +209,9 @@ export default function EditStudentPage() {
     if (form.group === prevGroup) return;
     setPrevGroup(form.group);
 
+    // Only auto-assign default if optional_subject_id is not already set
+    if (form.optional_subject_id) return;
+
     let targetName = '';
     if (form.group === 'science') {
       targetName = 'উচ্চতর গণিত';
@@ -225,7 +229,7 @@ export default function EditStudentPage() {
         setForm(prev => ({ ...prev, optional_subject_id: found.id }));
       }
     }
-  }, [isSecondaryOrHigher, form.group, subjects, loading, prevGroup]);
+  }, [isSecondaryOrHigher, form.group, subjects, loading, prevGroup, form.optional_subject_id]);
 
   const handleSubmit = async () => {
     if (!isAuthenticated()) {

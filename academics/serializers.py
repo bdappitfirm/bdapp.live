@@ -189,21 +189,27 @@ class TinySectionSerializer(serializers.ModelSerializer):
         model = Section
         fields = ['id', 'name']
 
+class SafePrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    def to_internal_value(self, data):
+        if data in ['', None, 'null', 'None']:
+            return None
+        return super().to_internal_value(data)
+
 class StudentProfileSerializer(serializers.ModelSerializer):
     user = SimpleUserSerializer(read_only=True)
-    user_id = serializers.PrimaryKeyRelatedField(source='user', queryset=User.objects.all(), write_only=True, required=False, allow_null=True)
+    user_id = SafePrimaryKeyRelatedField(source='user', queryset=User.objects.all(), write_only=True, required=False, allow_null=True)
     school = serializers.IntegerField(source='school_id', read_only=True)
-    school_id = serializers.PrimaryKeyRelatedField(source='school', queryset=School.objects.all(), write_only=True, required=False)
+    school_id = SafePrimaryKeyRelatedField(source='school', queryset=School.objects.all(), write_only=True, required=False, allow_null=True)
     classroom = TinyClassRoomSerializer(read_only=True)
-    classroom_id = serializers.PrimaryKeyRelatedField(source='classroom', queryset=ClassRoom.objects.all(), write_only=True, allow_null=True, required=False)
+    classroom_id = SafePrimaryKeyRelatedField(source='classroom', queryset=ClassRoom.objects.all(), write_only=True, allow_null=True, required=False)
     section = TinySectionSerializer(read_only=True)
-    section_id = serializers.PrimaryKeyRelatedField(source='section', queryset=Section.objects.all(), write_only=True, allow_null=True, required=False)
+    section_id = SafePrimaryKeyRelatedField(source='section', queryset=Section.objects.all(), write_only=True, allow_null=True, required=False)
     guardian = SimpleUserSerializer(read_only=True)
-    guardian_id = serializers.PrimaryKeyRelatedField(source='guardian', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
+    guardian_id = SafePrimaryKeyRelatedField(source='guardian', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
     father = SimpleUserSerializer(read_only=True)
-    father_id = serializers.PrimaryKeyRelatedField(source='father', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
+    father_id = SafePrimaryKeyRelatedField(source='father', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
     mother = SimpleUserSerializer(read_only=True)
-    mother_id = serializers.PrimaryKeyRelatedField(source='mother', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
+    mother_id = SafePrimaryKeyRelatedField(source='mother', queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
     username = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     password = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     first_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -212,7 +218,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
     last_name_en = serializers.CharField(write_only=True, required=False, allow_blank=True)
     email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     phone_number = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    optional_subject_id = serializers.PrimaryKeyRelatedField(source='optional_subject', queryset=Subject.objects.all(), write_only=True, allow_null=True, required=False)
+    optional_subject_id = SafePrimaryKeyRelatedField(source='optional_subject', queryset=Subject.objects.all(), write_only=True, allow_null=True, required=False)
     guardian_name = serializers.CharField(required=False, allow_blank=True)
     guardian_name_en = serializers.CharField(required=False, allow_blank=True)
     father_name_en = serializers.CharField(required=False, allow_blank=True)

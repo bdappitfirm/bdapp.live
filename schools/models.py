@@ -157,3 +157,15 @@ class SchoolBilling(models.Model):
 
     def __str__(self):
         return f"Billing for {self.school.name}"
+
+
+class SchoolGradingPolicy(models.Model):
+    """School-specific grading policy override (pass percentage, GPA scale, etc.)"""
+    school = models.OneToOneField(School, on_delete=models.CASCADE, related_name='grading_policy')
+    pass_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=33.00, help_text="Pass percentage threshold (e.g. 33.00 or 40.00)")
+    gpa_scale = models.DecimalField(max_digits=3, decimal_places=2, default=5.00)
+    custom_thresholds = models.JSONField(default=dict, blank=True, help_text="Custom grade thresholds if any")
+
+    def __str__(self):
+        return f"Grading Policy for {self.school.name} (Pass: {self.pass_percentage}%)"
+

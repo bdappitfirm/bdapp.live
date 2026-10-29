@@ -261,3 +261,21 @@ def send_bulk_sms(phone_numbers, message, sender_mobile=None):
         })
     
     return results
+
+
+# Asynchronous Bulk SMS function using background thread to prevent browser/request hanging
+import threading
+
+def send_bulk_sms_async(phone_numbers, message, sender_mobile=None):
+    """Send bulk SMS in a background thread"""
+    def _task():
+        try:
+            send_bulk_sms(phone_numbers, message, sender_mobile=sender_mobile)
+            logger.info(f"Async background bulk SMS completed for {len(phone_numbers)} recipients.")
+        except Exception as e:
+            logger.error(f"Async background bulk SMS error: {e}")
+
+    t = threading.Thread(target=_task, daemon=True)
+    t.start()
+    return True, "Bulk SMS initiated in background"
+
