@@ -60,7 +60,7 @@ const FeesPage = () => {
   const [isLoadingLedger, setIsLoadingLedger] = useState(false);
   const [ledger, setLedger] = useState({ assignments: [], collections: [], rows: [], totals: { amount: 0, paid: 0, due: 0 } });
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
-  const [inlinePayment, setInlinePayment] = useState({ amount: '', paymentDate: new Date(), method: 'cash', reference: '', note: '', bkash_to: '', bkash_from: '' });
+  const [inlinePayment, setInlinePayment] = useState({ amount: '', paymentDate: new Date(), method: 'cash', reference: '', feeHead: 'tuition_fee', note: '', bkash_to: '', bkash_from: '' });
   const [isDueSlipOpen, setIsDueSlipOpen] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [, setIsLoadingPayments] = useState(false);
@@ -278,17 +278,22 @@ const FeesPage = () => {
     if (!selectedLedgerStudentId || !inlinePayment.amount) return;
     try {
       setIsSubmittingPayment(true);
-      await api.post('/api/fees/payments/', {
-        student_id: selectedLedgerStudentId, amount: parseFloat(inlinePayment.amount),
+      const payload = {
+        student_id: selectedLedgerStudentId,
+        amount: parseFloat(inlinePayment.amount),
         payment_date: inlinePayment.paymentDate.toISOString().split('T')[0],
-        payment_method: inlinePayment.method, reference: inlinePayment.reference, school: schoolId
-      });
-      setSnackbar({ open: true, message: 'পেমেন্ট সফলভাবে সংরক্ষিত', severity: 'success' });
+        payment_method: inlinePayment.method,
+        reference: inlinePayment.reference,
+        school: schoolId,
+        [inlinePayment.feeHead]: parseFloat(inlinePayment.amount)
+      };
+      await api.post('/api/fees/payments/', payload);
+      setSnackbar({ open: true, message: 'পেমেন্ট সফলভাবে সংরক্ষিত ও দৈনিক আদায় রেজিস্টারে যুক্ত হয়েছে', severity: 'success' });
       const student = students.find(s => s.id === selectedLedgerStudentId);
       if (student?.guardian_phone) {
         sendWhatsAppMessage(student.guardian_phone, `সুপ্রিয় অভিভাবক, আপনার সন্তান ${student.display_name}-এর ৳${inlinePayment.amount} ফি জমা হয়েছে। ধন্যবাদ।`);
       }
-      setInlinePayment({ amount: '', paymentDate: new Date(), method: 'cash', reference: '', note: '', bkash_to: '', bkash_from: '' });
+      setInlinePayment({ amount: '', paymentDate: new Date(), method: 'cash', reference: '', feeHead: 'tuition_fee', note: '', bkash_to: '', bkash_from: '' });
       fetchStudentLedger(selectedLedgerStudentId); fetchPaymentHistory(selectedLedgerStudentId);
     } catch (e) { setSnackbar({ open: true, message: 'পেমেন্ট সংরক্ষণে ব্যর্থ', severity: 'error' }); }
     finally { setIsSubmittingPayment(false); }
@@ -419,7 +424,22 @@ const FeesPage = () => {
                           <DatePicker value={inlinePayment.paymentDate} onChange={(d) => setInlinePayment(p => ({ ...p, paymentDate: d }))} slotProps={{ textField: { size: 'small' } }} />
                         </TableCell>
                         <TableCell>
-                          <TextField id="inline-amount-input" size="small" type="number" placeholder="পরিমাণ" value={inlinePayment.amount} onChange={(e) => setInlinePayment(p => ({ ...p, amount: e.target.value }))} />
+                          <Select size="small" value={inlinePayment.feeHead} onChange={(e) => setInlinePayment(p => ({ ...p, feeHead: e.target.value }))} sx={{ minWidth: 140 }}>
+                            <MenuItem value="tuition_fee">মাসিক বেতন (Tuition)</MenuItem>
+                            <MenuItem value="admission_fee">ভর্তি ফি (Admission)</MenuItem>
+                            <MenuItem value="session_fee">সেশন ফি (Session)</MenuItem>
+                            <MenuItem value="exam_fee">পরীক্ষার ফি (Exam)</MenuItem>
+                            <MenuItem value="sports_fee">খেলাধুলা (Sports)</MenuItem>
+                            <MenuItem value="cert_reg_fee">সনদ ও রেজি.</MenuItem>
+                            <MenuItem value="religion_fee">ধর্ম ফি</MenuItem>
+                            <MenuItem value="culture_library_fee">সংস্কৃতি/পাঠাগার</MenuItem>
+                            <MenuItem value="refreshment_poor_fund_fee">জলযোগ/দরিদ্র ফান্ড</MenuItem>
+                            <MenuItem value="due_amount">বকেয়া</MenuItem>
+                            <MenuItem value="misc_fee">বিবিধ</MenuItem>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <TextField id="inline-amount-input" size="small" type="text" inputProps={{ inputMode: 'numeric' }} placeholder="পরিমাণ" value={inlinePayment.amount} onChange={(e) => setInlinePayment(p => ({ ...p, amount: e.target.value }))} />
                         </TableCell>
                         <TableCell>
                           <Select size="small" value={inlinePayment.method} onChange={(e) => setInlinePayment(p => ({ ...p, method: e.target.value }))} sx={{ minWidth: 120 }}>
@@ -463,7 +483,7 @@ const FeesPage = () => {
                   {feeStructures.map(fs => <MenuItem key={fs.id} value={fs.id}>{fs.name} (৳{fs.amount})</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField fullWidth label="টাকার পরিমাণ" type="number" value={feeForm.amount} onChange={(e) => setFeeForm(p => ({ ...p, amount: e.target.value }))} required />
+              <TextField fullWidth label="টাকার পরিমাণ" type="text" inputProps={{ inputMode: 'numeric' }} value={feeForm.amount} onChange={(e) => setFeeForm(p => ({ ...p, amount: e.target.value }))} required />
               <DatePicker label="শেষ তারিখ" value={feeForm.dueDate} onChange={(d) => setFeeForm(p => ({ ...p, dueDate: d }))} slotProps={{ textField: { fullWidth: true, required: true } }} />
               <DialogActions>
                 <Button onClick={handleCloseDialog}>বাতিল</Button>
@@ -477,10 +497,10 @@ const FeesPage = () => {
         <Dialog open={isPlanDialogOpen} onClose={() => setIsPlanDialogOpen(false)} fullWidth maxWidth="xs">
           <DialogTitle>ক্লাস ভিত্তিক ফি নির্ধারণ</DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-            <TextField fullWidth label="মাসিক বেতন" type="number" value={planForm.monthlyAmount} onChange={(e) => setPlanForm(p => ({ ...p, monthlyAmount: e.target.value }))} />
-            <TextField fullWidth label="অর্ধ-বার্ষিকী পরীক্ষার ফি" type="number" value={planForm.halfYearlyAmount} onChange={(e) => setPlanForm(p => ({ ...p, halfYearlyAmount: e.target.value }))} />
-            <TextField fullWidth label="বার্ষিক পরীক্ষার ফি" type="number" value={planForm.annualAmount} onChange={(e) => setPlanForm(p => ({ ...p, annualAmount: e.target.value }))} />
-            <TextField fullWidth label="সেশন ফি" type="number" value={planForm.sessionAmount} onChange={(e) => setPlanForm(p => ({ ...p, sessionAmount: e.target.value }))} />
+            <TextField fullWidth label="মাসিক বেতন" type="text" inputProps={{ inputMode: 'numeric' }} value={planForm.monthlyAmount} onChange={(e) => setPlanForm(p => ({ ...p, monthlyAmount: e.target.value }))} />
+            <TextField fullWidth label="অর্ধ-বার্ষিকী পরীক্ষার ফি" type="text" inputProps={{ inputMode: 'numeric' }} value={planForm.halfYearlyAmount} onChange={(e) => setPlanForm(p => ({ ...p, halfYearlyAmount: e.target.value }))} />
+            <TextField fullWidth label="বার্ষিক পরীক্ষার ফি" type="text" inputProps={{ inputMode: 'numeric' }} value={planForm.annualAmount} onChange={(e) => setPlanForm(p => ({ ...p, annualAmount: e.target.value }))} />
+            <TextField fullWidth label="সেশন ফি" type="text" inputProps={{ inputMode: 'numeric' }} value={planForm.sessionAmount} onChange={(e) => setPlanForm(p => ({ ...p, sessionAmount: e.target.value }))} />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setIsPlanDialogOpen(false)}>বাতিল</Button>

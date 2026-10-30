@@ -200,7 +200,7 @@ def dashboard_stats(request):
 
         # 6. Recent Fees (Last 30 Days)
         month_ago = today - timedelta(days=30)
-        fee_data_qs = Payment.objects.filter(student__school_id=school_id, payment_date__gte=month_ago, payment_status='completed').values('payment_date').annotate(total_amount=Sum('amount')).order_by('payment_date')
+        fee_data_qs = Payment.objects.filter(student__school_id=school_id, payment_date__gte=month_ago, payment_status__in=['completed', 'pending']).values('payment_date').annotate(total_amount=Sum('amount')).order_by('payment_date')
         fee_collection = [{'date': x['payment_date'], 'amount': float(x['total_amount'] or 0.0)} for x in fee_data_qs]
 
         # 7. Dues Calculation (Optimized - Avoid Python Loop for objects)
@@ -212,7 +212,7 @@ def dashboard_stats(request):
             payments = Payment.objects.filter(
                 student__school_id=school_id,
                 fee_assignment__isnull=False,
-                payment_status='completed'
+                payment_status__in=['completed', 'pending']
             ).values('fee_assignment_id').annotate(paid=Sum('amount'))
 
             paid_map = {p['fee_assignment_id']: float(p['paid'] or 0.0) for p in payments}

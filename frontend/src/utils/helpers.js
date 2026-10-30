@@ -283,32 +283,30 @@ export const transliterateBangla = (text) => {
   }).join(' ');
 };
 
-export const canAccessDailyCollectionRegister = (user) => {
+export const canAccessFeesAndCollection = (user) => {
   if (!user) return false;
   const username = String(user.username || '').toLowerCase().trim();
-  if (username === 'bdadmin' || user.is_superuser || user.is_staff || user.role === 'admin') {
+  if (username === 'bdadmin' || user.is_superuser || user.is_staff || user.role === 'admin' || user.profile?.role === 'admin') {
     return true;
   }
   const role = String(user.role || user.profile?.role || '').toLowerCase();
-  const designation = String(user.profile?.designation || user.designation || '').toLowerCase();
+  const designation = String(user.profile?.designation || user.designation || user.profile?.title || '').toLowerCase();
   if (
     role === 'admin' ||
-    designation.includes('প্রধান') ||
-    designation.includes('headmaster') ||
-    designation.includes('principal') ||
-    designation.includes('অধ্যক্ষ') ||
+    role === 'accountant' ||
     designation.includes('হিসাব') ||
     designation.includes('account') ||
-    designation.includes('assistant') ||
     designation.includes('cashier') ||
     designation.includes('ক্যাশিয়ার') ||
-    designation.includes('সহকারী') ||
-    designation.includes('clerk') ||
-    designation.includes('ডিলিং')
+    designation.includes('অ্যাকাউন্ট')
   ) {
     return true;
   }
   return false;
+};
+
+export const canAccessDailyCollectionRegister = (user) => {
+  return canAccessFeesAndCollection(user);
 };
 
 export const numberToBengaliWords = (num) => {

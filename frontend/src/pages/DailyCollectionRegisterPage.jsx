@@ -123,37 +123,34 @@ const DailyCollectionRegisterPage = () => {
             loadedStudents.push(studentObj);
             const latest = payments[payments.length - 1];
 
-            const parseVal = (v) => {
-              const num = parseFloat(v);
-              return !isNaN(num) && num > 0 ? num : '';
-            };
-
             const aggregated = {
               receipt_number: latest.receipt_number || '—',
-              due_amount: parseVal(latest.due_amount),
-              sports_fee: parseVal(latest.sports_fee),
-              admission_fee: parseVal(latest.admission_fee),
-              admission_print_fee: parseVal(latest.admission_print_fee),
-              cert_reg_fee: parseVal(latest.cert_reg_fee),
-              tuition_fee: parseVal(latest.tuition_fee),
-              religion_fee: parseVal(latest.religion_fee),
-              session_fee: parseVal(latest.session_fee),
-              exam_fee: parseVal(latest.exam_fee),
-              culture_library_fee: parseVal(latest.culture_library_fee),
-              refreshment_poor_fund_fee: parseVal(latest.refreshment_poor_fund_fee),
-              misc_fee: parseVal(latest.misc_fee),
-              existing_id: latest.id
+              due_amount: 0,
+              sports_fee: 0,
+              admission_fee: 0,
+              admission_print_fee: 0,
+              cert_reg_fee: 0,
+              tuition_fee: 0,
+              religion_fee: 0,
+              session_fee: 0,
+              exam_fee: 0,
+              culture_library_fee: 0,
+              refreshment_poor_fund_fee: 0,
+              misc_fee: 0,
+              existing_id: latest.id,
+              payment_ids: payments.map(p => p.id)
             };
 
-            payments.forEach((p, idx) => {
-              if (idx > 0) {
-                ['due_amount', 'sports_fee', 'admission_fee', 'admission_print_fee', 'cert_reg_fee', 'tuition_fee', 'religion_fee', 'session_fee', 'exam_fee', 'culture_library_fee', 'refreshment_poor_fund_fee', 'misc_fee'].forEach(f => {
-                  const curr = parseFloat(aggregated[f]) || 0;
-                  const add = parseFloat(p[f]) || 0;
-                  const sum = curr + add;
-                  aggregated[f] = sum > 0 ? sum : '';
-                });
-              }
+            payments.forEach(p => {
+              ['due_amount', 'sports_fee', 'admission_fee', 'admission_print_fee', 'cert_reg_fee', 'tuition_fee', 'religion_fee', 'session_fee', 'exam_fee', 'culture_library_fee', 'refreshment_poor_fund_fee', 'misc_fee'].forEach(f => {
+                const curr = parseFloat(aggregated[f]) || 0;
+                const add = parseFloat(p[f]) || 0;
+                aggregated[f] = curr + add;
+              });
+            });
+
+            ['due_amount', 'sports_fee', 'admission_fee', 'admission_print_fee', 'cert_reg_fee', 'tuition_fee', 'religion_fee', 'session_fee', 'exam_fee', 'culture_library_fee', 'refreshment_poor_fund_fee', 'misc_fee'].forEach(f => {
+              if (aggregated[f] === 0) aggregated[f] = '';
             });
 
             initialRows[sId] = aggregated;
@@ -253,8 +250,25 @@ const DailyCollectionRegisterPage = () => {
     setSelectedStudentToAdd(null);
   };
 
-  const handleRemoveStudent = (studentId) => {
+  const handleRemoveStudent = async (studentId) => {
+    const rowData = editingRows[studentId];
+    if (rowData) {
+      try {
+        const idsToDelete = rowData.payment_ids || (rowData.existing_id ? [rowData.existing_id] : []);
+        if (idsToDelete.length > 0) {
+          await Promise.all(idsToDelete.map(id => api.delete(`/api/fees/payments/${id}/`)));
+        }
+      } catch (err) {
+        console.error('Error deleting payment(s):', err);
+      }
+    }
     setActiveStudents(prev => prev.filter(s => s.id !== studentId));
+    setEditingRows(prev => {
+      const copy = { ...prev };
+      delete copy[studentId];
+      return copy;
+    });
+    setSnackbar({ open: true, message: 'পেমেন্ট সফলভাবে মুছে ফেলা হয়েছে', severity: 'success' });
   };
 
   // Perform auto-save for a specific student row

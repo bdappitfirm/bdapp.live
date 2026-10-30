@@ -193,7 +193,8 @@ const ReceiptBook = () => {
             <td>
               <input
                 className="amount-input"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="টাকার পরিমাণ"

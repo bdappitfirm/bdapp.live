@@ -44,7 +44,7 @@ import { useAuth } from '../context/AuthContext';
 import { setCurrentSchoolId, getDashboardStats } from '../services/dashboardService';
 import api from '../utils/api';
 import { getMediaUrl } from '../utils/media';
-import { canAccessDailyCollectionRegister } from '../utils/helpers';
+import { canAccessFeesAndCollection } from '../utils/helpers';
 
 // Dashboard Components
 import AttendanceChart from '../components/dashboard/AttendanceChart';
@@ -141,8 +141,8 @@ const SchoolDashboard = () => {
     if (item.key === 'rank-list') {
         return username === 'bdadmin';
     }
-    if (item.key === 'daily-collection-register') {
-        return canAccessDailyCollectionRegister(user);
+    if (['fees', 'daily-collection-register', 'fee-receipt', 'receipt-book'].includes(item.key)) {
+        return canAccessFeesAndCollection(user);
     }
     return true;
   }), [menuItems, isSuperUser, id, username, user, role]);
@@ -531,21 +531,23 @@ const SchoolDashboard = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid size={{ xs: 12 }}>
-            <Card>
-              <CardHeader 
-                title="ফি সংগ্রহের অবস্থা"
-                action={
-                  <TextField select size="small" label="সাল" value={feeYear} onChange={(e) => setFeeYear(e.target.value)} sx={{ minWidth: 100 }}>
-                    {[0,1,2].map(i => <MenuItem key={i} value={new Date().getFullYear()-i}>{new Date().getFullYear()-i}</MenuItem>)}
-                  </TextField>
-                }
-              />
-              <CardContent>
-                <FeeCollectionChart feeData={stats?.fee_collection || []} feeDuesSummary={stats?.fee_dues_summary} feeDuesByClass={stats?.fee_dues_by_class} />
-              </CardContent>
-            </Card>
-          </Grid>
+          {canAccessFeesAndCollection(user) && (
+            <Grid size={{ xs: 12 }}>
+              <Card>
+                <CardHeader
+                  title="ফি সংগ্রহের অবস্থা"
+                  action={
+                    <TextField select size="small" label="সাল" value={feeYear} onChange={(e) => setFeeYear(e.target.value)} sx={{ minWidth: 100 }}>
+                      {[0,1,2].map(i => <MenuItem key={i} value={new Date().getFullYear()-i}>{new Date().getFullYear()-i}</MenuItem>)}
+                    </TextField>
+                  }
+                />
+                <CardContent>
+                  <FeeCollectionChart feeData={stats?.fee_collection || []} feeDuesSummary={stats?.fee_dues_summary} feeDuesByClass={stats?.fee_dues_by_class} />
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
         </Grid>
       </Box>
     );
