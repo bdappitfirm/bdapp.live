@@ -96,6 +96,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         school = self.request.query_params.get('school') or self.request.query_params.get('school_id')
         student = self.request.query_params.get('student') or self.request.query_params.get('student_id')
         status_filter = self.request.query_params.get('status')
+        payment_date = self.request.query_params.get('payment_date') or self.request.query_params.get('date')
 
         if student:
             qs = qs.filter(student_id=student)
@@ -103,6 +104,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(student__school_id=school)
             if status_filter:
                 qs = qs.filter(payment_status=status_filter)
+            if payment_date:
+                qs = qs.filter(payment_date=payment_date)
             return qs
 
         if not school:
@@ -113,6 +116,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
             return Payment.objects.none()
         if status_filter:
             qs = qs.filter(payment_status=status_filter)
+        if payment_date:
+            qs = qs.filter(payment_date=payment_date)
         return qs
 
 

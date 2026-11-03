@@ -55,9 +55,33 @@ export const cacheData = async (storeName, data) => {
             console.error(`Store ${storeName} does not exist in Dexie DB`);
             return;
         }
+        const activeSchoolId = typeof window !== 'undefined' ? (localStorage.getItem('currentSchoolId') || localStorage.getItem('active_school_id')) : null;
+        const normalizeItem = (item) => {
+            if (item && typeof item === 'object') {
+                const sId = item.school_id ??
+                            item.school?.id ??
+                            (typeof item.school === 'number' || typeof item.school === 'string' ? item.school : null) ??
+                            item.classroom?.school_id ??
+                            item.classroom?.school?.id ??
+                            (typeof item.classroom?.school === 'number' || typeof item.classroom?.school === 'string' ? item.classroom?.school : null) ??
+                            activeSchoolId;
+                if (sId != null && !item.school_id) {
+                    item.school_id = String(sId);
+                }
+                if (item.classroom && typeof item.classroom === 'object' && item.classroom.id != null && !item.classroom_id) {
+                    item.classroom_id = item.classroom.id;
+                }
+                if (item.section && typeof item.section === 'object' && item.section.id != null && !item.section_id) {
+                    item.section_id = item.section.id;
+                }
+            }
+            return item;
+        };
+
         if (Array.isArray(data)) {
             const sanitized = data.map((item, index) => {
                 if (item && typeof item === 'object') {
+                    normalizeItem(item);
                     if (!item.id) {
                         return {
                             ...item,
@@ -70,6 +94,7 @@ export const cacheData = async (storeName, data) => {
             await db[storeName].bulkPut(sanitized);
         } else if (data && typeof data === 'object') {
             const item = { ...data };
+            normalizeItem(item);
             if (!item.id) {
                 item.id = item.student_id ? `${item.student_id}_${item.date || item.examination_id || 0}` : `item_${Date.now()}`;
             }

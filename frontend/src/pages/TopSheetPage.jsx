@@ -12,6 +12,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { scopedGet } from '../utils/schoolApi';
 import { useSchool } from '../context/SchoolContext';
 import { getMediaUrl } from '../utils/media';
+import { filterClassroomsByYear, filterSectionsByYear } from '../utils/classroomUtils';
 import dayjs from 'dayjs';
 
 // Helper function to calculate subject marks structure (CQ, MCQ, Practical)
@@ -445,7 +446,7 @@ export default function TopSheetPage() {
                   updateUrl({ classroom: val, section: '' });
                 }}
               >
-                {classrooms.map(c => (
+                {filterClassroomsByYear(classrooms, selectedYear).map(c => (
                   <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>
                 ))}
               </Select>
@@ -467,7 +468,7 @@ export default function TopSheetPage() {
                 }}
               >
                 <MenuItem value="">সকল শাখা (All)</MenuItem>
-                {sections.map(s => (
+                {filterSectionsByYear(sections, selectedYear).map(s => (
                   <MenuItem key={s.id} value={String(s.id)}>{s.name}</MenuItem>
                 ))}
               </Select>

@@ -2,44 +2,76 @@ import unicodedata
 import random
 import re
 
-BANGLA_CLASS_MAP = {
-    'প্লে': -3, 'play': -3,
-    'নার্সারি': -2, 'nursery': -2, 'শিশু': -2,
-    'কেজি': -1, 'kg': -1,
-    'প্রথম': 1, '১ম': 1, 'one': 1,
-    'দ্বিতীয়': 2, 'দ্বিতীয়': 2, '২য়': 2, 'two': 2,
-    'তৃতীয়': 3, 'তৃতীয়': 3, '৩য়': 3, 'three': 3,
-    'চতুর্থ': 4, '৪র্থ': 4, 'four': 4,
-    'পঞ্চম': 5, '৫ম': 5, 'five': 5,
-    'ষষ্ঠ': 6, '৬ষ্ঠ': 6, 'six': 6,
-    'সপ্তম': 7, '৭ম': 7, 'seven': 7,
-    'অষ্টম': 8, '৮ম': 8, 'eight': 8,
-    'নবম': 9, '৯ম': 9, 'nine': 9,
-    'দশম': 10, '১০ম': 10, 'ten': 10,
-    'একাদশ': 11, 'eleven': 11,
-    'দ্বাদশ': 12, 'twelve': 12,
-    'এসএসসি': 13, 'ssc': 13
+BANGLA_CLASS_ORDER_PATTERNS = [
+    (r'প্লে|play', 1),
+    (r'নুরানী', 2),
+    (r'নাযেরা|হিফজ', 3),
+    (r'নাসারী|নার্সারি|nursery|শিশু|shishu', 4),
+    (r'কেজি|kg', 5),
+    (r'প্রথম|১ম|\b1st\b|class\s*1|\bone\b', 6),
+    (r'দ্বিতীয়|দ্বীতিয়| his|দ্বিতীয়|২য়|\b2nd\b|class\s*2|\btwo\b', 7),
+    (r'তৃতীয়|তৃতীয়|৩য়|\b3rd\b|class\s*3|\bthree\b', 8),
+    (r'চতুর্থ|৪র্থ|\b4th\b|class\s*4|\bfour\b', 9),
+    (r'পঞ্চম|৫ম|\b5th\b|class\s*5|\bfive\b', 10),
+    (r'ষষ্ঠ|৬ষ্ঠ|\b6th\b|class\s*6|\bsix\b', 11),
+    (r'সপ্তম|৭ম|\b7th\b|class\s*7|\bseven\b', 12),
+    (r'অষ্টম|৮ম|\b8th\b|class\s*8|\beight\b|অস্টম', 13),
+    (r'নবম-দশম', 14),
+    (r'নবম|৯ম|\b9th\b|class\s*9|\bnine\b', 15),
+    (r'দশম|১০ম|\b10th\b|class\s*10|\bten\b', 16),
+    (r'এস\.এস\.সি|এসএসসি|s\.s\.c|ssc|পরীক্ষার্থী', 17),
+    (r'একাদশ|১১শ|\b11th\b|class\s*11|\beleven\b', 18),
+    (r'দ্বাদশ|১২থ|১২-তম|\b12th\b|class\s*12|\btwelve\b', 19),
+    (r'এইচএসসি|hsc|আলিম|আলীম', 20),
+    (r'নন-শিক্ষা|স্নাতক|ফাজেল|কামেল', 21),
+]
+
+BANGLA_SECTION_MAP = {
+    'ক': 1, 'খ': 2, 'গ': 3, 'ঘ': 4, 'ঙ': 5, 'চ': 6, 'ছ': 7, 'জ': 8,
+    'বিজ্ঞান': 101,
+    'মানবিক': 102,
+    'ব্যবসায়': 103, 'ব্যবসায়': 103, 'ব্যবসায় শিক্ষা': 103, 'ব্যবসায় শিক্ষা': 103, 'ব্যবসায় শাখা': 103
 }
 
 def get_class_order(class_name):
     """
-    Returns a numeric value representing the logical order of a class based on its name.
+    Returns a sort tuple (base_rank, is_2027, cleaned_base_name) for sorting classes.
     """
     if not class_name:
+        return (999, 0, '')
+
+    n = unicodedata.normalize('NFKC', str(class_name)).strip().lower()
+    is_2027 = 1 if ('2027' in n or '২০২৭' in n) else 0
+
+    base_n = re.sub(r'[-–_]?\s*(2027|২০২৭)', '', n).strip()
+
+    base_rank = 900
+    for pattern, rank in BANGLA_CLASS_ORDER_PATTERNS:
+        if re.search(pattern, base_n, re.IGNORECASE):
+            base_rank = rank
+            break
+
+    if base_rank == 900:
+        match = re.search(r'\d+', base_n)
+        if match:
+            base_rank = int(match.group(0))
+
+    return (base_rank, is_2027, base_n)
+
+def get_section_order(section_name):
+    """
+    Returns a numeric value representing logical section order ('ক', 'খ', 'গ', 'বিজ্ঞান' etc.)
+    """
+    if not section_name:
         return 999
-
-    n = str(class_name).lower().strip()
-
-    # 1. Direct match in map
-    for key, val in BANGLA_CLASS_MAP.items():
-        if key in n:
-            return val
-
-    # 2. Extract digits
-    match = re.search(r'\d+', n)
+    s = unicodedata.normalize('NFKC', str(section_name)).strip()
+    if s in BANGLA_SECTION_MAP:
+        return BANGLA_SECTION_MAP[s]
+    if len(s) == 1 and 'A' <= s.upper() <= 'Z':
+        return 200 + ord(s.upper())
+    match = re.search(r'\d+', s)
     if match:
-        return int(match.group(0))
-
+        return 300 + int(match.group(0))
     return 999
 
 def update_student_genders(school=None):
@@ -292,7 +324,6 @@ def standardize_subject_names():
     import re
 
     mapping = {
-        # Patterns for replacement
         r'বাংলা\s*[-–]?\s*১ম': 'বাংলা প্রথম পত্র',
         r'বাংলা\s*[-–]?\s*২য়': 'বাংলা দ্বিতীয় পত্র',
         r'bangla\s*1st': 'বাংলা প্রথম পত্র',
@@ -308,7 +339,7 @@ def standardize_subject_names():
         r'পদার্থ\s*বিজ্ঞান': 'পদার্থবিজ্ঞান',
         r'জীব\s*বিজ্ঞান': 'জীববিজ্ঞান',
         r'ভৌত\s*বিজ্ঞান': 'বিজ্ঞান',
-        r'বাংলাদেশ\s*ও\s*বিশ্বপরিচয়': 'বাংলাদেশ ও বিশ্বপরিচয়',
+        r'বাংলাদেশ\s*ও\s*বিশ্বপরিচায়': 'বাংলাদেশ ও বিশ্বপরিচয়',
         r'বা\s*ইতিহাস\s*ও\s*বিশ্বসভ্যতা': 'বাংলাদেশের ইতিহাস ও বিশ্বসভ্যতা',
         r'সমাজ': 'বাংলাদেশ ও বিশ্বপরিচয়',
         r'সমাজ\s*বিজ্ঞান': 'সমাজবিজ্ঞান',
@@ -332,7 +363,6 @@ def standardize_subject_names():
         r'হাদীস': 'হাদীস ও উসূলুল হাদীস',
         r'আকাইদ': 'আকাইদ ও ফিকহ',
         r'আরবি\s*[-–]?\s*১ম': 'আরবি প্রথম পত্র',
-        r'आरবি\s*[-–]?\s*১ম': 'আরবি প্রথম পত্র',
         r'আরবি\s*[-–]?\s*২য়': 'আরবি দ্বিতীয় পত্র',
     }
 
@@ -348,7 +378,6 @@ def standardize_subject_names():
                 break
 
         if new_name != original_name:
-            # Simple rename
             subject.name = new_name
             try:
                 subject.save(update_fields=['name'])

@@ -5,6 +5,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAcademics } from '../context/AcademicsContext';
 import { primaryWrittenMax, primarySpecForSubject } from '../utils/primaryMaxima';
+import { filterClassroomsByYear, filterSectionsByYear } from '../utils/classroomUtils';
 import {
   Box,
   Typography,
@@ -2740,7 +2741,7 @@ export default function ResultCardGenerator() {
             <MenuItem value="">
               {classrooms.length === 0 ? "কোনো শ্রেণি পাওয়া যায়নি (লোড হচ্ছে...)" : "একটি শ্রেণি নির্বাচন করুন"}
             </MenuItem>
-            {classrooms.map((classroom) => (
+            {filterClassroomsByYear(classrooms, selectedYear).map((classroom) => (
               <MenuItem key={classroom.id} value={classroom.id}>
                 {classroom.name}
               </MenuItem>
@@ -2759,7 +2760,7 @@ export default function ResultCardGenerator() {
             <MenuItem value="">
               {sections.length === 0 ? "কোনো সেকশন পাওয়া যায়নি" : "সেকশন নির্বাচন করুন"}
             </MenuItem>
-            {sections.map((sec) => (
+            {filterSectionsByYear(sections, selectedYear).map((sec) => (
               <MenuItem key={sec.id} value={sec.id}>
                 {sec.name}
               </MenuItem>

@@ -9,6 +9,7 @@ import { Receipt } from '@mui/icons-material';
 import html2canvas from 'html2canvas';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import api from '../utils/api';
 import { useSchool } from '../context/SchoolContext';
@@ -150,6 +151,7 @@ const FeePaymentReceipt = () => {
   const [schoolData, setSchoolData] = useState(null);
   const [manualAmounts, setManualAmounts] = useState({});
   const [previousDue, setPreviousDue] = useState('');
+  const [receiptDate, setReceiptDate] = useState(dayjs());
   const [activeStep, setActiveStep] = useState(0);
 
   const guidanceSteps = [
@@ -297,7 +299,7 @@ const FeePaymentReceipt = () => {
       const payload = {
         student_id: generatedReceipt.student.id,
         amount: total,
-        payment_date: dayjs().format('YYYY-MM-DD'),
+        payment_date: receiptDate ? dayjs(receiptDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
         payment_method: 'cash',
         reference: generatedReceipt.receiptNumber,
         school: schoolId,
@@ -327,7 +329,16 @@ const FeePaymentReceipt = () => {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 4 }}>
+              <Grid size={{ xs: 12, md: 3 }}>
+                <DatePicker
+                  label="পেমেন্টের তারিখ"
+                  value={receiptDate}
+                  onChange={(newDate) => setReceiptDate(newDate)}
+                  format="DD/MM/YYYY"
+                  slotProps={{ textField: { fullWidth: true } }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, md: 3 }}>
                 <FormControl id="class-select" fullWidth>
                   <InputLabel>শ্রেণি</InputLabel>
                   <Select value={selectedClass} onChange={(e) => handleClassChange(e.target.value)} label="শ্রেণি">
@@ -335,7 +346,7 @@ const FeePaymentReceipt = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid size={{ xs: 12, md: 4 }}>
+              <Grid size={{ xs: 12, md: 3 }}>
                 <FormControl id="section-select" fullWidth disabled={!selectedClass}>
                   <InputLabel>সেকশন</InputLabel>
                   <Select value={selectedSection} onChange={(e) => handleSectionChange(e.target.value)} label="সেকশন">
@@ -343,7 +354,7 @@ const FeePaymentReceipt = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid size={{ xs: 12, md: 4 }}>
+              <Grid size={{ xs: 12, md: 3 }}>
                 <FormControl id="student-select" fullWidth disabled={!selectedClass}>
                   <InputLabel>শিক্ষার্থী</InputLabel>
                   <Select value={selectedStudent} onChange={(e) => setSelectedStudent(e.target.value)} label="শিক্ষার্থী">

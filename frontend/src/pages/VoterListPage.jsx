@@ -26,7 +26,7 @@ import { db } from '../utils/offlineDb';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
 import { getCleanDisplayName } from '../utils/helpers';
-import { getClassOrder } from '../utils/classroomUtils';
+import { compareClassOrder } from '../utils/classroomUtils';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import dayjs from 'dayjs';
@@ -111,9 +111,8 @@ export default function VoterListPage() {
       Array.from(guardianGroups.values()).forEach(group => {
         // Sort students within the group (by class/roll)
         const sortedGroup = [...group].sort((a, b) => {
-          const classA = getClassOrder(a.classroom?.name);
-          const classB = getClassOrder(b.classroom?.name);
-          if (classA !== classB) return classA - classB;
+          const classCmp = compareClassOrder(a.classroom?.name, b.classroom?.name);
+          if (classCmp !== 0) return classCmp;
 
           const rollA = parseInt(String(a.roll_number || '9999').replace(/\D/g, ''), 10);
           const rollB = parseInt(String(b.roll_number || '9999').replace(/\D/g, ''), 10);
@@ -154,9 +153,8 @@ export default function VoterListPage() {
       });
 
       processedVoters.sort((a, b) => {
-        const classA = getClassOrder(a.classroom);
-        const classB = getClassOrder(b.classroom);
-        if (classA !== classB) return classA - classB;
+        const classCmp = compareClassOrder(a.classroom, b.classroom);
+        if (classCmp !== 0) return classCmp;
 
         const secA = getSectionOrder(a.section);
         const secB = getSectionOrder(b.section);

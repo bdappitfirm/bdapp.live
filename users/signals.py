@@ -16,7 +16,6 @@ def save_user_profile(sender, instance, created, **kwargs):
     if created:
         Profile.objects.get_or_create(user=instance)
 
-    # Avoid recursion if we're already saving this profile
     if getattr(instance, '_saving_profile', False):
         return
 
@@ -33,46 +32,63 @@ def save_user_profile(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Profile)
 def log_profile_creation(sender, instance, created, **kwargs):
-    if created and instance.school and instance.school.id == 6 and instance.role in ['teacher']:
-        # Profile cost is 0.00 TK
+    if created and instance.role in ['teacher', 'admin']:
         log_activity(
             user=instance.user,
-            school=instance.school,
-            action_type='profile_create',
+            school=instance.school_id or getattr(instance.school, 'id', None),
+            action_type='teacher_create',
             details={
                 'role': instance.role,
-                'username': instance.user.username,
-                'name': f"{instance.user.first_name} {instance.user.last_name}".strip()
+                'action_label': 'নতুন শিক্ষক যোগ',
+                'username': instance.user.username if instance.user else '',
+                'name': instance.user.get_full_name() if instance.user else ''
             },
-            cost=0.00
+            cost=5.00
         )
 
 @receiver(user_logged_in)
 def log_user_login(sender, request, user, **kwargs):
-    if hasattr(user, 'profile') and user.profile.school:
+    school_val = getattr(getattr(user, 'profile', None), 'school', None) or getattr(getattr(user, 'profile', None), 'school_id', None)
+    if school_val:
         log_activity(
             user=user,
-            school=user.profile.school,
+            school=school_val,
             action_type='login',
             details={'ip': request.META.get('REMOTE_ADDR')},
             cost=0.00
         )
 
-# Use string based registration to avoid circular import if needed, 
-# or just import inside the receiver
 @receiver(post_save, sender='academics.StudentProfile')
 def log_student_profile_creation(sender, instance, created, **kwargs):
-    if created and instance.school and instance.school.id == 6:
-        log_activity(
-            user=instance.user,
-            school=instance.school,
-            action_type='profile_create',
-            details={
-                'role': 'student',
-                'username': instance.user.username,
-                'name': f"{instance.user.first_name} {instance.user.last_name}".strip(),
-                'roll': instance.roll_number,
-                'class': instance.classroom.name if instance.classroom else 'N/A'
-            },
-            cost=0.00
-        )
+    if created:
+        school_val = instance.school or instance.school_id
+        student_name = instance.user.get_full_name() if instance.user else ''
+        if not student_name and instance.user:
+            student_name = instance.user.username
+
+        from users.models import ActivityLog
+        from django.utils import timezone
+        import datetime
+        now = timezone.now()
+        recent_exists = ActivityLog.objects.filter(
+            details__name=student_name,
+            timestamp__gte=now - datetime.timedelta(seconds=10)
+        ).exists()
+
+        if not recent_exists:
+            log_activity(
+                user=instance.user,
+                school=school_val,
+                action_type='student_create',
+                details={
+                    'action': 'student_create',
+                    'action_label': 'নতুন শিক্ষার্থী ভর্তি/যোগ',
+                    'role': 'student',
+                    'username': instance.user.username if instance.user else '',
+                    'name': student_name,
+                    'roll': instance.roll_number or '',
+                    'class': instance.classroom.name if instance.classroom else 'N/A',
+                    'section': instance.section.name if instance.section else ''
+                },
+                cost=5.00
+            )

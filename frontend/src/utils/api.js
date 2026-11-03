@@ -41,6 +41,30 @@ const smartOfflineFallback = async (config) => {
     const url = config.url || '';
     const params = config.params || {};
 
+    const getTargetSchoolId = () => {
+      if (params.school) return String(params.school);
+      if (params.school_id) return String(params.school_id);
+      try {
+        const dummyBase = 'http://localhost';
+        const u = new URL(url, dummyBase);
+        const sParam = u.searchParams.get('school') || u.searchParams.get('school_id');
+        if (sParam) return String(sParam);
+      } catch (_) {}
+      return localStorage.getItem('currentSchoolId') || localStorage.getItem('active_school_id') || null;
+    };
+    const targetSchoolId = getTargetSchoolId();
+
+    const getItemSchoolId = (item) => {
+      if (!item) return null;
+      const s = item.school_id ??
+                item.school?.id ??
+                (typeof item.school === 'number' || typeof item.school === 'string' ? item.school : null) ??
+                item.classroom?.school_id ??
+                item.classroom?.school?.id ??
+                (typeof item.classroom?.school === 'number' || typeof item.classroom?.school === 'string' ? item.classroom?.school : null);
+      return s != null ? String(s) : null;
+    };
+
     // 0. Current user profile fallback
     if (url.includes('/api/users/me/')) {
       const savedUser = localStorage.getItem('cached_user_profile');
@@ -53,8 +77,35 @@ const smartOfflineFallback = async (config) => {
     if (url.includes('/api/academics/students/')) {
       const { classroom, section } = params;
       let students = await db.students.toArray();
-      if (classroom) students = students.filter(s => String(s.classroom_id || s.classroom?.id || s.classroom) === String(classroom));
-      if (section) students = students.filter(s => String(s.section_id || s.section?.id || s.section) === String(section));
+      const normalizeId = (val) => val != null ? String(val).replace(/\.0$/, '').trim() : '';
+
+      const targetId = normalizeId(targetSchoolId);
+      if (targetId) {
+        students = students.filter(s => {
+          const sId = normalizeId(getItemSchoolId(s));
+          return !sId || sId === targetId;
+        });
+      }
+
+      if (classroom) {
+        const clsList = (Array.isArray(classroom) ? classroom : String(classroom).split(',')).map(c => String(c).trim()).filter(Boolean);
+        if (clsList.length > 0) {
+          students = students.filter(s => {
+            const studentClsId = String(s.classroom_id ?? s.classroom?.id ?? s.classroom ?? '');
+            return clsList.includes(studentClsId);
+          });
+        }
+      }
+
+      if (section && section !== 'all' && section !== 'null') {
+        const secList = (Array.isArray(section) ? section : String(section).split(',')).map(sec => String(sec).trim()).filter(Boolean);
+        if (secList.length > 0) {
+          students = students.filter(s => {
+            const studentSecId = String(s.section_id ?? s.section?.id ?? s.section ?? '');
+            return secList.includes(studentSecId);
+          });
+        }
+      }
 
       students.sort((a, b) => {
         const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
@@ -69,9 +120,25 @@ const smartOfflineFallback = async (config) => {
     if (url.includes('/api/attendance/records/')) {
       const { classroom, section, date, student } = params;
       let records = await db.attendance.toArray();
+      if (targetSchoolId) {
+        records = records.filter(r => {
+          const sId = getItemSchoolId(r);
+          return !sId || sId === String(targetSchoolId);
+        });
+      }
       if (date) records = records.filter(r => String(r.date) === String(date));
-      if (classroom) records = records.filter(r => String(r.classroom_id || r.classroom?.id || r.classroom) === String(classroom));
-      if (section) records = records.filter(r => String(r.section_id || r.section?.id || r.section) === String(section));
+      if (classroom) {
+        const clsList = (Array.isArray(classroom) ? classroom : String(classroom).split(',')).map(c => String(c).trim()).filter(Boolean);
+        if (clsList.length > 0) {
+          records = records.filter(r => clsList.includes(String(r.classroom_id ?? r.classroom?.id ?? r.classroom ?? '')));
+        }
+      }
+      if (section && section !== 'all' && section !== 'null') {
+        const secList = (Array.isArray(section) ? section : String(section).split(',')).map(sec => String(sec).trim()).filter(Boolean);
+        if (secList.length > 0) {
+          records = records.filter(r => secList.includes(String(r.section_id ?? r.section?.id ?? r.section ?? '')));
+        }
+      }
       if (student) records = records.filter(r => String(r.student_id || r.student?.id || r.student) === String(student));
       return { results: records, count: records.length };
     }
@@ -80,12 +147,28 @@ const smartOfflineFallback = async (config) => {
     if (url.includes('/api/results/results/')) {
       const { examination, exam_type, student, subject, classroom, section } = params;
       let results = await db.results.toArray();
+      if (targetSchoolId) {
+        results = results.filter(r => {
+          const sId = getItemSchoolId(r);
+          return !sId || sId === String(targetSchoolId);
+        });
+      }
       if (examination) results = results.filter(r => String(r.examination_id || r.examination?.id || r.examination) === String(examination));
       if (exam_type) results = results.filter(r => String(r.examination?.exam_type || r.exam_type || '') === String(exam_type));
       if (student) results = results.filter(r => String(r.student_id || r.student?.id || r.student) === String(student));
       if (subject) results = results.filter(r => String(r.subject_id || r.subject?.id || r.subject) === String(subject));
-      if (classroom) results = results.filter(r => String(r.classroom_id || r.classroom || r.student?.classroom_id) === String(classroom));
-      if (section) results = results.filter(r => String(r.section_id || r.section || r.student?.section_id) === String(section));
+      if (classroom) {
+        const clsList = (Array.isArray(classroom) ? classroom : String(classroom).split(',')).map(c => String(c).trim()).filter(Boolean);
+        if (clsList.length > 0) {
+          results = results.filter(r => clsList.includes(String(r.classroom_id ?? r.classroom?.id ?? r.classroom ?? r.student?.classroom_id ?? '')));
+        }
+      }
+      if (section && section !== 'all' && section !== 'null') {
+        const secList = (Array.isArray(section) ? section : String(section).split(',')).map(sec => String(sec).trim()).filter(Boolean);
+        if (secList.length > 0) {
+          results = results.filter(r => secList.includes(String(r.section_id ?? r.section?.id ?? r.section ?? r.student?.section_id ?? '')));
+        }
+      }
       return { results, count: results.length };
     }
 
@@ -103,6 +186,12 @@ const smartOfflineFallback = async (config) => {
     for (const [path, table] of Object.entries(tableMap)) {
       if (url.includes(path)) {
         let data = await db[table].toArray();
+        if (targetSchoolId) {
+          data = data.filter(item => {
+            const sId = getItemSchoolId(item);
+            return !sId || sId === String(targetSchoolId);
+          });
+        }
         if (params.classroom && (table === 'sections' || table === 'subjects' || table === 'examinations')) {
           data = data.filter(item => String(item.classroom_id || item.classroom?.id || item.classroom) === String(params.classroom));
         }

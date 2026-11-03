@@ -140,6 +140,19 @@ const WelcomePage = () => {
 
   const username = String(user?.username || user?.user?.username || '').toLowerCase().trim();
   const isBdAdmin = !!(user?.is_superuser || username === 'bdadmin' || username.includes('bdadmin'));
+  const rawSchool = user?.profile?.school_id || user?.profile?.school || user?.school || user?.school_id;
+  const userSchoolId = rawSchool ? String(typeof rawSchool === 'object' ? rawSchool.id : rawSchool) : (localStorage.getItem('currentSchoolId') || '');
+  const userRole = String(user?.profile?.role || user?.role || '').toLowerCase();
+
+  // Redirect non-School 6 teachers and school-specific staff directly to their school dashboard
+  useEffect(() => {
+    if (user && !isBdAdmin) {
+      const isSchool6Staff = (userSchoolId === '6' || userSchoolId === '6.0');
+      if (userRole === 'teacher' && !isSchool6Staff && userSchoolId) {
+        navigate(`/school/${userSchoolId}`, { replace: true });
+      }
+    }
+  }, [user, userRole, userSchoolId, isBdAdmin, navigate]);
 
   // Ad Management States for bdadmin
   const [adsOpen, setAdsOpen] = useState(false);
@@ -180,21 +193,6 @@ const WelcomePage = () => {
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    const checkRedirect = async () => {
-      const isAuth = isAuthenticated();
-      const lastSchoolId = localStorage.getItem('currentSchoolId');
-      
-      if (isAuth && lastSchoolId && user) {
-        if (username !== 'bdadmin') {
-          navigate(`/school/${lastSchoolId}`, { replace: true });
-        }
-      }
-    };
-    
-    checkRedirect();
-  }, [navigate, user, username]);
 
   useEffect(() => {
     fetchData();

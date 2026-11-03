@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAccessToken, login as authLogin, logout as authLogout, clearTokens } from '../utils/auth';
+import { getAccessToken, saveTokens, login as authLogin, logout as authLogout, clearTokens } from '../utils/auth';
 import api from '../utils/api';
 import { CircularProgress, Box, Typography } from '@mui/material';
 
@@ -76,9 +76,45 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
+      const isOffline = !navigator.onLine || !error.response || error.code === 'ECONNABORTED' || error.message === 'Network Error';
+
+      if (isOffline) {
+        const savedUserStr = localStorage.getItem('cached_user_profile');
+        if (savedUserStr) {
+          try {
+            const cachedUser = JSON.parse(savedUserStr);
+            const inputUser = (username || '').trim().toLowerCase();
+            const cachedUsername = (cachedUser.username || cachedUser.user?.username || '').trim().toLowerCase();
+            const cachedEmail = (cachedUser.email || cachedUser.user?.email || '').trim().toLowerCase();
+            const cachedPhone = (cachedUser.phone_number || cachedUser.mobile_number || cachedUser.profile?.phone_number || '').trim().toLowerCase();
+
+            const isMatch = (inputUser === cachedUsername) ||
+                            (inputUser && cachedEmail && inputUser === cachedEmail) ||
+                            (inputUser && cachedPhone && inputUser === cachedPhone);
+
+            if (isMatch) {
+              if (!getAccessToken()) {
+                saveTokens('offline_access_token', 'offline_refresh_token');
+              }
+              setUser(cachedUser);
+              return { success: true, offline: true };
+            } else {
+              return {
+                success: false,
+                error: 'অফলাইনে লগইন করতে পূর্বে এই ডিভাইসে লগইন করা একই ইউজার দিয়ে প্রবেশ করুন।'
+              };
+            }
+          } catch (_) {}
+        }
+        return {
+          success: false,
+          error: 'অফলাইনে লগইন করতে পূর্বে অন্তত একবার এই ডিভাইসে সফলভাবে অনলাইনে লগইন থাকতে হবে।'
+        };
+      }
+
       return {
         success: false, 
-        error: error.response?.data?.detail || 'Login failed' 
+        error: error.response?.data?.detail || error.response?.data?.error || 'Login failed'
       };
     }
   };

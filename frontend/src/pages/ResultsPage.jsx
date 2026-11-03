@@ -53,7 +53,7 @@ import { scopedGet } from '../utils/schoolApi';
 import { isAuthenticated } from '../utils/auth';
 import { useAuth } from '../context/AuthContext';
 import InputGuidance from '../components/InputGuidance';
-import { sortClassrooms } from '../utils/classroomUtils';
+import { sortClassrooms, filterClassroomsByYear, filterSectionsByYear } from '../utils/classroomUtils';
 
 // Examination types mapping (labels)
 const EXAM_TYPES = [
@@ -624,7 +624,35 @@ export default function ResultsPage() {
         setStudents(sorted);
         setLoadingStudents(false);
       })
-      .catch(err => { console.error('Error loading students:', err); toast.error('Failed to load students'); setLoadingStudents(false); });
+      .catch(async err => {
+        console.warn('Network error loading students, trying local IndexedDB fallback:', err);
+        try {
+          const { db } = await import('../utils/offlineDb');
+          let cached = await db.students.toArray();
+          const targetCls = String(classId);
+          cached = cached.filter(s => String(s.classroom_id ?? s.classroom?.id ?? s.classroom ?? '') === targetCls);
+          if (sectionId && sectionId !== 'all' && sectionId !== 'null') {
+            const secList = (Array.isArray(sectionId) ? sectionId : String(sectionId).split(',')).map(s => String(s).trim()).filter(Boolean);
+            if (secList.length > 0) {
+              cached = cached.filter(s => secList.includes(String(s.section_id ?? s.section?.id ?? s.section ?? '')));
+            }
+          }
+          const sorted = [...cached].sort((a, b) => {
+            const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+            const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+            const aNum = Number.isNaN(ar) ? null : ar;
+            const bNum = Number.isNaN(br) ? null : br;
+            if (aNum !== null && bNum !== null) return aNum - bNum;
+            return String(a?.roll_number ?? '').localeCompare(String(b?.roll_number ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+          });
+          setStudents(sorted);
+        } catch (e) {
+          console.error('Offline student fallback error:', e);
+          toast.error('Failed to load students');
+        } finally {
+          setLoadingStudents(false);
+        }
+      });
   }, [id, toast]);
 
   useEffect(() => {
@@ -1779,7 +1807,7 @@ export default function ResultsPage() {
               sx={{ minWidth: 200 }}
               inputProps={{ autoComplete: 'off' }}
             >
-              {classes.map(classroom => (
+              {filterClassroomsByYear(classes, summaryYear).map(classroom => (
                 <MenuItem key={classroom.id} value={classroom.id}>
                   {classroom.name}
                 </MenuItem>
@@ -1801,7 +1829,7 @@ export default function ResultsPage() {
               inputProps={{ autoComplete: 'off' }}
             >
               <MenuItem value="">নির্বাচন করুন</MenuItem>
-              {sectionsMain.map(sec => (
+              {filterSectionsByYear(sectionsMain, summaryYear).map(sec => (
                 <MenuItem key={sec.id} value={sec.id}>{sec.name}</MenuItem>
               ))}
             </TextField>
@@ -2409,7 +2437,7 @@ export default function ResultsPage() {
                   label="শ্রেণি নির্বাচন করুন"
                   disabled={loadingClasses}
                 >
-                  {classes.map(classroom => (
+                  {filterClassroomsByYear(classes, summaryYear).map(classroom => (
                     <MenuItem key={classroom.id} value={classroom.id}>
                       {classroom.name}
                     </MenuItem>
@@ -2448,7 +2476,7 @@ export default function ResultsPage() {
                   label="সেকশন নির্বাচন করুন"
                   disabled={!selectedClass}
                 >
-                  {sectionsForAdd.map(sec => (
+                  {filterSectionsByYear(sectionsForAdd, summaryYear).map(sec => (
                     <MenuItem key={sec.id} value={sec.id}>
                       <Checkbox checked={(selectedSectionAdd || []).indexOf(sec.id) > -1} />
                       <ListItemText primary={sec.name} />
@@ -2895,7 +2923,7 @@ export default function ResultsPage() {
                   label="শ্রেণি"
                   disabled={loadingClasses}
                 >
-                  {classes.map(classroom => (
+                  {filterClassroomsByYear(classes, bulkYear).map(classroom => (
                     <MenuItem key={classroom.id} value={String(classroom.id)}>{classroom.name}</MenuItem>
                   ))}
                 </Select>
@@ -2935,7 +2963,7 @@ export default function ResultsPage() {
                   label="সেকশন"
                   disabled={!bulkForm.classroom}
                 >
-                  {sectionsForAdd.map(sec => (
+                  {filterSectionsByYear(sectionsForAdd, bulkYear).map(sec => (
                     <MenuItem key={sec.id} value={String(sec.id)}>
                       <Checkbox checked={(bulkForm.section || []).map(String).indexOf(String(sec.id)) > -1} />
                       <ListItemText primary={sec.name} />

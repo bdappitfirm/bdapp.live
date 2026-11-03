@@ -12,7 +12,7 @@ export default function ClassesPage(){
   useEffect(() => {
     const fetchClasses = async () => {
       try {
-        const response = await api.get(`/api/academics/classrooms/?school=${id}`);
+        const response = await api.get(`/api/academics/classrooms/?school=${id}&page_size=1000`);
 
         const raw = Array.isArray(response.data)
           ? response.data

@@ -46,13 +46,32 @@ export const AcademicsProvider = ({ children }) => {
     setCurrentSchoolId(null);
   }, []);
 
+  // Helper to filter cached offline data by current active school
+  const filterBySchool = useCallback((items, targetSchoolId) => {
+    if (!Array.isArray(items) || !targetSchoolId) return [];
+    const targetIdStr = String(targetSchoolId);
+    return items.filter(item => {
+      if (!item) return false;
+      const sId = item.school_id ??
+                  item.school?.id ??
+                  (typeof item.school === 'number' || typeof item.school === 'string' ? item.school : null) ??
+                  item.classroom?.school_id ??
+                  item.classroom?.school?.id ??
+                  (typeof item.classroom?.school === 'number' || typeof item.classroom?.school === 'string' ? item.classroom?.school : null);
+      if (sId != null && String(sId) !== '') {
+        return String(sId) === targetIdStr;
+      }
+      return false;
+    });
+  }, []);
+
   // Fetch classrooms
   const refreshClassrooms = useCallback(async (schoolId, force = false) => {
     const sId = schoolId || schoolIdRef.current;
     if (!sId) return;
 
     try {
-      const response = await scopedGet('/api/academics/classrooms/', sId, {}, { timeout: 30000 });
+      const response = await scopedGet('/api/academics/classrooms/', sId, { page_size: 1000 }, { timeout: 30000 });
       const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
       const sorted = sortClassrooms(data);
       setClassrooms(sorted);
@@ -61,13 +80,14 @@ export const AcademicsProvider = ({ children }) => {
     } catch (error) {
       console.warn('Network error fetching classrooms, falling back to local DB:', error);
       const cached = await getCachedData('classrooms');
-      if (cached && cached.length > 0) {
-        const sorted = sortClassrooms(cached);
+      const schoolFiltered = filterBySchool(cached, sId);
+      if (schoolFiltered && schoolFiltered.length > 0) {
+        const sorted = sortClassrooms(schoolFiltered);
         setClassrooms(sorted);
         return sorted;
       }
     }
-  }, []);
+  }, [filterBySchool]);
 
   // Fetch sections
   const refreshSections = useCallback(async (schoolId, force = false) => {
@@ -75,7 +95,7 @@ export const AcademicsProvider = ({ children }) => {
     if (!sId) return;
 
     try {
-      const response = await scopedGet('/api/academics/sections/', sId, {}, { timeout: 15000 });
+      const response = await scopedGet('/api/academics/sections/', sId, { page_size: 1000 }, { timeout: 15000 });
       const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
 
       setSections(data);
@@ -84,12 +104,13 @@ export const AcademicsProvider = ({ children }) => {
     } catch (error) {
       console.warn('Network error fetching sections, falling back to local DB:', error);
       const cached = await getCachedData('sections');
-      if (cached && cached.length > 0) {
-        setSections(cached);
-        return cached;
+      const schoolFiltered = filterBySchool(cached, sId);
+      if (schoolFiltered && schoolFiltered.length > 0) {
+        setSections(schoolFiltered);
+        return schoolFiltered;
       }
     }
-  }, []);
+  }, [filterBySchool]);
 
   // Fetch students
   const refreshStudents = useCallback(async (schoolId, force = false) => {
@@ -99,9 +120,10 @@ export const AcademicsProvider = ({ children }) => {
     if (!force) {
       try {
         const cached = await getCachedData('students');
-        if (cached && cached.length > 0) {
-          setStudents(cached);
-          return cached;
+        const schoolFiltered = filterBySchool(cached, sId);
+        if (schoolFiltered && schoolFiltered.length > 0) {
+          setStudents(schoolFiltered);
+          return schoolFiltered;
         }
       } catch (e) {
         console.warn('Failed to load cached students:', e);
@@ -147,9 +169,10 @@ export const AcademicsProvider = ({ children }) => {
     } catch (error) {
       console.error('Error fetching students:', error);
       const cached = await getCachedData('students');
-      if (cached && cached.length > 0) setStudents(cached);
+      const schoolFiltered = filterBySchool(cached, sId);
+      if (schoolFiltered && schoolFiltered.length > 0) setStudents(schoolFiltered);
     }
-  }, []);
+  }, [filterBySchool]);
 
   // Fetch subjects
   const refreshSubjects = useCallback(async (schoolId, force = false) => {
@@ -159,9 +182,10 @@ export const AcademicsProvider = ({ children }) => {
     if (!force) {
       try {
         const cached = await getCachedData('subjects');
-        if (cached && cached.length > 0) {
-          setSubjects(cached);
-          return cached;
+        const schoolFiltered = filterBySchool(cached, sId);
+        if (schoolFiltered && schoolFiltered.length > 0) {
+          setSubjects(schoolFiltered);
+          return schoolFiltered;
         }
       } catch (e) {
         console.warn('Failed to load cached subjects:', e);
@@ -169,7 +193,7 @@ export const AcademicsProvider = ({ children }) => {
     }
 
     try {
-      const response = await scopedGet('/api/academics/subjects/', sId, {}, { timeout: 60000 });
+      const response = await scopedGet('/api/academics/subjects/', sId, { page_size: 1000 }, { timeout: 60000 });
       const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
       setSubjects(data);
       if (data.length > 0) await cacheData('subjects', data);
@@ -177,9 +201,10 @@ export const AcademicsProvider = ({ children }) => {
     } catch (error) {
       console.error('Error fetching subjects:', error);
       const cached = await getCachedData('subjects');
-      if (cached && cached.length > 0) setSubjects(cached);
+      const schoolFiltered = filterBySchool(cached, sId);
+      if (schoolFiltered && schoolFiltered.length > 0) setSubjects(schoolFiltered);
     }
-  }, []);
+  }, [filterBySchool]);
 
   const isRefreshingRef = useRef(false);
 

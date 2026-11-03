@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Paper, Stack, Button, TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -8,6 +9,118 @@ import { useAcademics } from '../context/AcademicsContext';
 import { useSchool } from '../context/SchoolContext';
 import { primaryWrittenMax } from '../utils/primaryMaxima';
 import { getMediaUrl } from '../utils/media';
+import { filterClassroomsByYear, filterSectionsByYear } from '../utils/classroomUtils';
+
+// ক্লাস রেজাল্টস প্রিন্ট/জেনারেট করার সময় বাংলা-ইংরেজি ভাষার হেডার ও বিষয়ের নামের অনুবাদ
+const MERGED_COL_LABELS = {
+  'merged-bangla-cq': { bn: 'বাংলা (১ম+২য়)-সিকিউ', en: 'Bangla (1st+2nd)-CQ' },
+  'merged-bangla-mcq': { bn: 'বাংলা (১ম+২য়)-এমসিকিউ', en: 'Bangla (1st+2nd)-MCQ' },
+  'merged-bangla': { bn: 'বাংলা (১ম+২য়)-মোট', en: 'Bangla (1st+2nd)-Total' },
+  'merged-english': { bn: 'ইংরেজি (১ম+২য়)', en: 'English (1st+2nd)' },
+  'merged-optional': { bn: 'কৃষি/উচ্চতর', en: 'Agriculture/Higher Math' },
+  religion_merged: { bn: 'ধর্ম', en: 'Religion' },
+};
+
+// ক্রম গুরুত্বপূর্ণ: নির্দিষ্ট/দীর্ঘ নাম আগে, সাধারণ নাম পরে (যেমন 'বাংলাদেশ' আগে, 'বাংলা' পরে)
+const SUBJECT_EN_LABELS = [
+  ['বাংলাদেশ ও বিশ্বপরিচয়', 'Bangladesh & Global Studies'],
+  ['বাংলাদেশ ও বিশ্বপরিচয়', 'Bangladesh & Global Studies'],
+  ['তথ্য ও যোগাযোগ প্রযুক্তি', 'ICT'],
+  ['উচ্চতর গণিত', 'Higher Mathematics'],
+  ['কৃষি শিক্ষা', 'Agriculture'],
+  ['গার্হস্থ্য বিজ্ঞান', 'Home Science'],
+  ['পদার্থবিজ্ঞান', 'Physics'],
+  ['রসায়ন', 'Chemistry'],
+  ['রসায়ন', 'Chemistry'],
+  ['জীববিজ্ঞান', 'Biology'],
+  ['হিসাববিজ্ঞান', 'Accounting'],
+  ['ফিন্যান্স ও ব্যাংকিং', 'Finance & Banking'],
+  ['ব্যবসায় উদ্যোগ', 'Business Entrepreneurship'],
+  ['ব্যবসায় শিক্ষা', 'Business Studies'],
+  ['পৌরনীতি ও নাগরিকতা', 'Civics & Citizenship'],
+  ['ভূগোল ও পরিবেশ', 'Geography & Environment'],
+  ['ইসলাম ও নৈতিক শিক্ষা', 'Islamic Studies'],
+  ['হিন্দু ধর্ম', 'Hindu Religion'],
+  ['বাংলা', 'Bangla'],
+  ['ইংরেজি', 'English'],
+  ['ইংরেজী', 'English'],
+  ['গণিত', 'Mathematics'],
+  ['ধর্ম', 'Religion'],
+  ['বিজ্ঞান', 'Science'],
+  ['ইতিহাস', 'History'],
+  ['ভূগোল', 'Geography'],
+  ['পৌরনীতি', 'Civics'],
+  ['অর্থনীতি', 'Economics'],
+  ['ফিন্যান্স', 'Finance'],
+  ['ব্যবসায়', 'Business'],
+  ['ব্যবসায়', 'Business'],
+  ['কৃষি', 'Agriculture'],
+  ['গার্হস্থ্য', 'Home Science'],
+  ['আরবি', 'Arabic'],
+  ['আরবী', 'Arabic'],
+  ['অংকন', 'Drawing'],
+  ['শারীরিক শিক্ষা', 'Physical Education'],
+  ['ক্যারিয়ার', 'Career Education'],
+  ['বই পড়া', 'Book Reading'],
+];
+
+const EXAM_LABELS_EN = {
+  half_yearly: 'Half Yearly Examination',
+  annual: 'Annual Examination',
+  pre_test: 'Pre-Test Examination',
+  test: 'Test Examination',
+  model: 'Model Test Examination',
+  first_term: 'First Term Examination',
+  terminal: 'Terminal Examination',
+};
+
+// বিষয়ের নাম বাংলা থেকে ইংরেজিতে রূপান্তর (তালিকায় যত নির্দিষ্ট/দীর্ঘ নাম, তত আগে থাকবে)
+const translateSubjectLabel = (label) => {
+  const src = String(label || '');
+  for (const [bnName, enName] of SUBJECT_EN_LABELS) {
+    if (src.includes(bnName)) return enName;
+  }
+  return src;
+};
+
+// টেবিল হেডারের স্থির লেবেলের অনুবাদ
+const HEAD_LABELS = {
+  roll: { bn: 'রোল', en: 'Roll' },
+  name: { bn: 'Name', en: 'Name' },
+  tutorial: { bn: 'টিউটোরিয়াল', en: 'Tutorial' },
+  total: { bn: 'মোট', en: 'Total' },
+  gpa: { bn: 'জিপিএ', en: 'GPA' },
+  merit: { bn: 'মেধাক্রম', en: 'Merit' },
+};
+
+// শ্রেণির নাম বাংলা থেকে ইংরেজিতে (যেমন 'দশম শ্রেণি' → 'Class Ten')
+const BN_DIGITS = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+const CLASS_ORDINAL_EN = [
+  ['একাদশ', 'Eleven'], ['দ্বাদশ', 'Twelve'], ['দ্বাদশ', 'Twelve'],
+  ['প্রথম', 'One'], ['দ্বিতীয়', 'Two'], ['দ্বিতীয়', 'Two'], ['দিতীয়', 'Two'],
+  ['তৃতীয়', 'Three'], ['তৃতীয়', 'Three'], ['চতুর্থ', 'Four'], ['পঞ্চম', 'Five'],
+  ['ষষ্ঠ', 'Six'], ['সপ্তম', 'Seven'], ['অষ্টম', 'Eight'], ['নবম', 'Nine'], ['দশম', 'Ten'],
+  ['শিশু', 'Shishu'], ['প্লে', 'Play'], ['নার্সারি', 'Nursery'], ['নার্সারী', 'Nursery'], ['কেজি', 'KG'],
+];
+const translateClassName = (name) => {
+  const src = String(name || '');
+  for (const [bn, en] of CLASS_ORDINAL_EN) {
+    if (src.includes(bn)) return `Class ${en}`;
+  }
+  return src.replace(/[০-৯]/g, d => BN_DIGITS[d]);
+};
+
+// শাখার নাম বাংলা থেকে ইংরেজিতে (ক→A, খ→B, ...)
+const SECTION_EN = { 'ক': 'A', 'খ': 'B', 'গ': 'C', 'ঘ': 'D', 'ঙ': 'E' };
+const translateSectionName = (name) => {
+  const src = String(name || '').trim();
+  if (SECTION_EN[src]) return SECTION_EN[src];
+  if (src === 'সব শাখা' || src === 'All' || src === '') return 'All';
+  if (src.includes('বিজ্ঞান')) return 'Science';
+  if (src.includes('ব্যবসায়') || src.includes('ব্যবসায়')) return 'Commerce';
+  if (src.includes('মানবিক')) return 'Humanities';
+  return src;
+};
 
 const getSubjectMaxima = (name, isNT, group = '') => {
   let lower = String(name || '').toLowerCase();
@@ -73,6 +186,10 @@ const computeGpa = (pct) => {
   if (pct >= 50) return 3.0; if (pct >= 40) return 2.0; if (pct >= 33) return 1.0;
   return 0.0;
 };
+
+// পত্র (১ম/২য়) শনাক্ত করার অভিন্ন প্যাটার্ন — শুধু '১ম/২য়' সংখ্যা নয়, 'প্রথম/দ্বিতীয়' শব্দরূপও ধরে।
+// নাহলে "ইংরেজি প্রথম পত্র"-কে combined ভেবে বাদ দেওয়া হয় এবং ১ম পত্রের নম্বর মোট থেকে হারিয়ে যায়।
+const SPECIFIC_PAPER_PAT = /(1st|2nd|১ম|২য়|২য়|first|second|প্রথম|দ্বিতীয়|দ্বিতীয়|দিতীয়)/i;
 
 const normalizeSubjKey = (n) => {
     const low = String(n).toLowerCase().trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
@@ -337,6 +454,48 @@ export default function ClassResultsPage() {
     const p = new URLSearchParams(window.location.search);
     return p.get('exam') || p.get('examination') || 'half_yearly';
   });
+  // ক্লাস রেজাল্টস প্রিন্ট/জেনারেট করার সময় কোন ভাষায় দেখানো হবে ('bn' | 'en')
+  const [resultLang, setResultLang] = useState('bn');
+  // প্রিন্ট ওরিয়েন্টেশন: <head>-এ দুটি @page স্টাইলশিট আগে থেকেই থাকা অবস্থায় ক্লিক হ্যান্ডলারেই
+  // সিঙ্ক্রোনাসভাবে একটি চালু করা হয়, তারপর সাথে সাথে window.print() — setTimeout দিয়ে ডিলে করলে
+  // Chrome ইউজার-অ্যাক্টিভেশন হারিয়ে @page size উপেক্ষা করে ডিফল্ট (পোট্রয়েট) প্রিন্ট করে।
+  const printLandscapeRef = useRef(null);
+  const printPortraitRef = useRef(null);
+
+  useEffect(() => {
+    const makeSheet = (id, orientation) => {
+      const el = document.createElement('style');
+      el.id = id;
+      el.textContent = `@media print { @page { size: A4 ${orientation}; margin: 5mm; } }`;
+      document.head.appendChild(el);
+      return el;
+    };
+    const landscapeEl = makeSheet('cr-print-landscape', 'landscape');
+    const portraitEl = makeSheet('cr-print-portrait', 'portrait');
+    printLandscapeRef.current = landscapeEl;
+    printPortraitRef.current = portraitEl;
+    if (landscapeEl.sheet) landscapeEl.sheet.disabled = false;
+    if (portraitEl.sheet) portraitEl.sheet.disabled = true;
+    return () => {
+      landscapeEl.remove();
+      portraitEl.remove();
+    };
+  }, []);
+
+  // ওরিয়েন্টেশন বদলে প্রিন্ট — সম্পূর্ণ সিঙ্ক্রোনাস, তাই কোন ডিলে/স্টেট-আপডেট লাগে না
+  const handleOrientationPrint = useCallback((orientation) => {
+    const landscapeEl = printLandscapeRef.current;
+    const portraitEl = printPortraitRef.current;
+    if (landscapeEl?.sheet) landscapeEl.sheet.disabled = orientation !== 'landscape';
+    if (portraitEl?.sheet) portraitEl.sheet.disabled = orientation !== 'portrait';
+    window.print();
+  }, []);
+
+  // "বাংলায় জেনারেট করুন" / "ইংরেজীতে জেনারেট করুন" — flushSync দিয়ে সিঙ্ক্রোনাস রেন্ডার করে সাথে সাথে প্রিন্ট
+  const handleGenerate = useCallback((lang) => {
+    flushSync(() => setResultLang(lang));
+    window.print();
+  }, []);
 
   const isClassNineOrTen = useMemo(() => {
     const cls = classrooms.find(c => String(c.id) === String(selectedClass));
@@ -656,12 +815,12 @@ export default function ClassResultsPage() {
                 let key = normalizeSubjKey(rawName);
 
                 // Skip redundant combined records if specific papers exist (Matches Merit List logic)
-                const isCombined = !rawName.match(/(1st|2nd|১ম|২য়|২য়)/);
+                const isCombined = !SPECIFIC_PAPER_PAT.test(rawName);
                 const hasSpecificPapers = stuRes.some(x => {
                     const xName = String(x.subject?.name || x.subject_name || '').toLowerCase();
                     const xKey = normalizeSubjKey(xName);
                     // Match by prefix (e.g., english_p1 matches english) or exact match
-                    return (xKey.startsWith(key.split('_')[0]) && xName.match(/(1st|2nd|১ম|২য়|২য়)/)) || xKey === key + '_p1' || xKey === key + '_p2';
+                    return (xKey.startsWith(key.split('_')[0]) && SPECIFIC_PAPER_PAT.test(xName)) || xKey === key + '_p1' || xKey === key + '_p2';
                 });
                 if (isClassNineOrTen && isCombined && hasSpecificPapers) return;
 
@@ -1060,9 +1219,13 @@ export default function ClassResultsPage() {
     const classHasReligion = religionAssignedToClass && !religionReplacedByArabic;
 
     const allLabels = Array.from(subjectsWithMarks.values());
+    // নবম-দশমে কৃষি শিক্ষা ও উচ্চতর গণিত আলাদা কলাম না হয়ে একটিমাত্র "কৃষিউচ্চতর" কলামে দেখানো হয়
+    let optionalPresent = false;
     subjectsWithMarks.forEach((label, key) => {
         // Navam-dasham bangla & english merged column handling
         if (isClassNineOrTen && (key.startsWith('bangla') || key.startsWith('english'))) return;
+        // নবম-দশমে কৃষি শিক্ষা / উচ্চতর গণিত আলাদা কলাম হিসেবে বাদ দিয়ে মার্জড কলামে যাবে
+        if (isClassNineOrTen && (key === 'higher' || key === 'agriculture')) { optionalPresent = true; return; }
 
         const hasRealMarks = hasAnyRealMarks(key);
 
@@ -1137,7 +1300,9 @@ export default function ClassResultsPage() {
         return 500;
     };
     const subjects = [];
-    if (isClassNineOrTen) { subjects.push({ label: 'বাংলা (১ম+২য়)', key: 'merged-bangla' }, { label: 'ইংরেজি (১ম+২য়)', key: 'merged-english' }); }
+    if (isClassNineOrTen) { subjects.push({ label: 'Bangla CQ', key: 'merged-bangla-cq' }, { label: 'Bangla MCQ', key: 'merged-bangla-mcq' }, { label: 'বাংলা (১ম+২য়)', key: 'merged-bangla' }, { label: 'ইংরেজি (১ম+২য়)', key: 'merged-english' }); }
+    // নবম-দশমে কৃষি শিক্ষা ও উচ্চতর গণিত একই "কৃষিউচ্চতর" কলামে
+    if (isClassNineOrTen && optionalPresent) subjects.push({ label: 'AgriHigher', key: 'merged-optional' });
     Array.from(set).forEach(s => {
         subjects.push(s);
     });
@@ -1147,6 +1312,12 @@ export default function ClassResultsPage() {
 
   const currentClassLabel = classrooms.find(c => String(c.id) === String(selectedClass))?.name || '---';
   const currentSectionLabel = sections.find(s => String(s.id) === String(selectedSection))?.name || 'সব শাখা';
+
+  // ইংরেজিতে জেনারেট করলে স্কুলের নাম/ঠিকানা, শ্রেণি ও শাখাও ইংরেজিতে দেখানো হয় (_en ফিল্ড না থাকলে বাংলা ফলব্যাক)
+  const headerSchoolName = resultLang === 'en' ? (schoolInfo?.name_en || schoolInfo?.name) : schoolInfo?.name;
+  const headerSchoolAddress = resultLang === 'en' ? (schoolInfo?.address_en || schoolInfo?.address) : (schoolInfo?.address || '');
+  const headerClassLabel = resultLang === 'en' ? translateClassName(currentClassLabel) : currentClassLabel;
+  const headerSectionLabel = resultLang === 'en' ? translateSectionName(currentSectionLabel) : currentSectionLabel;
 
   const isPrimaryClass = useMemo(() => {
       const lbl = currentClassLabel.toLowerCase();
@@ -1203,7 +1374,7 @@ export default function ClassResultsPage() {
             list = list.filter(r => { const ln = String(r.subject?.name || r.subject_name).toLowerCase(); if (/higher|উচ্চতর/.test(ln)) return showHM; if (/agriculture|home|কৃষি|গার্হস্থ্য/.test(ln)) return !showHM; return true; });
         }
     }
-    const m = new Map(), b = [], e = [], rel = [];
+    const m = new Map(), b = [], e = [], rel = [], opt = [];
     list.forEach(r => {
         const key = (r.standard_key || normalizeSubjKey(r.subject_name || r.subject?.name || '')).toLowerCase();
         if (suppressedKeys.has(key)) return;
@@ -1216,6 +1387,8 @@ export default function ClassResultsPage() {
         if (isClassNineOrTen) {
             if (key.startsWith('bangla')) { b.push(r); return; }
             if (key.startsWith('english')) { e.push(r); return; }
+            // কৃষি শিক্ষা ও উচ্চতর গণিত একই "কৃষিউচ্চতর" কলামে যাবে
+            if (key === 'higher' || key === 'agriculture') { opt.push(r); return; }
         }
 
         const w = parseFloat(r.written_marks)||0, mcq = parseFloat(r.mcq_marks)||0, pr = parseFloat(r.practical_marks)||0, has = r.hasMarks;
@@ -1274,6 +1447,14 @@ export default function ClassResultsPage() {
         if (anyM) {
             if (isPrimaryClass) {
                 disp = sumW > 0 ? String(Math.round(sumW)) : '0';
+            } else if (key === 'religion_merged') {
+                // ধর্ম: সিকিউ, এমসিকিউ (ও ব্যবহারিক থাকলে তা) সহ ব্রেকডাউন দেখানো হয়,
+                // নাহলে এমসিকিউ কখনো চোখে পড়ে না (যেমন ৭৩ = ৫১+২২)
+                const parts = [];
+                if (cqM > 0) parts.push(Math.round(sumW));
+                if (mcqM > 0) parts.push(Math.round(sumM));
+                if (prM > 0) parts.push(Math.round(sumP));
+                if (sum === 0) disp = 'Absent'; else disp = (parts.length > 1 ? `${Math.round(sum)} = ${parts.join('+')}` : String(Math.round(sum)));
             } else {
                 const p = arr.map(r => Math.round(parseFloat(r.total_obtained)||0));
                 if (sum === 0) disp = 'Absent'; else disp = (p.length > 1 ? `${Math.round(sum)} = ${p.join('+')}` : String(Math.round(sum)));
@@ -1282,7 +1463,52 @@ export default function ClassResultsPage() {
         const cqP = cqM === 0 || sumW >= Math.round(cqM * 0.33 - 0.5), mcqP = mcqM === 0 || sumM >= Math.round(mcqM * 0.33 - 0.5), prP = prM === 0 || sumP >= Math.round(prM * 0.33 - 0.5), totP = sum >= Math.round((cqM+mcqM+prM)*0.33-0.5);
         return { total: sum, display: disp, is_passed: anyM && (isClassNineOrTen ? (cqP && mcqP && prP && totP) : totP), hasMarks: anyM };
     };
-    if (isClassNineOrTen) { if (b.length>0) m.set('merged-bangla', merge(b, 'merged-bangla')); if (e.length>0) m.set('merged-english', merge(e, 'merged-english')); }
+    // কৃষি শিক্ষা ও উচ্চতর গণিত একই "কৃষিউচ্চতর" কলামে — সেলে সিকিউ+এমসিকিউ+ব্যবহারিক ব্রেকডাউন সহ
+    const mergeOptional = (arr) => {
+        let cqM = 0, mcqM = 0, prM = 0, sumW = 0, sumM = 0, sumP = 0;
+        arr.forEach(r => {
+            const spec = getSubjectMaxima(r.subject?.name || r.subject_name, isClassNineOrTen, stuGroup);
+            cqM += spec.cq; mcqM += spec.mcq; prM += spec.pr;
+            sumW += (parseFloat(r.written_marks) || 0);
+            sumM += (parseFloat(r.mcq_marks) || 0);
+            sumP += (parseFloat(r.practical_marks) || 0);
+        });
+        const anyM = arr.some(r => r.hasMarks);
+        let tot = sumW + sumM + sumP;
+        if (tot === 0) tot = arr.reduce((s, r) => s + (parseFloat(r.total_obtained) || 0), 0);
+        let disp = 'Absent';
+        if (anyM) {
+            const parts = [];
+            if (cqM > 0) parts.push(Math.round(sumW));
+            if (mcqM > 0) parts.push(Math.round(sumM));
+            if (prM > 0) parts.push(Math.round(sumP));
+            disp = parts.length > 1 ? `${Math.round(tot)} = ${parts.join('+')}` : String(Math.round(tot));
+        }
+        const cqP = cqM === 0 || sumW >= Math.round(cqM * 0.33 - 0.5),
+              mcqP = mcqM === 0 || sumM >= Math.round(mcqM * 0.33 - 0.5),
+              prP = prM === 0 || sumP >= Math.round(prM * 0.33 - 0.5),
+              totP = (cqM + mcqM + prM) === 0 || tot >= Math.round((cqM + mcqM + prM) * 0.33 - 0.5);
+        return { total: tot, display: disp, is_passed: anyM && cqP && mcqP && prP && totP, hasMarks: anyM };
+    };
+    if (isClassNineOrTen) {
+        if (b.length > 0) {
+            // বাংলা (১ম+২য়) তিনটি কলামে: সিকিউ, এমসিকিউ ও মোট
+            // ১ম ও ২য় পত্র আলাদা করে দেখানো হয় (যেমন ৪০+৩৫), যোগফল একক সংখ্যায় নয়
+            const mergedB = merge(b, 'merged-bangla');
+            const anyBM = b.some(r => r.hasMarks);
+            const cqParts = b.map(r => Math.round(parseFloat(r.written_marks) || 0));
+            const mcqParts = b.map(r => Math.round(parseFloat(r.mcq_marks) || 0));
+            const sumBW = cqParts.reduce((s, v) => s + v, 0);
+            const sumBM = mcqParts.reduce((s, v) => s + v, 0);
+            const cqDisp = anyBM ? (cqParts.length > 1 ? cqParts.join('+') : String(sumBW)) : 'Absent';
+            const mcqDisp = anyBM ? (mcqParts.length > 1 ? mcqParts.join('+') : String(sumBM)) : 'Absent';
+            m.set('merged-bangla-cq', { total: sumBW, display: cqDisp, is_passed: true, hasMarks: anyBM });
+            m.set('merged-bangla-mcq', { total: sumBM, display: mcqDisp, is_passed: true, hasMarks: anyBM });
+            m.set('merged-bangla', mergedB);
+        }
+        if (e.length > 0) m.set('merged-english', merge(e, 'merged-english'));
+        if (opt.length > 0) m.set('merged-optional', mergeOptional(opt));
+    }
     if (rel.length > 0) m.set('religion_merged', merge(rel, 'religion_merged'));
     return m;
   }, [resultsByStudent, isClassNineOrTen, isPrimaryClass]);
@@ -1317,6 +1543,7 @@ export default function ClassResultsPage() {
             if (Math.abs(b.rawScore - a.rawScore) > 0.01) return b.rawScore - a.rawScore;
             return (Number(a.roll) || 0) - (Number(b.roll) || 0);
         });
+        // ফেল করা শিক্ষার্থীরাও মেধাক্রম পাবে — কম বিষয়ে ফেল, তারপর GPA, তারপর মোট নম্বর অনুযায়ী ক্রম
         scores.forEach((s, i) => {
             ranks.set(s.sid, i + 1);
         });
@@ -1327,6 +1554,7 @@ export default function ClassResultsPage() {
   const studentListSortedByRoll = useMemo(() => { return [...studentListFiltered].sort((a, b) => (parseInt(a.roll_number) || 999) - (parseInt(b.roll_number) || 999)); }, [studentListFiltered]);
 
   const currentExamLabel = useMemo(() => {
+    if (resultLang === 'en') return EXAM_LABELS_EN[selectedExam] || 'All Examinations';
     if (selectedExam === 'half_yearly') return 'অর্ধ-বার্ষিক পরীক্ষা';
     if (selectedExam === 'annual') return 'বার্ষিক পরীক্ষা';
     if (selectedExam === 'pre_test') return 'প্রাক-নির্বাচনী পরীক্ষা';
@@ -1335,22 +1563,29 @@ export default function ClassResultsPage() {
     if (selectedExam === 'first_term') return 'প্রথম সাময়িক পরীক্ষা';
     if (selectedExam === 'terminal') return 'টার্মিনাল পরীক্ষা';
     return 'সকল পরীক্ষা';
-  }, [selectedExam]);
+  }, [selectedExam, resultLang]);
 
   return (
     <Box sx={{ p: 3 }}>
       <Stack className="no-print" direction="row" justifyContent="space-between" sx={{ mb: 3 }}>
         <Typography variant="h4"><AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} /> Class Results</Typography>
-        <Stack direction="row" spacing={1}><Button variant="outlined" onClick={() => navigate(-1)}>Back</Button><Button variant="contained" startIcon={<PrintIcon />} onClick={() => window.print()}>Print</Button></Stack>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" onClick={() => navigate(-1)}>Back</Button>
+          <Button variant="contained" color="secondary" startIcon={<PrintIcon />} onClick={() => window.print()}>প্রিন্ট (Print)</Button>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => handleOrientationPrint('landscape')}>ল্যান্ডস্কেপ মোডে প্রিন্ট করুন</Button>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => handleOrientationPrint('portrait')}>পোট্রয়েট মোডে প্রিন্ট করুন</Button>
+          <Button variant="contained" color={resultLang === 'bn' ? 'primary' : 'inherit'} startIcon={<PrintIcon />} onClick={() => handleGenerate('bn')}>বাংলায় জেনারেট করুন</Button>
+          <Button variant="contained" color={resultLang === 'en' ? 'primary' : 'inherit'} startIcon={<PrintIcon />} onClick={() => handleGenerate('en')}>ইংরেজীতে জেনারেট করুন</Button>
+        </Stack>
       </Stack>
       <Paper className="no-print" sx={{ p: 2, mb: 3 }}>
         <Stack direction="row" spacing={2}>
           <TextField select label="Class" value={selectedClass} onChange={e => handleClassChange(e.target.value)} sx={{ minWidth: 200 }}>
-            {classrooms.map(c => <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>)}
+            {filterClassroomsByYear(classrooms, selectedYear).map(c => <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>)}
           </TextField>
           <TextField select label="Section" value={selectedSection} onChange={e => handleSectionChange(e.target.value)} sx={{ minWidth: 150 }} disabled={!selectedClass}>
             <MenuItem value="">All</MenuItem>
-            {sections.map(s => <MenuItem key={s.id} value={String(s.id)}>{s.name}</MenuItem>)}
+            {filterSectionsByYear(sections, selectedYear).map(s => <MenuItem key={s.id} value={String(s.id)}>{s.name}</MenuItem>)}
           </TextField>
           <TextField select label="Exam" value={selectedExam} onChange={e => handleExamChange(e.target.value)} sx={{ minWidth: 180 }}>
             <MenuItem value="half_yearly">অর্ধ-বার্ষিক</MenuItem>
@@ -1365,14 +1600,33 @@ export default function ClassResultsPage() {
         </Stack>
       </Paper>
       <Box className="print-only" sx={{ display: 'none', textAlign: 'center', mb: 3, borderBottom: '2px solid black', pb: 2, "@media print": { display: 'block' } }}>
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mb: 1 }}>{schoolInfo?.logo && <img src={getMediaUrl(schoolInfo.logo)} alt="Logo" style={{ height: '80px' }} />}<Box><Typography variant="h5" sx={{ fontWeight: 800, fontSize: '1.6rem' }}>{schoolInfo?.name}</Typography><Typography variant="body1" sx={{ fontSize: '1rem' }}>{schoolInfo?.address || ''}</Typography></Box></Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, fontSize: '1.4rem' }}>শ্রেণি ভিত্তিক ফলাফল (Class Results)</Typography>
-          <Typography variant="h6" sx={{ fontSize: '1rem' }}>শ্রেণি: {currentClassLabel} | শাখা: {currentSectionLabel} | পরীক্ষা: {currentExamLabel} | বছর: {selectedYear}</Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mb: 1 }}>{schoolInfo?.logo && <img src={getMediaUrl(schoolInfo.logo)} alt="Logo" style={{ height: '80px' }} />}<Box><Typography variant="h5" sx={{ fontWeight: 800, fontSize: '1.6rem' }}>{headerSchoolName}</Typography><Typography variant="body1" sx={{ fontSize: '1rem' }}>{headerSchoolAddress}</Typography></Box></Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, fontSize: '1.4rem' }}>
+            {resultLang === 'en' ? `Exam: ${currentExamLabel} | Year: ${selectedYear}` : `পরীক্ষা: ${currentExamLabel} | বছর: ${selectedYear}`}
+          </Typography>
+          <Typography variant="h6" sx={{ fontSize: '1rem' }}>
+            {resultLang === 'en'
+              ? `Class: ${headerClassLabel} | Section: ${headerSectionLabel}`
+              : `শ্রেণি: ${headerClassLabel} | শাখা: ${headerSectionLabel}`}
+          </Typography>
       </Box>
       {loading ? <CircularProgress /> : (
         <TableContainer component={Paper} sx={{ boxShadow: 'none', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <Table size="small" sx={{ borderCollapse: 'collapse', '& td, & th': { border: '1.2px solid black !important', fontSize: { xs: '0.8rem', print: '7pt' }, py: 0.5, px: 0.3 } }}>
-            <TableHead><TableRow sx={{ bgcolor: '#eee', "@media print": { bgcolor: '#eee !important', WebkitPrintColorAdjust: 'exact' } }}><TableCell align="center">রোল</TableCell><TableCell>Name</TableCell>{displaySubjects.map(s => <TableCell key={s.key} align="center" sx={{ fontWeight: 'bold' }}>{s.label}</TableCell>)}{isPrimaryClass && <TableCell align="center" sx={{ fontWeight: 'bold' }}>টিউটোরিয়াল</TableCell>}<TableCell align="center" sx={{ fontWeight: 'bold' }}>মোট</TableCell><TableCell align="center" sx={{ fontWeight: 'bold' }}>মেধাক্রম</TableCell></TableRow></TableHead>
+          <Table className="class-results-table" size="small" sx={{ borderCollapse: 'collapse', '& td, & th': { border: '1.2px solid black !important', fontSize: { xs: '0.8rem', print: '7pt' }, py: 0.5, px: 0.3 } }}>
+            <TableHead><TableRow sx={{ bgcolor: '#eee', "@media print": { bgcolor: '#eee !important', WebkitPrintColorAdjust: 'exact' } }}>
+              <TableCell className="cr-roll" align="center">{HEAD_LABELS.roll[resultLang]}</TableCell>
+              <TableCell className="cr-name">{HEAD_LABELS.name[resultLang]}</TableCell>
+              {displaySubjects.map(s => {
+                const baseLbl = MERGED_COL_LABELS[s.key] ? MERGED_COL_LABELS[s.key][resultLang] : (resultLang === 'en' ? translateSubjectLabel(s.label) : s.label);
+                // বিজ্ঞান ও আইসিটির ক্ষেত্রে হেডারে CQ+MCQ+PRAC ব্রেকডাউন স্পষ্ট করা হয়
+                const lbl = ['physics', 'chemistry', 'biology', 'ict'].includes(s.key) ? `${baseLbl} (CQ+MCQ+PRAC)` : baseLbl;
+                return <TableCell key={s.key} className="cr-subj-head" align="center" sx={{ fontWeight: 'bold' }}>{lbl}</TableCell>;
+              })}
+              {isPrimaryClass && <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.tutorial[resultLang]}</TableCell>}
+              <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.total[resultLang]}</TableCell>
+              <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.gpa[resultLang]}</TableCell>
+              <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.merit[resultLang]}</TableCell>
+            </TableRow></TableHead>
             <TableBody>{studentListSortedByRoll.map(stu => {
               const stuData = overallTotals.get(String(stu.id));
               const stuGroup = (stuData?.group || stu?.student_group || stu?.group || currentGroupFromURL).toLowerCase();
@@ -1423,7 +1677,7 @@ export default function ClassResultsPage() {
               };
               return (
                 <TableRow key={stu.id} sx={{ pageBreakInside: 'avoid' }}>
-                  <TableCell align="center">{stu.roll_number}</TableCell><TableCell sx={{ fontWeight: 'bold', minWidth: '100px' }}>{stu.user?.first_name} {stu.user?.last_name}</TableCell>
+                  <TableCell className="cr-roll" align="center">{stu.roll_number}</TableCell><TableCell className="cr-name" sx={{ fontWeight: 'bold' }}>{resultLang === 'en' ? `${stu.user?.first_name_en || stu.user?.first_name || ''} ${stu.user?.last_name_en || stu.user?.last_name || ''}`.trim() : `${stu.user?.first_name || ''} ${stu.user?.last_name || ''}`.trim()}</TableCell>
                   {(() => { const resMap = getResultsMap(stu.id, stuGroup); return displaySubjects.map(sub => {
                       const r = resMap.get(sub.key); const mandatory = isSubMandatory(sub.key); const isOpt = /higher|উচ্চতর|agriculture|home|কৃষি|গার্হস্থ্য/.test(sub.key);
                       const isF = !isOpt && ((r && r.hasMarks && r.is_passed === false) || (!r && mandatory && stuData && !stuData.isAbsent));
@@ -1432,6 +1686,7 @@ export default function ClassResultsPage() {
                   }); })()}
                   {isPrimaryClass && <TableCell align="center" sx={{ fontWeight: 'bold' }}>{stuData?.totalTutorial || 0}</TableCell>}
                   <TableCell align="center" sx={{ fontWeight: 'bold' }}>{stuData?.total || 0}</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{stuData?.isAbsent ? '--' : (Number(stuData?.points) || 0).toFixed(2)}</TableCell>
                   <TableCell align="center" sx={{ fontWeight: 'bold', color: stuData?.isAbsent ? 'red' : 'inherit' }}>
                     {meritRanks.get(String(stu.id)) || '--'}
                   </TableCell>
@@ -1441,7 +1696,7 @@ export default function ClassResultsPage() {
           </Table>
         </TableContainer>
       )}
-      <style>{`@media print { .no-print { display: none !important; } body { background: white !important; margin: 0 !important; padding: 5mm !important; } @page { size: landscape; margin: 5mm; } .print-only { display: block !important; } .MuiTableContainer-root { overflow: visible !important; width: 100% !important; } table { width: 100% !important; table-layout: fixed !important; } th, td { word-break: break-word !important; line-height: 1.1 !important; } }`}</style>
+      <style>{`@media print { .no-print { display: none !important; } body { background: white !important; margin: 0 !important; padding: 5mm !important; } .print-only { display: block !important; } .MuiTableContainer-root { overflow: visible !important; width: 100% !important; } .class-results-table { width: 100% !important; table-layout: fixed !important; } .class-results-table th, .class-results-table td { word-break: break-word !important; line-height: 1.1 !important; } .class-results-table th.cr-roll, .class-results-table td.cr-roll { width: 4% !important; } .class-results-table th.cr-name, .class-results-table td.cr-name { width: 15% !important; } .class-results-table th.cr-subj-head { writing-mode: vertical-rl !important; white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; font-size: 9pt !important; line-height: 1 !important; padding: 1px !important; } .class-results-table th:not(.cr-subj-head) { vertical-align: bottom !important; } }`}</style>
     </Box>
   );
 }

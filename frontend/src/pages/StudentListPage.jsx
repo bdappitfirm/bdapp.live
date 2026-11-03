@@ -107,6 +107,7 @@ export default function StudentListPage() {
               admission_date: aDate,
               roll_number: s.roll_number,
               student_group: s.student_group,
+              blood_group: s.blood_group,
               section_id: s.section_id || s.section?.id || s.section,
               optional_subject_id: s.optional_subject_id || s.optional_subject?.id || s.optional_subject
           };
@@ -194,6 +195,18 @@ export default function StudentListPage() {
     return cls ? /নবম|দশম|nine|ten|ix|x|\b9\b|\b10\b/i.test(cls.name) : false;
   }, [selectedClassroom, classrooms]);
 
+  const printHeaderInfo = useMemo(() => {
+    const cls = classrooms.find(c => String(c.id) === String(selectedClassroom));
+    const sec = sections.find(s => String(s.id) === String(selectedSection));
+    const groupMap = { 'science': 'বিজ্ঞান', 'arts': 'মানবিক', 'commerce': 'ব্যবসায় শিক্ষা' };
+    const groups = [...new Set(students.map(s => s.student_group).filter(Boolean))].map(g => groupMap[g] || g);
+    const parts = [];
+    if (cls?.name) parts.push(`শ্রেণি: ${cls.name}`);
+    if (sec?.name) parts.push(`শাখা: ${sec.name}`);
+    if (groups.length) parts.push(`গ্রুপ: ${groups.join('/')}`);
+    return parts.join(' | ');
+  }, [classrooms, sections, selectedClassroom, selectedSection, students]);
+
   const handleDownloadCSV = useCallback(() => {
     if (students.length === 0) return;
     const headers = ['ক্র.', 'নাম', 'পিতা', 'মাতা', 'জন্ম তারিখ', 'রোল', 'শাখা', 'গ্রুপ', '৪র্থ বিষয়'];
@@ -265,6 +278,9 @@ export default function StudentListPage() {
                 <Box sx={{ textAlign: 'center', flex: 1 }}>
                     <Typography variant="h4" sx={{ fontWeight: 'bold' }}>{schoolInfo?.bn_name || schoolInfo?.name}</Typography>
                     <Typography variant="h5">শিক্ষার্থী তালিকা</Typography>
+                    {printHeaderInfo && (
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>{printHeaderInfo}</Typography>
+                    )}
                 </Box>
                 {schoolInfo?.logo && <Box component="img" src={schoolInfo.logo} sx={{ height: '16mm', ml: 2 }} />}
             </Box>
@@ -279,7 +295,7 @@ export default function StudentListPage() {
                   <col style={{ width: '75px' }} />
                   <col style={{ width: '75px' }} />
                   <col style={{ width: '60px' }} />
-                  <col style={{ width: '80px' }} />
+                  <col style={{ width: '70px' }} />
                   {isNineTen && (
                     <>
                       <col style={{ width: '80px' }} />
@@ -300,7 +316,7 @@ export default function StudentListPage() {
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>জন্ম তারিখ</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ভর্তির তারিখ</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>রোল</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>শাখা</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ব্লাড</TableCell>
                         {isNineTen && (
                           <>
                             <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>গ্রুপ</TableCell>
@@ -337,7 +353,12 @@ export default function StudentListPage() {
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.roll_number || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'roll_number', e.target.value)} style={{ textAlign: 'center' }} />
                         </TableCell>
-                        <TableCell align="center" sx={{ p: 0, m: 0 }}>{s.section?.name || ''}</TableCell>
+                        <TableCell sx={{ p: 0, m: 0 }}>
+                          <select className="sl-cell-select" value={s.blood_group || ''} onChange={(e) => handleFieldChange(s.id, 'blood_group', e.target.value)}>
+                            <option value=""></option>
+                            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (<option key={bg} value={bg}>{bg}</option>))}
+                          </select>
+                        </TableCell>
                         {isNineTen && (
                           <>
                             <TableCell sx={{ p: 0, m: 0 }}>

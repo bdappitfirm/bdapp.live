@@ -198,6 +198,12 @@ class Task(models.Model):
 class ActivityLog(models.Model):
     ACTION_CHOICES = [
         ('profile_create', 'Profile Creation'),
+        ('student_create', 'Student Creation'),
+        ('student_edit', 'Student Edit'),
+        ('student_delete', 'Student Delete'),
+        ('teacher_create', 'Teacher Creation'),
+        ('teacher_edit', 'Teacher Edit'),
+        ('teacher_delete', 'Teacher Delete'),
         ('login', 'User Login'),
         ('data_input', 'Data Input'),
         ('result_input', 'Result Input'),

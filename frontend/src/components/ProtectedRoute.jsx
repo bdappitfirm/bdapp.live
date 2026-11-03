@@ -4,6 +4,8 @@ import { isAuthenticated } from '../utils/auth';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 
+const ADMIN_ROLES = ['admin', 'super_admin', 'superadmin', 'bdadmin', 'school_admin'];
+
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -14,19 +16,24 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   // Extract role and user's school ID
   const role = ((user && (user.role || user.profile?.effective_role || user.profile?.role)) || '').trim().toLowerCase();
   const username = String(user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
-  const userSchoolId = user?.profile?.school;
-  const adminRoles = ['admin', 'super_admin', 'superadmin', 'bdadmin', 'school_admin'];
-  const isSuperUser = !!(
+  const rawSchool = user?.profile?.school_id || user?.profile?.school;
+  const userSchoolId = rawSchool ? String(typeof rawSchool === 'object' ? rawSchool.id : rawSchool) : '';
+  const isSchool6Staff = userSchoolId === '6' || userSchoolId === '6.0' || (user?.profile?.school?.id === 6);
+
+  const isTrueAdmin = !!(
     user?.is_superuser || 
     user?.user?.is_superuser || 
     user?.profile?.is_superuser || 
     user?.is_staff || 
     user?.user?.is_staff ||
-    adminRoles.includes(role) || 
+    ADMIN_ROLES.includes(role) ||
     username === 'bdadmin' || 
     username === 'shamir' ||
     username === 'umor'
   );
+
+  // Cross-school navigation permission (BDapp School 6 staff or superusers can enter other schools)
+  const canAccessMultipleSchools = isTrueAdmin || isSchool6Staff;
 
   useEffect(() => {
     const checkAuth = () => {
@@ -37,10 +44,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         return;
       }
 
-      // Check for school isolation if not a superuser
-      if (schoolId && !isSuperUser && userSchoolId) {
+      // Check for school isolation
+      if (schoolId && !canAccessMultipleSchools && userSchoolId) {
         if (String(schoolId) !== String(userSchoolId)) {
-          // User is trying to access another school's dashboard
           setIsChecking(false);
           return;
         }
@@ -50,18 +56,17 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       
       if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
         const hasRole = !!role;
-        const isAdminLike = role === 'admin' || role === 'super_admin';
-        const ok = isAdminLike ? true : (hasRole ? allowedRoles.map(r => String(r).toLowerCase()).includes(role) : true);
-        if (hasRole && !ok) {
+        const isAdminLike = ADMIN_ROLES.includes(role) || isTrueAdmin;
+        const ok = isAdminLike ? true : (hasRole ? allowedRoles.map(r => String(r).toLowerCase()).includes(role) : false);
+        if (!ok) {
           setIsChecking(false);
           return;
         }
       }
     };
 
-
     if (!loading) checkAuth();
-  }, [navigate, user, loading, location.pathname, location.search, schoolId, userSchoolId, isSuperUser, allowedRoles, role]);
+  }, [navigate, user, loading, location.pathname, location.search, schoolId, userSchoolId, canAccessMultipleSchools, allowedRoles, role, isTrueAdmin]);
 
   if (isChecking || loading) {
     return (
@@ -84,8 +89,33 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return null;
   }
 
+  // Special restriction: School 69 Admin Page is strictly for bdadmin
+  const isSchool69 = String(schoolId) === '69' || location.pathname.includes('/school/69');
+  const isAdminRoute = location.pathname.includes('/admin');
+  const isBdAdminUser = username === 'bdadmin' || username.includes('bdadmin');
+
+  if (isSchool69 && isAdminRoute && !isBdAdminUser) {
+    return (
+      <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="60vh" textAlign="center">
+        <Typography variant="h5" color="error" gutterBottom sx={{ fontWeight: 'bold' }}>
+          এক্সেস নিষিদ্ধ (Access Denied)
+        </Typography>
+        <Typography variant="body1" sx={{ mb: 2 }}>
+          স্কুল ৬৯ (School 69)-এর এডমিন পেজে প্রবেশ করার অনুমতি শুধুমাত্র <strong>bdadmin</strong> এর রয়েছে।
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => navigate(`/school/${schoolId || 69}`)}
+          sx={{ mt: 2 }}
+        >
+          স্কুল ড্যাশবোর্ডে ফিরে যান
+        </Button>
+      </Box>
+    );
+  }
+
   // School isolation error message
-  if (schoolId && !isSuperUser && userSchoolId && String(schoolId) !== String(userSchoolId)) {
+  if (schoolId && !canAccessMultipleSchools && userSchoolId && String(schoolId) !== String(userSchoolId)) {
     return (
       <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="60vh">
         <Typography variant="h5" color="error" gutterBottom>
@@ -105,25 +135,27 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     );
   }
 
+  // Role checking for Admin / Teacher / Student pages
   if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
     const hasRole = !!role;
-    const isAdminLike = adminRoles.includes(role);
+    const isAdminLike = ADMIN_ROLES.includes(role) || isTrueAdmin;
     const readOnlyRoles = ['student', 'parent', 'committee'];
-    const ok = isAdminLike || isSuperUser || (hasRole && allowedRoles.map(r => String(r).toLowerCase()).includes(role)) || readOnlyRoles.includes(role);
+    const ok = isAdminLike || (hasRole && allowedRoles.map(r => String(r).toLowerCase()).includes(role)) || readOnlyRoles.includes(role);
+
     if (!ok) {
         return (
-          <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="60vh">
-            <Typography variant="h6" sx={{ mb: 1 }}>
+          <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="60vh" textAlign="center">
+            <Typography variant="h5" color="error" gutterBottom sx={{ fontWeight: 'bold' }}>
               আপনি এই পেজে প্রবেশের অনুমতি পাচ্ছেন না
             </Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              প্রয়োজনীয় ভূমিকা: {allowedRoles.join(', ')}
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              এই পেজটিতে প্রবেশের জন্য প্রয়োজন: <strong>{allowedRoles.join(', ')}</strong> রোল। (আপনার বর্তমান ভূমিকা: {role || 'নাই'})
             </Typography>
             <Button variant="contained" onClick={() => navigate(-1)} sx={{ mr: 1 }}>
-              ব্যাক
+              পিছনে ফিরে যান
             </Button>
             <Button variant="outlined" onClick={() => navigate('/')}>
-              হোম
+              হোমপেজ
             </Button>
           </Box>
         );

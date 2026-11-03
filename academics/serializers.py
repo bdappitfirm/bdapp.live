@@ -75,7 +75,9 @@ class ClassRoomSerializer(serializers.ModelSerializer):
         return getattr(obj, 'annotated_student_count', obj.students.count())
     
     def get_sections(self, obj):
-        return [{'id': s.id, 'name': s.name} for s in obj.sections.all()]
+        from .utils import get_section_order
+        sorted_sections = sorted(obj.sections.all(), key=lambda s: get_section_order(s.name))
+        return [{'id': s.id, 'name': s.name} for s in sorted_sections]
         
     class Meta:
         model = ClassRoom

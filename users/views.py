@@ -223,6 +223,81 @@ class TeacherProfileViewSet(viewsets.ModelViewSet):
             return Profile.objects.none()
         return Profile.objects.filter(school_id=sid).filter(Q(role='teacher') | Q(role='admin'))
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        try:
+            from users.utils import log_activity, get_client_ip
+            full_name = instance.user.get_full_name() if instance.user else ''
+            if not full_name and instance.user:
+                full_name = instance.user.username
+
+            log_activity(
+                user=self.request.user,
+                school=instance.school,
+                action_type='teacher_create',
+                details={
+                    'action': 'teacher_create',
+                    'action_label': 'নতুন শিক্ষক যোগ',
+                    'name': full_name,
+                    'designation': getattr(instance, 'designation', '') or '',
+                    'role': 'teacher'
+                },
+                cost=5.00,
+                ip_address=get_client_ip(self.request)
+            )
+        except Exception as e:
+            print(f"Error logging teacher_create activity: {e}")
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        try:
+            from users.utils import log_activity, get_client_ip
+            full_name = instance.user.get_full_name() if instance.user else ''
+            if not full_name and instance.user:
+                full_name = instance.user.username
+
+            log_activity(
+                user=self.request.user,
+                school=instance.school,
+                action_type='teacher_edit',
+                details={
+                    'action': 'teacher_edit',
+                    'action_label': 'শিক্ষকের তথ্য আপডেট',
+                    'name': full_name,
+                    'designation': getattr(instance, 'designation', '') or '',
+                    'role': 'teacher'
+                },
+                cost=0.00,
+                ip_address=get_client_ip(self.request)
+            )
+        except Exception as e:
+            print(f"Error logging teacher_edit activity: {e}")
+
+    def perform_destroy(self, instance):
+        try:
+            from users.utils import log_activity, get_client_ip
+            full_name = instance.user.get_full_name() if instance.user else ''
+            if not full_name and instance.user:
+                full_name = instance.user.username
+
+            log_activity(
+                user=self.request.user,
+                school=instance.school,
+                action_type='teacher_delete',
+                details={
+                    'action': 'teacher_delete',
+                    'action_label': 'শিক্ষক মুছে ফেলা হয়েছে (ডিলেট)',
+                    'name': full_name,
+                    'designation': getattr(instance, 'designation', '') or '',
+                    'role': 'teacher'
+                },
+                cost=0.00,
+                ip_address=get_client_ip(self.request)
+            )
+        except Exception as e:
+            print(f"Error logging teacher_delete activity: {e}")
+        instance.delete()
+
 class TaskViewSet(viewsets.ModelViewSet):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
@@ -233,7 +308,66 @@ class TaskViewSet(viewsets.ModelViewSet):
 class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ActivityLog.objects.all()
     serializer_class = ActivityLogSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = ActivityLog.objects.select_related('user', 'user__profile', 'school').all()
+
+        sid = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+        if not sid:
+            sid = get_user_school_id(user, self.request)
+
+        if sid and str(sid).isdigit():
+            queryset = queryset.filter(school_id=int(sid))
+        elif not is_global_admin(user):
+            user_sid = getattr(getattr(user, 'profile', None), 'school_id', None)
+            if user_sid:
+                queryset = queryset.filter(school_id=user_sid)
+            else:
+                return ActivityLog.objects.none()
+
+        return queryset.order_by('-timestamp')
+
+    @action(detail=False, methods=['get'])
+    def reports(self, request):
+        user = request.user
+        sid = request.query_params.get('school') or request.query_params.get('school_id')
+        if not sid:
+            sid = get_user_school_id(user, request)
+
+        queryset = ActivityLog.objects.all()
+        if sid and str(sid).isdigit():
+            queryset = queryset.filter(school_id=int(sid))
+        elif not is_global_admin(user):
+            user_sid = getattr(getattr(user, 'profile', None), 'school_id', None)
+            if user_sid:
+                queryset = queryset.filter(school_id=user_sid)
+            else:
+                return Response({"total_earnings": 0, "daily_stats": [], "school_stats": []})
+
+        total_earnings = queryset.filter(action_type__in=['profile_create', 'student_create', 'teacher_create']).aggregate(total=Sum('cost'))['total'] or 0
+
+        daily_stats = list(
+            queryset.filter(action_type__in=['profile_create', 'student_create', 'teacher_create'])
+            .annotate(date=TruncDate('timestamp'))
+            .values('date')
+            .annotate(count=Count('id'), total_cost=Sum('cost'))
+            .order_by('-date')[:30]
+        )
+
+        school_stats = list(
+            queryset.filter(action_type__in=['profile_create', 'student_create', 'teacher_create'])
+            .values('school__id', 'school__name')
+            .annotate(count=Count('id'), total_cost=Sum('cost'))
+            .order_by('-count')
+        )
+
+        return Response({
+            "total_earnings": float(total_earnings),
+            "daily_stats": daily_stats,
+            "school_stats": school_stats
+        })
 
 class AIChatView(APIView):
     permission_classes = [permissions.IsAuthenticated]

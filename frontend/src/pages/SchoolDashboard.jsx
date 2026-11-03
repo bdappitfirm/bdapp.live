@@ -75,8 +75,20 @@ const SchoolDashboard = () => {
   // Auth & Permissions
   const role = (user?.role || user?.profile?.effective_role || user?.profile?.role || '').toLowerCase();
   const username = (user?.username || '').toLowerCase();
-  const isSuperUser = user?.is_superuser || role === 'admin' || username.includes('bdadmin');
+  const rawSchool = user?.profile?.school_id || user?.profile?.school;
+  const userSchoolId = rawSchool ? String(typeof rawSchool === 'object' ? rawSchool.id : rawSchool) : '';
+
+  const isSuperUser = user?.is_superuser || username.includes('bdadmin');
+  const isSchool6Staff = (userSchoolId === '6' || userSchoolId === '6.0' || user?.profile?.school?.id === 6) && (role === 'teacher' || role === 'admin' || role === 'super_admin');
+  const canAccessAllSchools = isSuperUser || isSchool6Staff;
   const isTeacher = role === 'teacher' || role === 'admin';
+
+  // Restrict non-School 6 teachers to strictly their assigned school
+  useEffect(() => {
+    if (user && !canAccessAllSchools && userSchoolId && String(id) !== String(userSchoolId)) {
+      navigate(`/school/${userSchoolId}`, { replace: true });
+    }
+  }, [user, canAccessAllSchools, userSchoolId, id, navigate]);
 
   const menuItems = useMemo(() => [
     { label: 'ড্যাশবোর্ড প্যানেল', icon: <AssessmentIcon />, key: 'dashboard-stats' },
@@ -135,6 +147,10 @@ const SchoolDashboard = () => {
   ], []);
 
   const filteredMenuItems = useMemo(() => menuItems.filter(item => {
+    // School 69 Admin menu item is ONLY visible to bdadmin
+    if (String(id) === '69' && item.key === 'admin') {
+      return username === 'bdadmin' || username.includes('bdadmin');
+    }
     if (item.key === 'billing' || item.key === 'accounts') {
         return String(id) === '6' && (isSuperUser || username.includes('bdadmin') || role === 'admin');
     }
@@ -293,9 +309,8 @@ const SchoolDashboard = () => {
     if (!id || authLoading) return;
     const uname = (user?.username || '').toLowerCase();
     const isShamirOrUmor = uname === 'shamir' || uname === 'umor';
-    const userSchoolId = String(user?.profile?.school_id || '');
 
-    if (!user?.is_superuser && !uname.includes('bdadmin')) {
+    if (!canAccessAllSchools) {
       if (isShamirOrUmor && String(id) !== '16') {
         setError('দুঃখিত, আপনি এই স্কুলে প্রবেশের জন্য অনুমোদিত ব্যক্তি নন।');
         setTimeout(() => navigate('/school/16'), 2000);
@@ -307,7 +322,7 @@ const SchoolDashboard = () => {
         return;
       }
     }
-  }, [id, user, navigate, authLoading]);
+  }, [id, user, navigate, authLoading, canAccessAllSchools, userSchoolId]);
 
   useEffect(() => {
     api.get('/api/schools/')
@@ -588,9 +603,35 @@ const SchoolDashboard = () => {
             <IconButton color="inherit" onClick={() => navigate(-1)} sx={{ display: isMainDashboard ? 'none' : 'inline-flex' }}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
-            <IconButton color="inherit" onClick={() => navigate('/')}>
-              <HomeIcon fontSize="small" />
-            </IconButton>
+            {canAccessAllSchools ? (
+              <>
+                <IconButton color="inherit" onClick={() => navigate('/')} title="ওপেনিং ড্যাশবোর্ড (সকল স্কুল)">
+                  <HomeIcon fontSize="small" />
+                </IconButton>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => navigate('/')}
+                  sx={{
+                    bgcolor: 'rgba(255,255,255,0.18)',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+                    fontWeight: 'bold',
+                    fontSize: { xs: '0.7rem', sm: '0.8rem' },
+                    px: 1.2,
+                    py: 0.3,
+                    mr: 1,
+                    borderRadius: 1.5,
+                    textTransform: 'none'
+                  }}
+                >
+                  সকল স্কুল
+                </Button>
+              </>
+            ) : (
+              <IconButton color="inherit" onClick={() => navigate(`/school/${id}`)} title="মেইন মেনু">
+                <HomeIcon fontSize="small" />
+              </IconButton>
+            )}
             <Stack direction="row" spacing={1} alignItems="center" onClick={() => navigate(`/school/${id}`)} sx={{ cursor: 'pointer', py: 0.5 }}>
               {schoolData?.logo && (
                 <Box component="img" src={getMediaUrl(schoolData.logo)} sx={{ width: { xs: 28, sm: 40 }, height: { xs: 28, sm: 40 }, borderRadius: '8px', bgcolor: '#fff', p: 0.5 }} />
@@ -656,21 +697,79 @@ const SchoolDashboard = () => {
         <Toolbar />
         <List sx={{ px: 1.5, py: 2 }}>
           <Box sx={{ p: 2 }}>
-             <Button
-                fullWidth
-                variant="contained"
-                startIcon={<HomeIcon />}
-                onClick={() => navigate(`/school/${id}`)}
-                sx={{
-                  borderRadius: 2,
-                  mb: 2,
-                  background: 'linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%)',
-                  fontWeight: 'bold',
-                  fontFamily: "'Hind Siliguri', sans-serif"
-                }}
-             >
-                মেইন মেনু
-             </Button>
+             {canAccessAllSchools ? (
+               <>
+                 <Button
+                    fullWidth
+                    variant="contained"
+                    startIcon={<HomeIcon />}
+                    onClick={() => navigate('/')}
+                    sx={{
+                      borderRadius: 2,
+                      mb: 1.5,
+                      background: 'linear-gradient(90deg, #15803d 0%, #22c55e 100%)',
+                      fontWeight: 'bold',
+                      fontFamily: "'Hind Siliguri', sans-serif"
+                    }}
+                 >
+                    সকল স্কুল (হোমপেজ)
+                 </Button>
+
+                 <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={<SchoolIcon />}
+                    onClick={() => navigate(`/school/${id}`)}
+                    sx={{
+                      borderRadius: 2,
+                      mb: 2,
+                      fontWeight: 'bold',
+                      fontFamily: "'Hind Siliguri', sans-serif"
+                    }}
+                 >
+                    চলতি স্কুল ড্যাশবোর্ড
+                 </Button>
+
+                 {schoolsList.length > 0 && (
+                   <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                     <InputLabel id="school-switch-label">স্কুল পরিবর্তন করুন</InputLabel>
+                     <Select
+                       labelId="school-switch-label"
+                       value={String(id)}
+                       label="স্কুল পরিবর্তন করুন"
+                       onChange={(e) => {
+                         const targetId = e.target.value;
+                         if (targetId && targetId !== String(id)) {
+                           navigate(`/school/${targetId}`);
+                         }
+                       }}
+                     >
+                       {schoolsList.map((s) => (
+                         <MenuItem key={s.id} value={String(s.id)}>
+                           {s.bn_name || s.name} (ID: {s.id})
+                         </MenuItem>
+                       ))}
+                     </Select>
+                   </FormControl>
+                 )}
+               </>
+             ) : (
+               <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={<HomeIcon />}
+                  onClick={() => navigate(`/school/${id}`)}
+                  sx={{
+                    borderRadius: 2,
+                    mb: 2,
+                    background: 'linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%)',
+                    fontWeight: 'bold',
+                    fontFamily: "'Hind Siliguri', sans-serif"
+                  }}
+               >
+                  মেইন মেনু
+               </Button>
+             )}
              <Divider />
           </Box>
           {filteredMenuItems.map((item, i) => (

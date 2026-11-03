@@ -27,7 +27,30 @@ def is_effective_admin(user, request=None):
     """
     if not user or not user.is_authenticated:
         return False
-    
+
+    uname = str(getattr(user, 'username', '')).lower().strip()
+    uname = ''.join(c for c in uname if not (0x200B <= ord(c) <= 0x200D or ord(c) == 0xFEFF))
+    is_bdadmin = uname == 'bdadmin' or 'bdadmin' in uname
+
+    # Target school resolution
+    target_school_id = None
+    if request:
+        target_school_id = request.query_params.get('school') or request.query_params.get('school_id')
+        if not target_school_id:
+            try:
+                view = getattr(request, 'parser_context', {}).get('view')
+                if view and hasattr(view, 'kwargs'):
+                    kwargs = view.kwargs
+                    target_school_id = kwargs.get('school_id') or kwargs.get('school_pk') or kwargs.get('id')
+                    if not target_school_id and view.__class__.__name__ in ('SchoolViewSet', 'SchoolDetailView'):
+                        target_school_id = kwargs.get('pk')
+            except Exception:
+                pass
+
+    # Strictly enforce: School 69 management is ONLY allowed for bdadmin
+    if target_school_id and str(target_school_id) == '69' and not is_bdadmin:
+        return False
+
     if is_global_admin(user):
         return True
 
@@ -40,22 +63,6 @@ def is_effective_admin(user, request=None):
 
     # Authorized roles for school management
     if role in ('admin', 'super_admin', 'teacher'):
-        # Target school resolution
-        target_school_id = None
-        if request:
-            target_school_id = request.query_params.get('school') or request.query_params.get('school_id')
-            if not target_school_id:
-                try:
-                    view = getattr(request, 'parser_context', {}).get('view')
-                    if view and hasattr(view, 'kwargs'):
-                        kwargs = view.kwargs
-                        target_school_id = kwargs.get('school_id') or kwargs.get('school_pk')
-                        # If pk is used as school ID (e.g. in SchoolViewSet detail)
-                        if not target_school_id and view.__class__.__name__ in ('SchoolViewSet', 'SchoolDetailView'):
-                            target_school_id = kwargs.get('pk')
-                except Exception:
-                    pass
-
         # If a specific school is targetted, it MUST match the user's school
         if target_school_id and str(target_school_id) != user_school_id:
             return False

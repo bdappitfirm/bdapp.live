@@ -36,8 +36,9 @@ export const canEdit = (user, itemUserId = null, itemRole = null) => {
   const username = normalize(user.username);
   const role = String(user.role || user.profile?.effective_role || user.profile?.role || '').toLowerCase();
   const designation = String(user.profile?.designation || '').toLowerCase();
-  
-  // Principal (shamir), Superuser (bdadmin) or Admin can edit anything
+  const userSchoolId = String(user.profile?.school_id || '');
+
+  // Principal (shamir), Superuser (bdadmin), Admin or School 6 teacher can edit
   if (
     username === 'shamir' || 
     username === 'bdadmin' || 
@@ -49,7 +50,8 @@ export const canEdit = (user, itemUserId = null, itemRole = null) => {
     user.is_staff ||
     designation.includes('প্রধান') || 
     designation.includes('principal') || 
-    designation.includes('headmaster')
+    designation.includes('headmaster') ||
+    (userSchoolId === '6' && role === 'teacher')
   ) {
     return true;
   }
@@ -62,8 +64,13 @@ export const canEdit = (user, itemUserId = null, itemRole = null) => {
     if (itemRole === 'student' || itemRole === 'parent') return true;
   }
   
+  // Parents and Students can ONLY edit their OWN data/profile:
+  if (role === 'student' || role === 'parent') {
+    return itemUserId != null && String(user.id) === String(itemUserId);
+  }
+
   // Others can only edit their own data
-  return itemUserId && String(user.id) === String(itemUserId);
+  return itemUserId != null && String(user.id) === String(itemUserId);
 };
 
 export const canDelete = (user, itemUserId = null, itemRole = null) => {
@@ -73,8 +80,14 @@ export const canDelete = (user, itemUserId = null, itemRole = null) => {
   const username = normalize(user.username);
   const role = String(user.role || user.profile?.effective_role || user.profile?.role || '').toLowerCase();
   const designation = String(user.profile?.designation || '').toLowerCase();
-  
-  // Principal (shamir), Superuser (bdadmin) or Admin can delete anything
+  const userSchoolId = String(user.profile?.school_id || '');
+
+  // Parents and Students CANNOT delete any data at all (not even their own ID)
+  if (role === 'student' || role === 'parent') {
+    return false;
+  }
+
+  // Principal (shamir), Superuser (bdadmin), Admin or School 6 teacher can delete
   if (
     username === 'shamir' || 
     username === 'bdadmin' || 
@@ -86,12 +99,18 @@ export const canDelete = (user, itemUserId = null, itemRole = null) => {
     user.is_staff ||
     designation.includes('প্রধান') || 
     designation.includes('principal') || 
-    designation.includes('headmaster')
+    designation.includes('headmaster') ||
+    (userSchoolId === '6' && role === 'teacher')
   ) {
     return true;
   }
   
-  // Others cannot delete anything except their own data in specific cases
+  // Regular Teachers can delete students or parents
+  if (role === 'teacher' && (itemRole === 'student' || itemRole === 'parent')) {
+    return true;
+  }
+
+  // Others cannot delete anything
   return false;
 };
 

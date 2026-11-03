@@ -9,6 +9,7 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import { getMediaUrl } from '../utils/media';
 import { bengaliToEnglishNumber } from '../utils/helpers';
 import { primaryWrittenMax, primarySpecForSubject, isPrimaryClassName } from '../utils/primaryMaxima';
+import { filterClassroomsByYear, filterSectionsByYear } from '../utils/classroomUtils';
 
 // --- SHARED LOGIC ENGINE (MIRROR OF CLASSRESULTSPAGE) ---
 const getSubjectMaxima = (name, isNT, group = '') => {
@@ -967,11 +968,11 @@ const MeritListPage = () => {
           <Grid item xs={12} md={2.5}><FormControl fullWidth><InputLabel>শ্রেণি</InputLabel><Select value={selectedClass} onChange={e => {
               const val = e.target.value;
               updateUrl({ classroom: val, section: '', group: '' });
-          }} sx={{ height: '56px' }}>{classrooms.map(c => <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>)}</Select></FormControl></Grid>
+          }} sx={{ height: '56px' }}>{filterClassroomsByYear(classrooms, selectedYear).map(c => <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>)}</Select></FormControl></Grid>
           <Grid item xs={12} md={2}><FormControl fullWidth><InputLabel>শাখা</InputLabel><Select value={selectedSection} onChange={e => {
               const val = e.target.value;
               updateUrl({ section: val });
-          }} sx={{ height: '56px' }} disabled={!selectedClass}><MenuItem value="">সব শাখা</MenuItem>{sections.map(s => <MenuItem key={s.id} value={String(s.id)}>{s.name}</MenuItem>)}</Select></FormControl></Grid>
+          }} sx={{ height: '56px' }} disabled={!selectedClass}><MenuItem value="">সব শাখা</MenuItem>{filterSectionsByYear(sections, selectedYear).map(s => <MenuItem key={s.id} value={String(s.id)}>{s.name}</MenuItem>)}</Select></FormControl></Grid>
 
           <Grid item xs={12} md={2.5}>
             <FormControl fullWidth>

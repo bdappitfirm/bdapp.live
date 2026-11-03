@@ -39,7 +39,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EmptyState from '../components/EmptyState';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
-import { getClassOrder } from '../utils/classroomUtils';
+import { compareClassOrder } from '../utils/classroomUtils';
 
 export default function ClassroomsPage() {
   const { id } = useParams();
@@ -301,11 +301,7 @@ export default function ClassroomsPage() {
         const searchLower = searchQuery.toLowerCase();
         return String(c.name).toLowerCase().includes(searchLower);
       })
-      .sort((a, b) => {
-        const orderA = a?.name ? getClassOrder(a.name) : 999;
-        const orderB = b?.name ? getClassOrder(b.name) : 999;
-        return orderA - orderB;
-      });
+      .sort((a, b) => compareClassOrder(a?.name, b?.name));
   }, [classrooms, searchQuery]);
 
   return (

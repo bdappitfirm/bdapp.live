@@ -27,7 +27,9 @@ import { useToast } from '../components/Toast';
 import StatCard from '../components/dashboard/StatCard';
 import AttendanceChart from '../components/dashboard/AttendanceChart';
 import FeeCollectionChart from '../components/dashboard/FeeCollectionChart';
+import MasterMonitor from '../components/dashboard/MasterMonitor';
 import { getDashboardStats } from '../services/dashboardService';
+import { useAuth } from '../context/AuthContext';
 
 const computeAdminStatsFallback = async (schoolId) => {
   const results = await Promise.allSettled([
@@ -196,6 +198,29 @@ const RoleDashboard = ({ role: roleProp }) => {
     finally { setReauthLoading(false); }
   };
 
+  const { user } = useAuth();
+  const username = String(user?.username || user?.user?.username || '').toLowerCase().replace(/\u200d/g, '').trim();
+  const isBdAdmin = username === 'bdadmin' || username.includes('bdadmin');
+  const isSchool69 = String(id) === '69' || window.location.pathname.includes('/school/69');
+
+  if (isSchool69 && (role === 'admin' || window.location.pathname.includes('/admin')) && !isBdAdmin) {
+    return (
+      <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center' }}>
+        <Paper elevation={3} sx={{ p: 4, borderRadius: 3, maxWidth: 500, bgcolor: '#fff0f0', border: '1px solid #ffcdd2' }}>
+          <Typography variant="h5" color="error" gutterBottom sx={{ fontWeight: 'bold' }}>
+            এক্সেস নিষিদ্ধ (Access Denied)
+          </Typography>
+          <Typography variant="body1" sx={{ color: 'text.secondary', mb: 3 }}>
+            স্কুল ৬৯ (School 69)-এর এডমিন পেজে প্রবেশ করার অনুমতি শুধুমাত্র <strong>bdadmin</strong> এর রয়েছে।
+          </Typography>
+          <Button variant="contained" color="primary" onClick={() => navigate(`/school/${id}`)}>
+            স্কুল ড্যাশবোর্ডে ফিরে যান
+          </Button>
+        </Paper>
+      </Box>
+    );
+  }
+
   const roleIcon = () => {
     switch (role) {
       case 'admin': return <PersonIcon />;
@@ -236,6 +261,12 @@ const RoleDashboard = ({ role: roleProp }) => {
           <Grid size={{ xs: 12, lg: 6 }}><Paper sx={{ p: 3, borderRadius: 2, height: 400 }}><Typography variant="h6" mb={2}>Attendance</Typography><AttendanceChart attendanceData={adminStats.attendance_data || []} /></Paper></Grid>
           <Grid size={{ xs: 12, lg: 6 }}><Paper sx={{ p: 3, borderRadius: 2, height: 400 }}><Typography variant="h6" mb={2}>Fee Collection</Typography><FeeCollectionChart feeData={adminStats.fee_collection || []} feeDuesSummary={adminStats.fee_dues_summary} feeDuesByClass={adminStats.fee_dues_by_class} /></Paper></Grid>
         </Grid>
+      )}
+
+      {role === 'admin' && (
+        <Box sx={{ mt: 4 }}>
+          <MasterMonitor schoolId={id} />
+        </Box>
       )}
 
       <Dialog open={reauthOpen} disableEscapeKeyDown fullWidth maxWidth="xs">

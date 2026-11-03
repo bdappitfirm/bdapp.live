@@ -27,7 +27,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { scopedGet } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
-import { getClassOrder } from '../utils/classroomUtils';
+import { getClassOrder, compareClassOrder } from '../utils/classroomUtils';
 import { getCleanDisplayName } from '../utils/helpers';
 import { getMediaUrl, resolveStudentPhoto } from '../utils/media';
 
@@ -139,7 +139,7 @@ export default function AllStudentsOverviewPage() {
     });
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => getClassOrder(a.name) - getClassOrder(b.name));
+      .sort((a, b) => compareClassOrder(a.name, b.name));
   }, [students]);
 
   // Extract available sections based on selected classroom
@@ -212,15 +212,17 @@ export default function AllStudentsOverviewPage() {
       const rawSec = s.section?.name || s.section_name || (typeof s.section === 'object' ? s.section?.name : s.section) || '';
       const secName = (rawSec && rawSec !== 'সকল শাখা' && rawSec !== '-' && rawSec !== 'সাধারণ' ? rawSec : '');
 
-      const classOrder = getClassOrder(clsNameRaw);
+      const orderInfo = getClassOrder(clsNameRaw);
+      const classOrder = orderInfo.baseRank;
       const sectionOrder = getSectionOrder(secName);
-      const key = `${classOrder}___${clsName}___${sectionOrder}___${secName}`;
+      const key = `${classOrder}___${orderInfo.is2027}___${clsName}___${sectionOrder}___${secName}`;
 
       if (!groupedMap.has(key)) {
         groupedMap.set(key, {
           classroomName: clsName,
           sectionName: secName,
           classOrder: classOrder,
+          is2027: orderInfo.is2027,
           sectionOrder: sectionOrder,
           students: []
         });
@@ -230,6 +232,7 @@ export default function AllStudentsOverviewPage() {
 
     const groups = Array.from(groupedMap.values()).sort((a, b) => {
       if (a.classOrder !== b.classOrder) return a.classOrder - b.classOrder;
+      if (a.is2027 !== b.is2027) return a.is2027 - b.is2027;
       if (a.sectionOrder !== b.sectionOrder) return a.sectionOrder - b.sectionOrder;
       return a.sectionName.localeCompare(b.sectionName);
     });

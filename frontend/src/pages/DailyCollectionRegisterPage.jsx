@@ -12,25 +12,30 @@ import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../utils/api';
+import dayjs from 'dayjs';
 import { useAuth } from '../context/AuthContext';
+import { useSchool } from '../context/SchoolContext';
+import { resolveSchoolLogo } from '../utils/media';
 import { canAccessDailyCollectionRegister, numberToBengaliWords } from '../utils/helpers';
 
 const DailyCollectionRegisterPage = () => {
   const { id: schoolId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { school: schoolInfo } = useSchool();
+  const schoolLogo = resolveSchoolLogo(schoolInfo);
 
   const [loading, setLoading] = useState(false);
   const [savingStatus, setSavingStatus] = useState(''); // 'saving', 'saved'
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  // Mode and Filter state
-  const currentDate = new Date();
+  // Always use local dayjs format for current date
+  const todayStr = dayjs().format('YYYY-MM-DD');
   const [reportMode, setReportMode] = useState('single_date'); // single_date, single_month, three_months, year_to_date
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
-  const [endMonth, setEndMonth] = useState(Math.min(currentDate.getMonth() + 3, 12));
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
-  const [selectedDate, setSelectedDate] = useState(currentDate.toISOString().split('T')[0]);
+  const [selectedMonth, setSelectedMonth] = useState(() => dayjs().month() + 1);
+  const [endMonth, setEndMonth] = useState(() => Math.min(dayjs().month() + 3, 12));
+  const [selectedYear, setSelectedYear] = useState(() => dayjs().year());
+  const [selectedDate, setSelectedDate] = useState(() => dayjs().format('YYYY-MM-DD'));
 
   // Class, Section selection
   const [classes, setClasses] = useState([]);
@@ -79,24 +84,52 @@ const DailyCollectionRegisterPage = () => {
   const loadSavedPaymentsForDate = useCallback(async () => {
     try {
       setLoading(true);
-      const [payRes, studRes, clsRes, secRes] = await Promise.all([
-        api.get(`/api/fees/payments/?school=${schoolId}`),
-        api.get(`/api/academics/students/?school=${schoolId}`),
-        api.get(`/api/academics/classrooms/?school=${schoolId}`),
-        api.get(`/api/academics/sections/?school=${schoolId}`)
+      const targetDate = reportMode === 'single_date' ? selectedDate : todayStr;
+      let payUrl = `/api/fees/payments/?school=${schoolId}&page_size=1000`;
+      if (reportMode === 'single_date') {
+        payUrl += `&payment_date=${targetDate}`;
+      }
+
+      const [payRes, clsRes, secRes] = await Promise.all([
+        api.get(payUrl),
+        api.get(`/api/academics/classrooms/?school=${schoolId}&page_size=1000`),
+        api.get(`/api/academics/sections/?school=${schoolId}&page_size=1000`)
       ]);
 
       setClasses(Array.isArray(clsRes.data) ? clsRes.data : clsRes.data?.results || []);
       setSections(Array.isArray(secRes.data) ? secRes.data : secRes.data?.results || []);
 
       const payData = Array.isArray(payRes.data) ? payRes.data : payRes.data?.results || [];
-      const allStudents = Array.isArray(studRes.data) ? studRes.data : studRes.data?.results || [];
 
-      // Filter payments for selectedDate (if single_date mode) or current date by default
-      const targetDate = reportMode === 'single_date' ? selectedDate : new Date().toISOString().split('T')[0];
-      const datePayments = payData.filter(p => p.payment_date === targetDate);
+      // Filter payments based on report mode
+      const datePayments = payData.filter(p => {
+        if (!p.payment_date) return false;
+        const pDate = String(p.payment_date).trim();
+        if (reportMode === 'single_date') {
+          return pDate === targetDate;
+        }
+        const [pYearStr, pMonthStr] = pDate.split('-');
+        const pYear = parseInt(pYearStr, 10);
+        const pMonth = parseInt(pMonthStr, 10);
+        if (reportMode === 'single_month') {
+          return pYear === selectedYear && pMonth === selectedMonth;
+        }
+        if (reportMode === 'three_months') {
+          return pYear === selectedYear && pMonth >= selectedMonth && pMonth <= endMonth;
+        }
+        if (reportMode === 'year_to_date') {
+          return pYear === selectedYear;
+        }
+        return pDate === targetDate;
+      });
 
       if (datePayments.length > 0) {
+        // শুধু যেসব শিক্ষার্থীর পেমেন্ট আছে তাদের আইডি দিয়ে আনা হয়, নয়তো শিক্ষার্থী তালিকার
+        // পেজিনেশন সীমার (প্রথম ১০০) বাইরের পেমেন্টগুলো নীরবে বাদ পড়ে যায়
+        const paidStudentIds = [...new Set(datePayments.map(p => String(p.student_id || p.student?.id || p.student)).filter(Boolean))];
+        const studRes = await api.get(`/api/academics/students/?school=${schoolId}&ids=${paidStudentIds.join(',')}&page_size=${paidStudentIds.length}`);
+        const allStudents = Array.isArray(studRes.data) ? studRes.data : studRes.data?.results || [];
+
         const studentMap = {};
         allStudents.forEach(s => {
           studentMap[String(s.id)] = {
@@ -168,7 +201,7 @@ const DailyCollectionRegisterPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [schoolId, reportMode, selectedDate]);
+  }, [schoolId, reportMode, selectedDate, todayStr, selectedMonth, endMonth, selectedYear]);
 
   useEffect(() => {
     if (hasAccess) {
@@ -390,7 +423,68 @@ const DailyCollectionRegisterPage = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: '100%', overflowX: 'auto' }}>
+    <Box className="dcr-root" sx={{ p: { xs: 2, md: 3 }, maxWidth: '100%', overflowX: 'auto' }}>
+      <style>{`
+        .dcr-print-header { display: none; }
+        @media print {
+          @page { size: A4 landscape; margin: 8mm; }
+
+          /* শুধু মূল রেজিস্টার প্রিন্ট হবে — হেডার, নেভবার, সাইডবার ও কন্ট্রোল লুকানো হবে */
+          .no-print,
+          header, footer, nav,
+          .MuiAppBar-root, .MuiToolbar-root, .MuiDrawer-root,
+          .MuiBackdrop-root, .MuiSnackbar-root, .MuiAlert-root {
+            display: none !important;
+          }
+
+          /* প্রিন্টে স্কুলের হেডার ও লোগো দেখানো হবে */
+          .dcr-print-header { display: flex !important; }
+
+          body, html, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
+          main, .print-content-wrapper, .dcr-root {
+            margin: 0 !important; padding: 0 !important;
+            overflow: visible !important; width: 100% !important; max-width: 100% !important;
+          }
+
+          /* টেবিল পুরোপুরি দেখাতে হবে — ডানে কাটা যাবে না, স্ক্রল-সীমাও থাকবে না */
+          #printable-register {
+            padding: 0 !important; margin: 0 !important;
+            border: none !important; box-shadow: none !important;
+            overflow: visible !important; width: 100% !important;
+          }
+          #printable-register .MuiTableContainer-root {
+            overflow: visible !important; max-height: none !important; width: 100% !important;
+          }
+          #printable-register table {
+            width: 100% !important; min-width: 0 !important;
+            table-layout: fixed !important; border-collapse: collapse !important;
+          }
+          #printable-register th, #printable-register td {
+            border: 1px solid #000 !important;
+            font-size: 8pt !important; padding: 1px 2px !important; line-height: 1.15 !important;
+          }
+          /* কলাম প্রস্থ বিন্যাস (নাম ও রসিদ নং কলামে বেশি জায়গা) */
+          #printable-register .dcr-main-table th:nth-child(1) { width: 4% !important; }
+          #printable-register .dcr-main-table th:nth-child(2) { width: 5% !important; }
+          #printable-register .dcr-main-table th:nth-child(3) { width: 5% !important; }
+          #printable-register .dcr-main-table th:nth-child(4) { width: 4% !important; }
+          #printable-register .dcr-main-table th:nth-child(5) { width: 12% !important; }
+          #printable-register .dcr-main-table th:nth-child(6) { width: 7% !important; }
+
+          /* এন্ট্রি বক্সগুলো প্রিন্টে সাধারণ টেক্সটের মতো দেখাবে */
+          #printable-register .MuiFormControl-root { width: 100% !important; }
+          #printable-register input {
+            width: 100% !important; border: none !important; background: transparent !important;
+            font-size: 8pt !important; padding: 0 !important; text-align: center !important;
+          }
+          #printable-register input::-webkit-outer-spin-button,
+          #printable-register input::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0 !important; }
+          #printable-register input[type=number] { -moz-appearance: textfield !important; appearance: textfield !important; }
+
+          tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+        }
+      `}</style>
+
       {/* Top Header & Actions */}
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" mb={3} spacing={2} className="no-print">
         <Stack direction="row" spacing={2} alignItems="center">
@@ -584,8 +678,8 @@ const DailyCollectionRegisterPage = () => {
         </Stack>
       </Paper>
 
-      {/* Overview Quick Summary */}
-      <Paper sx={{ p: 2, mb: 3, bgcolor: '#e8f5e9', border: '1px solid #c8e6c9' }}>
+      {/* Overview Quick Summary (শুধু স্ক্রিনে — প্রিন্টে বাদ) */}
+      <Paper className="no-print" sx={{ p: 2, mb: 3, bgcolor: '#e8f5e9', border: '1px solid #c8e6c9' }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#2e7d32', mb: 1 }}>
           তালিকায় যুক্ত মোট শিক্ষার্থী: {activeStudents.length} জন | মোট আদায়
         </Typography>
@@ -602,6 +696,16 @@ const DailyCollectionRegisterPage = () => {
 
       {/* Main Register Printable Area */}
       <Paper sx={{ p: 2, overflowX: 'auto' }} id="printable-register">
+        {/* প্রিন্টে পেজের ওপরে স্কুলের হেডার ও লোগো (স্ক্রিনে দেখা যাবে না) */}
+        <Box className="dcr-print-header" sx={{ display: 'none', alignItems: 'center', justifyContent: 'center', borderBottom: '2px solid #000', pb: 1, mb: 1.5 }}>
+          {schoolLogo && <Box component="img" src={schoolLogo} alt="লোগো" sx={{ height: '18mm', mr: 2 }} />}
+          <Box sx={{ textAlign: 'center', flex: 1 }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{schoolInfo?.name || ''}</Typography>
+            {schoolInfo?.address && <Typography variant="body2">{schoolInfo.address}</Typography>}
+          </Box>
+          {schoolLogo && <Box component="img" src={schoolLogo} alt="লোগো" sx={{ height: '18mm', ml: 2 }} />}
+        </Box>
+
         <Box sx={{ textAlign: 'center', mb: 2 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold' }}>দৈনিক ও কালিক আদায় রেজিস্টার</Typography>
           <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
@@ -615,7 +719,7 @@ const DailyCollectionRegisterPage = () => {
         </Box>
 
         <TableContainer sx={{ maxHeight: 600 }}>
-          <Table size="small" sx={{ minWidth: 1450, border: '1px solid #ddd' }}>
+          <Table size="small" className="dcr-main-table" sx={{ minWidth: 1450, border: '1px solid #ddd' }}>
             <TableHead>
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                 <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd', width: '50px' }}>ক্রমিক</TableCell>
@@ -708,7 +812,7 @@ const DailyCollectionRegisterPage = () => {
         {/* Total Calculation Section */}
         <Box sx={{ mt: 4, width: { xs: '100%', sm: '50%' }, ml: 'auto' }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
-            ### মোট হিসাব
+            মোট হিসাব
           </Typography>
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">

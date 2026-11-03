@@ -386,11 +386,90 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
     def birth_date_db_exists(cls):
         return True
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        try:
+            from users.utils import log_activity, get_client_ip
+            full_name = instance.user.get_full_name() if instance.user else ''
+            if not full_name and instance.user:
+                full_name = instance.user.username
+
+            log_activity(
+                user=self.request.user,
+                school=instance.school,
+                action_type='student_create',
+                details={
+                    'action': 'student_create',
+                    'action_label': 'নতুন শিক্ষার্থী ভর্তি/যোগ',
+                    'name': full_name,
+                    'roll': instance.roll_number,
+                    'class': instance.classroom.name if instance.classroom else '',
+                    'section': instance.section.name if instance.section else '',
+                    'role': 'student'
+                },
+                cost=5.00,
+                ip_address=get_client_ip(self.request)
+            )
+        except Exception as e:
+            print(f"Error logging student_create activity: {e}")
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        try:
+            from users.utils import log_activity, get_client_ip
+            full_name = instance.user.get_full_name() if instance.user else ''
+            if not full_name and instance.user:
+                full_name = instance.user.username
+
+            log_activity(
+                user=self.request.user,
+                school=instance.school,
+                action_type='student_edit',
+                details={
+                    'action': 'student_edit',
+                    'action_label': 'শিক্ষার্থীর তথ্য পরিবর্তন/আপডেট',
+                    'name': full_name,
+                    'roll': instance.roll_number,
+                    'class': instance.classroom.name if instance.classroom else '',
+                    'section': instance.section.name if instance.section else '',
+                    'role': 'student'
+                },
+                cost=0.00,
+                ip_address=get_client_ip(self.request)
+            )
+        except Exception as e:
+            print(f"Error logging student_edit activity: {e}")
+
     def perform_destroy(self, instance):
         """
         Custom delete to ensure the associated User object is also removed.
         This provides a complete cleanup of the student account.
         """
+        try:
+            from users.utils import log_activity, get_client_ip
+            full_name = instance.user.get_full_name() if instance.user else ''
+            if not full_name and instance.user:
+                full_name = instance.user.username
+
+            log_activity(
+                user=self.request.user,
+                school=instance.school,
+                action_type='student_delete',
+                details={
+                    'action': 'student_delete',
+                    'action_label': 'শিক্ষার্থী মুছে ফেলা হয়েছে (ডিলেট)',
+                    'name': full_name,
+                    'roll': instance.roll_number,
+                    'class': instance.classroom.name if instance.classroom else '',
+                    'section': instance.section.name if instance.section else '',
+                    'role': 'student'
+                },
+                cost=0.00,
+                ip_address=get_client_ip(self.request)
+            )
+        except Exception as e:
+            print(f"Error logging student_delete activity: {e}")
+
         user = instance.user
         # Deleting the user will cascade and delete the StudentProfile
         # and all its related records (Results, Attendance, etc.)
@@ -412,6 +491,13 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
             # (Family members are heavy to serialize and join)
             if self.action != 'list':
                 queryset = queryset.select_related('guardian', 'father', 'mother')
+
+            # নির্দিষ্ট শিক্ষার্থীদের আইডি দিয়ে আনা (যেমন দৈনিক আদায় রেজিস্ট্রারে পেজিনেশনের সীমাবদ্ধতা এড়াতে)
+            ids_param = self.request.query_params.get('ids')
+            if ids_param:
+                ids = [int(x) for x in str(ids_param).split(',') if str(x).strip().isdigit()]
+                if ids:
+                    queryset = queryset.filter(id__in=ids)
 
             if not sid:
                 if is_global_admin(self.request.user):
