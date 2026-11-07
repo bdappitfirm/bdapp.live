@@ -4,7 +4,7 @@ import { Box, Typography, useMediaQuery } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import QRCode from 'qrcode.react';
 
-export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
+function AdmissionCard({ data, school, exam, examSlots = [] }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const user = data?.user || {};
@@ -44,13 +44,11 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
   const schoolSealUrl = processPhotoUrl(school?.school_seal) || null;
 
-  console.log('AdmissionCard: school =', school);
-  console.log('AdmissionCard: signatureUrl =', signatureUrl);
-  console.log('AdmissionCard: schoolSealUrl =', schoolSealUrl);
-  console.log('AdmissionCard: examSlots =', examSlots);
-
-  // QR Code data for attendance - SIMPLIFIED for faster scanning
-  const qrData = `STU|${data?.id}|${name}|${school?.id}`;
+  // QR Code data for attendance. Only the student id is encoded: the scan
+  // handler in AttendancePageNew reads just parts[1], and a short ASCII payload
+  // keeps the QR at a low version, so dozens of cards render and print far
+  // faster than when the (Bengali) name and school id were included.
+  const qrData = `STU|${data?.id}`;
 
   const toBnDigits = (v) => {
     return String(v ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
@@ -374,22 +372,28 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
           backgroundColor: 'white',
           p: 0.3
         }}>
-          <QRCode value={qrData} size={isMobile ? 70 : 88} level="H" />
+          <QRCode renderAs="svg" value={qrData} size={isMobile ? 70 : 88} level="H" />
         </Box>
         
         {/* School Info */}
         <Box sx={{ textAlign: 'center', flex: 1, px: { xs: 0.5, sm: 1.5 }, minWidth: 0 }}>
           <Typography sx={{
             fontWeight: 'bold', 
-            fontSize: schoolName.length > 30 ? { xs: '0.75rem', sm: '0.95rem' } : (schoolName.length > 20 ? { xs: '0.85rem', sm: '1.1rem' } : { xs: '1.0rem', sm: '1.3rem' }),
-            lineHeight: 1.35,
-            pt: '3px',
+            fontSize: schoolName.length > 35
+              ? { xs: '0.75rem', sm: '0.9rem' }
+              : schoolName.length > 25
+              ? { xs: '0.8rem', sm: '1.0rem' }
+              : schoolName.length > 18
+              ? { xs: '0.85rem', sm: '1.1rem' }
+              : { xs: '0.95rem', sm: '1.25rem' },
+            lineHeight: 1.25,
+            pt: '2px',
             pb: '1px',
             color: '#000',
             mb: 0.2,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
+            wordBreak: 'break-word',
+            whiteSpace: 'normal',
+            overflow: 'visible'
           }}>
             {schoolName}
           </Typography>
@@ -861,3 +865,5 @@ export default function AdmissionCard({ data, school, exam, examSlots = [] }) {
     </Box>
   );
 }
+
+export default React.memo(AdmissionCard);

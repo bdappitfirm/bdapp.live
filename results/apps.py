@@ -9,3 +9,5 @@ class ResultsConfig(AppConfig):
     def ready(self):
         """Import signals when the app is ready"""
         import results.signals
+        from backend.cache_utils import connect_cache_invalidation
+        connect_cache_invalidation()

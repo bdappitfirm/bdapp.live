@@ -1546,7 +1546,7 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
 
   return (
     <Box className="result-card-container" sx={{
-      width: 'calc(200mm + 55px)', height: 'calc(280mm - 5px)', mx: 'auto', bgcolor: '#fff4e5', position: 'relative',
+      width: '200mm', height: '286mm', mx: 'auto', bgcolor: '#fff4e5', position: 'relative',
       boxSizing: 'border-box', overflow: 'visible',
       boxShadow: 'none !important', filter: 'none !important', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact',
       borderWidth: '25px',
@@ -1557,7 +1557,7 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
       '& *': { transition: 'none !important' },
       '&::before': {
         content: '""', position: 'absolute',
-        top: '-25px', left: '-50px', right: '-50px', bottom: '-25px',
+        top: '0px', left: '0px', right: '0px', bottom: '0px',
         border: '1.5px solid #000',
         backgroundImage: `${SVG_BORDER.replace('%3Cg ', '%3Cg transform=\'scale(-1, 1) translate(-100, 0)\' ')}, ${SVG_BORDER.replace('%3Cg ', '%3Cg transform=\'scale(-1, 1) translate(-100, 0)\' ')}, linear-gradient(#000, #000), linear-gradient(#000, #000)`,
         backgroundSize: '25px 25px, 25px 25px, 1.5px 100%, 1.5px 100%',
@@ -1567,18 +1567,19 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
       },
       '&::after': { content: '""', position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', border: '1.5px solid #000', pointerEvents: 'none', zIndex: 15 },
       '@media print': {
-        margin: 'auto !important',
+        margin: '0 auto !important',
         paddingTop: '0mm !important',
         bgcolor: '#fff4e5 !important',
-        height: 'calc(280mm - 5px) !important',
-        width: 'calc(200mm + 55px) !important',
+        height: '286mm !important',
+        width: '200mm !important',
+        maxWidth: '200mm !important',
         boxShadow: 'none !important',
         filter: 'none !important',
-        position: 'absolute !important',
-        left: '0 !important',
-        right: '0 !important',
-        top: '0 !important',
-        bottom: '0 !important',
+        position: 'relative !important',
+        left: 'auto !important',
+        right: 'auto !important',
+        top: 'auto !important',
+        bottom: 'auto !important',
         transform: 'none !important',
         pageBreakInside: 'avoid !important',
         breakInside: 'avoid-page !important',
@@ -1756,20 +1757,24 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
                   </TableRow>
                 )}
                 <TableRow>
-                  <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold', fontSize: '13px' }}>
+                  <TableCell colSpan={isPrimary ? 2 : 5} align="right" sx={{ fontWeight: 'bold', fontSize: '13px' }}>
                     {isPrimary ? (forceLanguage === 'bn' ? 'মোট প্রাপ্ত নম্বর (লিখিত + টিউটোরিয়াল):' : 'Total Obtained Marks (Written + Tutorial):') : `${l.totalObtainedMarks}:`}
                   </TableCell>
                   {isPrimary ? (
                     <>
                       <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '13px' }}>{formatNum(primaryTotals.written)}</TableCell>
                       <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '13px' }}>{formatNum(primaryTotals.tutorial)}</TableCell>
+                      <TableCell colSpan={1} align="center" sx={{ fontWeight: 'bold', fontSize: '12px' }}>
+                        {forceLanguage === 'bn' ? `সর্বমোট = ${formatNum(primaryTotals.grandTotal)}` : `Grand Total = ${formatNum(primaryTotals.grandTotal)}`}
+                      </TableCell>
+                      <TableCell colSpan={3} />
                     </>
                   ) : (
-                    <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '13px' }}>{formatNum(finalSummary.obtained)}</TableCell>
+                    <>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '13px' }}>{formatNum(finalSummary.obtained)}</TableCell>
+                      <TableCell colSpan={3} />
+                    </>
                   )}
-                  <TableCell colSpan={isPrimary ? 1 : 2} align="center" sx={{ fontWeight: 'bold', fontSize: '12px' }}>
-                    {isPrimary ? (forceLanguage === 'bn' ? `সর্বমোট = ${formatNum(primaryTotals.grandTotal)}` : `Grand Total = ${formatNum(primaryTotals.grandTotal)}`) : ''}
-                  </TableCell>
                   {displayMainSubjects.length === 0 && <TableCell sx={{ borderLeft: '1.5px solid #000 !important' }}></TableCell>}
                 </TableRow>
               </TableBody>
@@ -1852,15 +1857,15 @@ const AcademicTranscriptCard = memo(({ studentData, results: rawResults, overall
             alignItems: 'flex-end',
             px: 2,
             pb: 0,
-            mb: '160px',
+            mb: '20px',
             zIndex: 20,
             '@media print': {
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: '45mm',
-              mt: 0,
-              mb: 0,
+              position: 'relative !important',
+              left: 'auto !important',
+              right: 'auto !important',
+              bottom: 'auto !important',
+              mt: 'auto !important',
+              mb: '5mm !important',
               pageBreakInside: 'avoid',
               breakInside: 'avoid-page'
             }

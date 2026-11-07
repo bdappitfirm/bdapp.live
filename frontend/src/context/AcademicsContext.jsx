@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { scopedGet } from '../utils/schoolApi';
 import { getCachedData, cacheData } from '../utils/offlineDb';
-import { sortClassrooms } from '../utils/classroomUtils';
+import { sortClassrooms, sortSections } from '../utils/classroomUtils';
+import { sortSubjectsArray } from '../utils/subjectUtils';
 
 const AcademicsContext = createContext();
 
@@ -18,7 +19,7 @@ export const AcademicsProvider = ({ children }) => {
   const [sections, setSections] = useState([]);
   const [students, setStudents] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [examinations, setExaminations] = useState([]);
   const [currentSchoolId, setCurrentSchoolId] = useState(null);
   const studentsCountRef = useRef(0);
   const classroomsCountRef = useRef(0);
@@ -43,6 +44,7 @@ export const AcademicsProvider = ({ children }) => {
     setSections([]);
     setStudents([]);
     setSubjects([]);
+    setExaminations([]);
     setCurrentSchoolId(null);
   }, []);
 
@@ -65,10 +67,23 @@ export const AcademicsProvider = ({ children }) => {
     });
   }, []);
 
-  // Fetch classrooms
+  // Fetch classrooms with instant local delivery (0ms) + background sync
   const refreshClassrooms = useCallback(async (schoolId, force = false) => {
     const sId = schoolId || schoolIdRef.current;
     if (!sId) return;
+
+    if (!force) {
+      try {
+        const cached = await getCachedData('classrooms');
+        const schoolFiltered = filterBySchool(cached, sId);
+        if (schoolFiltered && schoolFiltered.length > 0) {
+          const sorted = sortClassrooms(schoolFiltered);
+          setClassrooms(sorted);
+        }
+      } catch (e) {
+        console.warn('Cached classrooms load error:', e);
+      }
+    }
 
     try {
       const response = await scopedGet('/api/academics/classrooms/', sId, { page_size: 1000 }, { timeout: 30000 });
@@ -89,24 +104,73 @@ export const AcademicsProvider = ({ children }) => {
     }
   }, [filterBySchool]);
 
-  // Fetch sections
+  // Fetch sections with instant local delivery (0ms) + background sync
   const refreshSections = useCallback(async (schoolId, force = false) => {
     const sId = schoolId || schoolIdRef.current;
     if (!sId) return;
 
+    if (!force) {
+      try {
+        const cached = await getCachedData('sections');
+        const schoolFiltered = filterBySchool(cached, sId);
+        if (schoolFiltered && schoolFiltered.length > 0) {
+          const sorted = sortSections(schoolFiltered);
+          setSections(sorted);
+        }
+      } catch (e) {
+        console.warn('Cached sections load error:', e);
+      }
+    }
+
     try {
       const response = await scopedGet('/api/academics/sections/', sId, { page_size: 1000 }, { timeout: 15000 });
       const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      const sorted = sortSections(data);
 
-      setSections(data);
-      if (data.length > 0) await cacheData('sections', data);
-      return data;
+      setSections(sorted);
+      if (sorted.length > 0) await cacheData('sections', sorted);
+      return sorted;
     } catch (error) {
       console.warn('Network error fetching sections, falling back to local DB:', error);
       const cached = await getCachedData('sections');
       const schoolFiltered = filterBySchool(cached, sId);
       if (schoolFiltered && schoolFiltered.length > 0) {
-        setSections(schoolFiltered);
+        const sorted = sortSections(schoolFiltered);
+        setSections(sorted);
+        return sorted;
+      }
+    }
+  }, [filterBySchool]);
+
+  // Fetch examinations with instant local delivery (0ms) + background sync
+  const refreshExaminations = useCallback(async (schoolId, force = false) => {
+    const sId = schoolId || schoolIdRef.current;
+    if (!sId) return;
+
+    if (!force) {
+      try {
+        const cached = await getCachedData('examinations');
+        const schoolFiltered = filterBySchool(cached, sId);
+        if (schoolFiltered && schoolFiltered.length > 0) {
+          setExaminations(schoolFiltered);
+        }
+      } catch (e) {
+        console.warn('Cached examinations load error:', e);
+      }
+    }
+
+    try {
+      const response = await scopedGet('/api/results/examinations/', sId, { page_size: 1000 }, { timeout: 30000 });
+      const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      setExaminations(data);
+      if (data.length > 0) await cacheData('examinations', data);
+      return data;
+    } catch (error) {
+      console.warn('Network error fetching examinations, falling back to local DB:', error);
+      const cached = await getCachedData('examinations');
+      const schoolFiltered = filterBySchool(cached, sId);
+      if (schoolFiltered && schoolFiltered.length > 0) {
+        setExaminations(schoolFiltered);
         return schoolFiltered;
       }
     }
@@ -141,7 +205,6 @@ export const AcademicsProvider = ({ children }) => {
         const data = res.data;
         const arr = Array.isArray(data) ? data : (data?.results || []);
 
-        // Update local state early if we have some data
         if (arr.length > 0) {
           const isFirstPage = page === 1;
           setStudents(prev => {
@@ -184,8 +247,9 @@ export const AcademicsProvider = ({ children }) => {
         const cached = await getCachedData('subjects');
         const schoolFiltered = filterBySchool(cached, sId);
         if (schoolFiltered && schoolFiltered.length > 0) {
-          setSubjects(schoolFiltered);
-          return schoolFiltered;
+          const sorted = sortSubjectsArray(schoolFiltered);
+          setSubjects(sorted);
+          return sorted;
         }
       } catch (e) {
         console.warn('Failed to load cached subjects:', e);
@@ -195,20 +259,24 @@ export const AcademicsProvider = ({ children }) => {
     try {
       const response = await scopedGet('/api/academics/subjects/', sId, { page_size: 1000 }, { timeout: 60000 });
       const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
-      setSubjects(data);
-      if (data.length > 0) await cacheData('subjects', data);
-      return data;
+      const sorted = sortSubjectsArray(data);
+      setSubjects(sorted);
+      if (sorted.length > 0) await cacheData('subjects', sorted);
+      return sorted;
     } catch (error) {
       console.error('Error fetching subjects:', error);
       const cached = await getCachedData('subjects');
       const schoolFiltered = filterBySchool(cached, sId);
-      if (schoolFiltered && schoolFiltered.length > 0) setSubjects(schoolFiltered);
+      if (schoolFiltered && schoolFiltered.length > 0) {
+        const sorted = sortSubjectsArray(schoolFiltered);
+        setSubjects(sorted);
+      }
     }
   }, [filterBySchool]);
 
   const isRefreshingRef = useRef(false);
 
-  // Refresh all academic data
+  // Refresh all academic data (Stale-While-Revalidate: Instant Local Load + Background Sync)
   const refreshAll = useCallback(async (schoolId, force = false) => {
     if (!schoolId) return;
     
@@ -216,45 +284,56 @@ export const AcademicsProvider = ({ children }) => {
     if (isRefreshingRef.current) return;
 
     const prevSchoolId = schoolIdRef.current;
-    // IMPORTANT: Clear old data if switching school
     if (prevSchoolId && String(prevSchoolId) !== sId) {
         setClassrooms([]);
         setSections([]);
         setStudents([]);
         setSubjects([]);
+        setExaminations([]);
         force = true;
     }
 
-    // If not forced and we have students, skip re-fetching students, but ALWAYS refresh classrooms and sections
-    if (!force && studentsCountRef.current > 0 && String(prevSchoolId) === sId) {
-      await Promise.all([
-        refreshClassrooms(sId, true),
-        refreshSections(sId, true)
-      ]);
-      return;
-    }
-
     isRefreshingRef.current = true;
-    setLoading(true);
+    setCurrentSchoolId(sId);
 
     try {
-      // Use force=false to allow cache usage if available
-      await Promise.all([
+      // 1. Load cached data from Dexie IndexedDB INSTANTLY (0ms)
+      const [cCache, secCache, stCache, subCache, exCache] = await Promise.all([
+        getCachedData('classrooms'),
+        getCachedData('sections'),
+        getCachedData('students'),
+        getCachedData('subjects'),
+        getCachedData('examinations')
+      ]);
+
+      const cSchool = filterBySchool(cCache, sId);
+      const secSchool = filterBySchool(secCache, sId);
+      const stSchool = filterBySchool(stCache, sId);
+      const subSchool = filterBySchool(subCache, sId);
+      const exSchool = filterBySchool(exCache, sId);
+
+      if (cSchool.length > 0) setClassrooms(sortClassrooms(cSchool));
+      if (secSchool.length > 0) setSections(sortSections(secSchool));
+      if (stSchool.length > 0) setStudents(stSchool);
+      if (subSchool.length > 0) setSubjects(sortSubjectsArray(subSchool));
+      if (exSchool.length > 0) setExaminations(exSchool);
+
+      // 2. Silent background sync with server
+      Promise.all([
         refreshClassrooms(sId, force),
         refreshSections(sId, force),
         refreshStudents(sId, force),
-        refreshSubjects(sId, force)
-      ]);
+        refreshSubjects(sId, force),
+        refreshExaminations(sId, force)
+      ]).catch(err => console.warn('Background sync warning:', err));
 
-      setCurrentSchoolId(sId);
-      console.log('Academic context refreshed successfully for school:', sId);
+      console.log('Academic context initialized instantly for school:', sId);
     } catch (error) {
       console.error('Error refreshing academic data:', error);
     } finally {
-      setLoading(false);
       isRefreshingRef.current = false;
     }
-  }, [refreshClassrooms, refreshSections, refreshStudents, refreshSubjects]);
+  }, [refreshClassrooms, refreshSections, refreshStudents, refreshSubjects, refreshExaminations, filterBySchool]);
 
   const fetchStudentsScoped = useCallback(async (schoolId, filters = {}) => {
       // (Implementation remains same, but ensured schoolId consistency)
@@ -302,12 +381,13 @@ export const AcademicsProvider = ({ children }) => {
     sections,
     students,
     subjects,
-    loading,
+    examinations,
     currentSchoolId,
     refreshClassrooms,
     refreshSections,
     refreshStudents,
     refreshSubjects,
+    refreshExaminations,
     refreshAll,
     clearData,
     fetchStudentsScoped,
@@ -316,8 +396,9 @@ export const AcademicsProvider = ({ children }) => {
     setClassrooms,
     setSections,
     setStudents,
-    setSubjects
-  }), [classrooms, sections, students, subjects, loading, currentSchoolId, refreshClassrooms, refreshSections, refreshStudents, refreshSubjects, refreshAll, clearData, fetchStudentsScoped, updateStudentInContext, getStudentCountForSection]);
+    setSubjects,
+    setExaminations
+  }), [classrooms, sections, students, subjects, examinations, currentSchoolId, refreshClassrooms, refreshSections, refreshStudents, refreshSubjects, refreshExaminations, refreshAll, clearData, fetchStudentsScoped, updateStudentInContext, getStudentCountForSection]);
 
   return (
     <AcademicsContext.Provider value={value}>

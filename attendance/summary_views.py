@@ -7,14 +7,16 @@ from .models import StudentAttendanceSummary
 from .serializers import StudentAttendanceSummarySerializer
 from users.permissions import IsSchoolMember, get_user_school_id
 from academics.models import StudentProfile
+from backend.cache_utils import CachedListMixin
 
 logger = logging.getLogger(__name__)
 
-class AttendanceSummaryViewSet(viewsets.ModelViewSet):
+class AttendanceSummaryViewSet(CachedListMixin, viewsets.ModelViewSet):
     permission_classes = [IsSchoolMember]
     queryset = StudentAttendanceSummary.objects.all()
     serializer_class = StudentAttendanceSummarySerializer
     pagination_class = None
+    cache_prefix = 'attendance-summaries-list'
 
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)

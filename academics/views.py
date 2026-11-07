@@ -10,6 +10,7 @@ from django.db import transaction
 from django.db.models import Q, Count, Sum
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
+from backend.cache_utils import CachedListMixin
 
 import re
 import unicodedata
@@ -23,6 +24,48 @@ def _subject_semantic_key(name):
     n = unicodedata.normalize('NFKC', str(name))
     n = n.replace('\u200d', '').replace('\u200c', '').strip().lower()
     return PUNCT_RE.sub('', n)
+
+def _get_subject_weight(name):
+    if not name:
+        return 9999
+    n = str(name).lower()
+    if 'বাংলা' in n or 'bangla' in n:
+        if 'বাংলাদেশ' in n or 'bgs' in n:
+            return 60
+        return 10
+    if 'english' in n or 'ইংরেজি' in n or 'ইংরেজী' in n:
+        return 20
+    if 'গণিত' in n or 'math' in n:
+        if 'উচ্চতর' in n or 'higher' in n:
+            return 500
+        return 30
+    if 'ইসলাম' in n or 'islam' in n or 'ধর্ম' in n or 'religion' in n:
+        return 40
+    if 'আইসিটি' in n or 'ict' in n or 'তথ্য' in n:
+        return 50
+    if 'বাংলাদেশ' in n or 'বিশ্বপরিচয়' in n or 'bgs' in n or 'global studies' in n:
+        return 60
+    if 'পদার্থ' in n or 'physics' in n:
+        return 70
+    if 'রসায়ন' in n or 'chemistry' in n:
+        return 80
+    if 'জীব' in n or 'biology' in n:
+        return 90
+    if 'হিসাব' in n or 'accounting' in n:
+        return 70
+    if 'ফিন্যান্স' in n or 'finance' in n:
+        return 80
+    if 'ব্যবসায়' in n or 'business' in n:
+        return 90
+    if 'ইতিহাস' in n or 'history' in n:
+        return 70
+    if 'পৌরনীতি' in n or 'civics' in n:
+        return 80
+    if 'ভূগোল' in n or 'geography' in n:
+        return 90
+    if 'কৃষি' in n or 'agriculture' in n or 'গার্হস্থ্য' in n or 'home' in n:
+        return 500
+    return 200 + len(n)
 
 User = get_user_model()
 
@@ -46,10 +89,11 @@ class SchoolListAPI(APIView):
         serializer = SchoolSerializer(schools, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-class ClassRoomViewSet(viewsets.ModelViewSet):
+class ClassRoomViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = ClassRoom.objects.all()
     serializer_class = ClassRoomSerializer
     permission_classes = [IsSchoolMember, RolePermission]
+    cache_prefix = 'classrooms-list'
 
     def get_queryset(self):
         try:
@@ -70,7 +114,7 @@ class ClassRoomViewSet(viewsets.ModelViewSet):
             print(f"ClassRoom Queryset Fatal Error: {e}")
             return ClassRoom.objects.none()
 
-    def list(self, request, *args, **kwargs):
+    def _list_uncached(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
 
         # Performance optimization: Default DB sort
@@ -125,9 +169,11 @@ class ClassRoomViewSet(viewsets.ModelViewSet):
                 Q(sections__classroom__id=classroom.id)
             ).distinct()
         
+        items = list(subjects)
+        items.sort(key=lambda x: (_get_subject_weight(x.name), x.name))
         # Use SubjectSerializer with classroom and section context for assigned teachers
         serializer = SubjectSerializer(
-            subjects, 
+            items,
             many=True, 
             context={
                 'request': request,
@@ -138,10 +184,11 @@ class ClassRoomViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.data)
 
-class SectionViewSet(viewsets.ModelViewSet):
+class SectionViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = Section.objects.all()
     serializer_class = SectionSerializer
     permission_classes = [RolePermission]
+    cache_prefix = 'sections-list'
 
     def get_queryset(self):
         school_param = self.request.query_params.get('school') or self.request.query_params.get('school_id')
@@ -163,10 +210,29 @@ class SectionViewSet(viewsets.ModelViewSet):
 
         return Section.objects.none()
 
-class SubjectViewSet(viewsets.ModelViewSet):
+    def _list_uncached(self, request, *args, **kwargs):
+        from .utils import get_class_order, get_section_order
+        queryset = self.filter_queryset(self.get_queryset())
+        items = list(queryset)
+        items.sort(key=lambda x: (
+            get_class_order(x.classroom.name) if x.classroom else (999, 0, ''),
+            get_section_order(x.name),
+            x.name
+        ))
+
+        page = self.paginate_queryset(items)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(items, many=True)
+        return Response(serializer.data)
+
+class SubjectViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
     permission_classes = [IsSchoolMember, AdminOrReadOnly]
+    cache_prefix = 'subjects-list'
 
     def get_queryset(self):
         try:
@@ -199,9 +265,17 @@ class SubjectViewSet(viewsets.ModelViewSet):
             print(f"Subject Queryset Error: {e}")
             return Subject.objects.none()
 
-    def list(self, request, *args, **kwargs):
+    def _list_uncached(self, request, *args, **kwargs):
         try:
-            return super().list(request, *args, **kwargs)
+            queryset = self.filter_queryset(self.get_queryset())
+            items = list(queryset)
+            items.sort(key=lambda x: (_get_subject_weight(x.name), x.name))
+            page = self.paginate_queryset(items)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            serializer = self.get_serializer(items, many=True)
+            return Response(serializer.data)
         except Exception as e:
             import traceback
             print(f"Subject List Error: {e}")
@@ -375,12 +449,13 @@ class SubjectViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class StudentProfileViewSet(viewsets.ModelViewSet):
+class StudentProfileViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = StudentProfile.objects.all()
     serializer_class = StudentProfileSerializer
     permission_classes = [IsSchoolMember, RolePermission]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     pagination_class = StandardResultsSetPagination
+    cache_prefix = 'students-list'
 
     @classmethod
     def birth_date_db_exists(cls):
@@ -605,7 +680,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
         self.check_object_permissions(self.request, obj)
         return obj
 
-    def list(self, request, *args, **kwargs):
+    def _list_uncached(self, request, *args, **kwargs):
         try:
             queryset = self.filter_queryset(self.get_queryset())
 

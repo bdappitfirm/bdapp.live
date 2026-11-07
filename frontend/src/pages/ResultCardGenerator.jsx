@@ -294,7 +294,20 @@ const getStudentAcademicGroup = (stu, stuData, fetchedRes = []) => {
     return inferClassGroupFromAllResultsLocal(fetchedRes, true, []);
 };
 
-const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs, classAssignedSubjs) => {
+const hasDataEntryLocal = (r) => {
+    if (!r) return false;
+    const w = r.written_marks;
+    const m = r.mcq_marks;
+    const p = r.practical_marks;
+    const tot = parseFloat(r.total_obtained);
+    const hasInput = (w !== null && w !== undefined && String(w).trim() !== '') ||
+                     (m !== null && m !== undefined && String(m).trim() !== '') ||
+                     (p !== null && p !== undefined && String(p).trim() !== '') ||
+                     (Number.isFinite(tot) && tot > 0);
+    return hasInput;
+};
+
+const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs, classAssignedSubjs, validSubjKeys = null) => {
     // Only subjects that ACTUALLY EXIST for this class count as "expected", i.e. the subjects the
     // class teaches (classAssignedSubjs) plus whatever subjects already have results (classSubjs).
     // The old code force-added bangla/english/math/religion/science/bgs to EVERY class, so a
@@ -309,6 +322,17 @@ const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs, classAssignedS
     };
     addAll(classSubjs);
     addAll(classAssignedSubjs);
+
+    // If validSubjKeys is provided (and non-empty), filter out subjects with NO data entry in the section
+    if (validSubjKeys && validSubjKeys.size > 0) {
+        for (const k of Array.from(normKeys)) {
+            const base = k.split('_')[0];
+            if (!validSubjKeys.has(k) && !validSubjKeys.has(base)) {
+                normKeys.delete(k);
+            }
+        }
+    }
+
     const classHas = (base) => normKeys.has(base) || Array.from(normKeys).some(k => k.startsWith(base + '_'));
     const subjects = new Set(normKeys);
     ['bangla', 'english', 'math', 'ict'].forEach(k => { if (classHas(k)) subjects.add(k); });
@@ -534,8 +558,18 @@ export default function ResultCardGenerator() {
 
             const classGroupFromAllResults = inferClassGroupFromAllResultsLocal(allResults, isNT, contextSubjects);
             const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT, stuObj) || classGroupFromAllResults || '').toLowerCase();
+            const validSubjKeysInRank = new Set();
+            (allResults || []).forEach(r => {
+                if (hasDataEntryLocal(r)) {
+                    const k = normalizeSubjKeyLocal(r.subject?.name || r.subject_name);
+                    if (k) {
+                        validSubjKeysInRank.add(k);
+                        validSubjKeysInRank.add(k.split('_')[0]);
+                    }
+                }
+            });
             const classSubjs = new Set(allResults.map(r => r.subject?.name || r.subject_name));
-            const expectedKeys = getExpectedSubjectsLocal(group, isNT, classSubjs, classAssignedSubjectNames);
+            const expectedKeys = getExpectedSubjectsLocal(group, isNT, classSubjs, classAssignedSubjectNames, validSubjKeysInRank);
             const relWithMarks = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0));
             const takenRelId = relWithMarks?.subject?.id || relWithMarks?.subject;
 
@@ -1254,9 +1288,9 @@ export default function ResultCardGenerator() {
       }
 
       // If validSubjKeys provided, filter out subjects with NO marks in section unless student has marks
-      const studentHasMarksForNormKey = Array.isArray(arr) && arr.some(fr => normalizeSubjKeyLocal(fr.subject?.name || fr.subject_name) === nm.split('_')[0] && ((parseFloat(fr.written_marks)||0) > 0 || (parseFloat(fr.mcq_marks)||0) > 0 || (parseFloat(fr.total_obtained)||0) > 0));
+      const studentHasMarksForNormKey = Array.isArray(arr) && arr.some(fr => normalizeSubjKeyLocal(fr.subject?.name || fr.subject_name) === nm.split('_')[0] && hasDataEntryLocal(fr));
 
-      if (isClassNineOrTen && validSubjKeys && validSubjKeys.size > 0 && !validSubjKeys.has(nm.split('_')[0]) && !studentHasMarksForNormKey) continue;
+      if (validSubjKeys && validSubjKeys.size > 0 && !validSubjKeys.has(nm) && !validSubjKeys.has(nm.split('_')[0]) && !studentHasMarksForNormKey) continue;
 
       // Skip redundant combined records if specific papers exist (Matches Merit List logic)
       const isCombined = !String(subjName || '').match(/(1st|2nd|১ম|২য়|২য়)/);
@@ -1401,7 +1435,7 @@ export default function ResultCardGenerator() {
             if (optKey && !map.has(optKey)) {
                 // Check section validity for optional as well (using base key)
                 const baseKey = optKey.split('_')[0];
-                if (isClassNineOrTen && validSubjKeys && validSubjKeys.size > 0 && !validSubjKeys.has(baseKey)) return;
+                if (validSubjKeys && validSubjKeys.size > 0 && !validSubjKeys.has(optKey) && !validSubjKeys.has(baseKey)) return;
 
                 const friendlyName = translateSubLocal(optKey);
                 map.set(optKey, {
@@ -1716,9 +1750,12 @@ export default function ResultCardGenerator() {
 
           validSubjKeys = new Set();
           sectionResults.forEach(r => {
-              const total = (parseFloat(r.total_obtained) || (sumStr(r.written_marks)||0) + (sumStr(r.mcq_marks)||0) + (sumStr(r.practical_marks)||0));
-              if (total > 0) {
-                  validSubjKeys.add(normalizeSubjKeyLocal(r.subject?.name || r.subject_name));
+              if (hasDataEntryLocal(r)) {
+                  const k = normalizeSubjKeyLocal(r.subject?.name || r.subject_name);
+                  if (k) {
+                      validSubjKeys.add(k);
+                      validSubjKeys.add(k.split('_')[0]);
+                  }
               }
           });
       } catch (err) {
@@ -1726,6 +1763,17 @@ export default function ResultCardGenerator() {
       }
       
       if (fetchedResults.length > 0) {
+        if (validSubjKeys.size === 0) {
+          fetchedResults.forEach(r => {
+            if (hasDataEntryLocal(r)) {
+              const k = normalizeSubjKeyLocal(r.subject?.name || r.subject_name);
+              if (k) {
+                validSubjKeys.add(k);
+                validSubjKeys.add(k.split('_')[0]);
+              }
+            }
+          });
+        }
         const subjectsWithPositiveData = new Set();
         fetchedResults.forEach(r => {
           const total = (parseFloat(r.total_obtained) || (sumStr(r.written_marks)||0) + (sumStr(r.mcq_marks)||0) + (sumStr(r.practical_marks)||0));
@@ -1759,7 +1807,7 @@ export default function ResultCardGenerator() {
 
         const classSubjs = new Set(useResults.map(r => r.subject?.name || r.subject_name));
         const group = getStudentAcademicGroup(student, studentData, useResults);
-        const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, classSubjs, classAssignedSubjectNames);
+        const expectedKeys = getExpectedSubjectsLocal(group, isClassNineOrTen, classSubjs, classAssignedSubjectNames, validSubjKeys);
 
         const merged = dedupeAndFillResults(useResults, matchingExams, expectedKeys, student.optional_subject, validSubjKeys, group);
 
@@ -2229,9 +2277,13 @@ export default function ResultCardGenerator() {
       // Filter: Identify valid subjects
       const validSubjKeys = new Set();
       rList.forEach(r => {
-        const w = parseFloat(r.written_marks) || 0, m = parseFloat(r.mcq_marks) || 0, p = parseFloat(r.practical_marks) || 0;
-        const total = (parseFloat(r.total_obtained) || (w + m + p));
-        if (total > 0) validSubjKeys.add(normalizeSubjKeyLocal(r.subject?.name || r.subject_name));
+        if (hasDataEntryLocal(r)) {
+          const k = normalizeSubjKeyLocal(r.subject?.name || r.subject_name);
+          if (k) {
+            validSubjKeys.add(k);
+            validSubjKeys.add(k.split('_')[0]);
+          }
+        }
       });
 
       const sectionSubjs = new Set(rList.map(r => r.subject?.name || r.subject_name));
@@ -2340,7 +2392,7 @@ export default function ResultCardGenerator() {
 
           const classGroupFromAllResults = inferClassGroupFromAllResultsLocal(Object.values(resultsByStudent).flat(), isNT, contextSubjects);
           const group = (stuObj.student_group || stuObj.group || inferGroupLocal(stuResults, isNT, stuObj) || classGroupFromAllResults || '').toLowerCase();
-          const expectedKeys = getExpectedSubjectsLocal(group, isNT, sectionSubjs, classAssignedSubjectNames);
+          const expectedKeys = getExpectedSubjectsLocal(group, isNT, sectionSubjs, classAssignedSubjectNames, validSubjKeys);
           const relWithMarks = Array.from(subjectMap.values()).find(r => isRelSubjLocal(r.subject?.name || r.subject_name) && (parseFloat(r.total_obtained) > 0));
           const takenRelId = relWithMarks?.subject?.id || relWithMarks?.subject;
 
@@ -3049,7 +3101,9 @@ export default function ResultCardGenerator() {
           @media print {
             @page {
               size: A4 portrait;
-              margin: 0 !important;
+              /* SSC বোর্ড ট্রান্সক্রিপ্ট ২১০mm ফুল-পেজ ডিজাইন, তাই margin 0;
+                 সাধারণ রেজাল্ট কার্ড পেজ-প্রান্তে বর্ডার কাটা এড়াতে 6mm */
+              margin: ${layout === 'ssc' ? '0mm' : '6mm'} !important;
             }
 
             .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiSnackbar-root, .MuiAlert-root, .MuiTabs-root, .MuiBackdrop-root {
@@ -3067,10 +3121,12 @@ export default function ResultCardGenerator() {
               print-color-adjust: exact !important;
             }
 
+            /* align-items: center হলে flex-item-এর width shrink-to-fit হয়ে যায়;
+               শতকরা (%) width chain ভেঙে কার্ডের প্রস্থ অনিশ্চিত হয়। তাই stretch. */
             #root, main, .result-display-area, .bulk-print-mode {
               display: flex !important;
               flex-direction: column !important;
-              align-items: center !important;
+              align-items: stretch !important;
               margin: 0 !important;
               padding: 0 !important;
               width: 100% !important;
@@ -3095,14 +3151,14 @@ export default function ResultCardGenerator() {
               margin: 0 !important;
               padding: 0 !important;
               width: 100% !important;
-              height: calc(280mm - 5px) !important;
-              max-height: calc(280mm - 5px) !important;
+              height: auto !important;
+              max-height: none !important;
               page-break-after: always !important;
               break-after: page !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
               position: relative !important;
-              overflow: hidden !important;
+              overflow: visible !important;
               box-sizing: border-box !important;
             }
 
@@ -3111,11 +3167,19 @@ export default function ResultCardGenerator() {
               filter: none !important;
               outline: none !important;
               margin: 0 auto !important;
-              width: calc(200mm + 55px) !important;
+              width: 195mm !important;
+              max-width: 195mm !important;
               height: calc(280mm - 5px) !important;
-              display: block !important;
+              min-height: calc(280mm - 5px) !important;
+              max-height: calc(280mm - 5px) !important;
+              display: flex !important;
+              flex-direction: column !important;
               position: relative !important;
-              overflow: hidden !important;
+              overflow: visible !important;
+              border-width: 25px !important;
+              border-style: solid !important;
+              border-color: transparent !important;
+              border-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5'%3E%3Cpath d='M0 50 Q 25 0 50 50 T 100 50'/%3E%3Cpath d='M0 50 Q 25 100 50 50 T 100 50'/%3E%3Cpath d='M50 0 Q 0 25 50 50 T 50 100'/%3E%3Cpath d='M50 0 Q 100 25 50 50 T 50 100'/%3E%3Cg transform='rotate(45,50,50)'%3E%3Cpath d='M20 50 Q 35 20 50 50 T 80 50'/%3E%3Cpath d='M20 50 Q 35 80 50 50 T 80 50'/%3E%3Cpath d='M50 20 Q 20 35 50 50 T 50 80'/%3E%3Cpath d='M50 20 Q 80 35 50 50 T 50 80'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") 25 25 25 25 round !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
               box-sizing: border-box !important;
@@ -3123,20 +3187,26 @@ export default function ResultCardGenerator() {
             }
 
             .result-card-signatures {
-              position: absolute !important;
-              left: 0 !important;
-              right: 0 !important;
-              bottom: 15mm !important;
+              position: relative !important;
+              left: auto !important;
+              right: auto !important;
+              bottom: auto !important;
+              margin-top: auto !important;
+              margin-bottom: 5mm !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
               break-before: avoid-page !important;
             }
 
             .result-card-main-content {
+              display: flex !important;
+              flex-direction: column !important;
+              flex-grow: 1 !important;
+              height: 100% !important;
               page-break-inside: auto !important;
               break-inside: auto !important;
               break-after: avoid-page !important;
-              padding-bottom: 34mm !important;
+              padding-bottom: 0mm !important;
             }
 
             .result-card-main-content table {

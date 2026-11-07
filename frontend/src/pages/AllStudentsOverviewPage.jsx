@@ -28,7 +28,7 @@ import { scopedGet } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
 import { getClassOrder, compareClassOrder } from '../utils/classroomUtils';
-import { getCleanDisplayName } from '../utils/helpers';
+import { getCleanDisplayName, sortStudentsByRoll } from '../utils/helpers';
 import { getMediaUrl, resolveStudentPhoto } from '../utils/media';
 
 // Helper to translate class name to Bangla
@@ -238,12 +238,7 @@ export default function AllStudentsOverviewPage() {
     });
 
     groups.forEach(group => {
-      group.students.sort((a, b) => {
-        const rollA = parseInt(String(a.roll_number || '99999').replace(/\D/g, ''), 10) || 99999;
-        const rollB = parseInt(String(b.roll_number || '99999').replace(/\D/g, ''), 10) || 99999;
-        if (rollA !== rollB) return rollA - rollB;
-        return String(a.user?.first_name || a.name || '').localeCompare(String(b.user?.first_name || b.name || ''));
-      });
+      group.students = sortStudentsByRoll(group.students);
     });
 
     return groups;

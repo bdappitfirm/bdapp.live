@@ -8,7 +8,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { scopedGet, scopedPost } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
-import { getCleanDisplayName, transliterateBangla } from '../utils/helpers';
+import { getCleanDisplayName, transliterateBangla, sortStudentsByRoll } from '../utils/helpers';
 import dayjs from 'dayjs';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -155,13 +155,8 @@ export default function StudentListPage() {
       const res = await scopedGet('/api/academics/students/', id, { classroom: targetCls, section: targetSec || undefined });
       const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
 
-      // Sort numerically by roll number
-      const sorted = [...data].sort((a, b) => {
-        const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
-        const br = parseInt(String(b.roll_number || '').replace(/\D/g, ''), 10);
-        if (!isNaN(ar) && !isNaN(br) && ar !== br) return ar - br;
-        return String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true });
-      });
+      // Sort numerically and safely by roll number
+      const sorted = sortStudentsByRoll(data);
 
       setStudents(processStudentNames(sorted));
     } catch (error) { toast.error('Error loading data'); } finally { setLoading(false); }
@@ -209,11 +204,11 @@ export default function StudentListPage() {
 
   const handleDownloadCSV = useCallback(() => {
     if (students.length === 0) return;
-    const headers = ['ক্র.', 'নাম', 'পিতা', 'মাতা', 'জন্ম তারিখ', 'রোল', 'শাখা', 'গ্রুপ', '৪র্থ বিষয়'];
+    const headers = ['ক্র.', 'রোল', 'নাম', 'পিতা', 'মাতা', 'জন্ম তারিখ', 'ভর্তির তারিখ', 'শাখা', 'গ্রুপ', '৪র্থ বিষয়'];
     const groupMap = { 'science': 'বিজ্ঞান', 'arts': 'মানবিক', 'commerce': 'ব্যবসায় শিক্ষা' };
     const rows = students.map((s, idx) => [
-      idx + 1, s.first_name, s.father_name, s.mother_name, s.manual_birth_date,
-      s.roll_number, s.section?.name, groupMap[s.student_group] || s.student_group || '', s.optional_subject?.name || ''
+      idx + 1, s.roll_number || '', s.first_name, s.father_name, s.mother_name, s.manual_birth_date, s.manual_admission_date,
+      s.section?.name, groupMap[s.student_group] || s.student_group || '', s.optional_subject?.name || ''
     ]);
     let csv = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\r\n" + rows.map(r => r.join(",")).join("\r\n");
     const link = document.createElement("a"); link.setAttribute("href", encodeURI(csv)); link.setAttribute("download", "Students.csv");
@@ -287,7 +282,8 @@ export default function StudentListPage() {
             <TableContainer component={Paper} sx={{ mb: 2, boxShadow: 'none', p: 0 }}>
               <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1500px' : '1300px', borderCollapse: 'collapse' }}>
                 <colgroup>
-                  <col style={{ width: '30px' }} />
+                  <col style={{ width: '35px' }} />
+                  <col style={{ width: '60px' }} />
                   <col style={{ width: '160px' }} />
                   <col style={{ width: '160px' }} />
                   <col style={{ width: '115px' }} />
@@ -295,7 +291,6 @@ export default function StudentListPage() {
                   <col style={{ width: '75px' }} />
                   <col style={{ width: '75px' }} />
                   <col style={{ width: '60px' }} />
-                  <col style={{ width: '70px' }} />
                   {isNineTen && (
                     <>
                       <col style={{ width: '80px' }} />
@@ -309,13 +304,13 @@ export default function StudentListPage() {
                 <TableHead>
                     <TableRow sx={{ bgcolor: '#1976d2' }}>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ক্র.</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>রোল</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>নাম (First Name)</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>নাম (ইংরেজিতে)</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>পিতার নাম</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>মাতার নাম</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>জন্ম তারিখ</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ভর্তির তারিখ</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>রোল</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ব্লাড</TableCell>
                         {isNineTen && (
                           <>
@@ -333,6 +328,9 @@ export default function StudentListPage() {
                       <TableRow key={s.id} sx={{ '&:nth-of-type(even)': { bgcolor: '#f5f5f5' }, height: '35px' }}>
                         <TableCell sx={{ textAlign: 'center', p: 0, m: 0 }}>{cIdx * 17 + idx + 1}</TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
+                          <input className="sl-cell-input" value={s.roll_number || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'roll_number', e.target.value)} style={{ textAlign: 'center', fontWeight: 600 }} />
+                        </TableCell>
+                        <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.first_name || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'first_name', e.target.value)} style={{ fontWeight: 600 }} />
                         </TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
@@ -349,9 +347,6 @@ export default function StudentListPage() {
                         </TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <input className="sl-cell-input" value={s.manual_admission_date || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'manual_admission_date', e.target.value)} style={{ textAlign: 'center' }} />
-                        </TableCell>
-                        <TableCell sx={{ p: 0, m: 0 }}>
-                          <input className="sl-cell-input" value={s.roll_number || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'roll_number', e.target.value)} style={{ textAlign: 'center' }} />
                         </TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
                           <select className="sl-cell-select" value={s.blood_group || ''} onChange={(e) => handleFieldChange(s.id, 'blood_group', e.target.value)}>

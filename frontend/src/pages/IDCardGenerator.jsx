@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
+import { getActiveClassrooms } from '../utils/classroomUtils';
 import {
   Box,
   Typography,
@@ -164,7 +165,7 @@ function IDCardGenerator() {
             <Stack direction="row" spacing={2} sx={{ mb: 2 }}><Button variant={searchType === 'single' ? 'contained' : 'outlined'} onClick={() => setSearchType('single')}>একক</Button><Button variant={searchType === 'bulk' ? 'contained' : 'outlined'} onClick={() => setSearchType('bulk')}>শ্রেণি অনুযায়ী</Button></Stack>
             {searchType === 'single' ? <TextField label="রোল/নাম" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} fullWidth /> : (
               <Stack direction="row" spacing={2}>
-                <TextField id="class-select" select label="শ্রেণি" value={classFilter} onChange={(e) => { setClassFilter(e.target.value); loadSections(e.target.value); }} fullWidth>{classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</TextField>
+                <TextField id="class-select" select label="শ্রেণি" value={classFilter} onChange={(e) => { setClassFilter(e.target.value); loadSections(e.target.value); }} fullWidth>{getActiveClassrooms(classrooms).map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</TextField>
                 <TextField id="section-select" select label="শাখা" value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value)} fullWidth disabled={!classFilter}>{filterSections.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}</TextField>
               </Stack>
             )}

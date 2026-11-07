@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
 import { useAcademics } from '../context/AcademicsContext';
+import { getActiveClassrooms } from '../utils/classroomUtils';
 import {
   Box,
   Typography,
@@ -18,8 +19,7 @@ import {
   DialogContent,
   DialogActions,
   IconButton,
-  Tooltip,
-  Backdrop
+  Tooltip
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PrintIcon from '@mui/icons-material/Print';
@@ -30,11 +30,32 @@ import html2canvas from 'html2canvas';
 import AdmissionCard from '../components/AdmissionCard';
 import InputGuidance from '../components/InputGuidance';
 
+// Which cards the print stylesheet keeps is toggled straight on the DOM rather
+// than through React state, so the whole print flow stays inside one click
+// handler and window.print() runs synchronously. If print() runs after a React
+// re-render or a timeout, Chrome drops the click's user-activation and then
+// ignores `@page { size: A4 landscape }`, printing portrait and cropping the
+// cards left and right.
+function applyPrintTargets(student) {
+  const container = document.querySelector('.screen-admission-cards');
+  if (!container) return;
+  container.classList.toggle('printing-single', Boolean(student));
+  container.querySelectorAll('.print-grid-item').forEach((el) => {
+    const isTarget = Boolean(student) && el.getAttribute('data-student-id') === String(student.id);
+    el.classList.toggle('print-target', isTarget);
+  });
+  // In single-card mode only the sheet that holds the requested card survives;
+  // every other sheet is dropped so it does not print as a blank page.
+  container.querySelectorAll('.print-page').forEach((page) => {
+    page.classList.toggle('print-page-active', !student || Boolean(page.querySelector('.print-target')));
+  });
+}
+
 export default function AdmissionCardGenerator() {
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
   const [school, setSchool] = useState(null);
-  const { classrooms, sections, refreshAll, students: allStudents, fetchStudentsScoped } = useAcademics();
+  const { classrooms, sections, refreshAll, students: allStudents, fetchStudentsScoped, examinations: contextExams } = useAcademics();
   const [searchResults, setSearchResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -45,16 +66,129 @@ export default function AdmissionCardGenerator() {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [exams, setExams] = useState([]);
   const [loadingExams, setLoadingExams] = useState(false);
+
+  // Combine context exams with fetched exams for instant 0ms availability
+  const effectiveExams = useMemo(() => {
+    if (Array.isArray(contextExams) && contextExams.length > 0) return contextExams;
+    return exams;
+  }, [contextExams, exams]);
+
+  // Instant memory filtering for exams when classFilter changes (0ms delay)
+  const filteredExams = useMemo(() => {
+    if (!Array.isArray(effectiveExams)) return [];
+    if (!classFilter) return effectiveExams;
+    return effectiveExams.filter(e => {
+      const cId = e.classroom?.id || e.classroom;
+      return !cId || String(cId) === String(classFilter);
+    });
+  }, [effectiveExams, classFilter]);
   const [examSlots, setExamSlots] = useState([]);
   const [activeStep, setActiveStep] = useState(0);
+  const printStyleRef = useRef(null);
 
-  const printPairs = useMemo(() => {
-    const pairs = [];
-    for (let i = 0; i < searchResults.length; i += 2) {
-      pairs.push(searchResults.slice(i, i + 2));
-    }
-    return pairs;
-  }, [searchResults]);
+  // Print styles live in <head> as a real stylesheet, not as a <style> rendered
+  // inside the page body. Chrome only honours @page / @media print reliably from
+  // a head stylesheet — this is what removes the browser's own header/footer
+  // (date, page title, URL, page number) that otherwise print on every page.
+  useEffect(() => {
+    const el = document.createElement('style');
+    el.id = 'admission-card-print-style';
+    el.textContent = `
+      @media print {
+        /* The sheet itself carries the margin (via .print-page padding), so the
+           page box stays exactly A4-landscape and one .print-page maps 1:1 to
+           one printed sheet with no rounding drift onto a blank page. */
+        @page { size: A4 landscape; margin: 0; }
+        html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+        main { min-height: 0 !important; overflow: visible !important; }
+        .no-print, .MuiSnackbar-root, .MuiDialog-root, header, footer, nav, aside, .MuiAppBar-root { display: none !important; }
+        .print-card-actions { display: none !important; }
+
+        /* The page wrapper's own padding offsets the cards and would also make a
+           full-height page overflow onto a blank second sheet. */
+        .admission-generator-root { padding: 0 !important; }
+
+        .screen-admission-cards { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+        /* The grid itself generates no box in print; each .print-page becomes a
+           real block so page breaks happen predictably between sheets. */
+        .screen-admission-cards .print-grid { display: contents !important; }
+
+        /* Each .print-page is exactly one A4-landscape sheet. A fixed height
+           (instead of min-height) is what makes the vertical centring hold on
+           every page, not just the first: the block fills the whole page box, so
+           the browser never puts it at the top of a fragment. Its own padding
+           stands in for the page margin, keeping the cards off the paper edge. */
+        .screen-admission-cards .print-page {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          column-gap: 6mm !important;
+          width: 100% !important;
+          height: 209mm !important;
+          padding: 8mm 10mm !important;
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+          break-after: page !important;
+          page-break-after: always !important;
+        }
+        .screen-admission-cards .print-page:last-child {
+          break-after: auto !important;
+          page-break-after: auto !important;
+        }
+
+        .screen-admission-cards .print-grid-item {
+          width: 130mm !important;
+          max-width: 130mm !important;
+          min-width: 130mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          box-sizing: border-box !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+        .screen-admission-cards .print-card-shell,
+        .screen-admission-cards .admission-card {
+          width: 130mm !important;
+          max-width: 130mm !important;
+          min-width: 130mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          box-sizing: border-box !important;
+          overflow: visible !important;
+          box-shadow: none !important;
+          filter: none !important;
+          background: #ffffff !important;
+        }
+
+        /* Single-card print: keep only the sheet holding the requested card,
+           and only that card on it. */
+        .screen-admission-cards.printing-single .print-page { display: none !important; }
+        .screen-admission-cards.printing-single .print-page.print-page-active {
+          display: flex !important;
+          break-after: auto !important;
+          page-break-after: auto !important;
+        }
+        .screen-admission-cards.printing-single .print-grid-item { display: none !important; }
+        .screen-admission-cards.printing-single .print-grid-item.print-target {
+          display: block !important;
+          margin: 0 !important;
+        }
+      }
+    `;
+    document.head.appendChild(el);
+    printStyleRef.current = el;
+    return () => {
+      printStyleRef.current = null;
+      el.remove();
+    };
+  }, []);
+
+  // Drop the print-only classes once the print dialog is dismissed.
+  useEffect(() => {
+    const reset = () => applyPrintTargets(null);
+    window.addEventListener('afterprint', reset);
+    return () => window.removeEventListener('afterprint', reset);
+  }, []);
 
   const guidanceSteps = [
     { selector: '#class-select', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
@@ -75,8 +209,19 @@ export default function AdmissionCardGenerator() {
     }
   }, [classFilter, selectedExam, searchResults.length]);
 
-  // Filter sections for selected class
-  const filteredSections = classFilter ? sections.filter(sec => String(sec.classroom?.id) === String(classFilter)) : [];
+  // Active classrooms memoized for instant (0ms) dropdown rendering
+  const activeClassroomsList = useMemo(() => {
+    return getActiveClassrooms(Array.isArray(classrooms) ? classrooms : []);
+  }, [classrooms]);
+
+  // Filter sections for selected class instantly in memory (0ms)
+  const filteredSections = useMemo(() => {
+    if (!classFilter || !Array.isArray(sections)) return [];
+    return sections.filter(sec => {
+      const cId = sec.classroom?.id || sec.classroom;
+      return String(cId) === String(classFilter);
+    });
+  }, [sections, classFilter]);
   
   // Load school data
   useEffect(() => {
@@ -87,23 +232,23 @@ export default function AdmissionCardGenerator() {
         const res = await api.get(`/api/schools/${id}/`);
         setSchool(res.data);
       } catch (err) {
-          console.error('Failed to load school data:', err);
-          showSnackbar('Failed to load school data', 'error');
-        }
-      };
-      loadSchool();
+        console.error('Failed to load school data:', err);
+        showSnackbar('Failed to load school data', 'error');
+      }
+    };
+    loadSchool();
+    if (!Array.isArray(classrooms) || classrooms.length === 0) {
       refreshAll(id);
-    }, [id, refreshAll]);
+    }
+  }, [id, classrooms, refreshAll]);
 
-  // Load examinations for the school (and optionally for selected class)
+  // Load examinations for the school once on mount (cached in memory)
   useEffect(() => {
     if (!id) return;
     const fetchExams = async () => {
       setLoadingExams(true);
       try {
-        let url = `/api/results/examinations/?school=${id}&page_size=100`;
-        if (classFilter) url += `&classroom=${classFilter}`;
-        const res = await api.get(url, { timeout: 15000 });
+        const res = await api.get(`/api/results/examinations/?school=${id}&page_size=300`, { timeout: 15000 });
         const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
         setExams(data);
       } catch (err) {
@@ -114,20 +259,14 @@ export default function AdmissionCardGenerator() {
       }
     };
     fetchExams();
-  }, [id, classFilter]);
+  }, [id]);
 
-  // Load exam slots for the selected exam
+  // Load exam slots for the school once on mount
   useEffect(() => {
     if (!id) return;
     const fetchExamSlots = async () => {
       try {
-        let url = `/api/results/exam-slots/?school=${id}`;
-        if (selectedExam) {
-          url += `&examination=${selectedExam}`;
-        } else if (classFilter) {
-          url += `&classroom=${classFilter}`;
-        }
-        const res = await api.get(url);
+        const res = await api.get(`/api/results/exam-slots/?school=${id}&page_size=500`);
         const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
         setExamSlots(data);
       } catch (err) {
@@ -136,8 +275,54 @@ export default function AdmissionCardGenerator() {
       }
     };
     fetchExamSlots();
-  }, [id, classFilter, selectedExam]);
+  }, [id]);
 
+
+  // Filter students from memory instantly for 0ms response time
+  const getLocalStudents = useCallback((clsId, secId, query = '') => {
+    if (!clsId || !Array.isArray(allStudents)) return [];
+    const normQuery = String(query || '').toLowerCase().trim();
+    const filtered = allStudents.filter(s => {
+      const cId = s.classroom?.id || s.classroom;
+      if (String(cId) !== String(clsId)) return false;
+      if (secId) {
+        const sId = s.section?.id || s.section;
+        if (String(sId) !== String(secId)) return false;
+      }
+      if (normQuery) {
+        const roll = String(s.roll_number || '');
+        const fn = String(s.user?.first_name || s.first_name || '').toLowerCase();
+        const ln = String(s.user?.last_name || s.last_name || '').toLowerCase();
+        const full = String(s.name || `${fn} ${ln}`).toLowerCase();
+        return roll.includes(normQuery) || fn.includes(normQuery) || ln.includes(normQuery) || full.includes(normQuery);
+      }
+      return true;
+    });
+
+    return filtered.map(student => ({
+      ...student,
+      user: {
+        ...student.user,
+        photo_url: student.photo || student.user?.photo || student.user?.photo_url,
+        first_name: student.user?.first_name || student.name?.split(' ')[0] || '',
+        last_name: student.user?.last_name || student.name?.split(' ').slice(1).join(' ') || ''
+      }
+    })).sort((a, b) => {
+      const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+      const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+      if (!isNaN(ar) && !isNaN(br)) return ar - br;
+      return String(a?.roll_number).localeCompare(String(b?.roll_number));
+    });
+  }, [allStudents]);
+
+  // Auto-generate cards instantly (0ms) whenever class/section/exam is selected
+  useEffect(() => {
+    if (!classFilter || !selectedExam) return;
+    const localMatches = getLocalStudents(classFilter, sectionFilter, searchQuery);
+    if (localMatches.length > 0) {
+      setSearchResults(localMatches);
+    }
+  }, [classFilter, sectionFilter, selectedExam, searchQuery, getLocalStudents]);
 
   const searchStudents = async () => {
     if (!selectedExam) {
@@ -145,41 +330,27 @@ export default function AdmissionCardGenerator() {
       return;
     }
     
+    // Check instant local memory first (0ms)
+    const localMatches = getLocalStudents(classFilter, sectionFilter, searchQuery);
+    if (localMatches.length > 0) {
+      setSearchResults(localMatches);
+      showSnackbar(`Found ${localMatches.length} student(s)`, 'success');
+      return;
+    }
+
     setLoading(true);
     try {
       let foundStudents = [];
-
-      // Always try to fetch from server for the specific filters to ensure fresh/complete data
+      const params = {};
+      if (classFilter) params.classroom = classFilter;
+      if (sectionFilter) params.section = sectionFilter;
       if (searchQuery) {
-        const normalizedQuery = searchQuery.toLowerCase().trim();
-        // First check local list for speed
-        foundStudents = allStudents.filter(s =>
-          (s.roll_number?.toString().includes(searchQuery)) || 
-          (s.user?.first_name?.toLowerCase().includes(normalizedQuery)) || 
-          (s.user?.last_name?.toLowerCase().includes(normalizedQuery)) || 
-          (s.name?.toLowerCase().includes(normalizedQuery))
-        );
-
-        // If nothing found locally or query is a roll number, try server
-        if (foundStudents.length === 0 || !isNaN(searchQuery)) {
-            const params = isNaN(searchQuery) ? { search: normalizedQuery } : { roll_number: searchQuery };
-            if (classFilter) params.classroom = classFilter;
-            if (sectionFilter) params.section = sectionFilter;
-            foundStudents = await fetchStudentsScoped(id, params);
-        }
-      } else if (classFilter) {
-        // Fetch class/section students from server directly
-        const params = { classroom: classFilter };
-        if (sectionFilter) params.section = sectionFilter;
-        foundStudents = await fetchStudentsScoped(id, params);
-      } else {
-        showSnackbar('Please enter search criteria or select class', 'warning');
-        setLoading(false);
-        return;
+        if (!isNaN(searchQuery)) params.roll_number = searchQuery;
+        else params.search = searchQuery.toLowerCase().trim();
       }
-      
-      // Map student data to ensure photo URL is in the correct format
-      foundStudents = foundStudents.map(student => ({
+
+      foundStudents = await fetchStudentsScoped(id, params);
+      foundStudents = (foundStudents || []).map(student => ({
         ...student,
         user: {
           ...student.user,
@@ -187,22 +358,18 @@ export default function AdmissionCardGenerator() {
           first_name: student.user?.first_name || student.name?.split(' ')[0] || '',
           last_name: student.user?.last_name || student.name?.split(' ').slice(1).join(' ') || ''
         }
-      }));
+      })).sort((a, b) => {
+        const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+        const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+        if (!isNaN(ar) && !isNaN(br)) return ar - br;
+        return String(a?.roll_number).localeCompare(String(b?.roll_number));
+      });
       
-      if (foundStudents.length === 0) {
-        setSearchResults([]);
-        showSnackbar('No students found with the specified criteria', 'warning');
+      setSearchResults(foundStudents);
+      if (foundStudents.length > 0) {
+        showSnackbar(`Found ${foundStudents.length} student(s)`, 'success');
       } else {
-        // Sort by roll number
-        const sortedData = [...foundStudents].sort((a, b) => {
-          const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
-          const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-          if (!isNaN(ar) && !isNaN(br)) return ar - br;
-          return String(a?.roll_number).localeCompare(String(b?.roll_number));
-        });
-        
-        setSearchResults(sortedData);
-        showSnackbar(`Found ${sortedData.length} student(s)`, 'success');
+        showSnackbar('No students found with specified criteria', 'warning');
       }
     } catch (err) {
       console.error('Error searching students:', err);
@@ -213,17 +380,34 @@ export default function AdmissionCardGenerator() {
   };
 
   const handlePrint = (student = null) => {
-    const studentsToPrint = student ? [student] : searchResults;
-    if (studentsToPrint.length === 0) {
+    const count = student ? 1 : searchResults.length;
+    if (count === 0) {
       showSnackbar('No students to print', 'warning');
       return;
     }
-    if (student) {
-      setSelectedStudent(student);
-      setOpenPreview(true);
-      setTimeout(() => window.print(), 200);
-      return;
+
+    // All of this runs inside the click handler, so window.print() is still
+    // called with the click's user-activation: Chrome then honours
+    // `@page { size: A4 landscape }`. Nothing is re-generated and nothing is
+    // re-mounted — the cards being printed are the ones already on screen, so
+    // every photo, logo, signature and QR code is already painted.
+    applyPrintTargets(student);
+    setOpenPreview(false);
+
+    // Push our print stylesheet to the very end of <head> so its
+    // `@page { size: A4 landscape }` is the LAST @page rule in the document.
+    // Other lazily loaded chunks (ResultCard.css, SSCMarksheet.css, IDCard.css,
+    // ReceiptBook.css — all pulled in by preloadAllPages) declare
+    // `@page { size: A4 portrait|A4 }`; because they land in <head> after this
+    // component mounts they would otherwise sit later in document order and win
+    // the cascade, flipping the printout back to portrait and cropping the
+    // cards on the left and right. Moving the node is synchronous, so the
+    // click's user-activation is preserved.
+    const styleEl = printStyleRef.current;
+    if (styleEl && styleEl.parentNode) {
+      styleEl.parentNode.appendChild(styleEl);
     }
+
     window.print();
   };
 
@@ -354,14 +538,24 @@ export default function AdmissionCardGenerator() {
     if (!ok) setSelectedExam('');
   }, [exams, selectedExam]);
 
+  // Two cards per printed A4 sheet: group the results into page-sized chunks so
+  // the print stylesheet can centre each sheet on its own. On screen the wrapper
+  // is `display: contents`, so the visible grid layout is untouched.
+  const cardPages = useMemo(() => {
+    const pages = [];
+    for (let i = 0; i < searchResults.length; i += 2) {
+      pages.push(searchResults.slice(i, i + 2));
+    }
+    return pages;
+  }, [searchResults]);
+
   return (
-    <Box sx={{ p: 3 }}>
-      <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={loading || loadingExams}>
-        <CircularProgress color="inherit" />
-      </Backdrop>
+    <Box className="admission-generator-root" sx={{ p: 3 }}>
+      {/* Non-blocking loading indicator */}
       {/* Header */}
       <Paper 
         elevation={0}
+        className="no-print"
         sx={{ 
           mb: 3, 
           p: 3, 
@@ -423,7 +617,7 @@ export default function AdmissionCardGenerator() {
       </Paper>
 
       {/* Search Form */}
-      <Paper sx={{ p: 3, mb: 3 }}>
+      <Paper className="no-print" sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
           Search Criteria
         </Typography>
@@ -446,8 +640,8 @@ export default function AdmissionCardGenerator() {
               required
             >
               <MenuItem value="">সব শ্রেণি</MenuItem>
-              {classrooms.map((cls) => (
-                <MenuItem key={cls.id} value={cls.id}>
+              {activeClassroomsList.map((cls) => (
+                <MenuItem key={cls.id} value={String(cls.id)}>
                   {cls.name}
                 </MenuItem>
               ))}
@@ -489,10 +683,10 @@ export default function AdmissionCardGenerator() {
               variant="outlined"
               size="small"
               required
-              disabled={loadingExams}
+              disabled={loadingExams && (!Array.isArray(effectiveExams) || effectiveExams.length === 0)}
             >
               <MenuItem value="">একটি পরীক্ষা নির্বাচন করুন</MenuItem>
-              {exams
+              {filteredExams
                 .filter(exam => {
                   const name = (exam.name || '').trim();
                   const type = (exam.exam_type || '').toLowerCase();
@@ -576,50 +770,6 @@ export default function AdmissionCardGenerator() {
       {/* Results */}
       {searchResults.length > 0 ? (
         <Box>
-          <style>{`
-            @media screen {
-              .print-all-admission-cards { display: none !important; }
-            }
-            @media print {
-              @page { size: A4 landscape; margin: 8mm; }
-              .no-print { display: none !important; }
-              .screen-admission-cards { display: none !important; }
-              .print-all-admission-cards {
-                display: block !important;
-                width: 100% !important;
-              }
-              .print-page-row {
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: flex-start !important;
-                justify-content: flex-start !important;
-                padding-top: 5mm !important;
-                height: auto !important;
-                max-height: none !important;
-                page-break-after: always !important;
-                break-after: page !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                box-sizing: border-box !important;
-              }
-              .print-grid-pair {
-                display: grid !important;
-                grid-template-columns: repeat(2, 130mm) !important;
-                gap: 8mm !important;
-                align-items: center !important;
-                justify-content: center !important;
-                width: 100% !important;
-                box-sizing: border-box !important;
-              }
-              .print-card-item {
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                width: 130mm !important;
-                max-width: 130mm !important;
-              }
-            }
-          `}</style>
-
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} className="no-print">
             <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
               Found {searchResults.length} Student(s)
@@ -635,71 +785,72 @@ export default function AdmissionCardGenerator() {
             </Button>
           </Box>
           
-          {/* Screen Grid */}
+          {/* Screen Grid — the on-screen cards are also the print cards: the
+              print stylesheet re-lays this same grid out as two cards per A4
+              landscape page. Nothing is duplicated, and because these images
+              have already painted, nothing prints half-loaded. */}
           <Box className="screen-admission-cards">
-            <Grid container spacing={3}>
-              {searchResults.map((student) => (
-                <Grid item xs={12} sm={6} md={4} key={student.id}>
-                  <Box position="relative" sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                    <Box id={`admission-card-${student.id}`}>
-                      <AdmissionCard
-                        data={student}
-                        school={school}
-                        exam={selectedExamData}
-                        examSlots={examSlots}
-                      />
-                    </Box>
+            <Box className="print-grid" sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center' }}>
+              {cardPages.map((pageStudents, pageIndex) => (
+                <Box
+                  key={`print-page-${pageIndex}`}
+                  className="print-page"
+                  sx={{ display: 'contents' }}
+                >
+                  {pageStudents.map((student) => (
                     <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 10,
-                        right: 10,
-                        display: 'flex',
-                        gap: 1,
-                        '& .MuiIconButton-root': {
-                          bgcolor: 'rgba(0,0,0,0.6)',
-                          color: 'white',
-                          '&:hover': {
-                            bgcolor: 'rgba(0,0,0,0.8)'
-                          }
-                        }
-                      }}
+                      key={student.id}
+                      className="print-grid-item"
+                      data-student-id={student.id}
+                      sx={{ width: { xs: '100%', sm: 'calc(50% - 24px)', md: 'calc(33.333% - 24px)' }, maxWidth: '640px' }}
                     >
-                      <Tooltip title="Preview">
-                        <IconButton size="small" onClick={() => handlePreview(student)}>
-                          <SearchIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Print">
-                        <IconButton size="small" onClick={() => handlePrint(student)}>
-                          <PrintIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
-          </Box>
-
-          {/* Print-All Always-Mounted Container (Instantaneous Direct DOM Printing, 2 per page in A4 landscape, centered without cutoffs) */}
-          <Box className="print-all-admission-cards">
-            {printPairs.map((pair, pageIdx) => (
-              <Box key={`print-page-${pageIdx}`} className="print-page-row">
-                <Box className="print-grid-pair">
-                  {pair.map((student) => (
-                    <Box key={`print-card-${student.id}`} className="print-card-item">
-                      <AdmissionCard
-                        data={student}
-                        school={school}
-                        exam={selectedExamData}
-                        examSlots={examSlots}
-                      />
+                      <Box
+                        position="relative"
+                        className="print-card-shell"
+                        sx={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+                      >
+                        <Box id={`admission-card-${student.id}`}>
+                          <AdmissionCard
+                            data={student}
+                            school={school}
+                            exam={selectedExamData}
+                            examSlots={examSlots}
+                          />
+                        </Box>
+                        <Box
+                          className="print-card-actions"
+                          sx={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 10,
+                            display: 'flex',
+                            gap: 1,
+                            '& .MuiIconButton-root': {
+                              bgcolor: 'rgba(0,0,0,0.6)',
+                              color: 'white',
+                              '&:hover': {
+                                bgcolor: 'rgba(0,0,0,0.8)'
+                              }
+                            }
+                          }}
+                        >
+                          <Tooltip title="Preview">
+                            <IconButton size="small" onClick={() => handlePreview(student)}>
+                              <SearchIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Print">
+                            <IconButton size="small" onClick={() => handlePrint(student)}>
+                              <PrintIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
                     </Box>
                   ))}
                 </Box>
-              </Box>
-            ))}
+              ))}
+            </Box>
           </Box>
         </Box>
       ) : (
@@ -754,10 +905,7 @@ export default function AdmissionCardGenerator() {
             variant="contained" 
             color="primary"
             startIcon={<PrintIcon />}
-            onClick={() => {
-              handlePrint(selectedStudent);
-              setOpenPreview(false);
-            }}
+            onClick={() => handlePrint(selectedStudent)}
           >
             Print
           </Button>
@@ -786,22 +934,6 @@ export default function AdmissionCardGenerator() {
         activeStep={activeStep}
         onStepComplete={() => setActiveStep(prev => prev + 1)}
       />
-
-      {/* Hidden offscreen container so html2canvas can access ALL searchResults elements */}
-      {searchResults.length > 0 && (
-        <Box sx={{ position: 'absolute', left: '-9999px', top: 0, width: '640px', visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
-          {searchResults.map((student) => (
-            <Box key={`hidden-card-${student.id}`} id={`admission-card-${student.id}`}>
-              <AdmissionCard
-                data={student}
-                school={school}
-                exam={selectedExamData}
-                examSlots={examSlots}
-              />
-            </Box>
-          ))}
-        </Box>
-      )}
     </Box>
   );
 }

@@ -1280,8 +1280,11 @@ export default function ClassResultsPage() {
         if (n.includes('bgs') || n.includes('বাংলাদেশ') || n.includes('global') || n.includes('world') || n.includes('বিশ্ব') || n.includes('social')) {
             if (!n.includes('bangla') && !n.includes('pure science')) return 60;
         }
-        if ((n.includes('bangla') || n.includes('বাংলা')) && !n.includes('বাংলাদেশ') && !n.includes('bangladesh')) return (n.includes('২য়') || n.includes('২য়') || n.includes('2nd') || n.includes('second') || n.includes('ii')) ? 12 : 11;
-        if (n.includes('english') || n.includes('ইংরেজি')) return (n.includes('২য়') || n.includes('২য়') || n.includes('2nd') || n.includes('second') || n.includes('ii')) ? 22 : 21;
+        // 'পত্র ক্রম' — normalizeSubjKey-এর কী (_p1/_p2) থেকেও দ্বিতীয় পত্র শনাক্ত করা হয়,
+        // নাহলে বাংলা/ইংরেজিতে কী মিলে গিয়ে দ্বিতীয় পত্র আগে এসে যেত (নাম-বর্ণানুক্রমে 'দ' < 'প')।
+        const isPaper2 = n.includes('_p2') || n.includes('২য়') || n.includes('২য়') || n.includes('2nd') || n.includes('second') || n.includes('ii');
+        if ((n.includes('bangla') || n.includes('বাংলা')) && !n.includes('বাংলাদেশ') && !n.includes('bangladesh')) return isPaper2 ? 12 : 11;
+        if (n.includes('english') || n.includes('ইংরেজি')) return isPaper2 ? 22 : 21;
         if (n.includes('math') || n.includes('গণিত') || n.includes('গনিত')) return (n.includes('উচ্চতর') || n.includes('higher')) ? 1000 : 30;
         if (n.includes('religion') || n.includes('islam') || n.includes('hindu') || n.includes('ধর্ম') || n.includes('ইসলাম') || n.includes('হিন্দু') || n.includes('moral')) return 40;
         if (n.includes('ict') || n.includes('তথ্য')) return 50;
@@ -1299,11 +1302,28 @@ export default function ClassResultsPage() {
         if (n.includes('agriculture') || n.includes('কৃষি') || n.includes('home') || n.includes('গার্হস্থ্য')) return 190;
         return 500;
     };
+    // শুধু ক্লাসে বিষয়টি অ্যাসাইন করা থাকলেই কলাম তৈরি হবে না — এই ক্লাস/সেকশনে অন্তত একজন
+    // শিক্ষার্থীর নাম্বার এন্ট্রি (CQ/MCQ/ব্যবহারিক বা মোট) থাকলে তবেই সেই বিষয়ের কলাম দেখানো হয়।
+    // নইলে যেমন "বিজ্ঞান"/"কৃষি শিক্ষা" ধরনের কলাম পূর্ণ "Absent"/"--" নিয়ে দেখা যেত।
+    const hasEnteredMarks = (subKey) => {
+        const key = String(subKey).toLowerCase();
+        const base = key.split('_')[0];
+        return Array.from(resultsByStudent.values()).some(list =>
+            list.some(r => {
+                if (!r.hasActualMarks && !r.hasMarks) return false;
+                if (key === 'religion_merged') return isRelSubj(r.subject?.name || r.subject_name);
+                const rk = String(r.standard_key || '').toLowerCase();
+                return rk === key || rk.split('_')[0] === base;
+            })
+        );
+    };
+
     const subjects = [];
     if (isClassNineOrTen) { subjects.push({ label: 'Bangla CQ', key: 'merged-bangla-cq' }, { label: 'Bangla MCQ', key: 'merged-bangla-mcq' }, { label: 'বাংলা (১ম+২য়)', key: 'merged-bangla' }, { label: 'ইংরেজি (১ম+২য়)', key: 'merged-english' }); }
     // নবম-দশমে কৃষি শিক্ষা ও উচ্চতর গণিত একই "কৃষিউচ্চতর" কলামে
     if (isClassNineOrTen && optionalPresent) subjects.push({ label: 'AgriHigher', key: 'merged-optional' });
     Array.from(set).forEach(s => {
+        if (!hasEnteredMarks(s.key)) return;
         subjects.push(s);
     });
     return subjects.sort((a, b) => getWeight(a.key) - getWeight(b.key));
@@ -1618,9 +1638,7 @@ export default function ClassResultsPage() {
               <TableCell className="cr-name">{HEAD_LABELS.name[resultLang]}</TableCell>
               {displaySubjects.map(s => {
                 const baseLbl = MERGED_COL_LABELS[s.key] ? MERGED_COL_LABELS[s.key][resultLang] : (resultLang === 'en' ? translateSubjectLabel(s.label) : s.label);
-                // বিজ্ঞান ও আইসিটির ক্ষেত্রে হেডারে CQ+MCQ+PRAC ব্রেকডাউন স্পষ্ট করা হয়
-                const lbl = ['physics', 'chemistry', 'biology', 'ict'].includes(s.key) ? `${baseLbl} (CQ+MCQ+PRAC)` : baseLbl;
-                return <TableCell key={s.key} className="cr-subj-head" align="center" sx={{ fontWeight: 'bold' }}>{lbl}</TableCell>;
+                return <TableCell key={s.key} className="cr-subj-head" align="center" sx={{ fontWeight: 'bold' }}>{baseLbl}</TableCell>;
               })}
               {isPrimaryClass && <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.tutorial[resultLang]}</TableCell>}
               <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.total[resultLang]}</TableCell>

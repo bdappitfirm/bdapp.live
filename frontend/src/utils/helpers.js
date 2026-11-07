@@ -28,6 +28,34 @@ export const normalizeNumberInput = (input) => {
   return bengaliToEnglishNumber(input);
 };
 
+// Sort students numerically and safely by roll number (handling Bengali digits, text, gaps)
+export const sortStudentsByRoll = (students) => {
+  if (!Array.isArray(students)) return [];
+  return [...students].sort((a, b) => {
+    const rawA = bengaliToEnglishNumber(String(a?.roll_number ?? a?.roll ?? '')).trim();
+    const rawB = bengaliToEnglishNumber(String(b?.roll_number ?? b?.roll ?? '')).trim();
+
+    const emptyA = !rawA;
+    const emptyB = !rawB;
+
+    if (emptyA && !emptyB) return 1;
+    if (!emptyA && emptyB) return -1;
+    if (emptyA && emptyB) return 0;
+
+    const numA = parseInt(rawA.replace(/\D/g, ''), 10);
+    const numB = parseInt(rawB.replace(/\D/g, ''), 10);
+
+    const validA = !isNaN(numA);
+    const validB = !isNaN(numB);
+
+    if (validA && validB && numA !== numB) {
+      return numA - numB;
+    }
+
+    return rawA.localeCompare(rawB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+};
+
 // Permission helpers
 export const canEdit = (user, itemUserId = null, itemRole = null) => {
   if (!user) return false;

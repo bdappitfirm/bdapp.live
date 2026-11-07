@@ -12,6 +12,10 @@ from .serializers import ExaminationSerializer, ResultSerializer, StudentOverall
 from django.db.models import Q
 from datetime import datetime
 import math
+from backend.cache_utils import (
+    CachedListMixin, DEFAULT_CACHE_TIMEOUT, make_cache_key,
+    safe_cache_get, safe_cache_set, to_plain,
+)
 
 
 class FlexiblePageNumberPagination(pagination.PageNumberPagination):
@@ -19,10 +23,11 @@ class FlexiblePageNumberPagination(pagination.PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 3000
 
-class ExamSlotViewSet(viewsets.ModelViewSet):
+class ExamSlotViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = ExamSlot.objects.all()
     serializer_class = ExamSlotSerializer
     permission_classes = [IsAuthenticated]
+    cache_prefix = 'exam-slots-list'
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
         if not sid:
@@ -54,10 +59,11 @@ class ExamSlotViewSet(viewsets.ModelViewSet):
 
         return qs
 
-class ExaminationViewSet(viewsets.ModelViewSet):
+class ExaminationViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = Examination.objects.all()
     serializer_class = ExaminationSerializer
     permission_classes = [IsAuthenticated]
+    cache_prefix = 'examinations-list'
 
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
@@ -152,10 +158,11 @@ class ExaminationViewSet(viewsets.ModelViewSet):
             "errors": errors
         }, status=status.HTTP_200_OK if (created or updated or not errors) else status.HTTP_400_BAD_REQUEST)
 
-class ResultViewSet(viewsets.ModelViewSet):
+class ResultViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = Result.objects.all()
     serializer_class = ResultSerializer
     permission_classes = [IsAuthenticated]
+    cache_prefix = 'results-list'
 
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
@@ -217,10 +224,11 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return qs
 
-class StudentOverallResultViewSet(viewsets.ModelViewSet):
+class StudentOverallResultViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = StudentOverallResult.objects.all()
     serializer_class = StudentOverallResultSerializer
     permission_classes = [IsAuthenticated]
+    cache_prefix = 'overall-results-list'
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
         if not sid:
@@ -283,6 +291,15 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
         if not exam_type or not classroom_id:
             return Response({"detail": "Missing parameters"}, status=400)
 
+        try:
+            rank_cache_key = make_cache_key(request, 'overall-rank-list')
+        except Exception:
+            rank_cache_key = None
+        if rank_cache_key:
+            rank_cached = safe_cache_get(rank_cache_key)
+            if rank_cached is not None:
+                return Response(rank_cached)
+
         qs = StudentOverallResult.objects.filter(
             examination__school_id=sid,
             examination__exam_type=exam_type,
@@ -298,6 +315,8 @@ class StudentOverallResultViewSet(viewsets.ModelViewSet):
         qs = qs.select_related('student__user', 'examination__classroom')
 
         serializer = self.get_serializer(qs, many=True)
+        if rank_cache_key:
+            safe_cache_set(rank_cache_key, to_plain(serializer.data), DEFAULT_CACHE_TIMEOUT)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])

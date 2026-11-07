@@ -16,6 +16,7 @@ import ImportDialog from '../components/ImportDialog';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { useToast } from '../components/Toast';
 import InputGuidance from '../components/InputGuidance';
+import { sortSections, getActiveClassrooms } from '../utils/classroomUtils';
 
 export default function StudentsPage() {
   const { id } = useParams();
@@ -163,8 +164,7 @@ export default function StudentsPage() {
         return acc;
       }, {}) : {};
 
-      const summary = [...contextClassrooms]
-        .sort((a, b) => (a.id - b.id))
+      const summary = getActiveClassrooms([...contextClassrooms])
         .map(c => ({
           id: c.id,
           name: c.name,
@@ -255,12 +255,13 @@ export default function StudentsPage() {
     if (!selectedClass) return [];
     const raw = (contextSections || []).filter(s => Number(s.classroom?.id ?? s.classroom) === selectedClass);
     const seen = new Set();
-    return raw.filter(s => {
+    const unique = raw.filter(s => {
       const key = `${s.name}`.trim().toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+    return sortSections(unique);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClass, contextSections]);
 

@@ -38,7 +38,7 @@ def get_class_order(class_name):
     Returns a sort tuple (base_rank, is_2027, cleaned_base_name) for sorting classes.
     """
     if not class_name:
-        return (999, 0, '')
+        return (1, 999, '')
 
     n = unicodedata.normalize('NFKC', str(class_name)).strip().lower()
     is_2027 = 1 if ('2027' in n or '২০২৭' in n) else 0
@@ -56,7 +56,7 @@ def get_class_order(class_name):
         if match:
             base_rank = int(match.group(0))
 
-    return (base_rank, is_2027, base_n)
+    return (is_2027, base_rank, base_n)
 
 def get_section_order(section_name):
     """

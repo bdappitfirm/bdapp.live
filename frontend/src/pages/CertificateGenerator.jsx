@@ -29,6 +29,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { useAcademics } from '../context/AcademicsContext';
+import { getActiveClassrooms } from '../utils/classroomUtils';
 import api from '../utils/api';
 import { isAuthenticated } from '../utils/auth';
 import InputGuidance from '../components/InputGuidance';
@@ -912,7 +913,7 @@ export default function CertificateGenerator() {
       {/* Filters Section */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={3}>
-          <Grid size={{ xs: 12, md: 3 }}><FormControl fullWidth><InputLabel>Class</InputLabel><Select id="class-select" value={classFilter} label="Class" onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}>{classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</Select></FormControl></Grid>
+          <Grid size={{ xs: 12, md: 3 }}><FormControl fullWidth><InputLabel>Class</InputLabel><Select id="class-select" value={classFilter} label="Class" onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}>{getActiveClassrooms(classrooms).map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</Select></FormControl></Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <FormControl fullWidth>
               <InputLabel>Section</InputLabel>

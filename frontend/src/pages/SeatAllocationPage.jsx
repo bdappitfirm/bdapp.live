@@ -14,6 +14,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import QRCode from 'qrcode.react';
+import { getActiveClassrooms } from '../utils/classroomUtils';
 
 const BenchSticker = React.memo(({ plan, examName, schoolId }) => {
   const s = plan.student || {};
@@ -194,6 +195,9 @@ const SeatAllocationPage = () => {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
   const [, setExamSlots] = useState([]);
+
+  // চলতি সালের শ্রেণি (যেমন ২০২৭-এর ক্লাস বাদ) — আসন বিন্যাসে শুধু সক্রিয় শ্রেণি দেখানো হবে
+  const activeClassrooms = useMemo(() => getActiveClassrooms(classrooms), [classrooms]);
 
   const toBnDigits = (num) => {
     const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
@@ -620,7 +624,7 @@ const SeatAllocationPage = () => {
                   renderValue={(selected) => {
                     if (selected.length === 0) return 'সকল শ্রেণি (All Classes)';
                     return selected.map(cid => {
-                      const cls = classrooms.find(c => String(c.id) === String(cid));
+                      const cls = activeClassrooms.find(c => String(c.id) === String(cid));
                       return cls ? cls.name : cid;
                     }).join(', ');
                   }}
@@ -628,17 +632,17 @@ const SeatAllocationPage = () => {
                   <MenuItem
                     value="ALL"
                     onClick={() => {
-                      if (selectedClassrooms.length === classrooms.length) {
+                      if (selectedClassrooms.length === activeClassrooms.length) {
                         setSelectedClassrooms([]);
                       } else {
-                        setSelectedClassrooms(classrooms.map(c => c.id));
+                        setSelectedClassrooms(activeClassrooms.map(c => c.id));
                       }
                     }}
                   >
-                    <Checkbox checked={classrooms.length > 0 && selectedClassrooms.length === classrooms.length} />
+                    <Checkbox checked={activeClassrooms.length > 0 && selectedClassrooms.length === activeClassrooms.length} />
                     <ListItemText primary="সকল শ্রেণি (Select All)" />
                   </MenuItem>
-                  {classrooms.map((cls) => (
+                  {activeClassrooms.map((cls) => (
                     <MenuItem key={cls.id} value={cls.id}>
                       <Checkbox checked={selectedClassrooms.indexOf(cls.id) > -1} />
                       <ListItemText primary={cls.name} />

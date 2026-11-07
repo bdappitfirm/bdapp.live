@@ -1,5 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getActiveClassrooms } from '../utils/classroomUtils';
+import { sortSubjectsArray } from '../utils/subjectUtils';
 import {
   Box,
   Typography,
@@ -61,6 +63,7 @@ export default function ExaminationsPage() {
 
   const [examinations, setExaminations] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
+  const activeClassrooms = useMemo(() => getActiveClassrooms(classrooms), [classrooms]);
   const [subjects, setSubjects] = useState([]);
   const [selectedClassroom, setSelectedClassroom] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -133,7 +136,7 @@ export default function ExaminationsPage() {
 
       setExaminations(allExams);
       const subjectsData = Array.isArray(subjectsRes.data) ? subjectsRes.data : (subjectsRes.data?.results || []);
-      setSubjects(subjectsData);
+      setSubjects(sortSubjectsArray(subjectsData));
       const clsData = Array.isArray(classroomsRes.data) ? classroomsRes.data : (classroomsRes.data?.results || []);
       setClassrooms(clsData);
     } catch (error) {
@@ -435,7 +438,7 @@ export default function ExaminationsPage() {
                   }}
                 >
                   <MenuItem value="">সকল শ্রেণি (All Classrooms)</MenuItem>
-                  {classrooms.map((c) => {
+                  {activeClassrooms.map((c) => {
                     const count = examinations.filter(ex => matchExamClassroom(ex, c.id)).length;
                     return (
                       <MenuItem key={c.id} value={String(c.id)}>
@@ -464,7 +467,7 @@ export default function ExaminationsPage() {
 
         {/* Quick Classroom Cards Grid */}
         <Grid container spacing={2} mb={3}>
-          {classrooms.map(c => {
+          {activeClassrooms.map(c => {
             const count = examinations.filter(ex => matchExamClassroom(ex, c.id)).length;
             const isSelected = selectedClassroom?.id === c.id;
             return (
@@ -554,9 +557,9 @@ export default function ExaminationsPage() {
               <Grid item xs={12} md={6}>
                 <Autocomplete
                   multiple
-                  options={classrooms}
+                  options={activeClassrooms}
                   getOptionLabel={(option) => option.name || ''}
-                  value={classrooms.filter(c => bulkForm.classrooms.includes(c.id))}
+                  value={activeClassrooms.filter(c => bulkForm.classrooms.includes(c.id))}
                   onChange={(e, val) => setBulkForm({ ...bulkForm, classrooms: val.map(v => v.id) })}
                   renderInput={(params) => <TextField {...params} label="শ্রেণি নির্বাচন করুন (Classrooms)" />}
                   sx={{ mb: 2 }}
@@ -612,7 +615,7 @@ export default function ExaminationsPage() {
             </TextField>
             <DatePicker label="তারিখ" value={formData.exam_date} onChange={d => setFormData({ ...formData, exam_date: d })} slotProps={{ textField: { fullWidth: true } }} />
             <TextField select label="শ্রেণি" value={formData.classroom} onChange={e => setFormData({ ...formData, classroom: e.target.value })} fullWidth>
-              {classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+              {activeClassrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
             </TextField>
           </Stack></DialogContent>
           <DialogActions><Button onClick={handleDialogClose}>বাতিল</Button><Button variant="contained" onClick={handleSubmit}>সেভ</Button></DialogActions>

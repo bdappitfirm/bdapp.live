@@ -27,6 +27,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import InputGuidance from '../components/InputGuidance';
+import { filterClassroomsByYear } from '../utils/classroomUtils';
 
 const EXAM_TYPE_LABELS = {
   'half_yearly': 'অর্ধবার্ষিক',
@@ -417,7 +418,7 @@ const RankListPage = () => {
               <FormControl fullWidth>
                 <InputLabel id="ranklist-class-label">Class</InputLabel>
                 <Select labelId="ranklist-class-label" id="ranklist-class" value={selectedClass} label="Class" onChange={(e) => setSelectedClass(e.target.value)}>
-                  {classrooms.map(c => <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>)}
+                  {filterClassroomsByYear(classrooms, selectedYear).map(c => <MenuItem key={c.id} value={String(c.id)}>{c.name}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>

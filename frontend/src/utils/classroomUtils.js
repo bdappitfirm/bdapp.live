@@ -36,28 +36,32 @@ export const getClassroomYear = (className) => {
 
 export const filterClassroomsByYear = (classrooms, targetYear) => {
   if (!Array.isArray(classrooms)) return [];
-  if (!targetYear) return classrooms;
-  const targetYearNum = parseInt(String(targetYear), 10);
-  if (Number.isNaN(targetYearNum)) return classrooms;
+  const currentYear = new Date().getFullYear();
+  const yearToFilter = targetYear ? parseInt(String(targetYear), 10) : currentYear;
 
   return classrooms.filter(cls => {
     const clsYear = getClassroomYear(cls?.name);
     if (clsYear === null) return true;
-    return clsYear === targetYearNum;
+    return clsYear === yearToFilter;
   });
 };
 
 export const filterSectionsByYear = (sections, targetYear) => {
   if (!Array.isArray(sections)) return [];
-  if (!targetYear) return sections;
-  const targetYearNum = parseInt(String(targetYear), 10);
-  if (Number.isNaN(targetYearNum)) return sections;
+  const currentYear = new Date().getFullYear();
+  const yearToFilter = targetYear ? parseInt(String(targetYear), 10) : currentYear;
 
   return sections.filter(sec => {
     const secYear = getClassroomYear(sec?.name);
     if (secYear === null) return true;
-    return secYear === targetYearNum;
+    return secYear === yearToFilter;
   });
+};
+
+export const getActiveClassrooms = (classrooms, targetYear) => {
+  if (!Array.isArray(classrooms)) return [];
+  const filtered = filterClassroomsByYear(classrooms, targetYear);
+  return sortClassrooms(filtered);
 };
 
 export const getClassOrder = (className) => {
@@ -82,15 +86,15 @@ export const getClassOrder = (className) => {
   return { baseRank, is2027, baseName };
 };
 
-// দুটি ক্লাস-নামের তুলনা করে -1/0/1 ফেরত দেয় (baseRank → is2027 → localeCompare)
+// দুটি ক্লাস-নামের তুলনা করে -1/0/1 ফেরত দেয় (is2027 → baseRank → localeCompare)
 export const compareClassOrder = (nameA, nameB) => {
   const orderA = getClassOrder(nameA);
   const orderB = getClassOrder(nameB);
-  if (orderA.baseRank !== orderB.baseRank) {
-    return orderA.baseRank - orderB.baseRank;
-  }
   if (orderA.is2027 !== orderB.is2027) {
     return orderA.is2027 - orderB.is2027;
+  }
+  if (orderA.baseRank !== orderB.baseRank) {
+    return orderA.baseRank - orderB.baseRank;
   }
   return String(nameA || '').localeCompare(String(nameB || ''));
 };
@@ -98,6 +102,55 @@ export const compareClassOrder = (nameA, nameB) => {
 export const sortClassrooms = (classrooms) => {
   if (!Array.isArray(classrooms)) return [];
   return [...classrooms].sort((a, b) => compareClassOrder(a?.name, b?.name));
+};
+
+export const getSectionOrder = (sectionName) => {
+  if (!sectionName) return 999;
+  const n = String(sectionName).normalize('NFKC').trim();
+  const lower = n.toLowerCase();
+
+  const clean = lower.replace(/^(শাখা|section)\s*|\s*(শাখা|section)$/gi, '').trim();
+
+  // Check Bengali letters
+  const bnMap = {
+    'ক': 1, 'খ': 2, 'গ': 3, 'ঘ': 4, 'ঙ': 5, 'চ': 6, 'ছ': 7, 'জ': 8
+  };
+  if (bnMap[clean]) return bnMap[clean];
+  if (bnMap[n]) return bnMap[n];
+
+  for (const [key, val] of Object.entries(bnMap)) {
+    if (lower.includes(key)) return val;
+  }
+
+  // Check English single letters (A, B, C, D...)
+  if (clean.length === 1 && clean >= 'a' && clean <= 'z') {
+    return 200 + clean.charCodeAt(0);
+  }
+
+  // Check Numbers (Bangla or English)
+  const bnDigits = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+  const engStr = clean.replace(/[০-৯]/g, d => bnDigits[d] || d);
+  const matchNum = engStr.match(/\d+/);
+  if (matchNum) return 300 + parseInt(matchNum[0], 10);
+
+  // Check Groups
+  if (lower.includes('বিজ্ঞান') || lower.includes('science')) return 401;
+  if (lower.includes('মানবিক') || lower.includes('arts') || lower.includes('humanities')) return 402;
+  if (lower.includes('ব্যবসায়') || lower.includes('ব্যবসায়') || lower.includes('commerce') || lower.includes('business')) return 403;
+
+  return 999;
+};
+
+export const compareSectionOrder = (nameA, nameB) => {
+  const orderA = getSectionOrder(nameA);
+  const orderB = getSectionOrder(nameB);
+  if (orderA !== orderB) return orderA - orderB;
+  return String(nameA || '').localeCompare(String(nameB || ''));
+};
+
+export const sortSections = (sections) => {
+  if (!Array.isArray(sections)) return [];
+  return [...sections].sort((a, b) => compareSectionOrder(a?.name, b?.name));
 };
 
 export const isSecondaryOrHigherClass = (className) => {

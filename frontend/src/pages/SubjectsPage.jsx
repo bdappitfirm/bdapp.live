@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import api from '../utils/api';
+import { sortSubjectsArray } from '../utils/subjectUtils';
 import {
   Box,
   Typography,
@@ -105,7 +106,7 @@ export default function SubjectsPage() {
       ]);
 
       const subjectsData = Array.isArray(subjectRes.data) ? subjectRes.data : subjectRes.data.results || [];
-      setSubjects(subjectsData);
+      setSubjects(sortSubjectsArray(subjectsData));
 
       const classesData = Array.isArray(classRes.data) ? classRes.data : classRes.data.results || [];
       const sortedClasses = sortClassrooms(classesData);

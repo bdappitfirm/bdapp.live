@@ -19,6 +19,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import { scopedGet, scopedPost } from '../utils/schoolApi';
 import { useToast } from '../components/Toast';
 import { useSchool } from '../context/SchoolContext';
+import { sortStudentsByRoll } from '../utils/helpers';
 
 // Simple Row Component without memo to avoid potential HMR issues
 const StudentRow = ({ student, index, handleManualChange }) => {
@@ -230,12 +231,7 @@ export default function ToTListPage() {
       if (targetSec && targetSec !== "") params.section = targetSec;
       const res = await scopedGet('/api/academics/students/', id, params);
       const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-      const sorted = [...data].sort((a, b) => {
-        const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
-        const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-        if (!isNaN(ar) && !isNaN(br)) return ar - br;
-        return String(a?.roll_number).localeCompare(String(b?.roll_number));
-      });
+      const sorted = sortStudentsByRoll(data);
       setStudents(processStudentNames(sorted, subjData));
     } catch (error) {
       toast.error('শিক্ষার্থী তালিকা লোড করতে ব্যর্থ হয়েছে');
