@@ -5,7 +5,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAcademics } from '../context/AcademicsContext';
 import { primaryWrittenMax, primarySpecForSubject } from '../utils/primaryMaxima';
-import { filterClassroomsByYear, filterSectionsByYear } from '../utils/classroomUtils';
+import { filterClassroomsByYear, filterSectionsByYear, sortSections } from '../utils/classroomUtils';
 import {
   Box,
   Typography,
@@ -54,6 +54,16 @@ const isRelSubjLocal = (subjName) => /religion|islam|hindu|buddhist|christian|�
 const BN_2ND_REGEX = /(২য়|২য়|2nd|second|দ্বিতীয়|দ্বিতীয়|\bii\b| 2)/i;
 
 const sumStr = (s) => String(s || '').split('+').reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
+
+// Strict, single source of truth for "does this examination belong to the selected year?".
+// An exam with no resolvable year can never be attributed to a specific year, so it must NOT
+// match any year - otherwise it would leak into every year's report.
+const examMatchesYear = (exam, year) => {
+  if (year === undefined || year === null || year === '') return true;
+  const exY = exam?.year ?? exam?.academic_year ?? null;
+  if (exY === null || exY === undefined || exY === '') return false;
+  return String(exY) === String(year);
+};
 
 const isCoCurricularLocal = (name, isClassNineOrTen) => {
   const subjLower = String(name || '').toLowerCase();
@@ -172,9 +182,9 @@ const inferGroupLocal = (resList, isNT, student = null) => {
         return 'humanities';
     }
 
-    if (comCount > 0) return 'commerce';
+    if (sciCount > 0 && sciCount >= comCount && sciCount >= humCount) return 'science';
+    if (comCount > 0 && comCount >= humCount) return 'commerce';
     if (humCount > 0) return 'humanities';
-    if (sciCount > 0) return 'science';
     return '';
 };
 
@@ -307,6 +317,29 @@ const hasDataEntryLocal = (r) => {
     return hasInput;
 };
 
+// একটি রেজাল্ট কার্ড তখনই তৈরি হবে যখন শিক্ষার্থীর কমপক্ষে এই সংখ্যক বিষয়-পত্রে (>০) নম্বর থাকবে।
+// বাংলা/ইংরেজি ১ম ও ২য় পত্র আলাদা পত্র হিসেবে গণ্য হয় (dedupeAndFillResults-এর মতো একই নিয়ম),
+// তাই "বাংলা ১ম + বাংলা ২য় + গণিত" = ৩টি বিষয়-পত্র - কার্ড তৈরি হবে।
+const MIN_SUBJECTS_WITH_MARKS = 3;
+
+const countSubjectsWithMarks = (results) => {
+    const keys = new Set();
+    (Array.isArray(results) ? results : []).forEach(r => {
+        if (!r) return;
+        if (!hasDataEntryLocal(r)) return;   // ডাটা ইনপুট না থাকলে বাদ (০ নম্বর বাদে)
+        const name = r.subject?.name || r.subject_name || '';
+        let key = normalizeSubjKeyLocal(name);
+        if (!key) return;
+        if (key === 'bangla' || key === 'english') {
+            key = key + (BN_2ND_REGEX.test(String(name)) ? '_p2' : '_p1');
+        }
+        keys.add(key);
+    });
+    return keys.size;
+};
+
+const hasEnoughSubjectsWithMarks = (results) => countSubjectsWithMarks(results) >= MIN_SUBJECTS_WITH_MARKS;
+
 const getExpectedSubjectsLocal = (studentGroup, isNT, classSubjs, classAssignedSubjs, validSubjKeys = null) => {
     // Only subjects that ACTUALLY EXIST for this class count as "expected", i.e. the subjects the
     // class teaches (classAssignedSubjs) plus whatever subjects already have results (classSubjs).
@@ -349,7 +382,17 @@ export default function ResultCardGenerator() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
-  const { classrooms, subjects: contextSubjects, refreshClassrooms } = useAcademics();
+  const {
+    classrooms,
+    sections: contextSections,
+    students: contextStudents,
+    subjects: contextSubjects,
+    examinations: contextExaminations,
+    refreshClassrooms,
+    refreshSections,
+    refreshStudents,
+    refreshExaminations
+  } = useAcademics();
   
   const [examTypes] = useState([
     { value: 'half_yearly', label: 'অর্ধবার্ষিক' },
@@ -364,7 +407,6 @@ export default function ResultCardGenerator() {
   ]);
   const [selectedExamType, setSelectedExamType] = useState('');
   const [examinations, setExaminations] = useState([]);
-  // classrooms state removed, using context
   const [selectedClass, setSelectedClass] = useState('');
   const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState('');
@@ -388,8 +430,87 @@ export default function ResultCardGenerator() {
   const [translatedData, setTranslatedData] = useState(null);
   const [layout, setLayout] = useState('standard');
 
-
   const isMounted = React.useRef(true);
+
+  // Reactive Instant Section/Student/Exam resolution from memory cache (0ms latency!)
+  const availableSections = useMemo(() => {
+    if (!selectedClass) return [];
+    const classIdStr = String(selectedClass);
+    const cls = classrooms.find(c => String(c.id) === classIdStr);
+    const fromClass = (cls && Array.isArray(cls.sections)) ? cls.sections : [];
+    const fromContext = (contextSections || []).filter(sec => {
+      const secClassId = String(sec.classroom?.id || sec.classroom || '');
+      return secClassId === classIdStr;
+    });
+    // Local state acts as a network-refreshed fallback so a newly added section still shows
+    // even before the cached context catches up.
+    const fromLocal = (sections || []).filter(sec => {
+      const secClassId = String(sec.classroom?.id || sec.classroom || '');
+      return !sec.classroom || secClassId === classIdStr;
+    });
+    const seen = new Set();
+    const merged = [];
+    [...fromClass, ...fromContext, ...fromLocal].forEach(sec => {
+      const key = String(sec?.id ?? sec?.name ?? '');
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(sec);
+    });
+    return sortSections(merged);
+  }, [selectedClass, classrooms, contextSections, sections]);
+
+  const availableStudents = useMemo(() => {
+    if (!selectedClass) return [];
+    const classIdStr = String(selectedClass);
+    const secIdStr = selectedSection ? String(selectedSection) : '';
+
+    let list = (contextStudents || []).filter(s => {
+      const sClassId = String(s.classroom?.id || s.classroom || '');
+      if (sClassId !== classIdStr) return false;
+      if (secIdStr) {
+        const sSecId = String(s.section?.id || s.section || '');
+        if (sSecId !== secIdStr) return false;
+      }
+      return true;
+    });
+
+    if (list.length === 0 && (students || []).length > 0) {
+      list = (students || []).filter(s => {
+        const sClassId = String(s.classroom?.id || s.classroom || '');
+        if (sClassId !== classIdStr) return false;
+        if (secIdStr) {
+          const sSecId = String(s.section?.id || s.section || '');
+          return sSecId === secIdStr;
+        }
+        return true;
+      });
+    }
+
+    return [...list].sort((a, b) => {
+      const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+      const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+      const aNum = Number.isNaN(ar) ? null : ar;
+      const bNum = Number.isNaN(br) ? null : br;
+      if (aNum !== null && bNum !== null) return aNum - bNum;
+      const as = String(a?.roll_number ?? '');
+      const bs = String(b?.roll_number ?? '');
+      return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }, [selectedClass, selectedSection, contextStudents, students]);
+
+  const classExaminations = useMemo(() => {
+    if (!selectedClass) return [];
+    // Strict: a candidate exam must belong to the selected class AND the selected year.
+    // Only when the context list yields nothing do we consider the class-scoped fetch -
+    // and that fallback is held to the exact same class + year rule (never a looser one).
+    const matchesClassAndYear = (ex) =>
+      getClassroomId(ex.classroom) === selectedClass && examMatchesYear(ex, selectedYear);
+    let list = (contextExaminations || []).filter(matchesClassAndYear);
+    if (list.length === 0 && (examinations || []).length > 0) {
+      list = (examinations || []).filter(matchesClassAndYear);
+    }
+    return list;
+  }, [selectedClass, selectedYear, contextExaminations, examinations]);
 
   const isClassNineOrTen = useMemo(() => {
     const cls = classrooms.find(c => String(c.id) === String(selectedClass));
@@ -426,26 +547,10 @@ export default function ResultCardGenerator() {
   const calculateStudentRank = useCallback(async (studentId, listResults = null, overrideSectionId = null) => {
     try {
         const targetSectionId = overrideSectionId || selectedSection;
-        let allResults = listResults;
-        if (!allResults) {
-            let page = 1, hasNext = true, fetched = [];
-            while (hasNext && page <= 25) {
-                const res = await scopedGet('/api/results/results/', id, {
-                    classroom: selectedClass,
-                    section: targetSectionId,
-                    year: selectedYear,
-                    page,
-                    page_size: 500
-                });
-                const data = res.data;
-                const arr = Array.isArray(data) ? data : (data.results || []);
-                fetched = fetched.concat(arr);
-                if (data.next) page++; else hasNext = false;
-            }
-            allResults = fetched;
-        }
-
-        if (allResults.length === 0) return null;
+        // Strict: rank is computed only from the results of the selected exam.
+        // Re-querying without an examination mixed in every other exam's results.
+        const allResults = listResults;
+        if (!Array.isArray(allResults) || allResults.length === 0) return null;
 
         const isNT = isClassNineOrTen;
 
@@ -734,11 +839,10 @@ export default function ResultCardGenerator() {
 
   useEffect(() => {
     if (!id) return;
-    refreshClassrooms(id)
-      .then(data => {
-        // success
-      })
-      .catch(() => {});
+    refreshClassrooms(id).catch(() => {});
+    refreshSections(id).catch(() => {});
+    refreshStudents(id).catch(() => {});
+    refreshExaminations(id).catch(() => {});
     loadSchool();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -891,6 +995,15 @@ export default function ResultCardGenerator() {
   }, [school, overrideLogo]);
 
 
+  const sortByRollLocal = (list) => [...list].sort((a, b) => {
+    const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+    const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+    const aNum = Number.isNaN(ar) ? null : ar;
+    const bNum = Number.isNaN(br) ? null : br;
+    if (aNum !== null && bNum !== null) return aNum - bNum;
+    return String(a?.roll_number ?? '').localeCompare(String(b?.roll_number ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+  });
+
   const handleClassChange = (classIdRaw) => {
     const parsed = parseInt(classIdRaw, 10);
     const classId = Number.isNaN(parsed) ? '' : parsed;
@@ -901,63 +1014,56 @@ export default function ResultCardGenerator() {
     setResults([]);
     setOverallResult(null);
     setSelectedSection('');
-    
+    setStudents([]);
+    setExaminations([]);
+
     if (!classId) {
-      setStudents([]);
-      setExaminations([]);
       setSections([]);
       return;
     }
-    
-    // Load sections for this class
-    scopedGet('/api/academics/sections/', id, { classroom: classId }, { timeout: 15000 })
-      .then(res => {
-        const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
-        setSections(data);
-        if (data.length === 0) {
-          scopedGet('/api/academics/students/', id, { classroom: classId }, { timeout: 15000 })
-            .then(r => {
-              const list = Array.isArray(r.data) ? r.data : r.data?.results || [];
-              const sorted = [...list].sort((a, b) => {
-                const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
-                const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-                const aNum = Number.isNaN(ar) ? null : ar;
-                const bNum = Number.isNaN(br) ? null : br;
-                if (aNum !== null && bNum !== null) return aNum - bNum;
-                const as = String(a?.roll_number ?? '');
-                const bs = String(b?.roll_number ?? '');
-                return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
-              });
-              setStudents(sorted);
-            })
-            .catch(() => setStudents([]));
-        }
-      })
-      .catch(() => setSections([]));
-    
-    // Do not load students yet; wait for section selection
-    setStudents([]);
-    
-    // Load examinations for this class only
-    scopedGet('/api/results/examinations/', id, { classroom: classId, page_size: 100 }, { timeout: 15000 })
-      .then(res => {
-        const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        let classExams = data.filter(exam => getClassroomId(exam.classroom) === classId);
 
-        // Apply year filter on frontend if needed
-        if (selectedYear) {
-            const yStr = String(selectedYear);
-            classExams = classExams.filter(ex => {
-                const exY = String(ex.year || ex.academic_year || '');
-                return !exY || exY === yStr || ex.name?.includes(yStr);
-            });
-        }
+    const classIdStr = String(classId);
+
+    // 1) Seed the lists INSTANTLY from the academics context (already hydrated from
+    //    IndexedDB cache), so section / student / exam selects populate on the same tick.
+    const cls = classrooms.find(c => String(c.id) === classIdStr);
+    const ctxSecs = (cls && Array.isArray(cls.sections) && cls.sections.length > 0)
+      ? cls.sections
+      : (contextSections || []).filter(sec => String(sec.classroom?.id || sec.classroom || '') === classIdStr);
+    if (ctxSecs.length > 0) setSections(ctxSecs);
+
+    const ctxStu = sortByRollLocal((contextStudents || []).filter(s => String(s.classroom?.id || s.classroom || '') === classIdStr));
+    if (ctxStu.length > 0) setStudents(ctxStu);
+
+    const ctxExams = (contextExaminations || []).filter(ex =>
+      getClassroomId(ex.classroom) === classId && examMatchesYear(ex, selectedYear));
+    setExaminations(ctxExams);
+
+    // 2) Silent background refresh (never blocks the UI) so the lists stay current.
+    Promise.all([
+      scopedGet('/api/academics/sections/', id, { classroom: classId }, { timeout: 10000 }).catch(() => null),
+      scopedGet('/api/academics/students/', id, { classroom: classId, page_size: 2000 }, { timeout: 15000 }).catch(() => null),
+      scopedGet('/api/results/examinations/', id, { classroom: classId, page_size: 100 }, { timeout: 10000 }).catch(() => null)
+    ]).then(([secRes, stuRes, exRes]) => {
+      if (!isMounted.current) return;
+
+      if (secRes) {
+        const data = Array.isArray(secRes.data) ? secRes.data : secRes.data?.results || [];
+        if (data.length > 0) setSections(data);
+      }
+
+      if (stuRes) {
+        const list = Array.isArray(stuRes.data) ? stuRes.data : stuRes.data?.results || [];
+        setStudents(sortByRollLocal(list));
+      }
+
+      if (exRes) {
+        const data = Array.isArray(exRes.data) ? exRes.data : exRes.data?.results || [];
+        const classExams = data.filter(exam =>
+          getClassroomId(exam.classroom) === classId && examMatchesYear(exam, selectedYear));
         setExaminations(classExams);
-      })
-      .catch(err => {
-        console.error('Error loading examinations:', err);
-        toast.error('Failed to load examinations');
-      });
+      }
+    }).catch(() => {});
   };
 
   useEffect(() => {
@@ -965,15 +1071,8 @@ export default function ResultCardGenerator() {
       scopedGet('/api/results/examinations/', id, { classroom: selectedClass, page_size: 100 }, { timeout: 15000 })
         .then(res => {
           const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-          let classExams = data.filter(exam => getClassroomId(exam.classroom) === selectedClass);
-
-          if (selectedYear) {
-              const yStr = String(selectedYear);
-              classExams = classExams.filter(ex => {
-                  const exY = String(ex.year || ex.academic_year || '');
-                  return !exY || exY === yStr || ex.name?.includes(yStr);
-              });
-          }
+          const classExams = data.filter(exam =>
+            getClassroomId(exam.classroom) === selectedClass && examMatchesYear(exam, selectedYear));
           setExaminations(classExams);
         })
         .catch(() => setExaminations([]));
@@ -986,13 +1085,13 @@ export default function ResultCardGenerator() {
     const s = String(type || '').toLowerCase();
     const combined = (examStr + ' ' + s).trim();
 
-    if (/(প্রাক|pre)/.test(combined)) return 'pre_test';
-    if (/(বার্ষিক|final|annual|yearly)/.test(combined)) return 'annual';
-    if (/(অর্ধ|half|mid|semi)/.test(combined)) return 'half_yearly';
-    if (/(টার্মিনাল|terminal|term)/.test(combined)) return 'terminal';
-    if (/(মডেল|model)/.test(combined)) return 'model';
-    if (/(প্রথম\s*টার্ম|first\s*term)/.test(combined)) return 'first_term';
-    if (/(টেস্ট|test|monthly)/.test(combined)) return 'test';
+    if (/(প্রাক[-_\s]?নির্বাচনী|pre[-_\s]?test)/i.test(combined)) return 'pre_test';
+    if (/(অর্ধ[-_\s]?বার্ষিক|half[-_\s]?yearly|mid|semi)/i.test(combined)) return 'half_yearly';
+    if (/(বার্ষিক|final|annual|yearly)/i.test(combined)) return 'annual';
+    if (/(মডেল|model)/i.test(combined)) return 'model';
+    if (/(প্রথম\s*সাময়িক|first\s*term)/i.test(combined)) return 'first_term';
+    if (/(টার্মিনাল|terminal|term)/i.test(combined)) return 'terminal';
+    if (/(টেস্ট|test|monthly|নির্বাচনী)/i.test(combined)) return 'test';
 
     if (['final','annual','yearly'].includes(s)) return 'annual';
     if (['half','half_yearly','mid','half-yearly'].includes(s)) return 'half_yearly';
@@ -1004,11 +1103,13 @@ export default function ResultCardGenerator() {
     return s || examStr || 'annual';
   };
 
-  const getClassroomId = (cls) => {
+  // Function declaration (not a const arrow) so it is hoisted and safe to use from the
+  // memos declared earlier in the component body (avoids TDZ "before initialization").
+  function getClassroomId(cls) {
     const v = typeof cls === 'object' ? (cls?.id ?? null) : cls;
     const parsedNum = parseInt(v, 10);
     return Number.isNaN(parsedNum) ? null : parsedNum;
-  };
+  }
   const normalizeLower = (s) => String(s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
   const canonicalLower = (s) => {
     const cleanText = normalizeLower(s).replace(/\u200d/g, '').trim();
@@ -1518,11 +1619,14 @@ export default function ResultCardGenerator() {
     setLoading(true);
     setForceLanguage(targetLang);
     setTranslatedData(null);
+    // Drop any previously rendered bulk cards so only one card exists in the DOM
+    // (printing / PDF export then renders a single page instead of the whole batch).
+    setBulkCards([]);
 
     try {
       const selType = normalizeExamType(selectedExamType);
       // Get student details
-      const studentRes = await api.get(`/api/academics/students/${selectedStudent}/`);
+      const studentRes = await api.get(`/api/academics/students/${selectedStudent}/`, { timeout: 15000 });
       const student = studentRes.data;
       const stuSectionId = student.section?.id || student.section || selectedSection;
 
@@ -1531,47 +1635,20 @@ export default function ResultCardGenerator() {
 
       let matchingExams = [];
       if (examIdOverride) {
-        const exRes = await api.get(`/api/results/examinations/${examIdOverride}/`, { params: { school: id } });
+        const exRes = await api.get(`/api/results/examinations/${examIdOverride}/`, { params: { school: id }, timeout: 15000 });
         const ex = exRes.data;
         matchingExams = ex ? [ex] : [];
       } else {
         matchingExams = examinations.filter(exam =>
           normalizeExamType(exam.exam_type, exam.name) === selType && 
-          getClassroomId(exam.classroom) === selectedClass
+          getClassroomId(exam.classroom) === selectedClass &&
+          examMatchesYear(exam, effectiveYear)
         );
       }
 
+      // No cross-exam fallback: only examinations matching the selected exam type
+      // are ever used. If there is no such examination, the card stays empty.
       if (matchingExams.length === 0) {
-        // Fallback: try by regex on names within class
-        const fallbackExams = examinations.filter(ex => getClassroomId(ex.classroom) === selectedClass);
-        let alt = [];
-        const sel = normalizeExamType(selectedExamType);
-        if (sel === 'annual') alt = fallbackExams.filter(ex => /(বার্ষিক|final|annual)/i.test(String(ex.name || '')));
-        else if (sel === 'half_yearly') alt = fallbackExams.filter(ex => /(অর্ধ|half|mid)/i.test(String(ex.name || '')));
-        else if (sel === 'terminal') alt = fallbackExams.filter(ex => /(টার্মিনাল|terminal|term)/i.test(String(ex.name || '')));
-        else if (sel === 'model') alt = fallbackExams.filter(ex => /(মডেল|model)/i.test(String(ex.name || '')));
-        else if (sel === 'test') alt = fallbackExams.filter(ex => /(টেস্ট|test|monthly)/i.test(String(ex.name || '')));
-        else if (sel === 'first_term') alt = fallbackExams.filter(ex => /(first\s*term|প্রথম\s*টার্ম)/i.test(String(ex.name || '')));
-
-        if (alt.length > 0) {
-          matchingExams = alt;
-        } else if (fallbackExams.length > 0) {
-          // If still no match by name but we have exams for this class, just use the latest one
-          matchingExams = [fallbackExams.sort((a, b) => new Date(b.exam_date || 0) - new Date(a.exam_date || 0))[0]];
-        } else {
-          // Fallback 2: derive exam from student's existing results
-          try {
-            const rs = await scopedGet('/api/results/results/', id, { student: student.id, page_size: 100 }, { timeout: 20000 });
-            const arr = Array.isArray(rs.data) ? rs.data : (rs.data?.results || []);
-            const examIds = Array.from(new Set(arr.map(r => (typeof r.examination === 'object' ? r.examination?.id : r.examination)).filter(Boolean)));
-            if (examIds.length > 0) {
-                const exRes = await api.get(`/api/results/examinations/${examIds[0]}/`, { params: { school: id } });
-                if (exRes.data) matchingExams = [exRes.data];
-            }
-          } catch (_) {}
-        }
-
-        if (matchingExams.length === 0) {
           setStudentData(null);
           setResults([]);
           setOverallResult(null);
@@ -1580,11 +1657,10 @@ export default function ResultCardGenerator() {
           setLoading(false);
           return;
         }
-      }
 
       if (examIdOverride) {
         try {
-          const overrideExRes = await api.get(`/api/results/examinations/${examIdOverride}/`, { params: { school: id } });
+          const overrideExRes = await api.get(`/api/results/examinations/${examIdOverride}/`, { params: { school: id }, timeout: 15000 });
           const overrideEx = overrideExRes.data;
           if (overrideEx) {
             matchingExams = [overrideEx];
@@ -1639,7 +1715,7 @@ export default function ResultCardGenerator() {
 
       let chosenExam = null;
       try {
-        const examResList = await Promise.all(matchingExams.map(ex => api.get(`/api/results/examinations/${ex.id}/`, { params: { school: id } }).then(r => r.data).catch(() => null)));
+        const examResList = await Promise.all(matchingExams.map(ex => api.get(`/api/results/examinations/${ex.id}/`, { params: { school: id }, timeout: 15000 }).then(r => r.data).catch(() => null)));
         const valid = examResList.filter(Boolean);
         if (examIdOverride && valid.length > 0) {
           chosenExam = valid.find(v => String(v.id) === String(examIdOverride)) || valid[0];
@@ -1690,28 +1766,8 @@ export default function ResultCardGenerator() {
         } catch (_) {}
       }
 
-      if (fetchedResults.length === 0) {
-        try {
-          const params = { student: student.id, classroom: selectedClass, page_size: 1000 };
-          const p1 = scopedGet('/api/results/results/', id, params, { timeout: 15000 }).catch(() => null);
-          const p2 = api.get('/api/results/results/', { params: { ...params, school: id }, timeout: 15000 }).catch(() => null);
-          const [resultsRes, directRes] = await Promise.all([p1, p2]);
-          const arr1 = resultsRes ? (Array.isArray(resultsRes.data) ? resultsRes.data : (resultsRes.data?.results || [])) : [];
-          const arr2 = directRes ? (Array.isArray(directRes.data) ? directRes.data : (directRes.data?.results || [])) : [];
-          const combined = arr1.concat(arr2);
-          if (combined.length) {
-            const seen = new Set();
-            const deduped = [];
-            for (const r of combined) {
-              const k = String(r.id || `${r.examination?.id||r.examination}-${r.student?.id||r.student}-${r.subject?.id||r.subject}`);
-              if (!seen.has(k)) { seen.add(k); deduped.push(r); }
-            }
-            fetchedResults = deduped;
-          }
-        } catch (_) {}
-      }
-
-
+      // No cross-exam fallback: results are only ever taken for the matched
+      // examination ids, so an empty exam correctly yields an empty card.
 
       // Fetch Section Results for the chosen examination(s)
       let sectionResults = [];
@@ -1728,24 +1784,8 @@ export default function ResultCardGenerator() {
               const arr = Array.isArray(sectionResultsRes.data) ? sectionResultsRes.data : (sectionResultsRes.data?.results || []);
               allSecRes = allSecRes.concat(arr);
           }
-          if (allSecRes.length === 0 && chosenExam) {
-              const sectionResultsRes = await scopedGet('/api/results/results/', id, {
-                  examination: chosenExam.id,
-                  classroom: selectedClass,
-                  section: stuSectionId,
-                  page_size: 10000
-              }, { timeout: 20000 });
-              allSecRes = Array.isArray(sectionResultsRes.data) ? sectionResultsRes.data : (sectionResultsRes.data?.results || []);
-          }
-          if (allSecRes.length === 0) {
-              const sectionResultsRes = await scopedGet('/api/results/results/', id, {
-                  classroom: selectedClass,
-                  section: stuSectionId,
-                  year: effectiveYear,
-                  page_size: 10000
-              }, { timeout: 20000 });
-              allSecRes = Array.isArray(sectionResultsRes.data) ? sectionResultsRes.data : (sectionResultsRes.data?.results || []);
-          }
+          // No exam-less fallback: section results are only valid when they come
+          // from the examination(s) that match the selected exam type.
           sectionResults = allSecRes;
 
           validSubjKeys = new Set();
@@ -1796,14 +1836,13 @@ export default function ResultCardGenerator() {
               const rid = (typeof r.examination === 'object' && r.examination !== null)
                 ? String(r.examination?.id || r.examination?.examination_id || '')
                 : String(r.examination || r.examination_id || '');
-              return !rid || targetExamIds.has(rid);
+              // Strict: a row that cannot be tied to the selected examination is dropped.
+              return !!rid && targetExamIds.has(rid);
             })
-          : fetchedResults;
+          : [];
 
-        let useResults = strictFiltered;
-        if (useResults.length === 0 && fetchedResults.length > 0) {
-          useResults = fetchedResults;
-        }
+        // Strict: never substitute results coming from another examination.
+        const useResults = strictFiltered;
 
         const classSubjs = new Set(useResults.map(r => r.subject?.name || r.subject_name));
         const group = getStudentAcademicGroup(student, studentData, useResults);
@@ -1814,12 +1853,22 @@ export default function ResultCardGenerator() {
         if (examIdOverride && merged.length === 0) {
           toast.warning('এই নির্দিষ্ট পরীক্ষার জন্য এখনো রেজাল্ট ইনপুট দেওয়া হয়নি। অনুগ্রহ করে ফলাফল পৃষ্ঠায় গিয়ে নাম্বার ইনপুট দিন।');
         }
+
+        // কার্ড তখনই তৈরি হবে যখন শিক্ষার্থীর কমপক্ষে তিনটি বিষয়ে ০-এর চেয়ে বেশি নম্বর আছে।
+        if (!hasEnoughSubjectsWithMarks(merged)) {
+          toast.warning('এই শিক্ষার্থীর ন্যূনতম তিনটি বিষয়ে নম্বর নেই, তাই রেজাল্ট কার্ড তৈরি করা যায়নি।');
+          setStudentData(null);
+          setResults([]);
+          setOverallResult(null);
+          setLoading(false);
+          return;
+        }
         setResults(merged);
 
         if (!examIdOverride) {
           const usedExamIds = Array.from(new Set(merged.map(r => typeof r.examination === 'object' ? r.examination?.id : r.examination).filter(Boolean)));
           try {
-            const usedExamObjs = await Promise.all(usedExamIds.map(eid => api.get(`/api/results/examinations/${eid}/`, { params: { school: id } }).then(r => r.data).catch(() => null)));
+            const usedExamObjs = await Promise.all(usedExamIds.map(eid => api.get(`/api/results/examinations/${eid}/`, { params: { school: id }, timeout: 15000 }).then(r => r.data).catch(() => null)));
             const validUsed = usedExamObjs.filter(Boolean).sort((a, b) => new Date(b.exam_date || 0) - new Date(a.exam_date || 0));
             if (validUsed[0]) setExamination(validUsed[0]);
           } catch (_) {}
@@ -1843,7 +1892,8 @@ export default function ResultCardGenerator() {
                 school: id,
                 year: selectedYear,
                 page_size: 2000
-              }
+              },
+              timeout: 25000
             });
             const list = Array.isArray(listRes.data) ? listRes.data : (listRes.data?.results || []);
 
@@ -1910,13 +1960,16 @@ export default function ResultCardGenerator() {
 
         if (!overall && exId) {
           try {
-            const res = await api.get('/api/results/overall/', { params: { student: student.id, examination: exId } });
+            const res = await api.get('/api/results/overall/', { params: { student: student.id, examination: exId }, timeout: 15000 });
             const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-            if (list[0]) {
+            // Never trust `list[0]`: pick the row that actually belongs to this student so a
+            // stale/unfiltered response can't leak another student's total onto the card.
+            const row = list.find(o => String((o.student && typeof o.student === 'object') ? (o.student.id ?? '') : (o.student ?? o.student_id ?? '')) === String(student.id)) || (list.length === 1 ? list[0] : null);
+            if (row) {
               overall = {
-                percentage: list[0].percentage, rank: Number(list[0].rank || list[0].position || 0) || null,
-                is_passed: list[0].is_passed, total_marks_obtained: list[0].total_marks_obtained,
-                total_marks_possible: list[0].total_marks_possible, cgpa: list[0].cgpa, grade: list[0].grade
+                percentage: row.percentage, rank: Number(row.rank || row.position || 0) || null,
+                is_passed: row.is_passed, total_marks_obtained: row.total_marks_obtained,
+                total_marks_possible: row.total_marks_possible, cgpa: row.cgpa, grade: row.grade
               };
             }
           } catch (_) {}
@@ -1939,14 +1992,13 @@ export default function ResultCardGenerator() {
       }
 
       if (overall) {
-          // Only recalculate rank if the combined_rank_list_by_exam_type flow did NOT already provide
-          // a frontend-sorted rank (that list uses the exact Merit List exam-specific pool).
-          if (overall.rank == null || overall.rank_in_section == null) {
-              const newRank = await calculateStudentRank(student.id, sectionResults.length > 0 ? sectionResults : null, stuSectionId);
-              if (newRank) {
-                  overall.rank = newRank;
-                  overall.rank_in_section = newRank;
-              }
+          // Always derive the merit from the raw exam results so the Result Card agrees with
+          // the Merit List / Class Results. The combined list's stored order/total is built from
+          // an all-subject sum and can disagree, so it is only a fallback now.
+          const newRank = await calculateStudentRank(student.id, sectionResults.length > 0 ? sectionResults : null, stuSectionId);
+          if (newRank) {
+              overall.rank = newRank;
+              overall.rank_in_section = newRank;
           }
       }
 
@@ -1965,20 +2017,20 @@ export default function ResultCardGenerator() {
             examination_name: `${examination?.academic_year || ''} ${examination?.name || ''}`.trim(),
             subjects: fetchedResults.map(r => r.subject?.name || r.subject_name)
           };
-          const transRes = await api.post('/api/results/overall/translate_card/', payload);
+          const transRes = await api.post('/api/results/overall/translate_card/', payload, { timeout: 60000 });
           setTranslatedData(transRes.data);
         } catch (_) { toast.error('AI অনুবাদ ব্যর্থ হয়েছে'); } finally { setIsTranslating(false); }
       }
 
       try {
-        const historyRes = await api.get('/api/academics/students/history/', { params: { school: id, year: selectedYear, student_id: student.id } });
+        const historyRes = await api.get('/api/academics/students/history/', { params: { school: id, year: selectedYear, student_id: student.id }, timeout: 15000 });
         const records = Array.isArray(historyRes.data) ? historyRes.data : (historyRes.data?.results || []);
         const me = records.find(r => String(r.student?.id || r.student) === String(student.id));
         if (me && me.roll_number) setStudentData(prev => ({ ...prev, student: { ...prev.student, promoted_roll: me.roll_number } }));
       } catch (_) {}
 
       try {
-        const attRes = await api.get('/api/attendance/summaries/', { params: { student: student.id, year: effectiveYear, school: id } });
+        const attRes = await api.get('/api/attendance/summaries/', { params: { student: student.id, year: effectiveYear, school: id }, timeout: 15000 });
         const summaries = Array.isArray(attRes.data) ? attRes.data : (attRes.data?.results || []);
         if (summaries && summaries[0]) setStudentData(prev => ({ ...prev, attendance_summary: summaries[0] }));
       } catch (_) {}
@@ -1994,10 +2046,9 @@ export default function ResultCardGenerator() {
       toast.warning('Please generate a result card first');
       return;
     }
-    toast.info('Opening print dialog...');
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       window.print();
-    }, 100);
+    });
   };
 
   const handleDownloadPDF = async () => {
@@ -2067,16 +2118,14 @@ export default function ResultCardGenerator() {
 
   const buildCardForStudent = async (stuId, preFetchedStudent = null, preFetchedResults = null, preFetchedOverall = null, sectionSubjs = null, validSubjKeys = null, preFetchedAttendance = null) => {
     try {
-      const student = preFetchedStudent || (await api.get(`/api/academics/students/${stuId}/`).then(r => r.data).catch(() => ({ id: stuId })));
+      const student = preFetchedStudent || (await api.get(`/api/academics/students/${stuId}/`, { timeout: 15000 }).then(r => r.data).catch(() => ({ id: stuId })));
       const selType = normalizeExamType(selectedExamType);
-      let matchingExams = Array.isArray(examinations) ? examinations.filter(exam =>
+      const examPool = classExaminations;
+      let matchingExams = Array.isArray(examPool) ? examPool.filter(exam =>
         normalizeExamType(exam.exam_type, exam.name) === selType &&
-        getClassroomId(exam.classroom) === selectedClass
+        getClassroomId(exam.classroom) === selectedClass &&
+        examMatchesYear(exam, selectedYear)
       ) : [];
-
-      if (matchingExams.length === 0 && Array.isArray(examinations) && examinations.length > 0) {
-        matchingExams = [examinations[0]];
-      }
 
       if (matchingExams.length > 1) {
         const bulkScored = [];
@@ -2148,13 +2197,8 @@ export default function ResultCardGenerator() {
             }
           } catch (_) {}
         }
-        if (fetchedResults.length === 0) {
-          try {
-            const r = await scopedGet('/api/results/results/', id, { student: stuId, page_size: 2000 }, { timeout: 20000 });
-            const arr = Array.isArray(r.data) ? r.data : (r.data?.results || r.data?.data || []);
-            if (arr.length > 0) fetchedResults = arr;
-          } catch (_) {}
-        }
+        // No per-student fallback: fetching results without an examination would
+        // pull in every exam the student has ever taken.
       }
 
       // Fill missing subjects for bulk cards
@@ -2169,9 +2213,10 @@ export default function ResultCardGenerator() {
             const rid = (typeof r.examination === 'object' && r.examination !== null)
               ? String(r.examination?.id || r.examination?.examination_id || '')
               : String(r.examination || r.examination_id || '');
-            return !rid || bulkTargetExamIds.has(rid);
+            // Strict: a row that cannot be tied to the selected examination is dropped.
+            return !!rid && bulkTargetExamIds.has(rid);
           })
-        : fetchedResults;
+        : [];
 
       const bulkUseResults = bulkStrictFiltered;
 
@@ -2181,11 +2226,12 @@ export default function ResultCardGenerator() {
          try {
            const res = await api.get('/api/results/overall/', { params: { student: stuId, examination: matchingExams[0].id } });
            const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-           if (list[0]) {
+           const row = list.find(o => String((o.student && typeof o.student === 'object') ? (o.student.id ?? '') : (o.student ?? o.student_id ?? '')) === String(stuId)) || (list.length === 1 ? list[0] : null);
+           if (row) {
              overall = {
-               percentage: list[0].percentage, rank: Number(list[0].rank || 0), is_passed: list[0].is_passed,
-               total_marks_obtained: list[0].total_marks_obtained, total_marks_possible: list[0].total_marks_possible,
-               cgpa: list[0].cgpa, grade: list[0].grade
+               percentage: row.percentage, rank: Number(row.rank || 0), is_passed: row.is_passed,
+               total_marks_obtained: row.total_marks_obtained, total_marks_possible: row.total_marks_possible,
+               cgpa: row.cgpa, grade: row.grade
              };
            }
          } catch (_) {}
@@ -2215,21 +2261,20 @@ export default function ResultCardGenerator() {
       toast.error('শ্রেণি ও পরীক্ষার ধরন নির্বাচন করুন');
       return;
     }
-    if (!Array.isArray(students) || students.length === 0) {
+    // Use the instantly-resolved (context-backed) student list so bulk generation does not
+    // depend on a finished network round-trip. It is already filtered by the selected section.
+    const sourceStudents = availableStudents;
+    if (!Array.isArray(sourceStudents) || sourceStudents.length === 0) {
       toast.error('এই সেকশনে কোনো শিক্ষার্থী পাওয়া যায়নি');
       return;
     }
     setBulkLoading(true);
     setBulkCards([]);
+    setStudentData(null);
     setForceLanguage(targetLang);
 
     try {
-      const sectionList = selectedSection
-        ? students.filter(s => {
-            const secId = (typeof s.section === 'object') ? (s.section?.id ?? s.section?.section_id) : (s.section_id ?? s.section);
-            return String(secId || '') === String(selectedSection);
-          })
-        : students;
+      const sectionList = sourceStudents;
 
       if (sectionList.length === 0) {
         toast.error(selectedSection ? 'এই সেকশনে কোনো শিক্ষার্থী পাওয়া যায়নি' : 'এই শ্রেণিতে কোনো শিক্ষার্থী পাওয়া যায়নি');
@@ -2243,20 +2288,17 @@ export default function ResultCardGenerator() {
       const [rRes, oRes, aRes] = await Promise.all([
         scopedGet('/api/results/results/', id, { classroom: selectedClass, section: selectedSection, exam_type: normalizedSelType, year: selectedYear, page_size: 10000 }, { timeout: 25000 }).catch(() => ({ data: [] })),
         api.get('/api/results/overall/combined_rank_list_by_exam_type/', {
-          params: { exam_type: normalizedSelType, classroom: selectedClass, section: selectedSection, school: id, year: selectedYear, page_size: 2000 }
+          params: { exam_type: normalizedSelType, classroom: selectedClass, section: selectedSection, school: id, year: selectedYear, page_size: 2000 },
+          timeout: 25000
         }).catch(() => ({ data: [] })),
         api.get('/api/attendance/summaries/get_by_section/', {
           params: { classroom: selectedClass, section: selectedSection, year: selectedYear, school: id }
         }).catch(() => ({ data: [] }))
       ]);
 
-      let rList = Array.isArray(rRes.data) ? rRes.data : (rRes.data?.results || []);
-      if (rList.length === 0) {
-        try {
-          const fallbackRes = await scopedGet('/api/results/results/', id, { classroom: selectedClass, section: selectedSection, year: selectedYear, page_size: 10000 }, { timeout: 25000 });
-          rList = Array.isArray(fallbackRes.data) ? fallbackRes.data : (fallbackRes.data?.results || []);
-        } catch (_) {}
-      }
+      // Strict: the bulk fetch is already scoped to the selected exam type, so a
+      // missing exam yields an empty card set instead of another exam's results.
+      const rList = Array.isArray(rRes.data) ? rRes.data : (rRes.data?.results || []);
       const aList = Array.isArray(aRes.data) ? aRes.data : [];
 
       // The database rows for CGPA / rank / totals. These were fetched before but DISCARDED (the
@@ -2307,8 +2349,16 @@ export default function ResultCardGenerator() {
       // Rank ONLY among students in the target section list (ensures parity with single card)
       const targetSids = new Set(sectionList.map(s => String(s.id)));
 
+      // কার্ড শুধু সেই শিক্ষার্থীদের জন্য তৈরি হবে যাদের কমপক্ষে তিনটি বিষয়ে ০-এর চেয়ে বেশি নম্বর আছে।
+      const eligibleSids = new Set();
+      studentIds.forEach(sid => {
+        if (!targetSids.has(sid)) return;
+        if (hasEnoughSubjectsWithMarks(resultsByStudent[sid])) eligibleSids.add(sid);
+      });
+
       for (const sid of studentIds) {
           if (!targetSids.has(sid)) continue;
+          if (!eligibleSids.has(sid)) continue;
 
           const stuResults = resultsByStudent[sid];
           if (!stuResults || stuResults.length === 0) continue;
@@ -2566,10 +2616,12 @@ export default function ResultCardGenerator() {
 
       studentIds.forEach(sid => {
         if (overallByStudent[sid]) {
-          // Prefer the stored rank; only fall back to the locally computed position.
-          const stored = overallByStudent[sid].rank;
+          // Merit must match the Merit List / Class Results, which rank straight from the raw
+          // exam results. The stored backend rank is built from an all-subject total and can
+          // disagree, so the locally computed section rank is authoritative on the card.
           const fRank = finalRankMap[sid];
-          overallByStudent[sid].rank = stored || fRank || null;
+          const stored = overallByStudent[sid].rank;
+          overallByStudent[sid].rank = fRank || stored || null;
           overallByStudent[sid].rank_in_section = overallByStudent[sid].rank;
         }
       });
@@ -2581,8 +2633,11 @@ export default function ResultCardGenerator() {
         return aRoll - bRoll;
       });
 
-      // 6. GENERATE CARDS IN PARALLEL
-      const promises = sectionList.map(async s => {
+      // 6. GENERATE CARDS IN PARALLEL (শুধু যোগ্য শিক্ষার্থীদের জন্য)
+      const cardStudents = sectionList.filter(s => eligibleSids.has(String(s.id)));
+      const skippedCount = sectionList.length - cardStudents.length;
+
+      const promises = cardStudents.map(async s => {
         const sIdStr = String(s.id);
         const stuResults = resultsByStudent[sIdStr] || [];
         const stuOverall = overallByStudent[sIdStr] || null;
@@ -2592,6 +2647,14 @@ export default function ResultCardGenerator() {
       const allGeneratedCards = (await Promise.all(promises)).filter(Boolean);
       setBulkCards(allGeneratedCards);
 
+      if (allGeneratedCards.length === 0) {
+        toast.error('কোনো শিক্ষার্থীর ন্যূনতম তিনটি বিষয়ে নম্বর নেই, তাই কোনো কার্ড তৈরি হয়নি।');
+        setBulkLoading(false);
+        return;
+      }
+      if (skippedCount > 0) {
+        toast.warning(`${skippedCount} জন শিক্ষার্থীর ন্যূনতম তিনটি বিষয়ে নম্বর না থাকায় তাদের কার্ড বাদ দেওয়া হয়েছে।`);
+      }
       toast.success('সব কার্ড জেনারেট সম্পন্ন');
       setBulkLoading(false);
       if (allGeneratedCards.length > 0) {
@@ -2613,14 +2676,13 @@ export default function ResultCardGenerator() {
       return;
     }
 
-    toast.info('প্রিন্ট ডায়ালগ খুলছে...');
     document.body.classList.add('bulk-print-active');
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       window.print();
       setTimeout(() => {
         document.body.classList.remove('bulk-print-active');
-      }, 1000);
-    }, 100);
+      }, 500);
+    });
   };
 
   const handleDownloadBulkPDF = async () => {
@@ -2689,73 +2751,10 @@ export default function ResultCardGenerator() {
 
   const handleSectionChange = (e) => {
     const p = parseInt(e.target.value, 10);
-    const secId = Number.isNaN(p) ? '' : p;
-    setSelectedSection(secId);
-    
-    if (selectedClass) {
-      if (secId) {
-        scopedGet('/api/academics/students/', id, { classroom: selectedClass, section: secId }, { timeout: 30000 })
-          .then(res => {
-            const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-            const sorted = [...data].sort((a, b) => {
-              const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
-              const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-              const aNum = Number.isNaN(ar) ? null : ar;
-              const bNum = Number.isNaN(br) ? null : br;
-              if (aNum !== null && bNum !== null) return aNum - bNum;
-              const as = String(a?.roll_number ?? '');
-              const bs = String(b?.roll_number ?? '');
-              return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
-            });
-            setStudents(sorted);
-          })
-          .catch(err => {
-            if (err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || ''))) {
-              scopedGet('/api/academics/students/', id, { classroom: selectedClass }, { timeout: 45000 })
-                .then(res2 => {
-                  const data2 = Array.isArray(res2.data) ? res2.data : res2.data.results || [];
-                  const sorted2 = [...data2].sort((a, b) => {
-                    const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
-                    const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-                    const aNum = Number.isNaN(ar) ? null : ar;
-                    const bNum = Number.isNaN(br) ? null : br;
-                    if (aNum !== null && bNum !== null) return aNum - bNum;
-                    const as = String(a?.roll_number ?? '');
-                    const bs = String(b?.roll_number ?? '');
-                    return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
-                  });
-                  toast.warning('Section query timed out, loaded class students instead');
-                  setStudents(sorted2);
-                })
-                .catch(e2 => {
-                  console.error('Error loading students (fallback):', e2);
-                  toast.error('Failed to load students');
-                  setStudents([]);
-                });
-            } else {
-              console.error('Error loading students:', err);
-              toast.error('Failed to load students');
-            }
-          });
-      } else {
-        scopedGet('/api/academics/students/', id, { classroom: selectedClass }, { timeout: 15000 })
-          .then(res => {
-            const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-            const sorted = [...data].sort((a, b) => {
-              const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
-              const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
-              const aNum = Number.isNaN(ar) ? null : ar;
-              const bNum = Number.isNaN(br) ? null : br;
-              if (aNum !== null && bNum !== null) return aNum - bNum;
-              const as = String(a?.roll_number ?? '');
-              const bs = String(b?.roll_number ?? '');
-              return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
-            });
-            setStudents(sorted);
-          })
-          .catch(() => setStudents([]));
-      }
-    }
+    setSelectedSection(Number.isNaN(p) ? '' : p);
+    setSelectedStudent('');
+    // The student list is derived reactively by the `availableStudents` memo, so no
+    // network round-trip is needed here — the filtered students appear instantly.
   };
 
   const handleStudentChange = (e) => {
@@ -2810,9 +2809,9 @@ export default function ResultCardGenerator() {
             disabled={!selectedClass}
           >
             <MenuItem value="">
-              {sections.length === 0 ? "কোনো সেকশন পাওয়া যায়নি" : "সেকশন নির্বাচন করুন"}
+              {availableSections.length === 0 ? "কোনো সেকশন পাওয়া যায়নি" : "সেকশন নির্বাচন করুন"}
             </MenuItem>
-            {filterSectionsByYear(sections, selectedYear).map((sec) => (
+            {filterSectionsByYear(availableSections, selectedYear).map((sec) => (
               <MenuItem key={sec.id} value={sec.id}>
                 {sec.name}
               </MenuItem>
@@ -2829,9 +2828,9 @@ export default function ResultCardGenerator() {
             disabled={!selectedClass}
           >
             <MenuItem value="">
-              {students.length === 0 ? "কোনো শিক্ষার্থী পাওয়া যায়নি" : "একজন শিক্ষার্থী নির্বাচন করুন"}
+              {availableStudents.length === 0 ? "কোনো শিক্ষার্থী পাওয়া যায়নি" : "একজন শিক্ষার্থী নির্বাচন করুন"}
             </MenuItem>
-            {students.map((student) => (
+            {availableStudents.map((student) => (
               <MenuItem key={student.id} value={student.id}>
                 {student.user?.first_name} {student.user?.last_name} - Roll: {student.roll_number || 'N/A'}
               </MenuItem>
@@ -2975,14 +2974,14 @@ export default function ResultCardGenerator() {
           </Alert>
         )}
         
-        {selectedClass && students.length === 0 && (
+        {selectedClass && availableStudents.length === 0 && (
           <Alert severity="warning" sx={{ mt: 2 }}>
             এই শ্রেণিতে কোনো শিক্ষার্থী নেই। আগে শিক্ষার্থী যোগ করুন।
           </Alert>
         )}
         
-        {selectedClass && selectedExamType && examinations.length > 0 &&
-         !examinations.find(e => normalizeExamType(e.exam_type, e.name) === normalizeExamType(selectedExamType) && getClassroomId(e.classroom) === selectedClass) && (
+        {selectedClass && selectedExamType && classExaminations.length > 0 &&
+         !classExaminations.find(e => normalizeExamType(e.exam_type, e.name) === normalizeExamType(selectedExamType) && getClassroomId(e.classroom) === selectedClass) && (
           <Alert severity="warning" sx={{ mt: 2 }}>
             এই শ্রেণির জন্য কোনো {examTypes.find(t => t.value === selectedExamType)?.label} পরীক্ষা পাওয়া যায়নি। আগে একটি পরীক্ষা তৈরি করুন।
           </Alert>
@@ -3101,90 +3100,19 @@ export default function ResultCardGenerator() {
           @media print {
             @page {
               size: A4 portrait;
-              /* SSC বোর্ড ট্রান্সক্রিপ্ট ২১০mm ফুল-পেজ ডিজাইন, তাই margin 0;
-                 সাধারণ রেজাল্ট কার্ড পেজ-প্রান্তে বর্ডার কাটা এড়াতে 6mm */
-              margin: ${layout === 'ssc' ? '0mm' : '6mm'} !important;
+              /* ResultCard.css ও SSCMarksheet.css - দুটোতেই margin 0, তাই এখানেও
+                 একই মান, যাতে ব্রাউজার/প্রিন্টার-ভেদে সেটিং বদলে না যায়। */
+              margin: 0mm !important;
             }
 
             .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiSnackbar-root, .MuiAlert-root, .MuiTabs-root, .MuiBackdrop-root {
               display: none !important;
             }
 
-            body, html {
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-              width: 100% !important;
-              height: auto !important;
-              overflow: visible !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-
-            /* align-items: center হলে flex-item-এর width shrink-to-fit হয়ে যায়;
-               শতকরা (%) width chain ভেঙে কার্ডের প্রস্থ অনিশ্চিত হয়। তাই stretch. */
-            #root, main, .result-display-area, .bulk-print-mode {
-              display: flex !important;
-              flex-direction: column !important;
-              align-items: stretch !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              width: 100% !important;
-              height: auto !important;
-              overflow: visible !important;
-            }
-
-            .single-card-view {
-              display: block !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              width: 100% !important;
-              height: auto !important;
-              page-break-inside: avoid !important;
-              break-inside: avoid-page !important;
-              position: relative !important;
-              overflow: visible !important;
-            }
-
-            .bulk-sheet, .bulk-card-wrap {
-              display: block !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              width: 100% !important;
-              height: auto !important;
-              max-height: none !important;
-              page-break-after: always !important;
-              break-after: page !important;
-              page-break-inside: avoid !important;
-              break-inside: avoid-page !important;
-              position: relative !important;
-              overflow: visible !important;
-              box-sizing: border-box !important;
-            }
-
-            .result-card-container {
-              box-shadow: none !important;
-              filter: none !important;
-              outline: none !important;
-              margin: 0 auto !important;
-              width: 195mm !important;
-              max-width: 195mm !important;
-              height: calc(280mm - 5px) !important;
-              min-height: calc(280mm - 5px) !important;
-              max-height: calc(280mm - 5px) !important;
-              display: flex !important;
-              flex-direction: column !important;
-              position: relative !important;
-              overflow: visible !important;
-              border-width: 25px !important;
-              border-style: solid !important;
-              border-color: transparent !important;
-              border-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5'%3E%3Cpath d='M0 50 Q 25 0 50 50 T 100 50'/%3E%3Cpath d='M0 50 Q 25 100 50 50 T 100 50'/%3E%3Cpath d='M50 0 Q 0 25 50 50 T 50 100'/%3E%3Cpath d='M50 0 Q 100 25 50 50 T 50 100'/%3E%3Cg transform='rotate(45,50,50)'%3E%3Cpath d='M20 50 Q 35 20 50 50 T 80 50'/%3E%3Cpath d='M20 50 Q 35 80 50 50 T 80 50'/%3E%3Cpath d='M50 20 Q 20 35 50 50 T 50 80'/%3E%3Cpath d='M50 20 Q 80 35 50 50 T 50 80'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") 25 25 25 25 round !important;
-              page-break-inside: avoid !important;
-              break-inside: avoid-page !important;
-              box-sizing: border-box !important;
-              visibility: visible !important;
-            }
+            /* body/html, #root, .result-display-area, .single-card-view ও
+               .bulk-sheet -এর পুরো প্রিন্ট লেআউট এখন ResultCard.css-এ আছে
+               (একই A4 শিট-বক্স + কার্ড সেন্টারিং)। এখানে ডুপ্লিকেট রাখলে দুই
+               স্টাইলশিট সংঘর্ষ করে কার্ড পেজের প্রান্তে সরে যায়। */
 
             .result-card-signatures {
               position: relative !important;

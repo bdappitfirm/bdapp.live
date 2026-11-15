@@ -117,7 +117,7 @@ const StudentProfile = ({ student }) => {
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
           <Typography variant="body2" color="text.secondary">রক্তের গ্রুপ</Typography>
-          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.blood_group || 'N/A'}</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.blood_group || student.user?.blood_group || student.profile?.blood_group || 'N/A'}</Typography>
         </Grid>
 
         <Grid item xs={12} sm={6}>

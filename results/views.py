@@ -14,7 +14,7 @@ from datetime import datetime
 import math
 from backend.cache_utils import (
     CachedListMixin, DEFAULT_CACHE_TIMEOUT, make_cache_key,
-    safe_cache_get, safe_cache_set, to_plain,
+    safe_cache_get, safe_cache_set, to_plain, bump_global_cache_version,
 )
 
 
@@ -59,6 +59,37 @@ class ExamSlotViewSet(CachedListMixin, viewsets.ModelViewSet):
 
         return qs
 
+
+_EXAM_TYPES_SYNCED = False
+
+def auto_fix_examination_types():
+    """Normalise every stored Examination.exam_type against its name (once per process).
+
+    Must run before any query that filters on ``examination__exam_type``; legacy
+    rows still hold an incorrect type (e.g. a Pre-Test stored as `half_yearly`),
+    which makes those filters return another examination's results.
+    """
+    global _EXAM_TYPES_SYNCED
+    if _EXAM_TYPES_SYNCED:
+        return
+    try:
+        from .models import Examination, normalize_db_exam_type
+        to_update = []
+        for ex in Examination.objects.all().only('id', 'name', 'exam_type'):
+            norm = normalize_db_exam_type(ex.name, ex.exam_type)
+            if norm and norm != ex.exam_type:
+                ex.exam_type = norm
+                to_update.append(ex)
+        if to_update:
+            Examination.objects.bulk_update(to_update, ['exam_type'])
+            # bulk_update() fires no post_save signal, so drop the report payloads
+            # that were cached while exam_type was still wrong.
+            bump_global_cache_version()
+        _EXAM_TYPES_SYNCED = True
+    except Exception:
+        pass
+
+
 class ExaminationViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = Examination.objects.all()
     serializer_class = ExaminationSerializer
@@ -66,6 +97,7 @@ class ExaminationViewSet(CachedListMixin, viewsets.ModelViewSet):
     cache_prefix = 'examinations-list'
 
     def get_queryset(self):
+        auto_fix_examination_types()
         sid = get_user_school_id(self.request.user, self.request)
         base_related = ('classroom', 'section')
         if not sid:
@@ -165,6 +197,7 @@ class ResultViewSet(CachedListMixin, viewsets.ModelViewSet):
     cache_prefix = 'results-list'
 
     def get_queryset(self):
+        auto_fix_examination_types()
         sid = get_user_school_id(self.request.user, self.request)
         base_select = (
             'examination',
@@ -230,6 +263,7 @@ class StudentOverallResultViewSet(CachedListMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     cache_prefix = 'overall-results-list'
     def get_queryset(self):
+        auto_fix_examination_types()
         sid = get_user_school_id(self.request.user, self.request)
         if not sid:
             if is_global_admin(self.request.user):
@@ -245,6 +279,15 @@ class StudentOverallResultViewSet(CachedListMixin, viewsets.ModelViewSet):
         eid = self.request.query_params.get('examination')
         if eid: qs = qs.filter(examination_id=eid)
 
+        # A single student's overall row. Without this the endpoint returned every
+        # student's row of the examination and callers reading `[0]` picked up an
+        # unrelated student's total (e.g. another student's 857 shown on a card).
+        student_id = self.request.query_params.get('student')
+        if student_id:
+            sids = [s.strip() for s in str(student_id).split(',') if s.strip()]
+            if sids:
+                qs = qs.filter(student_id__in=sids)
+
         section_id = self.request.query_params.get('section')
         if section_id and section_id != 'null':
             if ',' in section_id:
@@ -259,6 +302,7 @@ class StudentOverallResultViewSet(CachedListMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def combined_by_exam_type(self, request):
+        auto_fix_examination_types()
         student_id = request.query_params.get('student')
         exam_type = request.query_params.get('exam_type')
         year = request.query_params.get('year')
@@ -282,6 +326,7 @@ class StudentOverallResultViewSet(CachedListMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def combined_rank_list_by_exam_type(self, request):
+        auto_fix_examination_types()
         exam_type = request.query_params.get('exam_type')
         classroom_id = request.query_params.get('classroom')
         section_id = request.query_params.get('section')

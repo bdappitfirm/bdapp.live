@@ -92,7 +92,7 @@ $tarArgs = @(
     "--exclude=.git",
     "--exclude=backups",
     "--exclude=scratch",
-    "backend", "users", "schools", "academics", "attendance", "fees", "results", "software_accounts",
+    "backend", "users", "schools", "academics", "attendance", "fees", "results", "software_accounts", "employees",
     "manage.py", "requirements.txt",
     "templates", "frontend/build"
 )

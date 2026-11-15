@@ -110,9 +110,23 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
     return null;
   };
 
+  const isCivicsName = (name) => /civics|পৌরনীতি|পৌরণীতি|নাগরিকতা/i.test(String(name || ''));
+  const isEconName = (name) => /economics|অর্থনীতি|অর্থ\s*নীতি/i.test(String(name || ''));
+  const isAgriName = (name) => /agri|agriculture|কৃষি/i.test(String(name || ''));
+  const isHomeName = (name) => /home\s*science|home\s*economics|গার্হস্থ্য/i.test(String(name || ''));
+
   const getEffectiveSubjectForGroup = (subjectName, group) => {
     const name = String(subjectName || '').trim();
-    if (!name || !name.includes('/')) return name;
+    if (!name) return '';
+
+    if (isCivicsName(name) && isEconName(name)) {
+      return 'পৌরনীতি ও নাগরিকতা/অর্থনীতি';
+    }
+    if (isAgriName(name) && isHomeName(name)) {
+      return 'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান';
+    }
+
+    if (!name.includes('/')) return name;
     const parts = name.split(/\s*\/\s*/).filter(Boolean);
     const g = resolveGroupStr(group);
 
@@ -222,24 +236,96 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
     return true;
   };
 
-  // Filter slots to match student's classroom, section, and stream/group
+  // Filter slots to match student's classroom, section, stream/group, and examination
   const studentClassroomId = data?.classroom?.id;
   const studentSectionId = data?.section?.id;
+  const selectedExamId = exam?.id || (typeof exam === 'object' ? exam?.id : exam);
 
   const filteredSlots = examSlots.filter(slot => {
-    const classroomMatch = !slot.classroom || String(slot.classroom) === String(studentClassroomId);
-    const sectionMatch = !slot.section || String(slot.section) === String(studentSectionId);
+    const slotExamId = slot.examination?.id || slot.examination;
+    const examMatch = !selectedExamId || !slotExamId || String(slotExamId) === String(selectedExamId);
+    const classroomMatch = !slot.classroom || String(slot.classroom?.id || slot.classroom) === String(studentClassroomId);
+    const sectionMatch = !slot.section || String(slot.section?.id || slot.section) === String(studentSectionId);
     const groupMatch = isSubjectMatchingStudent(slot, data);
-    return classroomMatch && sectionMatch && groupMatch;
+    return examMatch && classroomMatch && sectionMatch && groupMatch;
   });
 
   const studentGroup = getStudentGroup(data);
+
+  // Group slots by (exam_date, start_time) to combine Civics/Economics or Agri/Home Science
+  // occurring on the exact same date and time slot.
+  const slotsByDateTime = {};
+  for (const slot of filteredSlots) {
+    const dateKey = String(slot.exam_date || '').trim();
+    const timeKey = String(slot.start_time || '').trim();
+    const key = `${dateKey}_${timeKey}`;
+    if (!slotsByDateTime[key]) {
+      slotsByDateTime[key] = [];
+    }
+    slotsByDateTime[key].push(slot);
+  }
+
+  const processedSlots = [];
+  for (const key of Object.keys(slotsByDateTime)) {
+    let slotsInGroup = [...slotsByDateTime[key]];
+
+    const isCivicsOnly = (n) => isCivicsName(n) && !isEconName(n);
+    const isEconOnly = (n) => isEconName(n) && !isCivicsName(n);
+    const isAgriOnly = (n) => isAgriName(n) && !isHomeName(n);
+    const isHomeOnly = (n) => isHomeName(n) && !isAgriName(n);
+
+    const getSlotName = (s) => s.subject_name || s.subject?.name;
+
+    // Merge Civics and Economics if both present at same date/time
+    const civicsIdx = slotsInGroup.findIndex(s => isCivicsOnly(getSlotName(s)));
+    const econIdx = slotsInGroup.findIndex(s => isEconOnly(getSlotName(s)));
+
+    if (civicsIdx !== -1 && econIdx !== -1 && civicsIdx !== econIdx) {
+      const baseSlot = slotsInGroup[civicsIdx];
+      const mergedSlot = {
+        ...baseSlot,
+        subject_name: 'পৌরনীতি ও নাগরিকতা/অর্থনীতি',
+        subject: {
+          ...(baseSlot.subject || {}),
+          name: 'পৌরনীতি ও नागरिकতা/অর্থনীতি'
+        }
+      };
+      const firstIdx = Math.min(civicsIdx, econIdx);
+      const secondIdx = Math.max(civicsIdx, econIdx);
+      slotsInGroup.splice(secondIdx, 1);
+      slotsInGroup.splice(firstIdx, 1, mergedSlot);
+    }
+
+    // Merge Agriculture and Home Science if both present at same date/time
+    const agriIdx = slotsInGroup.findIndex(s => isAgriOnly(getSlotName(s)));
+    const homeIdx = slotsInGroup.findIndex(s => isHomeOnly(getSlotName(s)));
+
+    if (agriIdx !== -1 && homeIdx !== -1 && agriIdx !== homeIdx) {
+      const baseSlot = slotsInGroup[agriIdx];
+      const mergedSlot = {
+        ...baseSlot,
+        subject_name: 'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান',
+        subject: {
+          ...(baseSlot.subject || {}),
+          name: 'কৃষি শিক্ষা/গার্হস্থ্য বিজ্ঞান'
+        }
+      };
+      const firstIdx = Math.min(agriIdx, homeIdx);
+      const secondIdx = Math.max(agriIdx, homeIdx);
+      slotsInGroup.splice(secondIdx, 1);
+      slotsInGroup.splice(firstIdx, 1, mergedSlot);
+    }
+
+    processedSlots.push(...slotsInGroup);
+  }
+
   const seenSubjects = new Set();
   const uniqueFilteredSlots = [];
-  for (const slot of filteredSlots) {
+  for (const slot of processedSlots) {
     const effName = getEffectiveSubjectForGroup(slot.subject_name || slot.subject?.name, studentGroup).trim().toLowerCase();
-    if (!seenSubjects.has(effName)) {
-      seenSubjects.add(effName);
+    const key = `${slot.exam_date || ''}_${effName}`;
+    if (!seenSubjects.has(key)) {
+      seenSubjects.add(key);
       uniqueFilteredSlots.push(slot);
     }
   }
@@ -434,6 +520,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
             <img
               src={userPhoto}
               alt="S"
+              decoding="async"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               onError={(e) => {
                 if (schoolLogo) e.target.src = schoolLogo;
@@ -444,6 +531,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
               <img
                 src={schoolLogo}
                 alt="School Logo"
+                decoding="async"
                 style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }}
               />
             ) : (
@@ -506,9 +594,6 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
               </Typography>
               <Typography variant="body1" sx={{ fontSize: '1.15rem', lineHeight: 1.4, pb: 0.2 }}>
                 <strong>Class:</strong> {className && className !== 'N/A' ? `${className} ${section}` : 'শ্রেণি'}
-              </Typography>
-              <Typography variant="body1" sx={{ fontSize: '1.15rem', lineHeight: 1.4, pb: 0.2 }}>
-                <strong>Exam ID:</strong> {exam?.exam_id || 'N/A'}
               </Typography>
           </Box>
         </Box>

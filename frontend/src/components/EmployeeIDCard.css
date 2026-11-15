@@ -1,0 +1,457 @@
+/* Employee ID Card styles (BDapp IT Firm) */
+.emp-card-wrapper {
+  display: inline-block;
+  margin: 10px;
+  vertical-align: top;
+}
+
+.emp-id-card-front,
+.emp-id-card-back {
+  font-family: 'Hind Siliguri', 'Roboto', 'Arial', sans-serif;
+  width: 66.7mm !important;
+  height: 104mm !important;
+  min-height: 104mm !important;
+  max-height: 104mm !important;
+  background: #ffffff;
+  border: 1.5px solid #0a4b94;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.emp-id-card-back {
+  margin-top: 4mm;
+}
+
+.emp-id-card-front *,
+.emp-id-card-back * {
+  box-sizing: border-box;
+}
+
+.emp-card-header {
+  background: linear-gradient(135deg, #0a4b94 0%, #1e6fd0 100%);
+  color: #ffffff;
+  text-align: center;
+  padding: 2.5mm 2mm 1.5mm 2mm;
+  border-bottom: 2.5px solid #f5b301;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-logo {
+  width: 11mm;
+  height: 11mm;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  padding: 0.5mm;
+  display: block;
+  margin: 0 auto 0.8mm auto;
+}
+
+.emp-card-school {
+  font-size: 11.5pt;
+  font-weight: 800;
+  line-height: 1.15;
+  word-wrap: break-word;
+}
+
+.emp-card-sub {
+  font-size: 7.5pt;
+  opacity: 0.95;
+  letter-spacing: 0.02em;
+}
+
+.emp-card-photo-box {
+  display: flex;
+  justify-content: center;
+  margin: 1.8mm 0 1mm 0;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-photo {
+  width: 21mm;
+  height: 25mm;
+  border: 1.5px solid #0a4b94;
+  border-radius: 3px;
+  object-fit: cover;
+  background: #f0f4f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0a4b94;
+  font-size: 13pt;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.emp-card-body {
+  flex: 1;
+  padding: 0 2.5mm;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-name {
+  font-size: 13pt;
+  font-weight: 800;
+  color: #0a4b94;
+  line-height: 1.15;
+  word-wrap: break-word;
+}
+
+.emp-card-id {
+  font-size: 9.5pt;
+  font-weight: 800;
+  color: #1565c0;
+  letter-spacing: 0.04em;
+  margin-top: 0.6mm;
+}
+
+.emp-card-divider {
+  width: 75%;
+  height: 1px;
+  background: #e3ecf7;
+  margin: 0.8mm auto;
+}
+
+.emp-card-rows {
+  text-align: left;
+  margin: 0;
+  width: 100%;
+  padding-left: 1.5mm;
+}
+
+.emp-card-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 0.5mm;
+  width: 100%;
+}
+
+.emp-card-row .lbl {
+  font-size: 8.5pt;
+  font-weight: 700;
+  color: #0a4b94;
+  min-width: 19mm;
+  text-align: left;
+  padding-right: 1mm;
+  flex-shrink: 0;
+  line-height: 1.25;
+}
+
+.emp-card-row .val {
+  font-size: 8.5pt;
+  font-weight: 600;
+  color: #0a4b94;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.25;
+  flex: 1;
+}
+
+.emp-card-sign {
+  margin-top: -10mm;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  padding: 0 0.5mm 0 0;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.emp-card-sign-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.emp-card-sign-slot {
+  position: relative;
+  width: 13mm;
+  height: 13mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emp-card-seal {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 13mm;
+  height: 13mm;
+  opacity: 0.15;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.emp-card-sign-img {
+  position: relative;
+  z-index: 1;
+  width: 11mm;
+  height: auto;
+  display: block;
+  filter: brightness(0);
+}
+
+.emp-card-sign-spacer {
+  height: 8mm;
+}
+
+.emp-card-sign-label {
+  font-size: 6.5pt;
+  color: #0a4b94;
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-top: -3mm;
+}
+
+.emp-card-footer {
+  background: linear-gradient(90deg, #0a4b94, #1e6fd0);
+  color: #ffffff;
+  padding: 1mm 2mm;
+  text-align: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-footer .site {
+  font-size: 8pt;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  word-wrap: break-word;
+}
+
+.emp-card-footer .contact {
+  font-size: 7pt;
+  opacity: 0.95;
+  word-wrap: break-word;
+}
+
+/* Back side specific styles - Fully Centered & Clean with Larger QR & Double Size Middle Logo */
+.emp-card-back-top {
+  background: linear-gradient(135deg, #0a4b94 0%, #1e6fd0 100%);
+  color: #ffffff;
+  padding: 2.5mm 2mm;
+  text-align: center;
+  border-bottom: 2.5px solid #f5b301;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-back-top .return-title {
+  font-size: 8pt;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.emp-card-back-qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin-top: 3mm;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-back-qr-box {
+  padding: 1.5mm;
+  border: 2px solid #0a4b94;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10,75,148,0.2);
+  margin: 0 auto;
+}
+
+.emp-card-back-qr-box canvas {
+  width: 31mm !important;
+  height: 31mm !important;
+  display: block !important;
+}
+
+.emp-card-back-qr-label {
+  margin-top: 1mm;
+  font-size: 7pt;
+  color: #0a4b94;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.emp-card-back-middle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 3mm;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-back-logo {
+  width: 26mm;
+  height: 26mm;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 50%;
+  border: 2px solid #0a4b94;
+  padding: 0.6mm;
+  display: block;
+  margin: 0 auto 1.5mm auto;
+  box-shadow: 0 2px 6px rgba(10,75,148,0.2);
+}
+
+.emp-card-back-school {
+  font-size: 10.5pt;
+  font-weight: 800;
+  color: #0a4b94;
+  line-height: 1.2;
+  text-align: center;
+  word-wrap: break-word;
+  width: 100%;
+}
+
+.emp-card-back-footer {
+  background: linear-gradient(135deg, #0a4b94 0%, #1e6fd0 100%);
+  color: #ffffff;
+  padding: 2.5mm 2mm;
+  text-align: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.emp-card-back-footer .address {
+  font-size: 7.5pt;
+  margin-bottom: 0.5mm;
+  line-height: 1.2;
+  text-align: center;
+  word-wrap: break-word;
+  width: 100%;
+}
+
+.emp-card-back-footer .email,
+.emp-card-back-footer .phone {
+  font-size: 7.5pt;
+  opacity: 0.95;
+  line-height: 1.2;
+  text-align: center;
+  width: 100%;
+}
+
+/* ---------------- Print ---------------- */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: none !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  main {
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .no-print,
+  header, footer, nav, aside,
+  .MuiAppBar-root,
+  .MuiDrawer-root,
+  .MuiToolbar-root,
+  .MuiTabs-root,
+  .MuiSnackbar-root,
+  .MuiBackdrop-root,
+  .MuiDialog-root {
+    display: none !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box !important;
+  }
+
+  .emp-card-generator-root {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .emp-card-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-content: flex-start !important;
+    gap: 3mm !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+  }
+
+  .emp-card-container .emp-card-wrapper {
+    width: 66.7mm !important;
+    max-width: 66.7mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .emp-card-container .emp-id-card-front,
+  .emp-card-container .emp-id-card-back {
+    width: 66.7mm !important;
+    height: 104mm !important;
+    min-height: 104mm !important;
+    max-width: 66.7mm !important;
+    max-height: 104mm !important;
+    box-shadow: 0.5px solid #ccc !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .emp-card-container canvas,
+  .emp-print-hidden img {
+    visibility: visible !important;
+    display: block !important;
+  }
+
+  .emp-print-hidden {
+    display: none !important;
+  }
+}

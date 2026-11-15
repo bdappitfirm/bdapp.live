@@ -107,7 +107,8 @@ export default function StudentListPage() {
               admission_date: aDate,
               roll_number: s.roll_number,
               student_group: s.student_group,
-              blood_group: s.blood_group,
+              blood_group: s.blood_group || s.user?.blood_group || s.profile?.blood_group || '',
+              gender: s.gender || s.user?.gender || s.profile?.gender || '',
               section_id: s.section_id || s.section?.id || s.section,
               optional_subject_id: s.optional_subject_id || s.optional_subject?.id || s.optional_subject
           };
@@ -311,6 +312,7 @@ export default function StudentListPage() {
                         <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>মাতার নাম</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>জন্ম তারিখ</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ভর্তির তারিখ</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>লিঙ্গ</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>ব্লাড</TableCell>
                         {isNineTen && (
                           <>
@@ -349,7 +351,14 @@ export default function StudentListPage() {
                           <input className="sl-cell-input" value={s.manual_admission_date || ''} onFocus={(e) => e.target.select()} onChange={(e) => handleFieldChange(s.id, 'manual_admission_date', e.target.value)} style={{ textAlign: 'center' }} />
                         </TableCell>
                         <TableCell sx={{ p: 0, m: 0 }}>
-                          <select className="sl-cell-select" value={s.blood_group || ''} onChange={(e) => handleFieldChange(s.id, 'blood_group', e.target.value)}>
+                          <select className="sl-cell-select" value={s.gender || s.user?.gender || s.profile?.gender || ''} onChange={(e) => handleFieldChange(s.id, 'gender', e.target.value)}>
+                            <option value=""></option>
+                            <option value="male">ছাত্র</option>
+                            <option value="female">ছাত্রী</option>
+                          </select>
+                        </TableCell>
+                        <TableCell sx={{ p: 0, m: 0 }}>
+                          <select className="sl-cell-select" value={s.blood_group || s.user?.blood_group || s.profile?.blood_group || ''} onChange={(e) => handleFieldChange(s.id, 'blood_group', e.target.value)}>
                             <option value=""></option>
                             {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (<option key={bg} value={bg}>{bg}</option>))}
                           </select>

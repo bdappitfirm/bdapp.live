@@ -29,6 +29,7 @@ api_v1_patterns = [
     path('fees/', include('fees.urls')),
     path('results/', include('results.urls')),
     path('software-accounts/', include('software_accounts.urls')),
+    path('employees/', include('employees.urls')),
 ]
 
 urlpatterns = [

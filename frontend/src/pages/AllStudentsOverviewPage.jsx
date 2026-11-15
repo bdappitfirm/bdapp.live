@@ -62,8 +62,8 @@ const isNineOrTenClass = (className) => {
 // Helper to translate gender
 const translateGender = (gender) => {
   const g = String(gender || '').toLowerCase().trim();
-  if (g === 'male' || g === 'boy' || g === 'ছাত্র') return 'ছাত্র';
-  if (g === 'female' || g === 'girl' || g === 'ছাত্রী') return 'ছাত্রী';
+  if (g === 'female' || g === 'girl' || g === 'ছাত্রী' || g === 'f' || g === 'woman' || g === 'female_student') return 'ছাত্রী';
+  if (g === 'male' || g === 'boy' || g === 'ছাত্র' || g === 'm' || g === 'man' || g === 'male_student') return 'ছাত্র';
   if (g === 'other') return 'অন্যান্য';
   return gender || '-';
 };
@@ -523,8 +523,9 @@ export default function AllStudentsOverviewPage() {
 
                       const fourthSub = isNineTen ? getFourthSubjectName(s) : '-';
 
-                      const gender = translateGender(s.gender);
-                      const blood = s.blood_group || '-';
+                      const rawGender = s.gender || s.user?.gender || s.profile?.gender || s.student_profile?.gender || '';
+                      const gender = translateGender(rawGender);
+                      const blood = s.blood_group || s.user?.blood_group || s.profile?.blood_group || s.student_profile?.blood_group || '-';
                       const father = s.father_name || '-';
                       const mother = s.mother_name || '-';
                       const phone = s.user?.phone_number || s.phone_number || '-';

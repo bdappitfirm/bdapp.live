@@ -228,7 +228,7 @@ const ORD_MAP = { 'Sixth': 'Six', 'Seventh': 'Seven', 'Eighth': 'Eight', 'Ninth'
 
 const SEC_MAP = { 'মানবিক': 'Humanities', 'বিজ্ঞান': 'Science', 'ব্যবসায় শিক্ষা': 'Business Studies', 'ব্যবসা': 'Business Studies', 'ব্যবসায়': 'Business Studies', 'ব্যবসায়': 'Business Studies', 'ক': 'A', 'খ': 'B', 'গ': 'C', 'ঘ': 'D', 'এ': 'A', 'বি': 'B', 'সি': 'C', 'ডি': 'D' };
 
-const SVG_BORDER = `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5'%3E%3Cpath d='M0 50 Q 25 0 50 50 T 100 50'/%3E%3Cpath d='M0 50 Q 25 100 50 50 T 100 50'/%3E%3Cpath d='M50 0 Q 0 25 50 50 T 50 100'/%3E%3Cpath d='M50 0 Q 100 25 50 50 T 50 100'/%3E%3Cg transform='rotate(45,50,50)'%3E%3Cpath d='M20 50 Q 35 20 50 50 T 80 50'/%3E%3Cpath d='M20 50 Q 35 80 50 50 T 80 50'/%3E%3Cpath d='M50 20 Q 20 35 50 50 T 50 80'/%3E%3Cpath d='M50 20 Q 80 35 50 50 T 50 80'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`;
+const SVG_BORDER = `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cg id='fl'%3E%3Cellipse cx='0' cy='-4.2' rx='2.9' ry='4.4'/%3E%3Cellipse cx='0' cy='-4.2' rx='2.9' ry='4.4' transform='rotate(60)'/%3E%3Cellipse cx='0' cy='-4.2' rx='2.9' ry='4.4' transform='rotate(120)'/%3E%3Cellipse cx='0' cy='-4.2' rx='2.9' ry='4.4' transform='rotate(180)'/%3E%3Cellipse cx='0' cy='-4.2' rx='2.9' ry='4.4' transform='rotate(240)'/%3E%3Cellipse cx='0' cy='-4.2' rx='2.9' ry='4.4' transform='rotate(300)'/%3E%3Ccircle cx='0' cy='0' r='1.7'/%3E%3C/g%3E%3C/defs%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5'%3E%3Cpath d='M0 50 Q 25 0 50 50 T 100 50'/%3E%3Cpath d='M0 50 Q 25 100 50 50 T 100 50'/%3E%3Cpath d='M50 0 Q 0 25 50 50 T 50 100'/%3E%3Cpath d='M50 0 Q 100 25 50 50 T 50 100'/%3E%3Cg transform='rotate(45,50,50)'%3E%3Cpath d='M20 50 Q 35 20 50 50 T 80 50'/%3E%3Cpath d='M20 50 Q 35 80 50 50 T 80 50'/%3E%3Cpath d='M50 20 Q 20 35 50 50 T 50 80'/%3E%3Cpath d='M50 20 Q 80 35 50 50 T 50 80'/%3E%3C/g%3E%3Cuse href='%23fl' x='50' y='12.5'/%3E%3Cuse href='%23fl' x='50' y='87.5'/%3E%3Cuse href='%23fl' x='12.5' y='50'/%3E%3Cuse href='%23fl' x='87.5' y='50'/%3E%3Cuse href='%23fl' x='12.5' y='12.5'/%3E%3Cuse href='%23fl' x='87.5' y='12.5'/%3E%3Cuse href='%23fl' x='12.5' y='87.5'/%3E%3Cuse href='%23fl' x='87.5' y='87.5'/%3E%3C/g%3E%3C/svg%3E")`;
 
 const isCoCurricular = (name, isClassNineOrTen) => {
   const subjStr = String(name || '').replace(/\u200d/g, '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
@@ -764,6 +764,13 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
     if (isClassNineOrTen && results.length > 0) {
       const countPerGroup = { science: 0, commerce: 0, humanities: 0 };
       results.forEach(r => {
+          const w = parseFloat(r.written_marks);
+          const m = parseFloat(r.mcq_marks);
+          const p = parseFloat(r.practical_marks);
+          const tot = parseFloat(r.total_obtained);
+          const hasInput = (!isNaN(w) && w > 0) || (!isNaN(m) && m > 0) || (!isNaN(p) && p > 0) || (!isNaN(tot) && tot > 0);
+          if (!hasInput) return;
+
           const rawName = r.subject?.name || r.subject_name || '';
           const parts = String(rawName).includes('/')
               ? String(rawName).split(/\s*\/\s*/).filter(Boolean)
@@ -779,9 +786,9 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       const commerceCount = countPerGroup.commerce;
       const humanitiesCount = countPerGroup.humanities;
 
-      if (commerceCount > 0) return 'Business Studies';
+      if (scienceCount > 0 && scienceCount >= commerceCount && scienceCount >= humanitiesCount) return 'Science';
+      if (commerceCount > 0 && commerceCount >= humanitiesCount) return 'Business Studies';
       if (humanitiesCount > 0) return 'Humanities';
-      if (scienceCount > 0) return 'Science';
     }
 
     // Ultra-safe fallback: If NOT 9-10, AND has primary-ish marks pattern (any result with mcq_marks tutorial
@@ -959,7 +966,26 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         }
     });
     const cleanResults = Array.from(resultsMap.values());
-    const studentGroup = inferredGroup;
+    let studentGroup = inferredGroup;
+
+    if (isClassNineOrTen && (!studentGroup || studentGroup === '')) {
+        let sci = 0, com = 0, hum = 0;
+        cleanResults.forEach(r => {
+            const name = (r.subject?.name || r.subject_name || '').toLowerCase();
+            const w = parseFloat(r.written_marks);
+            const m = parseFloat(r.mcq_marks);
+            const p = parseFloat(r.practical_marks);
+            const tot = parseFloat(r.total_obtained);
+            const hasMarks = (!isNaN(w) && w > 0) || (!isNaN(m) && m > 0) || (!isNaN(p) && p > 0) || (!isNaN(tot) && tot > 0);
+            if (!hasMarks) return;
+            if (/physics|chemistry|biology|পদার্থ|রসায়ন|রসায়ন|জীব/i.test(name)) sci++;
+            else if (/accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স|ব্যবসায়/i.test(name)) com++;
+            else if (/history|geography|civics|economics|ইতিহাস|ভূগোল|পৌরনীতি|অর্থনীতি/i.test(name)) hum++;
+        });
+        if (sci > 0 && sci >= com && sci >= hum) studentGroup = 'Science';
+        else if (com > 0 && com >= hum) studentGroup = 'Business Studies';
+        else if (hum > 0) studentGroup = 'Humanities';
+    }
 
     const filteredResults = cleanResults.filter(r => {
         const name = (r.subject?.name || r.subject_name || '').toLowerCase();
@@ -972,7 +998,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             const isScienceSub = /physics|chemistry|biology|higher|পদার্থ|রসায়ন|জীব|উচ্চতর/i.test(name);
             const isCommerceSub = /accounting|finance|entrepreneurship|business|ব্যবসায়|হিসাব|ফিন্যান্স|ব্যবসায়/i.test(name);
             const isHumanitiesSub = /history|geography|civics|ইতিহাস|ভূগোল|ভুগোল|পৌরনীতি|economics|অর্থনীতি/i.test(name);
-            const isBGS = /bgs|bangladesh|global studies|বাংলাদেশ ও বিশ্ব|বিশ্বপরিচয়/i.test(name);
+            const isBGS = /bgs|bangladesh|global studies|বাংলাদেশ ও বিশ্ব|বিশ্বপরিচয়|বিশ্বপরিচয়/i.test(name);
             const isGeneralScience = /^(science|বিজ্ঞান|general science|সাধারণ বিজ্ঞান)$/i.test(name.trim()) || (name.includes('science') && !isScienceSub && !isCommerceSub && !isBGS);
             const isAgriHomeSub = /agriculture|home|কৃষি|গার্হস্থ্য/i.test(name);
             const isCombined = name.includes('/');
@@ -980,7 +1006,7 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
             if (group.includes('science') || group.includes('বিজ্ঞান')) {
                 const belongs = isScienceSub || isBGS || isAgriHomeSub || isCombined;
                 if ((isCommerceSub || isHumanitiesSub || isGeneralScience) && !belongs) return false;
-            } else if (group.includes('commerce') || group.includes('business') || group.includes('ব্যবসায়')) {
+            } else if (group.includes('commerce') || group.includes('business') || group.includes('ব্যবসায়') || group.includes('ব্যবসায়')) {
                 const belongs = isCommerceSub || isGeneralScience || isAgriHomeSub || isCombined;
                 if ((isScienceSub || isHumanitiesSub || isBGS) && !belongs) return false;
             } else if (group.includes('arts') || group.includes('humanities') || group.includes('মানবিক')) {
@@ -1378,6 +1404,8 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       'প্রাক-নির্বাচনী': 'Pre-Test Examination',
       'প্রাক-নির্বাচনী পরীক্ষা': 'Pre-Test Examination',
       'নির্বাচনী': 'Test Examination',
+      'নির্বাচনী পরীক্ষা': 'Test Examination',
+      'নির্বাচনী Examination': 'Test Examination',
       'অর্ধ-বার্ষিক': 'Half Yearly Examination',
       'বার্ষিক': 'Annual Examination',
       'দ্বিতীয় প্রান্তিক': 'Second Term Examination',
@@ -1396,11 +1424,13 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
         name = nameMapEn[name];
       } else {
         name = name
+          .replace(/প্রাক[-_\s]?নির্বাচনী/gi, 'Pre-Test')
           .replace(/দ্বিতীয়|দ্বিতীয়/gi, 'Second')
           .replace(/প্রথম/gi, 'First')
           .replace(/প্রান্তিক/gi, 'Term')
+          .replace(/অর্ধ[-_\s]?বার্ষিক/gi, 'Half Yearly')
           .replace(/বার্ষিক/gi, 'Annual')
-          .replace(/অর্ধ-বার্ষিক/gi, 'Half Yearly')
+          .replace(/নির্বাচনী/gi, 'Test')
           .replace(/পরীক্ষা/gi, 'Examination')
           .replace(/টার্মিনাল/gi, 'Terminal')
           .replace(/মডেল টেস্ট/gi, 'Model Test');
@@ -1567,16 +1597,6 @@ const ResultCard = memo(({ studentData, results: rawResults, overallResult, exam
       borderImage: `${SVG_BORDER} 25 25 25 25 round`,
       transition: 'none !important',
       '& *': { transition: 'none !important' },
-      '&::before': {
-        content: '""', position: 'absolute',
-        top: '0px', left: '0px', right: '0px', bottom: '0px',
-        border: '1.5px solid #000',
-        backgroundImage: `${SVG_BORDER.replace('%3Cg ', '%3Cg transform=\'scale(-1, 1) translate(-100, 0)\' ')}, ${SVG_BORDER.replace('%3Cg ', '%3Cg transform=\'scale(-1, 1) translate(-100, 0)\' ')}, linear-gradient(#000, #000), linear-gradient(#000, #000)`,
-        backgroundSize: '25px 25px, 25px 25px, 1.5px 100%, 1.5px 100%',
-        backgroundRepeat: 'repeat-y, repeat-y, no-repeat, no-repeat',
-        backgroundPosition: 'left 0 top 0, right 0 top 0, left 25px top 0, right 25px top 0',
-        pointerEvents: 'none', zIndex: 15
-      },
       '&::after': { content: '""', position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', border: '1.5px solid #000', pointerEvents: 'none', zIndex: 15 },
       '@media print': {
         margin: '0 auto !important',

@@ -430,9 +430,14 @@ def calculate_student_overall_result(examination, student):
         is_passed_overall = False
 
     # RE-SYNC literal_total_obtained to include ALL subjects (Main + Optional + CA)
-    # This sum matches what users see in Result Card / Class Results
     # Use results_to_process which contains ALL valid subjects before optional/excluded filtering
+    # BUT the 4th (optional) subject must not be added in full: only the marks above 40%
+    # of its maximum count towards the total, exactly like Class Results / Merit List /
+    # Result Card. `bonus_marks` (computed above) already holds that excess, so swap the
+    # full optional mark for it.
     literal_total_obtained = sum(float(r.total_obtained) for r in results_to_process)
+    if optional_result:
+        literal_total_obtained += bonus_marks - float(optional_result.total_obtained)
 
     # Create or update overall result
     try:

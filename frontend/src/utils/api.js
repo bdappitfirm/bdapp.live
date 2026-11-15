@@ -22,6 +22,10 @@ export const getCacheKey = (config) => {
       });
     }
 
+    // scopedGet appends a `_t` cache-buster. Keeping it would make every cache
+    // key unique (different on each call), so nothing could ever be read back
+    // offline. Drop it before the key is built.
+    searchParams.delete('_t');
     searchParams.sort();
     const path = url.pathname;
     const finalParams = searchParams.toString();
@@ -192,8 +196,41 @@ const smartOfflineFallback = async (config) => {
             return !sId || sId === String(targetSchoolId);
           });
         }
+        // Classroom scoping. Sections/Examinations expose a single `classroom`,
+        // but Subjects expose a `classrooms` list and a `sections` list - the
+        // backend matches a class when the subject is linked to the class itself
+        // OR to one of that class's sections. Matching only `classroom` made
+        // every subject fail the test offline, so the list came up empty.
         if (params.classroom && (table === 'sections' || table === 'subjects' || table === 'examinations')) {
-          data = data.filter(item => String(item.classroom_id || item.classroom?.id || item.classroom) === String(params.classroom));
+          const clsList = (Array.isArray(params.classroom) ? params.classroom : String(params.classroom).split(','))
+            .map(c => String(c).trim()).filter(Boolean);
+
+          if (clsList.length > 0) {
+            let classSectionIds = [];
+            if (table === 'subjects') {
+              const allSections = await db.sections.toArray();
+              classSectionIds = allSections
+                .filter(sec => clsList.includes(String(sec.classroom_id ?? sec.classroom?.id ?? sec.classroom ?? '')))
+                .map(sec => String(sec.id));
+            }
+
+            const toId = (val) => {
+              const v = val && typeof val === 'object' ? val.id : val;
+              return v != null && v !== '' ? String(v) : null;
+            };
+
+            data = data.filter(item => {
+              if (table === 'subjects') {
+                const sectionIds = (Array.isArray(item.sections) ? item.sections : []).map(toId).filter(Boolean);
+                if (sectionIds.some(sid => classSectionIds.includes(sid))) return true;
+              }
+              const ids = [
+                toId(item.classroom_id ?? item.classroom),
+                ...(Array.isArray(item.classrooms) ? item.classrooms : []).map(toId)
+              ].filter(Boolean);
+              return ids.some(id => clsList.includes(id));
+            });
+          }
         }
         return Array.isArray(data) ? { results: data, count: data.length } : data;
       }

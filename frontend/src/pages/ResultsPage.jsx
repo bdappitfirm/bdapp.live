@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { db } from '../utils/offlineDb';
@@ -199,6 +199,8 @@ const SUBJECT_MAXIMA = {
   }
 };
 
+const EMPTY_MARK = { written: '', mcq: '', practical: '' };
+
 // MEMOIZED ROW FOR INSTANT SMOOTH BULK MARK INPUT ON MOBILE
 const MemoizedBulkMarkRow = React.memo(({
   student,
@@ -213,16 +215,16 @@ const MemoizedBulkMarkRow = React.memo(({
   onKeyDown
 }) => {
   const name = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || '-';
-  const m = mark || { written: '', mcq: '', practical: '' };
+  const m = mark || EMPTY_MARK;
 
   return (
     <TableRow hover sx={{ bgcolor: isOptional ? 'rgba(76, 175, 80, 0.05)' : 'inherit' }}>
-      <TableCell>{student.roll_number || '-'}</TableCell>
       <TableCell>
         <Typography variant="body2" sx={{ fontWeight: isOptional ? 'bold' : 'normal' }}>
           {name} {isOptional && <Chip label="৪র্থ" size="small" color="success" sx={{ height: 18, fontSize: '0.6rem', ml: 0.5 }} />}
         </Typography>
       </TableCell>
+      <TableCell>{student.roll_number || '-'}</TableCell>
       {isCA ? (
         <TableCell align="center">
           <TextField
@@ -352,6 +354,28 @@ export default function ResultsPage() {
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [bulkStudents, setBulkStudents] = useState([]);
   const [bulkMarks, setBulkMarks] = useState({});
+
+  const bulkDialogContentRef = useRef(null);
+  const bulkScrollPosRef = useRef(0);
+
+  const handleBulkScroll = (e) => {
+    bulkScrollPosRef.current = e.currentTarget.scrollTop;
+  };
+
+  useLayoutEffect(() => {
+    if (bulkDialogOpen && bulkDialogContentRef.current) {
+      bulkDialogContentRef.current.scrollTop = bulkScrollPosRef.current;
+    }
+  });
+
+  const sortedBulkStudents = useMemo(() => {
+    return [...bulkStudents].sort((a, b) => {
+      const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
+      const br = parseInt(String(b.roll_number || '').replace(/\D/g, ''), 10);
+      if (!isNaN(ar) && !isNaN(br) && ar !== br) return ar - br;
+      return String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true });
+    });
+  }, [bulkStudents]);
   const [criticalError, setCriticalError] = useState(null);
   const [classSelectOpen, setClassSelectOpen] = useState(false);
   const [sectionSelectOpen, setSectionSelectOpen] = useState(false);
@@ -1946,8 +1970,8 @@ export default function ResultsPage() {
             <Table>
               <TableHead>
                 <TableRow sx={{ bgcolor: 'primary.main' }}>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>রোল</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>রোল</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">লিখিত</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">{mcqLabel}</TableCell>
@@ -1992,8 +2016,8 @@ export default function ResultsPage() {
 
                     return (
                       <TableRow key={idx} hover>
-                        <TableCell>{roll}</TableCell>
                         <TableCell>{studentName}</TableCell>
+                        <TableCell>{roll}</TableCell>
                         <TableCell>{result.subject?.name || result.subject_name}</TableCell>
                         <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (w === null || w === undefined || w === '' ? '' : w)}</TableCell>
                         <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (m === null || m === undefined || m === '' ? '' : m)}</TableCell>
@@ -2901,7 +2925,11 @@ export default function ResultsPage() {
             </Button>
           </Stack>
         </DialogTitle>
-        <DialogContent sx={{ p: 2 }}>
+        <DialogContent
+          ref={bulkDialogContentRef}
+          onScroll={handleBulkScroll}
+          sx={{ p: 2, overflowY: 'auto' }}
+        >
           <Grid container spacing={2} sx={{ mt: 0.5, mb: 2 }}>
             <Grid size={{ xs: 12, md: 3 }}>
               <FormControl id="bulk-class-select" fullWidth size="small">
@@ -3041,8 +3069,8 @@ export default function ResultsPage() {
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', width: '60px' }}>রোল</TableCell>
                   <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>নাম</TableCell>
+                  <TableCell sx={{ bgcolor: 'grey.100', fontWeight: 'bold', width: '60px' }}>রোল</TableCell>
                   {(() => {
                     const clsObj = classes.find(c => c.id === parseInt(bulkForm.classroom));
                     const isNineTen = /\b9\b|\b10\b|\bnine\b|\bten\b|\bssc\b|\bix\b|\bx\b|নবম|দশম/i.test(clsObj?.name || '');
@@ -3070,22 +3098,16 @@ export default function ResultsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {bulkStudents.length === 0 || !bulkForm.subject ? (
+                {sortedBulkStudents.length === 0 || !bulkForm.subject ? (
                   <TableRow>
                     <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>
                       {!bulkForm.subject ? 'বিষয় সিলেক্ট করলে শিক্ষার্থীর তালিকা ও ইনপুট বক্স এখানে আসবে' : 'শিক্ষার্থীর তালিকা পাওয়া যায়নি'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  [...bulkStudents]
-                    .sort((a, b) => {
-                      const ar = parseInt(String(a.roll_number || '').replace(/\D/g, ''), 10);
-                      const br = parseInt(String(b.roll_number || '').replace(/\D/g, ''), 10);
-                      if (!isNaN(ar) && !isNaN(br) && ar !== br) return ar - br;
-                      return String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true });
-                    })
+                  sortedBulkStudents
                     .map(s => {
-                      const m = bulkMarks[s.id] || { written: '', mcq: '', practical: '' };
+                      const m = bulkMarks[s.id] || EMPTY_MARK;
                       const examObj = getExamById(bulkForm.exam || selectedExam);
                       const clsObj = classes.find(c => c.id === parseInt(bulkForm.classroom));
                       const isNineTen = /\b9\b|\b10\b|\bnine\b|\bten\b|\bssc\b|\bix\b|\bx\b|নবম|দশম/i.test(clsObj?.name || '');

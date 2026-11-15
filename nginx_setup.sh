@@ -60,8 +60,6 @@ server {
     location /admin/ {
         include proxy_params;
         proxy_pass http://unix:/run/gunicorn.sock;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $http_host;
         proxy_connect_timeout 300s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;

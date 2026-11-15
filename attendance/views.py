@@ -3,7 +3,7 @@ import traceback
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db import transaction
+from django.db import transaction, connection
 from .models import AttendanceRecord
 from .serializers import AttendanceRecordSerializer
 from users.permissions import RolePermission, IsSchoolMember, get_user_school_id
@@ -109,61 +109,48 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
             user_name = (request.user.get_full_name() or request.user.username) if request.user.is_authenticated else 'System'
             user_id = request.user.id if request.user.is_authenticated else None
 
-            # 1. Detect actual columns in DB using robust Django introspection
-            from django.db import connection
-            with connection.cursor() as cursor:
-                db_cols = {c.name for c in connection.introspection.get_table_description(cursor, 'attendance_attendancerecord')}
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    # Ensure employee column exists in attendance_attendancerecord if needed
+                    try:
+                        cursor.execute("ALTER TABLE attendance_attendancerecord ADD COLUMN IF NOT EXISTS employee_id INTEGER REFERENCES employees_employee(id) ON DELETE CASCADE;")
+                    except Exception:
+                        pass
 
-            # 2. Separate present/missing fields
-            optional_fields = ['device_id', 'scan_time', 'session']
-            available_optional = [f for f in optional_fields if f in db_cols]
+                    for rd in records_data:
+                        student_id = rd.get('student')
+                        employee_id = rd.get('employee')
+                        date_val = rd.get('date')
+                        present = bool(rd.get('present', True))
+                        note = str(rd.get('note', ''))
+                        device_id = rd.get('device_id')
+                        scan_time = rd.get('scan_time')
+                        session = rd.get('session')
 
-            # 3. Build Raw SQL for maximum reliability when schema is out of sync
-            # This avoids Django ORM's tendency to include all model fields in INSERTs
-            base_cols = ['student_id', 'date', 'school_id', 'present', 'note', 'taken_by_user_id', 'taken_by_name']
-            all_cols = base_cols + available_optional
+                        if not date_val or (not student_id and not employee_id):
+                            continue
 
-            placeholders = ", ".join(["%s"] * len(all_cols))
-            col_names = ", ".join([f'"{c}"' for c in all_cols])
-
-            # Update part for ON CONFLICT
-            update_parts = [f'"{c}" = EXCLUDED."{c}"' for c in all_cols if c not in ['student_id', 'date']]
-            update_stmt = ", ".join(update_parts)
-
-            sql = f"""
-                INSERT INTO attendance_attendancerecord ({col_names})
-                VALUES ({placeholders})
-                ON CONFLICT (student_id, date)
-                DO UPDATE SET {update_stmt}
-            """
-
-            # Prepare data for batch execution
-            batch_data = []
-            for rd in records_data:
-                student_id = rd.get('student')
-                date_val = rd.get('date')
-                if not student_id or not date_val: continue
-
-                row = [
-                    student_id, date_val, sid,
-                    bool(rd.get('present', True)),
-                    str(rd.get('note', '')),
-                    user_id, user_name
-                ]
-                # Append extra fields if they exist in DB
-                for f in available_optional:
-                    row.append(rd.get(f))
-                batch_data.append(row)
-
-            if batch_data:
-                with transaction.atomic():
-                    with connection.cursor() as cursor:
-                        cursor.executemany(sql, batch_data)
+                        if student_id:
+                            cursor.execute("""
+                                INSERT INTO attendance_attendancerecord
+                                (school_id, student_id, date, present, note, taken_by_user_id, taken_by_name, device_id, scan_time, session)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (student_id, date)
+                                DO UPDATE SET present = EXCLUDED.present, note = EXCLUDED.note, device_id = EXCLUDED.device_id, scan_time = EXCLUDED.scan_time
+                            """, [sid, student_id, date_val, present, note, user_id, user_name, device_id, scan_time, session])
+                        elif employee_id:
+                            cursor.execute("""
+                                INSERT INTO attendance_attendancerecord
+                                (school_id, employee_id, date, present, note, taken_by_user_id, taken_by_name, device_id, scan_time, session)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (employee_id, date)
+                                DO UPDATE SET present = EXCLUDED.present, note = EXCLUDED.note, device_id = EXCLUDED.device_id, scan_time = EXCLUDED.scan_time
+                            """, [sid, employee_id, date_val, present, note, user_id, user_name, device_id, scan_time, session])
 
             return Response({
                 'success': True,
-                'total': len(batch_data),
-                'message': f'Successfully saved {len(batch_data)} records (Database-safe mode)'
+                'total': len(records_data),
+                'message': f'Successfully saved {len(records_data)} attendance records'
             })
         except Exception as e:
             logger.exception("Error in bulk_save")

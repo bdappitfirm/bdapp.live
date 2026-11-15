@@ -97,8 +97,8 @@ export default function StudentCard({ student, onUploaded, onEdit, onDelete, onC
               {className && <Typography variant="body2">শ্রেণি: {className}</Typography>}
               {sectionName && <Typography variant="body2">সেকশন: {sectionName}</Typography>}
               {student.group && <Typography variant="body2">গ্রুপ: {student.group === 'science' ? 'বিজ্ঞান' : student.group === 'arts' ? 'মানবিক' : 'ব্যবসায়'}</Typography>}
-              {student.gender && <Typography variant="body2">Gender: {student.gender}</Typography>}
-              <Typography variant="body2">রক্তের গ্রুপ: {student.blood_group || 'N/A'}</Typography>
+              {(student.gender || student.user?.gender || student.profile?.gender) && <Typography variant="body2">Gender: {(student.gender || student.user?.gender || student.profile?.gender) === 'female' || (student.gender || student.user?.gender || student.profile?.gender) === 'female_student' ? 'Female (ছাত্রী)' : (((student.gender || student.user?.gender || student.profile?.gender) === 'male' || (student.gender || student.user?.gender || student.profile?.gender) === 'male_student') ? 'Male (ছাত্র)' : (student.gender || student.user?.gender || student.profile?.gender))}</Typography>}
+              <Typography variant="body2">রক্তের গ্রুপ: {student.blood_group || student.user?.blood_group || student.profile?.blood_group || student.student_profile?.blood_group || 'N/A'}</Typography>
               {student.father_name && <Typography variant="body2">পিতার নাম: {student.father_name}</Typography>}
               {student.mother_name && <Typography variant="body2">মাতার নাম: {student.mother_name}</Typography>}
               <Typography variant="body2">ফোন: {student.user?.phone_number || student.phone_number || 'N/A'}</Typography>

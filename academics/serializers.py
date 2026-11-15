@@ -243,6 +243,29 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'user_id', 'username', 'password', 'first_name', 'last_name', 'first_name_en', 'last_name_en', 'email', 'phone_number', 'photo', 'school', 'school_id', 'classroom', 'classroom_id', 'section', 'section_id', 'roll_number', 'group', 'student_group', 'blood_group', 'gender', 'birth_date', 'student_custom_id', 'optional_subject', 'optional_subject_id', 'guardian', 'guardian_id', 'guardian_name', 'guardian_name_en', 'father', 'father_id', 'father_name', 'father_name_en', 'mother', 'mother_id', 'mother_name', 'mother_name_en', 'admission_date', 'address', 'address_en', 'remarks', 'voter_number', 'subjects_list', 'ssc_board', 'ssc_roll', 'ssc_registration', 'ssc_session', 'ssc_gpa']
         read_only_fields = ['school']
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not data.get('gender'):
+            g = None
+            if hasattr(instance, 'user') and instance.user:
+                if hasattr(instance.user, 'profile') and instance.user.profile:
+                    g = instance.user.profile.gender
+                if not g and hasattr(instance.user, 'gender'):
+                    g = instance.user.gender
+            if g:
+                data['gender'] = g
+
+        if not data.get('blood_group'):
+            bg = None
+            if hasattr(instance, 'user') and instance.user:
+                if hasattr(instance.user, 'profile') and instance.user.profile:
+                    bg = instance.user.profile.blood_group
+                if not bg and hasattr(instance.user, 'blood_group'):
+                    bg = instance.user.blood_group
+            if bg:
+                data['blood_group'] = bg
+        return data
+
     def create(self, validated_data):
         if not self.birth_date_db_exists(): validated_data.pop('birth_date', None)
         school = validated_data.pop('school', None)

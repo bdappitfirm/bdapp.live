@@ -9,6 +9,32 @@ from .utils import _round_half_up, _class_group, get_subject_maxima
 User = settings.AUTH_USER_MODEL
 
 
+def normalize_db_exam_type(name, current_type=None):
+    import re
+    n = (name or '').lower().strip()
+    t = (current_type or '').lower().strip()
+    combined = f"{n} {t}".strip()
+
+    if re.search(r'pre[-_\s]?test|প্রাক[-_\s]?নির্বাচনী', combined, re.I):
+        return 'pre_test'
+    if re.search(r'half[-_\s]?yearly|semi|mid|অর্ধ[-_\s]?বার্ষিক', combined, re.I):
+        return 'half_yearly'
+    if re.search(r'annual|final|বার্ষিক', combined, re.I):
+        return 'annual'
+    if re.search(r'model|মডেল', combined, re.I):
+        return 'model'
+    if re.search(r'first[-_\s]?term|প্রথম[-_\s]?সাময়িক', combined, re.I):
+        return 'first_term'
+    if re.search(r'terminal|টার্মিনাল', combined, re.I):
+        return 'terminal'
+    if re.search(r'test|নির্বাচনী|টেস্ট', combined, re.I):
+        return 'test'
+
+    if t in ['half_yearly', 'pre_test', 'annual', 'test', 'model', 'first_term', 'terminal']:
+        return t
+    return t or 'test'
+
+
 class Examination(models.Model):
     """Exam/Test definition"""
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='examinations')
@@ -37,6 +63,10 @@ class Examination(models.Model):
         return f"{self.name} - {self.classroom.name}"
     
     def save(self, *args, **kwargs):
+        if self.name:
+            norm_type = normalize_db_exam_type(self.name, self.exam_type)
+            if norm_type:
+                self.exam_type = norm_type
         if not self.year:
             y = None
             try:

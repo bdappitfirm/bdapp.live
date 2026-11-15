@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'results.apps.ResultsConfig',
     'software_accounts',
+    'employees.apps.EmployeesConfig',
 ]
 
 try:

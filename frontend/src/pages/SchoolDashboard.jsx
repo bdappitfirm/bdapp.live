@@ -38,6 +38,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import LockIcon from '@mui/icons-material/Lock';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
+import BadgeIcon from '@mui/icons-material/Badge';
 
 // Context & Services
 import { useAuth } from '../context/AuthContext';
@@ -135,6 +136,8 @@ const SchoolDashboard = () => {
     { label: 'এসএমএস', icon: <SmsIcon />, key: 'sms' },
     { label: 'কমিটি', icon: <GroupIcon />, key: 'committee' },
     { label: 'শিক্ষক পে-রোল (বেতন)', icon: <PaymentIcon />, key: 'payroll' },
+    { label: 'কর্মী (Employee)', icon: <BadgeIcon />, key: 'employee' },
+    { label: 'কর্মী আইডি কার্ড', icon: <CardMembershipIcon />, key: 'employee/id-card' },
     { label: 'আইডি লিস্ট', icon: <LockIcon />, key: 'credentials' },
     { label: 'এডমিন', icon: <AccountBalanceIcon />, key: 'admin' },
     { label: 'স্কুল সেটিংস', icon: <SchoolIcon />, key: 'settings' },
@@ -256,19 +259,25 @@ const SchoolDashboard = () => {
     if (!id || authLoading) return;
     console.log('🏫 SchoolDashboard: Loading initial data for school', id);
 
-    // Check for cached data first to show it immediately
+    // Check for cached data first to show it immediately (Instant Local Cache-First)
     const isSimple = localStorage.getItem(`dashboardSimpleDue:${id}`) === 'on';
     const cachedStats = localStorage.getItem(`dashboard_stats_${id}`);
+    const cachedSchool = localStorage.getItem(`school_data_${id}`);
 
     if (cachedStats) {
       try {
-        const parsed = JSON.parse(cachedStats);
-        setStats(parsed);
-        // If we have cached stats, don't show full page loading
-        setLoading(false);
-      } catch (e) {
-        console.warn("Failed to parse cached stats", e);
-      }
+        setStats(JSON.parse(cachedStats));
+      } catch (e) {}
+    }
+    if (cachedSchool) {
+      try {
+        setSchoolData(JSON.parse(cachedSchool));
+      } catch (e) {}
+    }
+
+    // If we have cached stats, NEVER show loading spinner (Instant open)
+    if (cachedStats) {
+      setLoading(false);
     } else {
       setLoading(true);
     }
@@ -276,14 +285,24 @@ const SchoolDashboard = () => {
     setError(null);
     try {
       setCurrentSchoolId(id);
-      const schoolRes = await api.get(`/api/schools/${id}/`);
-      setSchoolData(schoolRes.data);
 
-      const statsRes = await getDashboardStats(id, feeYear, isSimple);
-      setStats(statsRes);
+      // Fetch in background (Stale-While-Revalidate) without blocking UI
+      const [schoolRes, statsRes] = await Promise.all([
+        api.get(`/api/schools/${id}/`).catch(() => null),
+        getDashboardStats(id, feeYear, isSimple).catch(() => null)
+      ]);
+
+      if (schoolRes && schoolRes.data) {
+        setSchoolData(schoolRes.data);
+        localStorage.setItem(`school_data_${id}`, JSON.stringify(schoolRes.data));
+      }
+      if (statsRes && statsRes.total_students !== undefined) {
+        setStats(statsRes);
+      }
     } catch (err) {
-      console.error("Dashboard error:", err);
-      if (!cachedStats) {
+      console.warn("Background fetch warning (using local cache):", err);
+      // Never show 524 or network timeout errors if local cache exists
+      if (!cachedStats && !cachedSchool) {
          setError("ইন্টারনেট সংযোগ নেই এবং কোনো ক্যাশ করা ডাটা পাওয়া যায়নি।");
       }
     } finally {
@@ -356,16 +375,23 @@ const SchoolDashboard = () => {
 
   const generateSummary = useCallback(async () => {
     if (!id) return;
-    setSummaryLoading(true);
+    const cachedSummary = localStorage.getItem(`dashboard_summary_${id}`);
+    if (cachedSummary) {
+      try {
+        setSummaryRows(JSON.parse(cachedSummary));
+      } catch (e) {}
+    }
+
     try {
       const res = await api.get(`/api/results/overall/dashboard_result_summary/`, {
         params: { school: id }
       });
-      setSummaryRows(res.data || []);
+      if (res && res.data) {
+        setSummaryRows(res.data);
+        localStorage.setItem(`dashboard_summary_${id}`, JSON.stringify(res.data));
+      }
     } catch (err) {
-      console.error("Error summary:", err);
-    } finally {
-      setSummaryLoading(false);
+      console.warn("Background summary fetch warning (using local cache):", err);
     }
   }, [id]);
 

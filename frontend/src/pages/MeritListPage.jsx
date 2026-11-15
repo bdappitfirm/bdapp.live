@@ -271,18 +271,28 @@ const parseRoll = (r) => {
 const normalizeExamType = (type, name = '') => {
   const t = (type || '').toLowerCase().trim();
   const n = (name || '').toLowerCase().trim();
-  const combined = `${t} ${n}`;
+  const combined = `${n} ${t}`.trim();
   if (/pre[-_\s]?test|প্রাক[-_\s]?নির্বাচনী/i.test(combined)) return 'pre_test';
   if (/half[-_\s]?yearly|semi|mid|অর্ধ[-_\s]?বার্ষিক/i.test(combined)) return 'half_yearly';
   if (/annual|final|বার্ষিক/i.test(combined)) return 'annual';
-  if (/test|নির্বাচনী|টেস্ট/i.test(combined)) return 'test';
   if (/model|মডেল/i.test(combined)) return 'model';
   if (/first[-_\s]?term|প্রথম[-_\s]?সাময়িক/i.test(combined)) return 'first_term';
   if (/terminal|টার্মিনাল/i.test(combined)) return 'terminal';
+  if (/test|নির্বাচনী|টেস্ট/i.test(combined)) return 'test';
   if (['half_yearly', 'pre_test', 'annual', 'test', 'model', 'first_term', 'terminal'].includes(t)) {
     return t;
   }
   return t || 'other';
+};
+
+// Strict, single source of truth for "does this examination belong to the selected year?".
+// An exam with no resolvable year can never be attributed to a specific year, so it must NOT
+// match any year - otherwise it would leak into every year's report.
+const examMatchesYear = (exam, year) => {
+  if (year === undefined || year === null || year === '') return true;
+  const exY = exam?.year ?? exam?.academic_year ?? null;
+  if (exY === null || exY === undefined || exY === '') return false;
+  return String(exY) === String(year);
 };
 
 const MeritListPage = () => {
@@ -538,18 +548,25 @@ const MeritListPage = () => {
                 return;
             }
 
-            // 3. Fetch Examinations & Results strictly by examination ID with fallback to exam_type
+            // 3. Fetch Examinations & Results strictly by matching examination ID
             const examRes = await scopedGet('/api/results/examinations/', id, { ...(selectedClass ? { classroom: selectedClass } : {}), page_size: 100 }).catch(() => ({ data: [] }));
             const examList = Array.isArray(examRes.data) ? examRes.data : (Array.isArray(examRes.data?.results) ? examRes.data.results : []);
             const matchingExams = examList.filter(ex => {
                 const clsId = String(typeof ex.classroom === 'object' ? (ex.classroom?.id || ex.classroom?.classroom_id || '') : (ex.classroom || ex.classroom_id || ''));
-                return (!selectedClass || clsId === String(selectedClass)) && normalizeExamType(ex.exam_type, ex.name) === normalizeExamType(selectedExam);
+                return (!selectedClass || clsId === String(selectedClass))
+                    && normalizeExamType(ex.exam_type, ex.name) === normalizeExamType(selectedExam)
+                    && examMatchesYear(ex, selectedYear);
             });
             const examIds = matchingExams.map(ex => ex.id);
 
+            if (examIds.length === 0) {
+                setRankings([]);
+                setLoading(false);
+                return;
+            }
+
             let allResults = [];
-            const targetExamIds = examIds.length > 0 ? examIds : [null];
-            for (const eId of targetExamIds) {
+            for (const eId of examIds) {
                 let page = 1, hasNext = true;
                 while (hasNext && page <= 25) {
                     const params = {
@@ -557,17 +574,25 @@ const MeritListPage = () => {
                         section: selectedSection || undefined,
                         group: activeGroup,
                         year: selectedYear,
+                        examination: eId,
                         page,
                         page_size: 500
                     };
-                    if (eId) params.examination = eId;
-                    else params.exam_type = selectedExam;
 
                     const res = await scopedGet('/api/results/results/', id, params).catch(() => ({ data: [] }));
                     if (!isMounted.current) return;
                     const data = res.data;
                     const arr = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
-                    allResults = allResults.concat(arr);
+                    // Strict: keep only rows that actually belong to the examination we asked
+                    // for - a foreign row can never be ranked even if the API (or a cache)
+                    // were to return one.
+                    const scoped = arr.filter(r => {
+                        const rid = typeof r.examination === 'object'
+                            ? (r.examination?.id ?? r.examination?.examination_id)
+                            : (r.examination ?? r.examination_id);
+                        return String(rid) === String(eId);
+                    });
+                    allResults = allResults.concat(scoped);
                     if (data.next) page++; else hasNext = false;
                 }
             }
@@ -859,11 +884,18 @@ const MeritListPage = () => {
                         : tO >= Math.round(tPossible * 0.33 - 0.5);
 
                     const isCoCurric = CO_CURRICULAR.some(c => String(key || '').toLowerCase().includes(c.toLowerCase()));
-                    let isSubjectPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
-
-                    // SPECIAL SYNC: School 63 English/Combined Subject Correction
-                    if (isNT && key === 'english' && tPossible === 200 && tO >= 66) isSubjectPassed = true;
-                    if (isNT && key === 'english' && tPossible === 100 && tO >= 33) isSubjectPassed = true;
+                    let isSubjectPassed = pPresent;
+                    const hasBackendPassed = papers.some(r => r.is_passed !== undefined && r.is_passed !== null);
+                    if (hasBackendPassed) {
+                        const anyFailed = papers.some(r => r.is_passed === false);
+                        const allPassed = papers.every(r => r.is_passed === true || r.is_passed === undefined || r.is_passed === null);
+                        isSubjectPassed = pPresent && !anyFailed && allPassed;
+                    } else {
+                        isSubjectPassed = pPresent && (isNT ? (isCoCurric ? totPass : (cqPass && mcqPass && prPass && totPass)) : totPass);
+                        // SPECIAL SYNC: School 63 English/Combined Subject Correction
+                        if (isNT && key === 'english' && tPossible === 200 && tO >= 66) isSubjectPassed = true;
+                        if (isNT && key === 'english' && tPossible === 100 && tO >= 33) isSubjectPassed = true;
+                    }
 
                     const gp = isSubjectPassed
                         ? computeGpa(((isPrimary ? (wPoss > 0 ? tW / wPoss : 0) : (tPossible > 0 ? tO / tPossible : 0)) * 100))

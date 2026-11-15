@@ -67,11 +67,15 @@ export default function AdmissionCardGenerator() {
   const [exams, setExams] = useState([]);
   const [loadingExams, setLoadingExams] = useState(false);
 
-  // Combine context exams with fetched exams for instant 0ms availability
+  // Combine context exams with fetched exams for instant 0ms availability, filtered by school id
   const effectiveExams = useMemo(() => {
-    if (Array.isArray(contextExams) && contextExams.length > 0) return contextExams;
-    return exams;
-  }, [contextExams, exams]);
+    const list = (Array.isArray(contextExams) && contextExams.length > 0) ? contextExams : exams;
+    if (!id) return list;
+    return list.filter(e => {
+      const sId = e.school?.id || e.school || e.school_id;
+      return !sId || String(sId) === String(id);
+    });
+  }, [contextExams, exams, id]);
 
   // Instant memory filtering for exams when classFilter changes (0ms delay)
   const filteredExams = useMemo(() => {
@@ -124,8 +128,9 @@ export default function AdmissionCardGenerator() {
           justify-content: center !important;
           column-gap: 6mm !important;
           width: 100% !important;
-          height: 209mm !important;
-          padding: 8mm 10mm !important;
+          height: 198mm !important;
+          max-height: 198mm !important;
+          padding: 4mm 6mm !important;
           box-sizing: border-box !important;
           overflow: hidden !important;
           break-after: page !important;
@@ -223,7 +228,7 @@ export default function AdmissionCardGenerator() {
     });
   }, [sections, classFilter]);
   
-  // Load school data
+  // Load school data and refresh academics when school id changes
   useEffect(() => {
     if (!id) return;
     
@@ -237,10 +242,8 @@ export default function AdmissionCardGenerator() {
       }
     };
     loadSchool();
-    if (!Array.isArray(classrooms) || classrooms.length === 0) {
-      refreshAll(id);
-    }
-  }, [id, classrooms, refreshAll]);
+    refreshAll(id);
+  }, [id, refreshAll]);
 
   // Load examinations for the school once on mount (cached in memory)
   useEffect(() => {
@@ -261,12 +264,15 @@ export default function AdmissionCardGenerator() {
     fetchExams();
   }, [id]);
 
-  // Load exam slots for the school once on mount
+  // Load exam slots for the school/exam
   useEffect(() => {
     if (!id) return;
     const fetchExamSlots = async () => {
       try {
-        const res = await api.get(`/api/results/exam-slots/?school=${id}&page_size=500`);
+        const url = selectedExam
+          ? `/api/results/exam-slots/?school=${id}&examination=${selectedExam}&page_size=500`
+          : `/api/results/exam-slots/?school=${id}&page_size=500`;
+        const res = await api.get(url);
         const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
         setExamSlots(data);
       } catch (err) {
@@ -275,7 +281,7 @@ export default function AdmissionCardGenerator() {
       }
     };
     fetchExamSlots();
-  }, [id]);
+  }, [id, selectedExam]);
 
 
   // Filter students from memory instantly for 0ms response time
@@ -379,35 +385,43 @@ export default function AdmissionCardGenerator() {
     }
   };
 
-  const handlePrint = (student = null) => {
+  const handlePrint = async (student = null) => {
     const count = student ? 1 : searchResults.length;
     if (count === 0) {
       showSnackbar('No students to print', 'warning');
       return;
     }
 
-    // All of this runs inside the click handler, so window.print() is still
-    // called with the click's user-activation: Chrome then honours
-    // `@page { size: A4 landscape }`. Nothing is re-generated and nothing is
-    // re-mounted — the cards being printed are the ones already on screen, so
-    // every photo, logo, signature and QR code is already painted.
+    setLoading(true);
+
     applyPrintTargets(student);
     setOpenPreview(false);
 
-    // Push our print stylesheet to the very end of <head> so its
-    // `@page { size: A4 landscape }` is the LAST @page rule in the document.
-    // Other lazily loaded chunks (ResultCard.css, SSCMarksheet.css, IDCard.css,
-    // ReceiptBook.css — all pulled in by preloadAllPages) declare
-    // `@page { size: A4 portrait|A4 }`; because they land in <head> after this
-    // component mounts they would otherwise sit later in document order and win
-    // the cascade, flipping the printout back to portrait and cropping the
-    // cards on the left and right. Moving the node is synchronous, so the
-    // click's user-activation is preserved.
     const styleEl = printStyleRef.current;
     if (styleEl && styleEl.parentNode) {
       styleEl.parentNode.appendChild(styleEl);
     }
 
+    // Fast image check: wait at most 400ms total for pending images so print dialog opens instantly
+    const container = document.querySelector('.screen-admission-cards');
+    if (container) {
+      const images = Array.from(container.querySelectorAll('img'));
+      const pendingImages = images.filter(img => !img.complete || img.naturalHeight === 0);
+
+      if (pendingImages.length > 0) {
+        const imagePromises = pendingImages.map(img => {
+          return new Promise((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            setTimeout(resolve, 200); // 200ms per image fallback
+          });
+        });
+        const maxWait = new Promise(resolve => setTimeout(resolve, 400));
+        await Promise.race([Promise.all(imagePromises), maxWait]);
+      }
+    }
+
+    setLoading(false);
     window.print();
   };
 

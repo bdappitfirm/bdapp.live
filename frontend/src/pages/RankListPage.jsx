@@ -152,18 +152,14 @@ const RankListPage = () => {
     const type = String(t || '').toLowerCase();
     const combined = (n + ' ' + type).trim();
 
-    // Specific logic for Class 10 Pre-Test mapping to Half Yearly
-    const isTen = /দশম|ten|\b10\b/i.test(String(classrooms.find(c => String(c.id) === String(selectedClass))?.name || ''));
-    if (isTen && (/প্রাক-নির্বাচনী|pre-test/i.test(combined))) {
-        return 'half_yearly';
-    }
-
-    if (/বার্ষিক|annual|yearly|final/.test(combined)) return 'annual';
+    // Order matters: "প্রাক-নির্বাচনী"/"Pre-Test" must be matched before the
+    // generic "test|নির্বাচনী", and "অর্ধ-বার্ষিক" before "বার্ষিক".
+    if (/pre[-_\s]?test|প্রাক[-_\s]?নির্বাচনী/.test(combined)) return 'pre_test';
     if (/অর্ধ|half|mid|semi/.test(combined)) return 'half_yearly';
+    if (/বার্ষিক|annual|yearly|final/.test(combined)) return 'annual';
     if (/টার্মিনাল|terminal|term/.test(combined)) return 'terminal';
     if (/মডেল|model/.test(combined)) return 'model';
     if (/টেস্ট|test|monthly|নির্বাচনী/.test(combined)) return 'test';
-    if (/pre-test|প্রাক-নির্বাচনী/.test(combined)) return 'pre_test';
     return type || 'annual';
   };
 
@@ -212,13 +208,8 @@ const RankListPage = () => {
                 const data = rResp.data;
                 let items = Array.isArray(data) ? data : (data.results || []);
 
-                if (items.length === 0 && page === 1 && selectedYear) {
-                    const fallbackParams = { ...resultsParams };
-                    delete fallbackParams.year;
-                    const fRes = await scopedGet('/api/results/results/', schoolId, fallbackParams, { timeout: 60000 });
-                    items = Array.isArray(fRes.data) ? fRes.data : (fRes.data?.results || []);
-                }
-
+                // Strict: never re-query without the year filter - that pulled in
+                // other years' examinations and leaked their results.
                 if (items.length === 0) break;
 
                 const filtered = items.filter(r => {

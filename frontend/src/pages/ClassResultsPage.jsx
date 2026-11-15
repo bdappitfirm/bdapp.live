@@ -12,10 +12,12 @@ import { getMediaUrl } from '../utils/media';
 import { filterClassroomsByYear, filterSectionsByYear } from '../utils/classroomUtils';
 
 // ক্লাস রেজাল্টস প্রিন্ট/জেনারেট করার সময় বাংলা-ইংরেজি ভাষার হেডার ও বিষয়ের নামের অনুবাদ
+// বাংলা (১ম+২য়) কলামে বিষয়ের নাম ও অংশ (সিকিউ/এমসিকিউ/মোট) পাশাপাশি না লিখে
+// উপরে নাম, নিচে অংশ হিসেবে দেখানো হয় — তাই base/part আলাদা করে রাখা হয়েছে
 const MERGED_COL_LABELS = {
-  'merged-bangla-cq': { bn: 'বাংলা (১ম+২য়)-সিকিউ', en: 'Bangla (1st+2nd)-CQ' },
-  'merged-bangla-mcq': { bn: 'বাংলা (১ম+২য়)-এমসিকিউ', en: 'Bangla (1st+2nd)-MCQ' },
-  'merged-bangla': { bn: 'বাংলা (১ম+২য়)-মোট', en: 'Bangla (1st+2nd)-Total' },
+  'merged-bangla-cq': { bn: 'বাংলা (১ম+২য়)-সিকিউ', en: 'Bangla (1st+2nd)-CQ', bnBase: 'বাংলা (১ম+২য়)', bnPart: 'সিকিউ', enBase: 'Bangla (1st+2nd)', enPart: 'CQ' },
+  'merged-bangla-mcq': { bn: 'বাংলা (১ম+২য়)-এমসিকিউ', en: 'Bangla (1st+2nd)-MCQ', bnBase: 'বাংলা (১ম+২য়)', bnPart: 'এমসিকিউ', enBase: 'Bangla (1st+2nd)', enPart: 'MCQ' },
+  'merged-bangla': { bn: 'বাংলা (১ম+২য়)-মোট', en: 'Bangla (1st+2nd)-Total', bnBase: 'বাংলা (১ম+২য়)', bnPart: 'মোট', enBase: 'Bangla (1st+2nd)', enPart: 'Total' },
   'merged-english': { bn: 'ইংরেজি (১ম+২য়)', en: 'English (1st+2nd)' },
   'merged-optional': { bn: 'কৃষি/উচ্চতর', en: 'Agriculture/Higher Math' },
   religion_merged: { bn: 'ধর্ম', en: 'Religion' },
@@ -64,14 +66,15 @@ const SUBJECT_EN_LABELS = [
   ['বই পড়া', 'Book Reading'],
 ];
 
-const EXAM_LABELS_EN = {
-  half_yearly: 'Half Yearly Examination',
-  annual: 'Annual Examination',
-  pre_test: 'Pre-Test Examination',
-  test: 'Test Examination',
-  model: 'Model Test Examination',
-  first_term: 'First Term Examination',
-  terminal: 'Terminal Examination',
+// প্রিন্ট হেডারে পরীক্ষার ফলাফল শিরোনাম
+const EXAM_RESULT_TITLES = {
+  half_yearly: { bn: 'অর্ধ-বার্ষিক পরীক্ষার ফলাফল', en: 'Half Yearly Examination Result' },
+  annual: { bn: 'বার্ষিক পরীক্ষার ফলাফল', en: 'Annual Examination Result' },
+  pre_test: { bn: 'প্রাক-নির্বাচনী পরীক্ষার ফলাফল', en: 'Pre-Test Examination Result' },
+  test: { bn: 'নির্বাচনী পরীক্ষার ফলাফল', en: 'Test Examination Result' },
+  model: { bn: 'মডেল টেস্ট পরীক্ষার ফলাফল', en: 'Model Test Examination Result' },
+  first_term: { bn: 'প্রথম সাময়িক পরীক্ষার ফলাফল', en: 'First Term Examination Result' },
+  terminal: { bn: 'টার্মিনাল পরীক্ষার ফলাফল', en: 'Terminal Examination Result' },
 };
 
 // বিষয়ের নাম বাংলা থেকে ইংরেজিতে রূপান্তর (তালিকায় যত নির্দিষ্ট/দীর্ঘ নাম, তত আগে থাকবে)
@@ -82,6 +85,10 @@ const translateSubjectLabel = (label) => {
   }
   return src;
 };
+
+// মার্ক ব্রেকডাউনে (যেমন 51+50) '+' চিহ্নের পরে invisible ব্রেক পয়েন্ট (ZWSP) বসানো হয়,
+// যাতে কলাম ছোট হলে সংখ্যার মাঝখান থেকে না ভেঙে প্লাসের পরেই নিচে নামে (যেমন 51+ / 50)
+const withMarksBreak = (s) => String(s ?? '').replace(/\+/g, '+\u200B');
 
 // টেবিল হেডারের স্থির লেবেলের অনুবাদ
 const HEAD_LABELS = {
@@ -175,6 +182,18 @@ const getSubjectMaxima = (name, isNT, group = '') => {
   }
 
   return isNT ? { cq: 70, mcq: 30, pr: 0 } : { cq: 100, mcq: 30, pr: 0 };
+};
+
+// সাবজেক্ট হেডারের নিচে দেখানোর ব্রেকডাউন লেবেল — সেলের ভেতরে যে ক্রমে মার্ক যোগ হয় (CQ+MCQ, প্রয়োজনে +PRA) সেটিই
+const getHeaderBreakLabel = (name, isNT, group, isPrimary) => {
+  if (isPrimary) return '';
+  const spec = getSubjectMaxima(name, isNT, group);
+  const parts = [];
+  if (spec.cq > 0) parts.push('CQ');
+  if (spec.mcq > 0) parts.push('MCQ');
+  if (spec.pr > 0) parts.push('PRA');
+  // একক অংশ (শুধু CQ বা শুধু PRA) হলে আলাদা করে দেখানোর দরকার নেই
+  return parts.length > 1 ? parts.join('+') : '';
 };
 
 // PRIMARY written ceiling: 100 for every subject, 50 for drawing (অংকন) - imported from
@@ -326,12 +345,15 @@ const isEarlyPrimaryName = (n) => EARLY_PRIMARY_PAT.test(String(n || ''));
 
 const getSubjectName = (r, subjectsList = []) => {
     if (r.subject_name) return r.subject_name;
+    if (typeof r.subject === 'string' && r.subject.trim() !== '') return r.subject;
     if (r.subject?.name) return r.subject.name;
     if (r.subject_detail?.name) return r.subject_detail.name;
     if (r.subject != null || r.subject_id != null) {
-        const sid = String(r.subject?.id || r.subject || r.subject_id || '');
-        const found = subjectsList.find(s => String(s.id) === sid);
-        if (found) return found.name;
+        const sid = String(r.subject?.id || r.subject_id || r.subject || '');
+        if (sid) {
+            const found = subjectsList.find(s => String(s.id) === sid || String(s.name) === sid);
+            if (found) return found.name;
+        }
     }
     return '';
 };
@@ -360,10 +382,32 @@ const inferGroup = (resList, isNT, subjectsList = []) => {
         if (humCount > 0) return 'humanities';
     }
 
-    if (sciCount > 0 && sciCount > comCount && sciCount > humCount) return 'science';
-    if (comCount > 0 && comCount >= humCount && comCount >= sciCount) return 'commerce';
-    if (humCount > 0 && humCount >= comCount && humCount >= sciCount) return 'humanities';
+    if (sciCount > 0 && sciCount >= comCount && sciCount >= humCount) return 'science';
+    if (comCount > 0 && comCount >= humCount) return 'commerce';
+    if (humCount > 0) return 'humanities';
     return '';
+};
+
+const isCrossGroupSubject = (subKey, studentGroup, isNT = true) => {
+    if (!isNT) return false;
+    const lowKey = String(subKey || '').toLowerCase();
+    const g = String(studentGroup || '').toLowerCase();
+    if (!g) return false;
+
+    const isSciSub = ['physics', 'chemistry', 'biology', 'পদার্থ', 'রসায়ন', 'রসায়ন', 'জীব'].some(x => lowKey.includes(x));
+    const isComSub = ['accounting', 'finance', 'business', 'entrepreneurship', 'হিসাব', 'ফিন্যান্স', 'ব্যবসায়', 'ব্যবসায়', 'উদ্যোগ'].some(x => lowKey.includes(x));
+    const isHumSub = ['history', 'geography', 'civics', 'economics', 'ইতিহাস', 'ভূগোল', 'পৌরনীতি', 'অর্থনীতি'].some(x => lowKey.includes(x));
+    const isGenSci = lowKey === 'science' || lowKey.includes('সাধারণ বিজ্ঞান');
+    const isBgsSub = lowKey === 'bgs' || lowKey.includes('বিশ্বপরিচয়') || lowKey.includes('বিশ্বপরিচয়');
+
+    if (g.includes('science') || g.includes('বিজ্ঞান')) {
+        if (isComSub || isHumSub || isGenSci) return true;
+    } else if (g.includes('commerce') || g.includes('business') || g.includes('ব্যবসায়') || g.includes('ব্যবসায়')) {
+        if (isSciSub || isHumSub || isBgsSub) return true;
+    } else if (g.includes('arts') || g.includes('humanities') || g.includes('মানবিক')) {
+        if (isSciSub || isComSub || isBgsSub) return true;
+    }
+    return false;
 };
 
 const inferClassGroupFromAllResults = (allRes, isNT, subjectsList = []) => {
@@ -392,18 +436,28 @@ const parseRoll = (r) => {
 const normalizeExamType = (type, name = '') => {
   const t = (type || '').toLowerCase().trim();
   const n = (name || '').toLowerCase().trim();
-  const combined = `${t} ${n}`;
+  const combined = `${n} ${t}`.trim();
   if (/pre[-_\s]?test|প্রাক[-_\s]?নির্বাচনী/i.test(combined)) return 'pre_test';
   if (/half[-_\s]?yearly|semi|mid|অর্ধ[-_\s]?বার্ষিক/i.test(combined)) return 'half_yearly';
   if (/annual|final|বার্ষিক/i.test(combined)) return 'annual';
-  if (/test|নির্বাচনী|টেস্ট/i.test(combined)) return 'test';
   if (/model|মডেল/i.test(combined)) return 'model';
   if (/first[-_\s]?term|প্রথম[-_\s]?সাময়িক/i.test(combined)) return 'first_term';
   if (/terminal|টার্মিনাল/i.test(combined)) return 'terminal';
+  if (/test|নির্বাচনী|টেস্ট/i.test(combined)) return 'test';
   if (['half_yearly', 'pre_test', 'annual', 'test', 'model', 'first_term', 'terminal'].includes(t)) {
     return t;
   }
   return t || 'other';
+};
+
+// Strict, single source of truth for "does this examination belong to the selected year?".
+// An exam with no resolvable year can never be attributed to a specific year, so it must NOT
+// match any year - otherwise it would leak into every year's report.
+const examMatchesYear = (exam, year) => {
+  if (year === undefined || year === null || year === '') return true;
+  const exY = exam?.year ?? exam?.academic_year ?? null;
+  if (exY === null || exY === undefined || exY === '') return false;
+  return String(exY) === String(year);
 };
 
 export default function ClassResultsPage() {
@@ -665,6 +719,11 @@ export default function ClassResultsPage() {
     if (fetchController.current) fetchController.current.abort();
     fetchController.current = new AbortController();
 
+    // Strict isolation: clear whatever was rendered before the moment the selection
+    // changes, so a failed / aborted / early-returned fetch can never leave another
+    // exam's (or another year's) data on screen.
+    setResultsByStudent(new Map());
+    setOverallTotals(new Map());
     setLoading(true);
     const currentSchoolId = id;
 
@@ -723,37 +782,48 @@ export default function ClassResultsPage() {
                 return;
             }
 
-            // 3. Fetch Examinations & Results strictly by examination ID with fallback to exam_type
+            // 3. Fetch Examinations & Results strictly by matching examination ID
             const examRes = await scopedGet('/api/results/examinations/', currentSchoolId, { ...(selectedClass ? { classroom: selectedClass } : {}), page_size: 100 }).catch(() => ({ data: [] }));
             const examList = Array.isArray(examRes.data) ? examRes.data : (Array.isArray(examRes.data?.results) ? examRes.data.results : []);
             const matchingExams = examList.filter(ex => {
                 const clsId = String(typeof ex.classroom === 'object' ? (ex.classroom?.id || ex.classroom?.classroom_id || '') : (ex.classroom || ex.classroom_id || ''));
-                return (!selectedClass || clsId === String(selectedClass)) && normalizeExamType(ex.exam_type, ex.name) === normalizeExamType(selectedExam);
+                return (!selectedClass || clsId === String(selectedClass))
+                    && normalizeExamType(ex.exam_type, ex.name) === normalizeExamType(selectedExam)
+                    && examMatchesYear(ex, selectedYear);
             });
             const examIds = matchingExams.map(ex => ex.id);
 
             let allResults = [];
-            const targetExamIds = examIds.length > 0 ? examIds : [null];
-            for (const eId of targetExamIds) {
-                let page = 1, hasNext = true;
-                while (hasNext && page <= 25) {
-                    const params = {
-                        classroom: selectedClass || undefined,
-                        section: selectedSection || undefined,
-                        year: selectedYear,
-                        page,
-                        page_size: 500
-                    };
-                    if (eId) params.examination = eId;
-                    else params.exam_type = selectedExam;
+            if (examIds.length > 0) {
+                for (const eId of examIds) {
+                    let page = 1, hasNext = true;
+                    while (hasNext && page <= 25) {
+                        const params = {
+                            classroom: selectedClass || undefined,
+                            section: selectedSection || undefined,
+                            year: selectedYear,
+                            examination: eId,
+                            page,
+                            page_size: 500
+                        };
 
-                    const res = await scopedGet('/api/results/results/', currentSchoolId, params).catch(() => ({ data: [] }));
-                    if (!isMounted.current || currentSchoolId !== id) return;
+                        const res = await scopedGet('/api/results/results/', currentSchoolId, params).catch(() => ({ data: [] }));
+                        if (!isMounted.current || currentSchoolId !== id) return;
 
-                    const data = res.data;
-                    const arr = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
-                    allResults = allResults.concat(arr);
-                    if (data.next) page++; else hasNext = false;
+                        const data = res.data;
+                        const arr = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
+                        // Strict: keep only rows that actually belong to the examination we
+                        // asked for - a foreign row can never be displayed even if the API
+                        // (or a cache) were to return one.
+                        const scoped = arr.filter(r => {
+                            const rid = typeof r.examination === 'object'
+                                ? (r.examination?.id ?? r.examination?.examination_id)
+                                : (r.examination ?? r.examination_id);
+                            return String(rid) === String(eId);
+                        });
+                        allResults = allResults.concat(scoped);
+                        if (data.next) page++; else hasNext = false;
+                    }
                 }
             }
 
@@ -880,13 +950,14 @@ export default function ClassResultsPage() {
 
             const classGroupFromAllResults = inferClassGroupFromAllResults(allResults, isClassNineOrTen, contextSubjects);
             const sectionGroup = getGroupFromContext();
+            const explicitGroup = (stu?.student_group || stu?.group || '').toLowerCase();
+            const inferredStuGroup = inferGroup(resList, isClassNineOrTen, contextSubjects);
             const group = (
-                stu?.student_group ||
-                stu?.group ||
+                explicitGroup ||
+                inferredStuGroup ||
                 sectionGroup ||
                 currentGroupFromURL ||
                 detectedGroup ||
-                inferGroup(resList, isClassNineOrTen, contextSubjects) ||
                 classGroupFromAllResults ||
                 classLevelGroup
             ).toLowerCase();
@@ -949,6 +1020,7 @@ export default function ClassResultsPage() {
             let studentTotalTutorial = 0;
 
             allKeys.forEach(key => {
+                if (isCrossGroupSubject(key, group, isClassNineOrTen)) return;
                 if (key === 'higher' && !showHM) return;
                 if (key === 'agriculture' && !showAgri) return;
 
@@ -1125,6 +1197,11 @@ export default function ClassResultsPage() {
         }
     } catch (err) {
         if (err.name !== 'AbortError') console.error("Fetch error:", err);
+        // Strict: a failed load must show nothing - never the previous exam's results.
+        if (isMounted.current && currentSchoolId === id) {
+            setResultsByStudent(new Map());
+            setOverallTotals(new Map());
+        }
     } finally {
         if (isMounted.current && currentSchoolId === id) setLoading(false);
     }
@@ -1233,13 +1310,15 @@ export default function ClassResultsPage() {
         if (hasCombinedScienceBgs && (key === 'science' || key === 'bgs') && !label.includes('/') && !hasRealMarks) return;
 
         if (isClassNineOrTen) {
-            // 1. Group-specific strict exclusion:
-            if (activeGroup === 'commerce') {
-                if (['physics', 'chemistry', 'biology', 'bgs', 'history', 'geography', 'civics', 'economics'].includes(key)) return;
-            } else if (activeGroup === 'science') {
-                if (['science', 'accounting', 'finance', 'business', 'history', 'geography', 'civics', 'economics'].includes(key)) return;
-            } else if (activeGroup === 'humanities') {
-                if (['physics', 'chemistry', 'biology', 'bgs', 'accounting', 'finance', 'business'].includes(key)) return;
+            // 1. Group-specific strict exclusion (only for subjects WITHOUT entered marks in this section view):
+            if (!hasRealMarks) {
+                if (activeGroup === 'commerce') {
+                    if (['physics', 'chemistry', 'biology', 'bgs', 'history', 'geography', 'civics', 'economics'].includes(key)) return;
+                } else if (activeGroup === 'science') {
+                    if (['science', 'accounting', 'finance', 'business', 'history', 'geography', 'civics', 'economics'].includes(key)) return;
+                } else if (activeGroup === 'humanities') {
+                    if (['physics', 'chemistry', 'biology', 'bgs', 'accounting', 'finance', 'business'].includes(key)) return;
+                }
             }
 
             // 2. Strict Universal Rule: If NO student in the current view has actual positive marks (>0) in an optional/elective subject, HIDE IT!
@@ -1338,6 +1417,8 @@ export default function ClassResultsPage() {
   const headerSchoolAddress = resultLang === 'en' ? (schoolInfo?.address_en || schoolInfo?.address) : (schoolInfo?.address || '');
   const headerClassLabel = resultLang === 'en' ? translateClassName(currentClassLabel) : currentClassLabel;
   const headerSectionLabel = resultLang === 'en' ? translateSectionName(currentSectionLabel) : currentSectionLabel;
+  // হেডারের ব্রেকডাউন লেবেল (CQ+MCQ+PRA) নির্ণয়ে ব্যবহৃত শাখা/গ্রুপ
+  const headerGroup = (detectedGroup || currentGroupFromURL || '').toLowerCase();
 
   const isPrimaryClass = useMemo(() => {
       const lbl = currentClassLabel.toLowerCase();
@@ -1451,7 +1532,7 @@ export default function ClassResultsPage() {
         const displayStr = !has ? 'Absent'
             : isPrimaryClass ? primaryDisplay
             : (tot > 0
-                ? (p.length > 1 ? `${Math.round(tot)} = ${p.join('+')}` : String(Math.round(tot)))
+                ? (p.length > 1 ? `${p.join('+')} = ${Math.round(tot)}` : String(Math.round(tot)))
                 : '0');
 
         m.set(key, { total: tot, display: displayStr, is_passed: isPassed, hasMarks: has });
@@ -1474,10 +1555,10 @@ export default function ClassResultsPage() {
                 if (cqM > 0) parts.push(Math.round(sumW));
                 if (mcqM > 0) parts.push(Math.round(sumM));
                 if (prM > 0) parts.push(Math.round(sumP));
-                if (sum === 0) disp = 'Absent'; else disp = (parts.length > 1 ? `${Math.round(sum)} = ${parts.join('+')}` : String(Math.round(sum)));
+                if (sum === 0) disp = 'Absent'; else disp = (parts.length > 1 ? `${parts.join('+')} = ${Math.round(sum)}` : String(Math.round(sum)));
             } else {
                 const p = arr.map(r => Math.round(parseFloat(r.total_obtained)||0));
-                if (sum === 0) disp = 'Absent'; else disp = (p.length > 1 ? `${Math.round(sum)} = ${p.join('+')}` : String(Math.round(sum)));
+                if (sum === 0) disp = 'Absent'; else disp = (p.length > 1 ? `${p.join('+')} = ${Math.round(sum)}` : String(Math.round(sum)));
             }
         }
         const cqP = cqM === 0 || sumW >= Math.round(cqM * 0.33 - 0.5), mcqP = mcqM === 0 || sumM >= Math.round(mcqM * 0.33 - 0.5), prP = prM === 0 || sumP >= Math.round(prM * 0.33 - 0.5), totP = sum >= Math.round((cqM+mcqM+prM)*0.33-0.5);
@@ -1502,7 +1583,7 @@ export default function ClassResultsPage() {
             if (cqM > 0) parts.push(Math.round(sumW));
             if (mcqM > 0) parts.push(Math.round(sumM));
             if (prM > 0) parts.push(Math.round(sumP));
-            disp = parts.length > 1 ? `${Math.round(tot)} = ${parts.join('+')}` : String(Math.round(tot));
+            disp = parts.length > 1 ? `${parts.join('+')} = ${Math.round(tot)}` : String(Math.round(tot));
         }
         const cqP = cqM === 0 || sumW >= Math.round(cqM * 0.33 - 0.5),
               mcqP = mcqM === 0 || sumM >= Math.round(mcqM * 0.33 - 0.5),
@@ -1574,15 +1655,8 @@ export default function ClassResultsPage() {
   const studentListSortedByRoll = useMemo(() => { return [...studentListFiltered].sort((a, b) => (parseInt(a.roll_number) || 999) - (parseInt(b.roll_number) || 999)); }, [studentListFiltered]);
 
   const currentExamLabel = useMemo(() => {
-    if (resultLang === 'en') return EXAM_LABELS_EN[selectedExam] || 'All Examinations';
-    if (selectedExam === 'half_yearly') return 'অর্ধ-বার্ষিক পরীক্ষা';
-    if (selectedExam === 'annual') return 'বার্ষিক পরীক্ষা';
-    if (selectedExam === 'pre_test') return 'প্রাক-নির্বাচনী পরীক্ষা';
-    if (selectedExam === 'test') return 'নির্বাচনী (টেস্ট) পরীক্ষা';
-    if (selectedExam === 'model') return 'মডেল টেস্ট পরীক্ষা';
-    if (selectedExam === 'first_term') return 'প্রথম সাময়িক পরীক্ষা';
-    if (selectedExam === 'terminal') return 'টার্মিনাল পরীক্ষা';
-    return 'সকল পরীক্ষা';
+    const titles = EXAM_RESULT_TITLES[selectedExam] || { bn: 'সকল পরীক্ষার ফলাফল', en: 'All Examinations Result' };
+    return titles[resultLang] || titles.bn;
   }, [selectedExam, resultLang]);
 
   return (
@@ -1622,12 +1696,12 @@ export default function ClassResultsPage() {
       <Box className="print-only" sx={{ display: 'none', textAlign: 'center', mb: 3, borderBottom: '2px solid black', pb: 2, "@media print": { display: 'block' } }}>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mb: 1 }}>{schoolInfo?.logo && <img src={getMediaUrl(schoolInfo.logo)} alt="Logo" style={{ height: '80px' }} />}<Box><Typography variant="h5" sx={{ fontWeight: 800, fontSize: '1.6rem' }}>{headerSchoolName}</Typography><Typography variant="body1" sx={{ fontSize: '1rem' }}>{headerSchoolAddress}</Typography></Box></Box>
           <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, fontSize: '1.4rem' }}>
-            {resultLang === 'en' ? `Exam: ${currentExamLabel} | Year: ${selectedYear}` : `পরীক্ষা: ${currentExamLabel} | বছর: ${selectedYear}`}
+            {resultLang === 'en' ? `${currentExamLabel} | Year: ${selectedYear}` : `${currentExamLabel} | বছর: ${selectedYear}`}
           </Typography>
           <Typography variant="h6" sx={{ fontSize: '1rem' }}>
             {resultLang === 'en'
-              ? `Class: ${headerClassLabel} | Section: ${headerSectionLabel}`
-              : `শ্রেণি: ${headerClassLabel} | শাখা: ${headerSectionLabel}`}
+              ? `${headerClassLabel} | Section: ${headerSectionLabel}`
+              : `${headerClassLabel} | শাখা: ${headerSectionLabel}`}
           </Typography>
       </Box>
       {loading ? <CircularProgress /> : (
@@ -1638,7 +1712,22 @@ export default function ClassResultsPage() {
               <TableCell className="cr-name">{HEAD_LABELS.name[resultLang]}</TableCell>
               {displaySubjects.map(s => {
                 const baseLbl = MERGED_COL_LABELS[s.key] ? MERGED_COL_LABELS[s.key][resultLang] : (resultLang === 'en' ? translateSubjectLabel(s.label) : s.label);
-                return <TableCell key={s.key} className="cr-subj-head" align="center" sx={{ fontWeight: 'bold' }}>{baseLbl}</TableCell>;
+                // বাংলা ইতিমধ্যেই আলাদা CQ/MCQ/Total কলামে ভাগ করা, তাই সেখানে আলাদা ব্রেকডাউন লাগে না
+                const isMergedBanglaCol = s.key.startsWith('merged-bangla');
+                // বাংলা (১ম+২য়) কলামে উপরে বিষয়ের নাম, নিচে অংশ (সিকিউ/এমসিকিউ/মোট) — পাশাপাশি নয়
+                const banglaBase = isMergedBanglaCol && MERGED_COL_LABELS[s.key]?.enBase ? (resultLang === 'en' ? MERGED_COL_LABELS[s.key].enBase : MERGED_COL_LABELS[s.key].bnBase) : '';
+                const banglaPart = isMergedBanglaCol && MERGED_COL_LABELS[s.key]?.enPart ? (resultLang === 'en' ? MERGED_COL_LABELS[s.key].enPart : MERGED_COL_LABELS[s.key].bnPart) : '';
+                const breakName = s.key === 'merged-optional' ? 'কৃষি শিক্ষা'
+                  : s.key === 'merged-english' ? 'english'
+                  : s.key === 'religion_merged' ? 'ধর্ম'
+                  : s.label;
+                const breakLbl = isMergedBanglaCol ? '' : getHeaderBreakLabel(breakName, isClassNineOrTen, headerGroup, isPrimaryClass);
+                return (
+                  <TableCell key={s.key} className="cr-subj-head" align="center" sx={{ fontWeight: 'bold' }}>
+                    {banglaBase ? (<>{banglaBase}{' '}<span className="cr-hdr-part" style={{ fontSize: '9pt', fontWeight: 'normal' }}>{banglaPart}</span></>) : (<>{baseLbl}
+                    {breakLbl ? (<><br /><span style={{ fontSize: '9pt', fontWeight: 'normal' }}>{breakLbl}</span></>) : null}</>)}
+                  </TableCell>
+                );
               })}
               {isPrimaryClass && <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.tutorial[resultLang]}</TableCell>}
               <TableCell align="center" sx={{ fontWeight: 'bold' }}>{HEAD_LABELS.total[resultLang]}</TableCell>
@@ -1697,9 +1786,21 @@ export default function ClassResultsPage() {
                 <TableRow key={stu.id} sx={{ pageBreakInside: 'avoid' }}>
                   <TableCell className="cr-roll" align="center">{stu.roll_number}</TableCell><TableCell className="cr-name" sx={{ fontWeight: 'bold' }}>{resultLang === 'en' ? `${stu.user?.first_name_en || stu.user?.first_name || ''} ${stu.user?.last_name_en || stu.user?.last_name || ''}`.trim() : `${stu.user?.first_name || ''} ${stu.user?.last_name || ''}`.trim()}</TableCell>
                   {(() => { const resMap = getResultsMap(stu.id, stuGroup); return displaySubjects.map(sub => {
-                      const r = resMap.get(sub.key); const mandatory = isSubMandatory(sub.key); const isOpt = /higher|উচ্চতর|agriculture|home|কৃষি|গার্হস্থ্য/.test(sub.key);
-                      const isF = !isOpt && ((r && r.hasMarks && r.is_passed === false) || (!r && mandatory && stuData && !stuData.isAbsent));
-                      const display = (r?.display === 'Absent' || (!r && mandatory)) ? <span style={{ color: 'red', fontWeight: 'normal' }}>Absent</span> : (!r && !mandatory ? <span style={{ color: '#aaa' }}>--</span> : (r?.display || ''));
+                      const r = resMap.get(sub.key);
+                      const isCrossGroup = isCrossGroupSubject(sub.key, stuGroup, isClassNineOrTen);
+                      const mandatory = !isCrossGroup && isSubMandatory(sub.key);
+                      const isOpt = /higher|উচ্চতর|agriculture|home|কৃষি|গার্হস্থ্য/.test(sub.key);
+                      const isF = !isCrossGroup && !isOpt && ((r && r.hasMarks && r.is_passed === false) || (!r && mandatory && stuData && !stuData.isAbsent));
+                      let display;
+                      if (isCrossGroup) {
+                          display = <span style={{ color: '#aaa' }}>--</span>;
+                      } else if (r?.display === 'Absent' || (!r && mandatory)) {
+                          display = <span style={{ color: 'red', fontWeight: 'normal' }}>Absent</span>;
+                      } else if (!r && !mandatory) {
+                          display = <span style={{ color: '#aaa' }}>--</span>;
+                      } else {
+                          display = withMarksBreak(r?.display || '');
+                      }
                       return <TableCell key={sub.key} align="center" sx={{ color: isF ? 'red' : 'inherit' }}>{display}</TableCell>;
                   }); })()}
                   {isPrimaryClass && <TableCell align="center" sx={{ fontWeight: 'bold' }}>{stuData?.totalTutorial || 0}</TableCell>}
@@ -1714,7 +1815,7 @@ export default function ClassResultsPage() {
           </Table>
         </TableContainer>
       )}
-      <style>{`@media print { .no-print { display: none !important; } body { background: white !important; margin: 0 !important; padding: 5mm !important; } .print-only { display: block !important; } .MuiTableContainer-root { overflow: visible !important; width: 100% !important; } .class-results-table { width: 100% !important; table-layout: fixed !important; } .class-results-table th, .class-results-table td { word-break: break-word !important; line-height: 1.1 !important; } .class-results-table th.cr-roll, .class-results-table td.cr-roll { width: 4% !important; } .class-results-table th.cr-name, .class-results-table td.cr-name { width: 15% !important; } .class-results-table th.cr-subj-head { writing-mode: vertical-rl !important; white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; font-size: 9pt !important; line-height: 1 !important; padding: 1px !important; } .class-results-table th:not(.cr-subj-head) { vertical-align: bottom !important; } }`}</style>
+      <style>{`.cr-hdr-part { display: block; } @media print { .cr-hdr-part { display: inline !important; } .no-print { display: none !important; } body { background: white !important; margin: 0 !important; padding: 5mm !important; } .print-only { display: block !important; } .MuiTableContainer-root { overflow: visible !important; width: 100% !important; } .class-results-table { width: 100% !important; table-layout: fixed !important; } .class-results-table th, .class-results-table td { word-break: break-word !important; line-height: 1.1 !important; } .class-results-table th.cr-roll, .class-results-table td.cr-roll { width: 4% !important; } .class-results-table th.cr-name, .class-results-table td.cr-name { width: 15% !important; } .class-results-table th.cr-subj-head { writing-mode: vertical-rl !important; white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; font-size: 9pt !important; line-height: 1 !important; padding: 1px !important; } .class-results-table th:not(.cr-subj-head) { vertical-align: bottom !important; } }`}</style>
     </Box>
   );
 }

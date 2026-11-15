@@ -163,6 +163,25 @@ class StudentProfile(models.Model):
             if self.father_name: self.father = get_or_create_parent_user(self.father_name, 'father', 'male')
             if self.mother_name: self.mother = get_or_create_parent_user(self.mother_name, 'mother', 'female')
 
+        if self.user:
+            try:
+                from users.models import Profile
+                if self.gender:
+                    Profile.objects.filter(user=self.user).update(gender=self.gender)
+                else:
+                    prof_gender = Profile.objects.filter(user=self.user).values_list('gender', flat=True).first()
+                    if prof_gender:
+                        self.gender = prof_gender
+
+                if self.blood_group:
+                    Profile.objects.filter(user=self.user).update(blood_group=self.blood_group)
+                else:
+                    prof_bg = Profile.objects.filter(user=self.user).values_list('blood_group', flat=True).first()
+                    if prof_bg:
+                        self.blood_group = prof_bg
+            except Exception:
+                pass
+
         is_new = not self.pk
         super().save(*args, **kwargs)
 

@@ -2,10 +2,12 @@ from django.db import models
 from django.conf import settings
 from schools.models import School
 from academics.models import StudentProfile
+from employees.models import Employee
 
 class AttendanceRecord(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='attendance_records')
-    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='attendances')
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='attendances', null=True, blank=True)
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='attendances', null=True, blank=True)
     date = models.DateField()
     present = models.BooleanField(default=True)
     note = models.TextField(blank=True, null=True)
@@ -24,18 +26,22 @@ class AttendanceRecord(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     class Meta:
-        unique_together = ('student', 'date')
         ordering = ['-date']
+        # bulk_save uses "ON CONFLICT (student_id, date)", so this unique
+        # constraint must stay declared here to match the database index.
+        unique_together = (('student', 'date'),)
         indexes = [
             models.Index(fields=['school', 'date'], name='att_rec_sch_date_idx'),
             models.Index(fields=['school'], name='att_rec_school_idx'),
             models.Index(fields=['date'], name='att_rec_date_idx'),
             models.Index(fields=['student'], name='att_rec_student_idx'),
+            models.Index(fields=['employee'], name='att_rec_employee_idx'),
             models.Index(fields=['taken_by_user'], name='att_rec_taken_by_idx'),
         ]
 
     def __str__(self):
-        return f"{self.student.user.username} - {self.date}"
+        target = self.student.user.username if self.student else (self.employee.name_en if self.employee else 'Unknown')
+        return f"{target} - {self.date}"
 
 class StudentAttendanceSummary(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='attendance_summaries')

@@ -1,48 +1,34 @@
-import './reactRefreshShim';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
-// index.js বা App.js এ
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
-import { CssBaseline } from '@mui/material';
 import { ThemeProvider, createTheme, responsiveFontSizes } from '@mui/material/styles';
+import { CssBaseline } from '@mui/material';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
+
+// safeLazy stale-chunk রিলোডের সময় URL-এ যোগ করা cache-buster প্যারামিটারটি
+// সফলভাবে বুট হওয়ার পর সরিয়ে ফেলি, যাতে URL পরিষ্কার থাকে।
+try {
+  const cleanUrl = new URL(window.location.href);
+  if (cleanUrl.searchParams.has('_bdapp_reload')) {
+    cleanUrl.searchParams.delete('_bdapp_reload');
+    window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+  }
+} catch (_) {}
+
 let theme = createTheme({
-  typography: {
-    fontSize: 16,
+  palette: {
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
   },
-  components: {
-    MuiTableContainer: {
-      styleOverrides: {
-        root: {
-          overflowX: 'auto',
-        },
-      },
-    },
-    MuiTextField: {
-      styleOverrides: {
-        root: {
-          '& .MuiInputBase-input': {
-            fontSize: '1rem',
-          },
-          '& .MuiInputLabel-root': {
-            fontSize: '1rem',
-          },
-        },
-      },
-    },
-    MuiListItemText: {
-      styleOverrides: {
-        primary: {
-          fontSize: '1.1rem',
-          fontWeight: 500,
-        },
-      },
-    },
+  typography: {
+    fontFamily: '"Hind Siliguri", "SolaimanLipi", "Roboto", "Helvetica", "Arial", sans-serif',
   },
 });
 theme = responsiveFontSizes(theme);
@@ -54,12 +40,36 @@ root.render(
   </ThemeProvider>
 );
 
-// Register service worker for offline support and PWA caching
+// Register Service Worker for offline PWA functionality & background asset precaching
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // রিলোড লুপ আটকানোর জন্য (safeLazy চাঙ্ক লোড ব্যর্থ হলে যা সেট করে)
+    try { sessionStorage.removeItem('bdapp_chunk_reloaded'); } catch (_) {}
+
     navigator.serviceWorker.register('/service-worker.js')
       .then((reg) => {
-        console.log('✅ ServiceWorker registered with scope:', reg.scope);
+        console.log('✅ ServiceWorker registered successfully:', reg.scope);
+
+        // নতুন বিল্ড আছে কিনা দ্রুত ধরে ফেলার জন্য পর্যায়ক্রমে চেক
+        const checkForUpdate = () => {
+          if (navigator.onLine) reg.update().catch(() => {});
+        };
+        checkForUpdate();
+        setInterval(checkForUpdate, 15 * 60 * 1000);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') checkForUpdate();
+        });
+
+        // নতুন ভার্সন activate হলে ইউজারকে কিছু না জানিয়েই একবার নীরব রিলোড —
+        // ফলে সর্বশেষ কোড/আপডেট ব্যবহারকারী টের না পেয়েই চালু হয়ে যায়।
+        const hadController = !!navigator.serviceWorker.controller;
+        let reloading = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!hadController) return; // প্রথমবার ইনস্টল: রিলোড দরকার নেই
+          if (reloading) return;
+          reloading = true;
+          window.location.reload();
+        });
       })
       .catch((err) => {
         console.warn('⚠️ ServiceWorker registration failed:', err);

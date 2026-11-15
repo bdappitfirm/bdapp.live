@@ -32,7 +32,7 @@ const OfflinePageFallback = () => (
         পেজটি অফলাইনে ডাউনলোডেড নেই
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        আপনি অনলাইনে থাকাকালীন এই পেজে প্রবেশ করেননি। প্রথমবার অনলাইনে একবার লোড করার পর পেজটি সবসময় অফলাইনে পাওয়া যাবে।
+        আপনি এখন অফলাইনে আছেন; এই পেজটি এখনো ডিভাইসে সেভ করা নেই। প্রথমবার অনলাইনে একবার লোড করার পর পেজটি সবসময় অফলাইনে পাওয়া যাবে।
       </Typography>
       <Button variant="contained" onClick={() => window.history.back()}>
         পিছনে ফিরে যান
@@ -42,97 +42,51 @@ const OfflinePageFallback = () => (
 );
 
 // Safe Lazy Component Loader that catches chunk import errors offline
+const CHUNK_RELOAD_FLAG = 'bdapp_chunk_reloaded';
+
 export const safeLazy = (importFn) => {
   return React.lazy(async () => {
-    try {
-      const module = await importFn();
-      if (module && (module.default || typeof module === 'function')) {
-        return module;
+    let lastError = null;
+
+    // অনলাইনে থাকলে কয়েকবার চেষ্টা করি — অনেক সময় সাময়িক নেটওয়ার্ক গোলযোগে
+    // চাঙ্ক লোড ব্যর্থ হয়, তখন সাথে সাথে "ডাউনলোড হয়নি" দেখানো উচিত নয়।
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const module = await importFn();
+        try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG); } catch (_) {}
+        if (module && (module.default || typeof module === 'function')) {
+          return module;
+        }
+        return { default: OfflinePageFallback };
+      } catch (error) {
+        lastError = error;
+        if (!navigator.onLine) break;
+        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
       }
-      return { default: OfflinePageFallback };
-    } catch (error) {
-      console.warn('SafeLazy: Module chunk failed to load offline', error);
-      return { default: OfflinePageFallback };
     }
+
+    // অনলাইনে থেকেও চাঙ্ক লোড হয়নি — এটি সাধারণত নতুন deploy-এর পর পুরনো
+    // বান্ডেল/পুরনো chunk নাম থাকার কারণে হয়। cache-busting সহ একবার রিলোড
+    // করলেই ব্রাউজার-ক্যাশ এড়িয়ে নতুন index.html ও নতুন চাঙ্ক পাওয়া যায়।
+    if (navigator.onLine) {
+      let alreadyReloaded = false;
+      try { alreadyReloaded = sessionStorage.getItem(CHUNK_RELOAD_FLAG) === '1'; } catch (_) {}
+      if (!alreadyReloaded) {
+        try { sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1'); } catch (_) {}
+        try {
+          const freshUrl = new URL(window.location.href);
+          freshUrl.searchParams.set('_bdapp_reload', String(Date.now()));
+          window.location.replace(freshUrl.toString());
+        } catch (_) {
+          window.location.reload();
+        }
+        return new Promise(() => {}); // রিলোড চলার সময় লোডিং স্পিনার ধরে রাখি
+      }
+    }
+
+    console.warn('SafeLazy: Module chunk unavailable', lastError);
+    return { default: OfflinePageFallback };
   });
-};
-
-// Preload all page component JS chunks into SW / browser cache when online
-const pageImports = [
-  () => import('./pages/PublicVerify'),
-  () => import('./pages/WelcomePage'),
-  () => import('./pages/SchoolDashboard.jsx'),
-  () => import('./pages/Dashboard'),
-  () => import('./pages/RoleDashboard'),
-  () => import('./pages/RoleDetail'),
-  () => import('./pages/LoginPage'),
-  () => import('./pages/SignupPage'),
-  () => import('./pages/ForgotPasswordPage'),
-  () => import('./pages/ResetPasswordPage'),
-  () => import('./pages/ChangePasswordPage'),
-  () => import('./pages/TeachersPage'),
-  () => import('./pages/AddTeacherPage'),
-  () => import('./pages/CredentialsPage'),
-  () => import('./pages/TeacherCardsPage'),
-  () => import('./pages/SoftwareAssistant.jsx'),
-  () => import('./pages/StudentsPage'),
-  () => import('./pages/AddStudentPage'),
-  () => import('./pages/EditStudentPage'),
-  () => import('./pages/AcademicsPage'),
-  () => import('./pages/ParentsPage'),
-  () => import('./pages/AddParentPage'),
-  () => import('./pages/ParentDashboard'),
-  () => import('./pages/StudentDashboard'),
-  () => import('./pages/ResultsPage'),
-  () => import('./pages/ExaminationsPage'),
-  () => import('./pages/ResultCardGenerator'),
-  () => import('./pages/MeritListPage'),
-  () => import('./pages/RankListPage'),
-  () => import('./pages/ToTListPage'),
-  () => import('./pages/VoterListPage'),
-  () => import('./pages/StudentListPage'),
-  () => import('./pages/SiblingsPage.jsx'),
-  () => import('./pages/ClassResultsPage'),
-  () => import('./pages/TopSheetPage'),
-  () => import('./pages/IDCardGenerator'),
-  () => import('./pages/CertificateGenerator'),
-  () => import('./pages/AdmissionCardGenerator'),
-  () => import('./pages/ProfilePage'),
-  () => import('./pages/SMSPage'),
-  () => import('./pages/SubjectsPage'),
-  () => import('./pages/ClassroomsPage'),
-  () => import('./pages/AddCommitteePage'),
-  () => import('./pages/AttendancePageNew'),
-  () => import('./pages/AttendanceReportCard'),
-  () => import('./pages/FeesPage'),
-  () => import('./pages/DailyCollectionRegisterPage.jsx'),
-  () => import('./components/FeePaymentReceipt'),
-  () => import('./components/ReceiptBook'),
-  () => import('./pages/GroupsPage'),
-  () => import('./pages/SchoolsPage'),
-  () => import('./pages/AttendanceRecordsPage'),
-  () => import('./pages/YearReportPage'),
-  () => import('./pages/VirtualClassPage'),
-  () => import('./pages/SupportLive.jsx'),
-  () => import('./pages/SchoolSettings.jsx'),
-  () => import('./pages/SeatAllocationPage.jsx'),
-  () => import('./pages/WhatsAppSettings.jsx'),
-  () => import('./pages/billing/BillingPage.jsx'),
-  () => import('./pages/SoftwareAccountsPage.jsx'),
-  () => import('./pages/BanbeisPage.jsx'),
-  () => import('./pages/PayrollPage.jsx'),
-  () => import('./pages/PayslipGenerator.jsx'),
-  () => import('./pages/AllStudentsOverviewPage.jsx')
-];
-
-export const preloadAllPages = () => {
-  if (typeof window === 'undefined') return;
-  if (!navigator.onLine) return;
-  setTimeout(() => {
-    pageImports.forEach(importFn => {
-      importFn().catch(() => {});
-    });
-  }, 1000);
 };
 
 const GlobalInstallPrompt = () => {
@@ -282,6 +236,8 @@ const BanbeisPage = safeLazy(() => import('./pages/BanbeisPage.jsx'));
 const PayrollPage = safeLazy(() => import('./pages/PayrollPage.jsx'));
 const PayslipGenerator = safeLazy(() => import('./pages/PayslipGenerator.jsx'));
 const AllStudentsOverviewPage = safeLazy(() => import('./pages/AllStudentsOverviewPage.jsx'));
+const EmployeePage = safeLazy(() => import('./pages/EmployeePage.jsx'));
+const EmployeeIDCardGenerator = safeLazy(() => import('./pages/EmployeeIDCardGenerator.jsx'));
 
 const PathTracker = () => {
   const location = useLocation();
@@ -322,10 +278,6 @@ const OfflineIndicator = () => {
 };
 
 function App() {
-  useEffect(() => {
-    preloadAllPages();
-  }, []);
-
   return (
     <Router>
       <CacheClearer />
@@ -407,6 +359,8 @@ function App() {
           <Route path="support-live" element={<ProtectedRoute><SupportLivePage /></ProtectedRoute>} />
           <Route path="sms" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SMSPage /></ProtectedRoute>} />
           <Route path="payroll" element={<ProtectedRoute allowedRoles={['admin']}><PayrollPage /></ProtectedRoute>} />
+          <Route path="employee" element={<ProtectedRoute allowedRoles={['admin','teacher']}><EmployeePage /></ProtectedRoute>} />
+          <Route path="employee/id-card" element={<ProtectedRoute allowedRoles={['admin','teacher']}><EmployeeIDCardGenerator /></ProtectedRoute>} />
           <Route path="payslip/:recordId" element={<ProtectedRoute allowedRoles={['admin','teacher']}><PayslipGenerator /></ProtectedRoute>} />
           <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="admin" element={<ProtectedRoute allowedRoles={['admin']}><RoleDashboard role="admin" /></ProtectedRoute>} />

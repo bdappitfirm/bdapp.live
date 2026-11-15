@@ -210,7 +210,8 @@ const SeatAllocationPage = () => {
     return `${toBnDigits(d)}/${toBnDigits(m)}/${toBnDigits(y)}`;
   };
 
-  const benchOptions = [5, 10, 15, 20, 25, 30, 35, 40, 50];
+  const benchOptions = Array.from({ length: 50 }, (_, i) => i + 1);
+  const roomCountOptions = Array.from({ length: 30 }, (_, i) => i + 1);
   const DEFAULT_BENCH_COUNT = 15;
 
   const availableBuildings = school?.number_of_buildings 
@@ -667,7 +668,7 @@ const SeatAllocationPage = () => {
                 <Box key={bNum} sx={{ mt: 2, p: 1, bgcolor: '#f5f5f5', borderRadius: 1 }}>
                   <Typography variant="subtitle2" color="primary">ভবন-{bNum} রুম ও বেঞ্চ সংখ্যা</Typography>
                   <TextField size="small" select label="রুম সংখ্যা" value={buildingRooms[bNum] || 1} onChange={(e) => handleRoomCountChange(bNum, e.target.value)} fullWidth sx={{ my: 1 }} SelectProps={{ native: true }}>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 25, 30].map(n => <option key={n} value={n}>{n}</option>)}
+                    {roomCountOptions.map(n => <option key={n} value={n}>{n}</option>)}
                   </TextField>
                   <Grid container spacing={1}>
                     {Array.from({ length: buildingRooms[bNum] || 1 }, (_, i) => i + 1).map(rNum => (

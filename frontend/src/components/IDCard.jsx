@@ -71,7 +71,107 @@ const getNumericSection = (sectionName) => {
   return '01';
 };
 
-export default function IDCard({ type = 'student', data, school, classrooms = [], sections = [], overridePhone, signatureUrl: propSignatureUrl }) {
+// Bangla section letter -> English section letter (for the English version of the card)
+const SECTION_EN_MAP = {
+  'ক': 'A', 'খ': 'B', 'গ': 'C', 'ঘ': 'D', 'ঙ': 'E',
+  'চ': 'F', 'ছ': 'G', 'জ': 'H', 'ঝ': 'I', 'ঞ': 'J'
+};
+
+// Build an English class name ("Class 8", "Nursery", "Play", ...) from a Bangla class name
+const getEnglishClassName = (className) => {
+  if (!className) return '';
+  const numeric = getNumericClass(className);
+  if (numeric) return `Class ${parseInt(numeric, 10)}`;
+  const s = String(className);
+  if (/প্লে|play/i.test(s)) return 'Play';
+  if (/শিশু|shishu/i.test(s)) return 'Shishu';
+  if (/নার্সার|nursery/i.test(s)) return 'Nursery';
+  if (/কেজি|\bkg\b/i.test(s)) return 'KG';
+  return s;
+};
+
+// All labels used on the card, per language
+const LABELS = {
+  bn: {
+    studentCard: 'শিক্ষার্থী আইডি কার্ড',
+    teacherCard: 'শিক্ষক আইডি কার্ড',
+    committeeCard: 'পরিচালনা কমিটি আইডি কার্ড',
+    id: 'আইডি',
+    className: 'শ্রেণি',
+    roll: 'রোল',
+    section: 'শাখা',
+    blood: 'রক্ত',
+    designation: 'পদবী',
+    subject: 'বিষয়',
+    joining: 'যোগদান',
+    returnTo: 'প্রাপ্ত হলে ফেরত দিন',
+    scanToVerify: 'যাচাই করতে স্ক্যান করুন',
+    session: 'শিক্ষাবর্ষ',
+    headmaster: 'প্রধান শিক্ষক',
+    email: 'মেইল',
+    mobile: 'মোবাইল',
+  },
+  en: {
+    studentCard: 'Student ID Card',
+    teacherCard: 'Teacher ID Card',
+    committeeCard: 'Committee ID Card',
+    id: 'ID',
+    className: 'Class',
+    roll: 'Roll',
+    section: 'Section',
+    blood: 'Blood',
+    designation: 'Designation',
+    subject: 'Subject',
+    joining: 'Joining',
+    returnTo: 'If found, please return to',
+    scanToVerify: 'Scan to verify',
+    session: 'Session',
+    headmaster: 'Headmaster',
+    email: 'Email',
+    mobile: 'Mobile',
+  }
+};
+
+// Faint school logo printed behind the card content - Larger size
+const CardWatermark = ({ logo }) => (
+  logo ? (
+    <Box
+      component="img"
+      src={logo}
+      alt=""
+      sx={{
+        position: 'absolute',
+        top: '52%',
+        left: '50%',
+        width: '88%',
+        transform: 'translate(-50%, -50%)',
+        opacity: 0.08,
+        zIndex: 0,
+        pointerEvents: 'none',
+        userSelect: 'none'
+      }}
+    />
+  ) : null
+);
+
+// A single "label : value" row inside the details block - Optimized font size & wrapping to prevent text cutoff
+const InfoRow = ({ label, value, labelWidth = '75px' }) => (
+  <Box sx={{ display: 'flex', mb: 0.3, alignItems: 'flex-start' }}>
+    <Typography sx={{
+      fontWeight: 'bold', fontSize: '0.75rem', width: labelWidth, flexShrink: 0,
+      textAlign: 'right', pr: 0.8, color: '#0a4b94', lineHeight: 1.2
+    }}>{label}</Typography>
+    <Typography sx={{
+      fontWeight: 'bold', fontSize: '0.75rem', color: '#0a4b94', lineHeight: 1.2,
+      whiteSpace: 'normal', wordBreak: 'break-word', overflow: 'hidden'
+    }}>{value}</Typography>
+  </Box>
+);
+
+export default function IDCard({ type = 'student', data, school, classrooms = [], sections = [], overridePhone, signatureUrl: propSignatureUrl, lang = 'bn' }) {
+  const isEn = lang === 'en';
+  const t = LABELS[isEn ? 'en' : 'bn'];
+
   // Resolve classroom object
   const getClassroom = () => {
     if (!data?.classroom) return null;
@@ -92,7 +192,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
   const signatureUrl = (() => {
     if (propSignatureUrl) return propSignatureUrl;
     if (school?.principal_signature) {
-      const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'');
+      const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/, '');
       const sig = String(school.principal_signature);
       if (sig.startsWith('http')) return sig;
       return `${base}/media/${sig.replace(/^\/+/, '')}`;
@@ -100,153 +200,73 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
     // Hardcoded fallback for specific school 19 only if they requested it, else return null
     try {
       if (school?.id && String(school.id) === '19') {
-        const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/,'');
+        const base = (api?.defaults?.baseURL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/, '');
         return `${base}/media/BHS/signature.png`;
       }
     } catch (_) {}
     return null; // Return null instead of a default signature
   })();
-  
+
+  // Print a single card straight from the visible DOM. The cards are never
+  // cloned into another document, so the QR <canvas> keeps its drawn pixels
+  // (cloning a canvas copies the element but not the bitmap, which is why the
+  // QR code used to come out blank).
   const handlePrintSingle = () => {
-    const printWindow = window.open('', '_blank');
-    const cardElement = document.getElementById(`id-card-${data.id}`);
-    if (cardElement && printWindow) {
-      // Clone the element to preserve all computed styles
-      const clonedElement = cardElement.cloneNode(true);
-      
-      // Copy computed styles for all elements
-      const copyComputedStyles = (source, target) => {
-        const computedStyle = window.getComputedStyle(source);
-        for (let i = 0; i < computedStyle.length; i++) {
-          const property = computedStyle[i];
-          target.style.setProperty(property, computedStyle.getPropertyValue(property), computedStyle.getPropertyPriority(property));
-        }
-        
-        // Recursively copy styles for child elements
-        const sourceChildren = source.children;
-        const targetChildren = target.children;
-        for (let i = 0; i < sourceChildren.length; i++) {
-          if (targetChildren[i]) {
-            copyComputedStyles(sourceChildren[i], targetChildren[i]);
-          }
-        }
-      };
-      
-      copyComputedStyles(cardElement, clonedElement);
-      
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>ID Card - ${data?.user?.username || 'User'}</title>
-            <style>
-              @page { size: A4; margin: 10mm; }
-              body { 
-                margin: 0; 
-                padding: 10mm; 
-                font-family: Arial, sans-serif; 
-                background: white !important; 
-                -webkit-print-color-adjust: exact !important; 
-                print-color-adjust: exact !important;
-              }
-              
-              /* Force exact dimensions */
-              .id-card-front, .id-card-back { 
-                width: 250px !important; 
-                min-height: 386px !important;
-                max-height: none !important;
-                height: auto !important;
-                position: relative !important; 
-                display: flex !important;
-                flex-direction: column !important;
-                overflow: visible !important;
-                border: 2px solid #0a4b94 !important;
-                box-shadow: none !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                font-family: 'Hind Siliguri', 'Arial', sans-serif !important;
-              }
-              
-              .id-card-front { 
-                margin-bottom: 4mm !important; 
-                background: white !important;
-              }
-              
-              .id-card-back { 
-                background: white !important;
-              }
-              
-              .id-card-wrapper { 
-                position: relative !important; 
-                display: block !important;
-                margin-bottom: 20px;
-              }
-              
-              /* Preserve all element positioning */
-              * { 
-                -webkit-print-color-adjust: exact !important; 
-                print-color-adjust: exact !important;
-                box-sizing: border-box !important;
-              }
-              
-              .MuiBox-root { 
-                display: flex !important;
-                flex-direction: column !important;
-              }
-              
-              .MuiTypography-root { 
-                display: block !important;
-              }
-              
-              .MuiAvatar-root, .MuiAvatar-img { 
-                display: block !important; 
-                visibility: visible !important; 
-                opacity: 1 !important; 
-              }
-              
-              /* Ensure footer is visible */
-              .id-card-front > .MuiBox-root:last-child,
-              .id-card-back > .MuiBox-root:last-child {
-                display: flex !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                background-color: #0a4b94 !important;
-                color: white !important;
-              }
-              
-              /* Ensure footer text is visible */
-              .id-card-front > .MuiBox-root:last-child .MuiTypography-root,
-              .id-card-back > .MuiBox-root:last-child .MuiTypography-root {
-                display: block !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                color: white !important;
-                font-weight: bold !important;
-                font-size: 0.7rem !important;
-              }
-              
-              @media print {
-                body { margin: 0; padding: 10mm; }
-                .no-print { display: none !important; }
-              }
-            </style>
-          </head>
-          <body>
-            ${clonedElement.outerHTML}
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+    const container = document.querySelector('.id-card-container');
+    const cardId = data?.id;
+    if (!container || cardId === undefined || cardId === null) {
+      window.print();
+      return;
     }
+
+    container.classList.add('printing-single');
+    container.querySelectorAll('.id-card-wrapper').forEach((el) => {
+      el.classList.toggle('print-target', el.getAttribute('data-card-id') === String(cardId));
+    });
+
+    let printed = false;
+    const trigger = () => {
+      if (printed) return;
+      printed = true;
+      window.print();
+    };
+
+    // Give any not-yet-loaded image (logo/photo) a brief moment so the print
+    // preview shows the finished card instead of a half-loaded one.
+    const target = container.querySelector('.id-card-wrapper.print-target');
+    const pending = target
+      ? Array.from(target.querySelectorAll('img')).filter((img) => !img.complete || img.naturalHeight === 0)
+      : [];
+
+    if (pending.length === 0) {
+      trigger();
+      return;
+    }
+
+    let remaining = pending.length;
+    const step = () => {
+      remaining -= 1;
+      if (remaining <= 0) trigger();
+    };
+    pending.forEach((img) => {
+      img.addEventListener('load', step, { once: true });
+      img.addEventListener('error', step, { once: true });
+    });
+    setTimeout(trigger, 800);
   };
-  
+
   const isStudent = type === 'student';
   const user = data?.user || {};
-  const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+
+  // Names: use the English column when generating the English card, and fall
+  // back to the Bangla value if the English one is missing.
+  const nameBn = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+  const nameEn = `${user.first_name_en || user.first_name || ''} ${user.last_name_en || user.last_name || ''}`.trim() || user.username;
+  const name = (isEn ? nameEn : nameBn) || 'N/A';
+
+  const schoolName = isEn ? (school?.name_en || school?.name) : school?.name;
+  const schoolAddress = isEn ? (school?.address_en || school?.address) : school?.address;
+
   const currentYear = new Date().getFullYear();
 
   // Function to process photo URLs
@@ -284,15 +304,24 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
     // For teachers/committee, use index_number if available, else existing id or id_card_number
     customIdNumber = data?.index_number || data?.id_card_number || data?.id || '';
   }
-  
+
+  // Values shown on the card, already localized
+  const rawClassName = classroom?.name || data?.classroom_name || data?.class_name || '';
+  const classValue = isEn ? (getEnglishClassName(rawClassName) || 'N/A') : (rawClassName || 'N/A');
+  const sectionValue = isEn
+    ? (SECTION_EN_MAP[String(section?.name || '').trim()] || section?.name || 'N/A')
+    : (section?.name || 'N/A');
+  const bloodValue = data?.blood_group || data?.user?.blood_group || data?.profile?.blood_group || data?.student_profile?.blood_group || 'N/A';
+  const cardTypeLabel = isStudent ? t.studentCard : (type === 'teacher' ? t.teacherCard : t.committeeCard);
+
   // Generate QR code data - simpler format for easier scanning
   // Using a simpler format than JSON to make QR smaller and more reliable
   const qrData = `STU|${data.id}|${customIdNumber}|${encodeURIComponent(name)}|${school?.ein || school?.id}`;
 
   return (
-    <Box className="id-card-wrapper" sx={{ position: 'relative' }}>
+    <Box className="id-card-wrapper" data-card-id={data?.id} sx={{ position: 'relative' }}>
       {/* Print Button */}
-      <Tooltip title="Print this card" className="no-print">
+      <Tooltip title={isEn ? 'Print this card' : 'এই কার্ডটি প্রিন্ট করুন'} className="no-print">
         <IconButton
           onClick={handlePrintSingle}
           sx={{
@@ -312,65 +341,64 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
       </Tooltip>
 
       <Box id={`id-card-${data.id}`}>
-        {/* Front Side - Portrait - EXACT SIZE */}
-        <Box className="id-card id-card-front" sx={{ 
-          background: 'white',
-          borderRadius: 0,
+        {/* Front Side - Portrait */}
+        <Box className="id-card id-card-front" sx={{
+          background: '#ffffff',
           color: 'black',
           position: 'relative',
-          boxShadow: 'none',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          height: '386px !important',
-          width: '250px !important',
           border: '2px solid #0a4b94',
-          '&.id-card-front': {
-            height: '386px !important',
-            width: '250px !important',
-            minHeight: '386px !important',
-            maxHeight: '386px !important'
-          }
+          borderRadius: '10px'
         }}>
+          <CardWatermark logo={schoolLogo} />
+
           {/* Top Header - Blue Section */}
-          <Box sx={{ 
-            bgcolor: '#0a4b94',
-            p: 0.2,
+          <Box sx={{
+            position: 'relative',
+            zIndex: 1,
+            background: 'linear-gradient(135deg, #0a4b94 0%, #1e6fd0 100%)',
             color: 'white',
             textAlign: 'center',
-            position: 'relative'
+            px: 0.8,
+            pt: 0.5,
+            pb: 0.6,
+            borderBottom: '3px solid #f5b301'
           }}>
             {/* School Logo */}
             {schoolLogo && (
-              <Avatar 
-                src={schoolLogo} 
-                sx={{ 
-                  width: 35, 
-                  height: 35, 
-                  border: '1px solid white',
+              <Avatar
+                src={schoolLogo}
+                sx={{
+                  width: 36,
+                  height: 36,
+                  border: '2px solid white',
                   bgcolor: 'white',
                   mx: 'auto',
-                  mb: 0.15
-                }} 
+                  mb: 0.2,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.35)'
+                }}
               />
             )}
             {/* School Info */}
-            <Typography variant="h6" sx={{ 
-              fontWeight: 'bold', 
-              lineHeight: 1.1, 
-              fontSize: '0.8rem !important',
+            <Typography variant="h6" sx={{
+              fontWeight: 800,
+              lineHeight: 1.15,
+              fontSize: '0.78rem !important',
               mb: 0.05,
               whiteSpace: 'normal',
               wordWrap: 'break-word',
               display: 'block',
-              letterSpacing: '-0.01em'
+              letterSpacing: '0.01em'
             }}>
-              {school?.name || 'School Name'}
+              {schoolName || t.studentCard}
             </Typography>
             {school?.ein && (
-              <Typography variant="body2" sx={{ 
-                fontSize: '0.7rem',
-                opacity: 0.9
+              <Typography variant="body2" sx={{
+                fontSize: '0.62rem',
+                opacity: 0.95,
+                letterSpacing: '0.02em'
               }}>
                 EIIN No.- {school.ein}
               </Typography>
@@ -378,25 +406,27 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
           </Box>
 
           {/* Photo Section */}
-          <Box sx={{ 
-            display: 'flex', 
+          <Box sx={{
+            display: 'flex',
             justifyContent: 'center',
-            mt: 0.4,
-            mb: 0.15,
+            mt: 0.6,
+            mb: 0.2,
             position: 'relative',
             zIndex: 1
           }}>
             <Box sx={{
-              width: 110,
-              height: 130,
+              width: 108,
+              height: 128,
               border: '2px solid #0a4b94',
+              borderRadius: '6px',
               bgcolor: 'white',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               overflow: 'hidden',
-              position: 'relative'
+              position: 'relative',
+              boxShadow: '0 2px 6px rgba(10,75,148,0.25)'
             }}>
               {/* Badge on top of the photo */}
               <Box sx={{
@@ -404,16 +434,17 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                 top: 0,
                 left: 0,
                 right: 0,
-                bgcolor: '#0a4b94',
+                background: 'linear-gradient(90deg, #0a4b94, #1e6fd0)',
                 color: 'white',
                 px: 0.5,
-                py: 0.2,
+                py: 0.25,
                 textAlign: 'center',
                 zIndex: 2,
-                fontSize: '0.5rem',
-                fontWeight: 'bold'
+                fontSize: '0.48rem',
+                fontWeight: 'bold',
+                letterSpacing: '0.03em'
               }}>
-                {type === 'student' ? 'Student ID Card' : type === 'teacher' ? 'Teacher ID Card' : 'Committee ID Card'}
+                {cardTypeLabel}
               </Box>
               {studentPhotoToDisplay ? (
                 <img
@@ -448,277 +479,70 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
           </Box>
 
           {/* Student/Teacher Details */}
-          <Box sx={{ 
-            textAlign: 'center', 
+          <Box sx={{
+            position: 'relative',
+            zIndex: 1,
+            textAlign: 'center',
             px: 0.8,
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
             py: 0.1,
-            mt: '5px' /* Move down 5px from photo */
+            mt: '4px'
           }}>
-            <Typography variant="h5" sx={{ 
-              fontWeight: 'bold', 
-              lineHeight: 1.1, 
+            <Typography variant="h5" sx={{
+              fontWeight: 800,
+              lineHeight: 1.15,
               mb: 0.15,
               color: '#0a4b94',
-              fontSize: isStudent ? '1rem !important' : '0.8rem !important', /* Larger for student */
+              fontSize: isStudent ? '1rem !important' : '0.85rem !important',
               whiteSpace: 'normal',
               wordWrap: 'break-word',
               display: 'block'
             }}>
               {name}
             </Typography>
-            
+
             {/* ID Card Number */}
-            {(isStudent || !isStudent) && (
-              <Typography variant="body2" sx={{ 
-                fontWeight: 'bold', 
-                lineHeight: 1.1, 
-                mb: 0.2,
-                color: '#0a4b94',
-                fontSize: '0.8rem'
-              }}>
-                ID: {customIdNumber}
-              </Typography>
-            )}
-            
-            <Box sx={{ textAlign: 'left', mx: 'auto', minWidth: '145px' }}>
+            <Typography variant="body2" sx={{
+              fontWeight: 'bold',
+              lineHeight: 1.1,
+              mb: 0.3,
+              color: '#1565c0',
+              fontSize: '0.72rem',
+              letterSpacing: '0.03em'
+            }}>
+              {t.id}: {customIdNumber}
+            </Typography>
+
+            <Box sx={{ width: '78%', height: '1px', bgcolor: '#e3ecf7', mx: 'auto', mb: 0.4 }} />
+
+            <Box sx={{ textAlign: 'left', mx: 'auto', minWidth: '150px' }}>
               {type === 'student' ? (
                 <>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '65px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      শ্রেণি :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {classroom?.name || data.classroom_name || data.class_name || 'N/A'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '65px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      রোল :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.roll_number || 'N/A'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '65px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      শাখা :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {section?.name || 'N/A'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '65px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      রক্ত :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.blood_group || 'N/A'}
-                    </Typography>
-                  </Box>
+                  <InfoRow label={`${t.className} :`} value={classValue} />
+                  <InfoRow label={`${t.roll} :`} value={data?.roll_number || 'N/A'} />
+                  <InfoRow label={`${t.section} :`} value={sectionValue} />
+                  <InfoRow label={`${t.blood} :`} value={bloodValue} />
                 </>
               ) : type === 'teacher' ? (
                 <>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '80px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      পদবী :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.designation || 'Teacher'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '80px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      বিষয় :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.assigned_subject_name || data?.subject || 'N/A'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '80px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      রক্ত :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.blood_group || 'N/A'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '80px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      যোগদান :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.joining_date || 'N/A'}
-                    </Typography>
-                  </Box>
+                  <InfoRow label={`${t.designation} :`} value={data?.designation || 'Teacher'} labelWidth="80px" />
+                  <InfoRow label={`${t.subject} :`} value={data?.assigned_subject_name || data?.subject || 'N/A'} labelWidth="80px" />
+                  <InfoRow label={`${t.blood} :`} value={bloodValue} labelWidth="80px" />
+                  <InfoRow label={`${t.joining} :`} value={data?.joining_date || 'N/A'} labelWidth="80px" />
                 </>
               ) : (
                 <>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '80px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      পদবী :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.designation || 'Committee Member'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', mb: 0.4, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      width: '80px',
-                      flexShrink: 0,
-                      textAlign: 'right',
-                      pr: 0.8,
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      রক্ত :
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '0.85rem',
-                      color: '#0a4b94',
-                      lineHeight: 1.4
-                    }}>
-                      {data?.blood_group || 'N/A'}
-                    </Typography>
-                  </Box>
+                  <InfoRow label={`${t.designation} :`} value={data?.designation || 'Committee Member'} labelWidth="80px" />
+                  <InfoRow label={`${t.blood} :`} value={bloodValue} labelWidth="80px" />
                 </>
               )}
             </Box>
 
             {/* Signature with School Seal Background */}
-            <Box sx={{ 
-              mt: -0.5, // Move UP to prevent cutting footer
+            <Box sx={{
+              mt: -0.5,
               textAlign: 'right',
               pr: 0.6,
               pt: 0,
@@ -729,7 +553,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
               <Box sx={{ display: 'inline-block', textAlign: 'center', position: 'relative', zIndex: 1 }}>
                 {/* School Seal as Background */}
                 {schoolLogo && (
-                  <Box 
+                  <Box
                     component="img"
                     src={schoolLogo}
                     sx={{
@@ -739,7 +563,7 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
                       transform: 'translate(-50%, -50%)',
                       width: '45px',
                       height: '45px',
-                      opacity: 0.1,
+                      opacity: 0.12,
                       zIndex: 0,
                       pointerEvents: 'none'
                     }}
@@ -769,127 +593,146 @@ export default function IDCard({ type = 'student', data, school, classrooms = []
           </Box>
 
           {/* Bottom Bar */}
-          <Box sx={{ 
-            bgcolor: '#0a4b94',
+          <Box sx={{
+            position: 'relative',
+            zIndex: 1,
+            background: 'linear-gradient(90deg, #0a4b94, #1e6fd0)',
             color: 'white',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            px: 0.8,
-            py: 0.2,
+            px: 1,
+            py: 0.3,
             flexShrink: 0,
             mt: 0
           }}>
             <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.55rem', color: 'white' }}>
-              Session: {currentYear}
+              {t.session}: {currentYear}
             </Typography>
             <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.55rem', color: 'white' }}>
-              Headmaster
+              {t.headmaster}
             </Typography>
           </Box>
         </Box>
 
-        {/* Back Side - Portrait - EXACT SAME SIZE AS FRONT */}
-          <Box className="id-card id-card-back" sx={{ 
-            background: 'white',
-            borderRadius: 0,
-            color: 'black',
+        {/* Back Side - Portrait, same size as front */}
+        <Box className="id-card id-card-back" sx={{
+          background: '#ffffff',
+          color: 'black',
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          mt: 1,
+          border: '2px solid #0a4b94',
+          borderRadius: '10px'
+        }}>
+          <CardWatermark logo={schoolLogo} />
+
+          {/* Top Section - Blue: If found, please return to */}
+          <Box sx={{
             position: 'relative',
-            boxShadow: 'none',
-            overflow: 'hidden',
+            zIndex: 1,
+            background: 'linear-gradient(135deg, #0a4b94 0%, #1e6fd0 100%)',
+            color: 'white',
+            px: 1,
+            py: 0.7,
+            textAlign: 'center',
+            borderBottom: '3px solid #f5b301'
+          }}>
+            <Typography sx={{ fontWeight: 'bold', fontSize: '0.72rem', lineHeight: 1.2 }}>
+              {t.returnTo}
+            </Typography>
+          </Box>
+
+          {/* QR Code - Optimized for Screen-to-Screen and Print Scanning */}
+          <Box sx={{
+            position: 'relative',
+            zIndex: 1,
             display: 'flex',
             flexDirection: 'column',
-            height: '386px !important',
-            width: '250px !important',
-            mt: 1,
-            border: '2px solid #0a4b94',
-            '&.id-card-back': {
-              height: '386px !important',
-              width: '250px !important',
-              minHeight: '386px !important',
-              maxHeight: '386px !important'
-            }
+            alignItems: 'center',
+            mt: 1.2,
+            flexShrink: 0
           }}>
-            {/* Top Section - White: If found, please return to */}
-            <Box sx={{ px: 1, py: 1.5, flexShrink: 0 }}>
-              <Typography variant="h6" sx={{ 
-                fontWeight: 'bold', 
+            <Box sx={{
+              p: 1,
+              border: '3px solid #0a4b94',
+              borderRadius: '8px',
+              bgcolor: '#ffffff',
+              boxShadow: '0 2px 8px rgba(10,75,148,0.2)'
+            }}>
+              <QRCodeCanvas
+                value={qrData}
+                size={150}
+                level="H"
+                includeMargin={false}
+                fgColor="#000000"
+                bgColor="#ffffff"
+              />
+            </Box>
+            <Typography sx={{
+              mt: 0.4,
+              fontSize: '0.55rem',
+              color: '#0a4b94',
+              fontWeight: 'bold',
+              letterSpacing: '0.04em'
+            }}>
+              {t.scanToVerify}
+            </Typography>
+          </Box>
+
+          {/* School Name */}
+          <Box sx={{
+            position: 'relative',
+            zIndex: 1,
+            textAlign: 'center',
+            px: 1,
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Typography
+              className="id-card-back-school-name"
+              variant="h5"
+              sx={{
+                fontWeight: 'bold',
                 fontSize: '0.8rem',
                 color: '#0a4b94',
-                textAlign: 'center'
-              }}>
-                If found, please return to
-              </Typography>
-            </Box>
-
-            {/* QR Code - Optimized for Screen-to-Screen and Print Scanning */}
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <Box sx={{
-                position: 'relative',
-                p: 2, 
-                border: '3px solid #000000', 
-                bgcolor: '#ffffff'
-              }}>
-                <QRCodeCanvas 
-                  value={qrData} 
-                  size={160}
-                  level="H" 
-                  includeMargin={false}
-                  fgColor="#000000" 
-                  bgColor="#ffffff"
-                />
-              </Box>
-            </Box>
-
-            {/* School Name */}
-            <Box sx={{ textAlign: 'center', mt: 1, mb: 1, px: 1, flexShrink: 0 }}>
-              <Typography
-                className="id-card-back-school-name"
-                variant="h5"
-                sx={{ 
-                  fontWeight: 'bold', 
-                  fontSize: '0.85rem',
-                  color: '#0a4b94',
-                  whiteSpace: 'normal',
-                  lineHeight: 1.2,
-                  wordBreak: 'break-word'
-                }}
-              >
-                {school?.name || 'School Name'}
-              </Typography>
-            </Box>
-
-            {/* School Seal/Logo Removed to save space */}
-
-            {/* Bottom Section - Blue */}
-            <Box sx={{ 
-              bgcolor: '#0a4b94',
-              color: 'white',
-              px: 1,
-              pt: 1,
-              pb: 1,
-              textAlign: 'center',
-              flexShrink: 0,
-              mt: 'auto'
-            }}>
-              <Typography variant="body2" sx={{ fontSize: '0.7rem', mb: 0.3, lineHeight: 1.3, whiteSpace: 'normal', wordWrap: 'break-word' }}>
-                {school?.address || 'ভাটারা, রায়পুর, নরসিংদী'}
-              </Typography>
-              <Typography variant="body2" sx={{ fontSize: '0.7rem', mb: 0.3, lineHeight: 1.3 }}>
-                মেইল: {school?.email || 'hsbhatra1906@gmail.com'}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Box sx={{ mr: 0.3, fontSize: '0.8rem' }}>📞</Box>
-                <Typography variant="body2" sx={{ fontSize: '0.7rem', lineHeight: 1.3 }}>
-                  মোবাইল: {overridePhone || school?.phone_number || school?.phone || '01712923054'}
-                </Typography>
-              </Box>
-            </Box>
+                whiteSpace: 'normal',
+                lineHeight: 1.2,
+                wordBreak: 'break-word'
+              }}
+            >
+              {schoolName || t.studentCard}
+            </Typography>
           </Box>
+
+          {/* Bottom Section - Blue */}
+          <Box sx={{
+            position: 'relative',
+            zIndex: 1,
+            background: 'linear-gradient(135deg, #0a4b94 0%, #1e6fd0 100%)',
+            color: 'white',
+            px: 1,
+            pt: 0.8,
+            pb: 0.8,
+            textAlign: 'center',
+            flexShrink: 0,
+            mt: 'auto'
+          }}>
+            <Typography variant="body2" sx={{ fontSize: '0.65rem', mb: 0.4, lineHeight: 1.3, whiteSpace: 'normal', wordWrap: 'break-word' }}>
+              {schoolAddress || 'ভাটারা, রায়পুর, নরসিংদী'}
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: '0.62rem', mb: 0.3, lineHeight: 1.3 }}>
+              {t.email}: {school?.email || 'hsbhatra1906@gmail.com'}
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: '0.62rem', lineHeight: 1.3 }}>
+              {t.mobile}: {overridePhone || school?.phone_number || school?.phone || '01712923054'}
+            </Typography>
+          </Box>
+        </Box>
       </Box>
     </Box>
   );

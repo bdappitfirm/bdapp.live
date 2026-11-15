@@ -101,14 +101,19 @@ class Profile(models.Model):
         if self.role == 'student':
             try:
                 from academics.models import StudentProfile
-                update_data = {}
-                if self.gender:
-                    update_data['gender'] = self.gender
-                if self.blood_group:
-                    update_data['blood_group'] = self.blood_group
+                sp = StudentProfile.objects.filter(user=self.user).first()
+                if sp:
+                    if sp.gender and sp.gender != self.gender:
+                        self.gender = sp.gender
+                        Profile.objects.filter(pk=self.pk).update(gender=sp.gender)
+                    elif self.gender:
+                        StudentProfile.objects.filter(pk=sp.pk).update(gender=self.gender)
 
-                if update_data:
-                    StudentProfile.objects.filter(user=self.user).update(**update_data)
+                    if sp.blood_group and sp.blood_group != self.blood_group:
+                        self.blood_group = sp.blood_group
+                        Profile.objects.filter(pk=self.pk).update(blood_group=sp.blood_group)
+                    elif self.blood_group:
+                        StudentProfile.objects.filter(pk=sp.pk).update(blood_group=self.blood_group)
             except Exception:
                 pass
 

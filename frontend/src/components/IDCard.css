@@ -23,11 +23,10 @@
   flex-direction: column !important;
 }
 
-/* Screen preview: 76.2x95.25mm */
+/* Screen preview */
 @media screen {
   .id-card-front,
   .id-card-back {
-    /* EXACT size for both front and back */
     width: 250px !important;
     height: 386px !important;
   }
@@ -40,103 +39,125 @@
 }
 
 .id-card-back-school-name {
-  font-size: 0.045rem !important;
   white-space: normal !important;
   word-break: break-word !important;
-  line-height: 1.1 !important;
+  line-height: 1.15 !important;
 }
 
-/* Print Styles */
+/* ------------------------------------------------------------------ */
+/* Print: three cards per A4 portrait page, front + back stacked.     */
+/* The grid columns are fixed at the card width so nothing can push   */
+/* the cards past the right paper edge (the old percentage-based     */
+/* width was narrower than the card and cut the right side off).      */
+/* ------------------------------------------------------------------ */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
   body {
-    background: none !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-  
-  .id-card-container {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    background: none !important;
     width: 100% !important;
-    display: flex !important;
-    flex-wrap: wrap !important;
-    justify-content: flex-start !important;
-    align-items: flex-start !important;
-    gap: 8mm !important;
-    padding: 8mm !important;
-    margin: 0 !important;
-    background: white !important;
-  }
-  
-  .id-card-wrapper {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    display: block !important;
-    margin: 6mm !important;
-    width: calc(33.33% - 12mm) !important;
-    box-sizing: border-box !important;
-    vertical-align: top !important;
-  }
-
-  .id-card-back-school-name {
-    font-size: 0.045rem !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    line-height: 1.1 !important;
-  }
-
-  .id-card {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+    height: auto !important;
     overflow: visible !important;
-    border: 1px solid #eee !important;
-    box-shadow: none !important;
-    width: 100% !important;
-    height: auto !important;
   }
 
-  /* New size: 66.7mm x 90.5mm (2.62x3.56 inches) */
-  .id-card-front, .id-card-back {
-    width: 66.7mm !important;
-    min-height: 90.5mm !important;
-    max-height: none !important;
-    height: auto !important;
-    position: relative !important;
-    margin: 0 auto !important;
+  main {
+    min-height: 0 !important;
+    overflow: visible !important;
   }
 
-  .id-card-front {
-    margin-bottom: 4mm !important; /* Gap between front and back */
-  }
-
-  /* Ensure avatars (logo/photo) are visible */
-  .MuiAvatar-root, 
-  .MuiAvatar-img {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-  }
-
-  .no-print {
+  /* Strip app chrome and page controls so only the cards reach the paper */
+  .no-print,
+  header, footer, nav, aside,
+  .MuiAppBar-root,
+  .MuiDrawer-root,
+  .MuiToolbar-root,
+  .MuiTabs-root,
+  .MuiSnackbar-root,
+  .MuiBackdrop-root,
+  .MuiDialog-root {
     display: none !important;
   }
-  
+
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-sizing: border-box !important;
   }
-  
-  @page {
-    size: A4;
-    margin: 5mm;
-  }
-}
 
-/* Ensure proper orientation for all cards */
-@media print {
-  .id-card-front, .id-card-back {
-    page-break-inside: avoid;
-    break-inside: avoid;
+  /* The generator page's own padding would offset the grid */
+  .id-card-generator-root {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .id-card-container {
+    display: grid !important;
+    grid-template-columns: repeat(3, 66.7mm) !important;
+    justify-content: center !important;
+    align-content: start !important;
+    column-gap: 0 !important;
+    row-gap: 6mm !important;
+    padding: 4mm !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .id-card-container .id-card-wrapper {
+    width: 66.7mm !important;
+    max-width: 66.7mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Keep the card's natural (designed) height instead of shrinking it, so  */
+  /* the details block / bottom bar / QR code are never clipped away.       */
+  .id-card-container .id-card-front,
+  .id-card-container .id-card-back {
+    width: 66.7mm !important;
+    height: auto !important;
+    min-height: 386px !important;
+    max-height: none !important;
+    overflow: hidden !important;
+    border: 1px solid #0a4b94 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .id-card-container .id-card-front {
+    margin: 0 0 4mm 0 !important;
+  }
+
+  .id-card-container .MuiAvatar-root,
+  .id-card-container .MuiAvatar-img,
+  .id-card-container canvas {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Single-card print: keep only the requested card */
+  .id-card-container.printing-single {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+  }
+  .id-card-container.printing-single .id-card-wrapper {
+    display: none !important;
+  }
+  .id-card-container.printing-single .id-card-wrapper.print-target {
+    display: block !important;
   }
 }

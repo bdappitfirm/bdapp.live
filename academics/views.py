@@ -1088,16 +1088,17 @@ class BuildingViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSchoolMember, AdminOrReadOnly]
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
-        if not sid:
-            if is_global_admin(self.request.user):
-                return Building.objects.all()
+        qs = Building.objects.all()
+        if sid:
+            qs = qs.filter(school_id=sid)
+        elif not is_global_admin(self.request.user):
             return Building.objects.none()
 
-        # Global admin viewing everything
-        if is_global_admin(self.request.user) and not sid:
-            return Building.objects.all()
+        school_param = self.request.query_params.get('school')
+        if school_param:
+            qs = qs.filter(school_id=school_param)
 
-        return Building.objects.filter(school_id=sid)
+        return qs
 
     @action(detail=False, methods=['post'], url_path='bulk-setup')
     def bulk_setup(self, request):
@@ -1123,16 +1124,17 @@ class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSchoolMember, AdminOrReadOnly]
     def get_queryset(self):
         sid = get_user_school_id(self.request.user, self.request)
-        if not sid:
-            if is_global_admin(self.request.user):
-                return Room.objects.all().select_related('building')
+        qs = Room.objects.all().select_related('building')
+        if sid:
+            qs = qs.filter(building__school_id=sid)
+        elif not is_global_admin(self.request.user):
             return Room.objects.none()
 
-        # Global admin viewing everything
-        if is_global_admin(self.request.user) and not sid:
-            return Room.objects.all().select_related('building')
+        building_param = self.request.query_params.get('building')
+        if building_param:
+            qs = qs.filter(building_id=building_param)
 
-        return Room.objects.filter(building__school_id=sid)
+        return qs
 
 class ExamSeatPlanViewSet(viewsets.ModelViewSet):
     queryset = ExamSeatPlan.objects.all()

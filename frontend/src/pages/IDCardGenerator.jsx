@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
 import { getActiveClassrooms } from '../utils/classroomUtils';
@@ -44,6 +44,40 @@ function IDCardGenerator() {
   const [hmPhone, setHmPhone] = useState('');
   const [cards, setCards] = useState([]);
   const [activeStep, setActiveStep] = useState(0);
+  const [lang, setLang] = useState('bn');
+  const printStyleRef = useRef(null);
+
+  // Print styles live in <head> as a real stylesheet, not inside the page body.
+  // Chrome only honours @page / @media print reliably from a head stylesheet —
+  // this is what removes the browser's own header/footer (date, URL, page number)
+  // from the printed ID cards.
+  useEffect(() => {
+    const el = document.createElement('style');
+    el.id = 'id-card-print-style';
+    el.textContent = `
+      @media print {
+        @page { size: A4 portrait; margin: 0; }
+      }
+    `;
+    document.head.appendChild(el);
+    printStyleRef.current = el;
+    return () => {
+      printStyleRef.current = null;
+      el.remove();
+    };
+  }, []);
+
+  // Drop the print-only classes once the print dialog is dismissed.
+  useEffect(() => {
+    const reset = () => {
+      const container = document.querySelector('.id-card-container');
+      if (!container) return;
+      container.classList.remove('printing-single');
+      container.querySelectorAll('.id-card-wrapper.print-target').forEach((el) => el.classList.remove('print-target'));
+    };
+    window.addEventListener('afterprint', reset);
+    return () => window.removeEventListener('afterprint', reset);
+  }, []);
 
   const guidanceSteps = [
     { selector: '#class-select', text: 'শ্রেণি নির্বাচন করুন', autoNext: false },
@@ -101,7 +135,11 @@ function IDCardGenerator() {
       else if (searchType === 'bulk') { if (classFilter) url += `&classroom=${classFilter}`; if (sectionFilter) url += `&section=${sectionFilter}`; }
       const res = await api.get(url);
       let data = Array.isArray(res.data) ? res.data : res.data.results || [];
-      data = data.map(s => ({ ...s, user: { ...s.user, photo_url: s.photo || s.user?.photo_url || s.user?.photo } }));
+      data = data.map(s => ({
+        ...s,
+        blood_group: s.blood_group || s.user?.blood_group || s.profile?.blood_group || '',
+        user: { ...s.user, photo_url: s.photo || s.user?.photo_url || s.user?.photo, blood_group: s.blood_group || s.user?.blood_group || '' }
+      }));
       setCards(data.sort((a, b) => (parseInt(a.roll_number) || 0) - (parseInt(b.roll_number) || 0)));
       if (data.length) toast.success(`Generated ${data.length} cards`);
       else toast.warning('No students found');
@@ -123,8 +161,12 @@ function IDCardGenerator() {
 
   const handlePrint = () => {
     if (!cards.length) return toast.warning('Generate cards first');
+    // Keep the print stylesheet as the last rule in <head> so its @page rule
+    // wins over any stylesheet another page may have injected.
+    const styleEl = printStyleRef.current;
+    if (styleEl && styleEl.parentNode) styleEl.parentNode.appendChild(styleEl);
     toast.info('Opening print dialog...');
-    setTimeout(() => window.print(), 300);
+    window.print();
   };
 
   const handleDownloadAll = async () => {
@@ -144,14 +186,30 @@ function IDCardGenerator() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box className="id-card-generator-root" sx={{ p: 3 }}>
       <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={loading}>
         <CircularProgress color="inherit" />
       </Backdrop>
       <Paper elevation={0} sx={{ mb: 3, p: 3, background: 'linear-gradient(135deg, #00b09b 0%, #96c93d 100%)', color: 'white', borderRadius: 3 }} className="no-print">
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
           <Box><Typography variant="h4" sx={{ fontWeight: 'bold' }}><BadgeIcon sx={{ mr: 1 }} /> আইডি কার্ড জেনারেটর</Typography></Box>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => setLang('bn')}
+              sx={{ bgcolor: lang === 'bn' ? '#ffffff' : 'rgba(255,255,255,0.2)', color: lang === 'bn' ? '#00796b' : 'white', fontWeight: 'bold' }}
+            >
+              বাংলা
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => setLang('en')}
+              sx={{ bgcolor: lang === 'en' ? '#ffffff' : 'rgba(255,255,255,0.2)', color: lang === 'en' ? '#00796b' : 'white', fontWeight: 'bold' }}
+            >
+              English
+            </Button>
             {cards.length > 0 && <Button variant="contained" startIcon={<PrintIcon />} onClick={handlePrint} sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>প্রিন্ট</Button>}
             {cards.length > 0 && <Button variant="contained" startIcon={<PictureAsPdfIcon />} onClick={handleDownloadAll} sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>ডাউনলোড</Button>}
           </Stack>
@@ -178,11 +236,10 @@ function IDCardGenerator() {
       {loading ? <CardSkeleton count={4} /> : cards.length > 0 ? (
         <Box className="id-card-container" sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center', p: 2 }}>
           {cards.map((item, idx) => (
-            <Box key={idx} className="id-card-wrapper"><IDCard type={tabValue === 0 ? 'student' : 'teacher'} data={item} school={school} classrooms={classrooms} sections={allSections} overridePhone={hmPhone} /></Box>
+            <IDCard key={idx} type={tabValue === 0 ? 'student' : 'teacher'} data={item} school={school} classrooms={classrooms} sections={allSections} overridePhone={hmPhone} lang={lang} />
           ))}
         </Box>
       ) : <EmptyState icon={BadgeIcon} title="কোনো কার্ড নেই" message="অনুসন্ধান করুন" />}
-      <style>{`@media print { .no-print { display: none !important; } .id-card-wrapper { page-break-inside: avoid; margin: 5mm; } }`}</style>
 
       <InputGuidance
         steps={guidanceSteps}

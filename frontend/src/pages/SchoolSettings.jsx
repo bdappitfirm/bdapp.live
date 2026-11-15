@@ -135,11 +135,17 @@ export default function SchoolSettings() {
       const targetCount = parseInt(count) || 0;
       
       if (targetCount > newRooms.length) {
-        // Add new rooms
+        // Add new rooms with a name that is unique within this building
+        const usedNames = new Set(newRooms.map(r => String(r.room_name)));
+        let nextNum = bNum * 100 + newRooms.length + 1;
         for (let i = newRooms.length; i < targetCount; i++) {
+          while (usedNames.has(`${nextNum}`)) nextNum += 1;
+          const roomName = `${nextNum}`;
+          usedNames.add(roomName);
+          nextNum += 1;
           newRooms.push({
             room_number: i + 1,
-            room_name: `${bNum * 100 + (i + 1)}`,
+            room_name: roomName,
             bench_count: 10
           });
         }

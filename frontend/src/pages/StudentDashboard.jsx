@@ -24,6 +24,16 @@ import StudentFeeSlipCard from '../components/StudentFeeSlipCard';
 import PaymentHistoryDialog from '../components/PaymentHistoryDialog';
 import { getMediaUrl, resolveStudentPhoto } from '../utils/media';
 
+// Strict, single source of truth for "does this examination belong to the selected year?".
+// An exam with no resolvable year can never be attributed to a specific year, so it must NOT
+// match any year - otherwise it would leak into every year's report.
+const examMatchesYear = (exam, year) => {
+  if (year === undefined || year === null || year === '') return true;
+  const exY = exam?.year ?? exam?.academic_year ?? null;
+  if (exY === null || exY === undefined || exY === '') return false;
+  return String(exY) === String(year);
+};
+
 // Live Class Alert Component
 const LiveClassAlert = ({ activeClasses, onJoin }) => {
   if (!activeClasses || activeClasses.length === 0) return null;
@@ -142,7 +152,7 @@ const StudentProfile = ({ student, schoolInfo }) => {
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
           <Typography variant="body2" color="text.secondary">রক্তের গ্রুপ</Typography>
-          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.blood_group || 'N/A'}</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 500 }}>{student.blood_group || student.user?.blood_group || student.profile?.blood_group || 'N/A'}</Typography>
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
           <Typography variant="body2" color="text.secondary">ভোটার আইডি/জন্ম নিবন্ধন</Typography>
@@ -295,6 +305,9 @@ const StudentResults = ({
   loadingResultCard,
   selectedExamType,
   onExamTypeChange,
+  selectedResultYear,
+  onResultYearChange,
+  resultYears,
   onLoadResultCard,
   examTypes
 }) => {
@@ -316,6 +329,20 @@ const StudentResults = ({
             {examTypes.map((type) => (
               <MenuItem key={type.value} value={type.value}>
                 {type.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            label="Year"
+            value={String(selectedResultYear || '')}
+            onChange={(e) => onResultYearChange(e.target.value)}
+            fullWidth
+            sx={{ maxWidth: 400 }}
+          >
+            {(resultYears || []).map((y) => (
+              <MenuItem key={y} value={String(y)}>
+                {y}
               </MenuItem>
             ))}
           </TextField>
@@ -440,6 +467,7 @@ class StudentDashboard extends React.Component {
       resultCardData: null,
       loadingResultCard: false,
       selectedExamType: 'annual',
+      selectedResultYear: new Date().getFullYear(),
       examinations: [],
       examTypes: [
         { value: 'test', label: 'বিশেষ মূল্যায়ন' },
@@ -1016,18 +1044,26 @@ class StudentDashboard extends React.Component {
     this.setState({ selectedExamType: examType, resultCardData: null });
   };
 
+  handleResultYearChange = (year) => {
+    const parsed = parseInt(year, 10);
+    this.setState({
+      selectedResultYear: Number.isNaN(parsed) ? '' : parsed,
+      resultCardData: null
+    });
+  };
+
   normalizeExamType = (type, name) => {
     const n = String(name || '').toLowerCase();
     const s = String(type || '').toLowerCase();
     const combined = (n + ' ' + s).trim();
 
-    if (/(প্রাক|pre)/.test(combined)) return 'pre_test';
-    if (/(বার্ষিক|final|annual|yearly)/.test(combined)) return 'annual';
-    if (/(অর্ধ|half|mid|semi)/.test(combined)) return 'half_yearly';
-    if (/(টার্মিনাল|terminal|term)/.test(combined)) return 'terminal';
-    if (/(মডেল|model)/.test(combined)) return 'model';
-    if (/(প্রথম\s*টার্ম|first\s*term)/.test(combined)) return 'first_term';
-    if (/(টেস্ট|test|monthly)/.test(combined)) return 'test';
+    if (/(প্রাক[-_\s]?নির্বাচনী|pre[-_\s]?test)/i.test(combined)) return 'pre_test';
+    if (/(অর্ধ[-_\s]?বার্ষিক|half[-_\s]?yearly|mid|semi)/i.test(combined)) return 'half_yearly';
+    if (/(বার্ষিক|final|annual|yearly)/i.test(combined)) return 'annual';
+    if (/(মডেল|model)/i.test(combined)) return 'model';
+    if (/(প্রথম\s*সাময়িক|first\s*term)/i.test(combined)) return 'first_term';
+    if (/(টার্মিনাল|terminal|term)/i.test(combined)) return 'terminal';
+    if (/(টেস্ট|test|monthly|নির্বাচনী)/i.test(combined)) return 'test';
 
     if (['final','annual','yearly'].includes(s)) return 'annual';
     if (['half','half_yearly','mid','half-yearly'].includes(s)) return 'half_yearly';
@@ -1047,7 +1083,7 @@ class StudentDashboard extends React.Component {
 
   loadResultCard = async () => {
     const { studentId } = this.props.params;
-    const { selectedExamType, student, examinations } = this.state;
+    const { selectedExamType, selectedResultYear, student, examinations } = this.state;
     const classroomId = student?.classroom?.id;
 
     if (!selectedExamType || !studentId || !classroomId) {
@@ -1062,42 +1098,19 @@ class StudentDashboard extends React.Component {
       const studentRes = await api.get(`/api/academics/students/${studentId}/`);
       const studentData = { student: studentRes.data };
 
-      // Find examinations by exam type for this class
+      // Find examinations by exam type for this class AND the selected year.
+      // Strict: an exam of another year (or one with no resolvable year) must never match,
+      // otherwise it would leak its data into the selected exam's card.
       const matchingExams = examinations.filter(exam => 
         this.normalizeExamType(exam.exam_type, exam.name) === selectedExamType && 
-        this.getClassroomId(exam.classroom) === parseInt(classroomId)
+        this.getClassroomId(exam.classroom) === parseInt(classroomId) &&
+        examMatchesYear(exam, selectedResultYear)
       );
 
       if (matchingExams.length === 0) {
-        const fallbackExams = examinations.filter(exam => this.getClassroomId(exam.classroom) === parseInt(classroomId));
-        let alt = [];
-        if (selectedExamType === 'annual') alt = fallbackExams.filter(ex => /(বার্ষিক|final|annual)/i.test(String(ex.name || '')));
-        else if (selectedExamType === 'half_yearly') alt = fallbackExams.filter(ex => /(অর্ধ|half|mid)/i.test(String(ex.name || '')));
-        else if (selectedExamType === 'terminal') alt = fallbackExams.filter(ex => /(টার্মিনাল|terminal)/i.test(String(ex.name || '')));
-        else if (selectedExamType === 'model') alt = fallbackExams.filter(ex => /(মডেল|model)/i.test(String(ex.name || '')));
-        else if (selectedExamType === 'test') alt = fallbackExams.filter(ex => /(টেস্ট|test|monthly)/i.test(String(ex.name || '')));
-        const useExams = alt.length ? alt : fallbackExams;
-        if (!useExams.length) {
-          this.props.toast.error(`No ${this.state.examTypes.find(t => t.value === selectedExamType)?.label || selectedExamType} examination found for this class`);
-          this.setState({ loadingResultCard: false, resultCardData: null });
-          return;
-        }
-        const examRes = await api.get(`/api/results/examinations/${useExams[0].id}/`);
-        const examination = examRes.data;
-        let allResults = [];
-        try {
-          const resultsRes = await api.get(`/api/results/results/?examination=${useExams[0].id}&student=${studentId}`);
-          allResults = Array.isArray(resultsRes.data) ? resultsRes.data : (resultsRes.data?.results || []);
-        } catch (_) { allResults = []; }
-        this.setState({
-          resultCardData: {
-            studentData,
-            results: allResults,
-            overallResult: null,
-            examination
-          },
-          loadingResultCard: false
-        });
+        // Strict: never fall back to another examination's data.
+        this.props.toast.error(`No ${this.state.examTypes.find(t => t.value === selectedExamType)?.label || selectedExamType} examination found for this class in ${selectedResultYear}`);
+        this.setState({ loadingResultCard: false, resultCardData: null });
         return;
       }
 
@@ -1109,14 +1122,20 @@ class StudentDashboard extends React.Component {
         try {
           const resultsRes = await api.get(`/api/results/results/?examination=${ex.id}&student=${studentId}&page_size=1000`);
           const arr = Array.isArray(resultsRes.data) ? resultsRes.data : (resultsRes.data?.results || []);
-          allResults = allResults.concat(arr);
+          // Strict: keep only rows that actually belong to the examination we asked for.
+          allResults = allResults.concat(arr.filter(r => {
+            const rid = typeof r.examination === 'object'
+              ? (r.examination?.id ?? r.examination?.examination_id)
+              : (r.examination ?? r.examination_id);
+            return String(rid) === String(ex.id);
+          }));
         } catch (_) {}
       }
       
       // Get combined overall result with rank from backend
       let overallResult = null;
       try {
-        const overallRes = await api.get(`/api/results/overall/combined_by_exam_type/?student=${studentId}&exam_type=${selectedExamType}&classroom=${classroomId}`);
+        const overallRes = await api.get(`/api/results/overall/combined_by_exam_type/?student=${studentId}&exam_type=${selectedExamType}&classroom=${classroomId}&year=${selectedResultYear}`);
         overallResult = overallRes.data;
       } catch (err) {
         console.error('Error fetching combined overall result:', err);
@@ -1180,6 +1199,13 @@ class StudentDashboard extends React.Component {
 
   render() {
     const { loading, error, student, attendance, results, attendanceSummary, feesLoading, feeRows, feeTotals, feePayments, selectedTab, schoolInfo } = this.state;
+
+    // Years that actually have examinations for this class (+ the current year so the
+    // selector is never empty). Used to scope the result card to a single year.
+    const resultYears = Array.from(new Set([
+      new Date().getFullYear(),
+      ...((this.state.examinations || []).map(ex => ex.year ?? ex.academic_year).filter(Boolean))
+    ])).sort((a, b) => Number(b) - Number(a));
     const { navigate, user, logout } = this.props;
 
     if (loading) {
@@ -1434,6 +1460,9 @@ class StudentDashboard extends React.Component {
             loadingResultCard={this.state.loadingResultCard}
             selectedExamType={this.state.selectedExamType}
             onExamTypeChange={this.handleExamTypeChange}
+            selectedResultYear={this.state.selectedResultYear}
+            onResultYearChange={this.handleResultYearChange}
+            resultYears={resultYears}
             onLoadResultCard={this.loadResultCard}
             examTypes={this.state.examTypes}
           />
