@@ -238,6 +238,7 @@ const PayslipGenerator = safeLazy(() => import('./pages/PayslipGenerator.jsx'));
 const AllStudentsOverviewPage = safeLazy(() => import('./pages/AllStudentsOverviewPage.jsx'));
 const EmployeePage = safeLazy(() => import('./pages/EmployeePage.jsx'));
 const EmployeeIDCardGenerator = safeLazy(() => import('./pages/EmployeeIDCardGenerator.jsx'));
+const BenchStickerGenerator = safeLazy(() => import('./pages/BenchStickerGenerator'));
 
 const PathTracker = () => {
   const location = useLocation();
@@ -355,6 +356,7 @@ function App() {
           <Route path="id-card" element={<ProtectedRoute allowedRoles={['admin','teacher']}><IDCardGenerator /></ProtectedRoute>} />
           <Route path="certificate" element={<ProtectedRoute allowedRoles={['admin','teacher']}><CertificateGenerator /></ProtectedRoute>} />
           <Route path="admission-cards" element={<ProtectedRoute allowedRoles={['admin','teacher']}><AdmissionCardGenerator /></ProtectedRoute>} />
+          <Route path="bench-sticker" element={<ProtectedRoute allowedRoles={['admin','teacher']}><BenchStickerGenerator /></ProtectedRoute>} />
           <Route path="assistant" element={<ProtectedRoute><SoftwareAssistant /></ProtectedRoute>} />
           <Route path="support-live" element={<ProtectedRoute><SupportLivePage /></ProtectedRoute>} />
           <Route path="sms" element={<ProtectedRoute allowedRoles={['admin','teacher']}><SMSPage /></ProtectedRoute>} />

@@ -1,6 +1,28 @@
-/* Global Stability Fixes */
+@font-face {
+  font-family: 'NikoshBAN';
+  src: url('./fonts/Nikosh.ttf') format('truetype');
+  unicode-range: U+0980-09FF, U+0964, U+0965;
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'NikoshBAN';
+  src: url('./fonts/Nikosh.ttf') format('truetype');
+  unicode-range: U+0980-09FF, U+0964, U+0965;
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Global Stability Fixes & Font Family: Bangla - NikoshBAN, English - Times New Roman */
 :root {
   --app-height: 100%;
+}
+
+html, body, *, button, input, select, textarea, table, th, td {
+  font-family: 'NikoshBAN', 'Times New Roman', Times, serif;
 }
 
 html {
@@ -18,7 +40,6 @@ body {
   padding: 0;
   width: 100%;
   min-height: 100%;
-  font-family: 'Hind Siliguri', 'SolaimanLipi', 'Noto Sans Bengali', 'Roboto', sans-serif;
   background-color: #f5f7fa;
   color: #1a237e;
   line-height: 1.5;

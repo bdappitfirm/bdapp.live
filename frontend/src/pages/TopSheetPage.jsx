@@ -848,7 +848,7 @@ export default function TopSheetPage() {
             background: white !important;
             margin: 0 !important;
             padding: 0 !important;
-            font-family: 'SolaimanLipi', 'Kalpurush', 'Siyam Rupali', Roboto, sans-serif !important;
+            font-family: 'NikoshBAN', 'Times New Roman', Times, serif !important;
           }
           @page {
             size: A4 portrait;

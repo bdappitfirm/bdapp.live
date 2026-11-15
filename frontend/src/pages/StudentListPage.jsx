@@ -280,26 +280,27 @@ export default function StudentListPage() {
                 </Box>
                 {schoolInfo?.logo && <Box component="img" src={schoolInfo.logo} sx={{ height: '16mm', ml: 2 }} />}
             </Box>
-            <TableContainer component={Paper} sx={{ mb: 2, boxShadow: 'none', p: 0 }}>
-              <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1500px' : '1300px', borderCollapse: 'collapse' }}>
+            <TableContainer component={Paper} sx={{ mb: 2, boxShadow: 'none', p: 0, overflowX: 'auto' }}>
+              <Table size="small" sx={{ tableLayout: 'fixed', width: isNineTen ? '1600px' : '1400px', borderCollapse: 'collapse' }}>
                 <colgroup>
                   <col style={{ width: '35px' }} />
                   <col style={{ width: '60px' }} />
-                  <col style={{ width: '160px' }} />
-                  <col style={{ width: '160px' }} />
-                  <col style={{ width: '115px' }} />
-                  <col style={{ width: '115px' }} />
-                  <col style={{ width: '75px' }} />
-                  <col style={{ width: '75px' }} />
+                  <col style={{ width: '145px' }} />
+                  <col style={{ width: '145px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '80px' }} />
+                  <col style={{ width: '80px' }} />
+                  <col style={{ width: '60px' }} />
                   <col style={{ width: '60px' }} />
                   {isNineTen && (
                     <>
-                      <col style={{ width: '80px' }} />
+                      <col style={{ width: '100px' }} />
                       <col style={{ width: '120px' }} />
                     </>
                   )}
-                  <col style={{ width: '200px' }} />
-                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '170px' }} />
+                  <col style={{ width: '170px' }} />
                   <col style={{ width: '110px' }} />
                 </colgroup>
                 <TableHead>

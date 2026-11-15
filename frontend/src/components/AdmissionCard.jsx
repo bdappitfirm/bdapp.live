@@ -417,7 +417,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
         maxWidth: { xs: '100%', sm: '640px' }, // Responsive width
         boxShadow: '0 4px 15px rgba(26, 35, 126, 0.1)',
         position: 'relative',
-        fontFamily: 'Hind Siliguri, Arial, sans-serif',
+        fontFamily: "'NikoshBAN', 'Times New Roman', Times, serif",
         border: '1.5px solid #1a237e',
         p: { xs: 0.5, sm: isCompact ? 0.8 : 1 }, // Dynamic padding
         lineHeight: 1.4, // Increased line height
@@ -752,7 +752,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                                 backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                                 textAlign: 'center',
                                 borderBottom: '0.5px solid #e0e8ff',
-                                fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
+                                fontFamily: "'NikoshBAN', 'Times New Roman', Times, serif"
                               }}>
                                 <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
                                   {slot1 ? formatDate(slot1.exam_date) : ''}
@@ -775,7 +775,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                                 backgroundColor: r % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(248,249,255,0.6)',
                                 textAlign: 'center',
                                 borderBottom: '0.5px solid #e0e8ff',
-                                fontFamily: '"Roboto", "Arial", "Hind Siliguri", sans-serif'
+                                fontFamily: "'NikoshBAN', 'Times New Roman', Times, serif"
                               }}>
                                 <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
                                   {slot2 ? formatDate(slot2.exam_date) : ''}

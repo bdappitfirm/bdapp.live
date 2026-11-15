@@ -28,7 +28,7 @@ let theme = createTheme({
     },
   },
   typography: {
-    fontFamily: '"Hind Siliguri", "SolaimanLipi", "Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"NikoshBAN", "Times New Roman", Times, serif',
   },
 });
 theme = responsiveFontSizes(theme);
@@ -40,41 +40,52 @@ root.render(
   </ThemeProvider>
 );
 
-// Register Service Worker for offline PWA functionality & background asset precaching
+// Register Service Worker for offline PWA functionality & background asset precaching (Production only)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // রিলোড লুপ আটকানোর জন্য (safeLazy চাঙ্ক লোড ব্যর্থ হলে যা সেট করে)
-    try { sessionStorage.removeItem('bdapp_chunk_reloaded'); } catch (_) {}
+  if (process.env.NODE_ENV === 'production') {
+    window.addEventListener('load', () => {
+      // রিলোড লুপ আটকানোর জন্য (safeLazy চাঙ্ক লোড ব্যর্থ হলে যা সেট করে)
+      try { sessionStorage.removeItem('bdapp_chunk_reloaded'); } catch (_) {}
 
-    navigator.serviceWorker.register('/service-worker.js')
-      .then((reg) => {
-        console.log('✅ ServiceWorker registered successfully:', reg.scope);
+      navigator.serviceWorker.register('/service-worker.js')
+        .then((reg) => {
+          console.log('✅ ServiceWorker registered successfully:', reg.scope);
 
-        // নতুন বিল্ড আছে কিনা দ্রুত ধরে ফেলার জন্য পর্যায়ক্রমে চেক
-        const checkForUpdate = () => {
-          if (navigator.onLine) reg.update().catch(() => {});
-        };
-        checkForUpdate();
-        setInterval(checkForUpdate, 15 * 60 * 1000);
-        document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') checkForUpdate();
+          // নতুন বিল্ড আছে কিনা দ্রুত ধরে ফেলার জন্য পর্যায়ক্রমে চেক
+          const checkForUpdate = () => {
+            if (navigator.onLine) reg.update().catch(() => {});
+          };
+          checkForUpdate();
+          setInterval(checkForUpdate, 15 * 60 * 1000);
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkForUpdate();
+          });
+
+          // নতুন ভার্সন activate হলে ইউজারকে কিছু না জানিয়েই একবার নীরব রিলোড —
+          // ফলে সর্বশেষ কোড/আপডেট ব্যবহারকারী টের না পেয়েই চালু হয়ে যায়।
+          const hadController = !!navigator.serviceWorker.controller;
+          let reloading = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!hadController) return; // প্রথমবার ইনস্টল: রিলোড দরকার নেই
+            if (reloading) return;
+            reloading = true;
+            window.location.reload();
+          });
+        })
+        .catch((err) => {
+          console.warn('⚠️ ServiceWorker registration failed:', err);
         });
-
-        // নতুন ভার্সন activate হলে ইউজারকে কিছু না জানিয়েই একবার নীরব রিলোড —
-        // ফলে সর্বশেষ কোড/আপডেট ব্যবহারকারী টের না পেয়েই চালু হয়ে যায়।
-        const hadController = !!navigator.serviceWorker.controller;
-        let reloading = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (!hadController) return; // প্রথমবার ইনস্টল: রিলোড দরকার নেই
-          if (reloading) return;
-          reloading = true;
-          window.location.reload();
-        });
-      })
-      .catch((err) => {
-        console.warn('⚠️ ServiceWorker registration failed:', err);
+    });
+  } else {
+    // Development mode-এ সার্ভিস ওয়ার্কার আনরেজিস্ট্রার করে রাখি যাতে লাইভ রিলোড বা ক্যাশের কারণে ইউজার ইন্টারফেস লাফালাফি (flickering/reloading loop) না করে।
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister();
+        }
       });
-  });
+    });
+  }
 }
 
 // If you want to start measuring performance in your app, pass a function

@@ -113,6 +113,7 @@ const SchoolDashboard = () => {
     { label: 'স্টুডেন্ট তালিকা', icon: <GroupIcon />, key: 'student-list' },
     { label: 'আইডি কার্ড', icon: <CardMembershipIcon />, key: 'id-card' },
     { label: 'প্রবেশপত্র', icon: <CardMembershipIcon />, key: 'admission-cards' },
+    { label: 'বেঞ্চ স্টিকার', icon: <EventSeatIcon />, key: 'bench-sticker' },
     { label: 'সার্টিফিকেট', icon: <CardMembershipIcon />, key: 'certificate' },
     { label: 'ভোটার তালিকা', icon: <DescriptionIcon />, key: 'voter-list' },
     { label: 'টট লিস্ট', icon: <DescriptionIcon />, key: 'tot-list' },

@@ -284,6 +284,183 @@ const MemoizedBulkMarkRow = React.memo(({
   );
 });
 
+// Distinct hex colors per grade to avoid visual similarity (A vs B)
+const getGradeStyle = (grade) => {
+  const map = {
+    'A+': { bg: '#2e7d32', fg: '#ffffff' },   // deep green
+    'A':  { bg: '#1565c0', fg: '#ffffff' },   // darker blue
+    'A-': { bg: '#6a1b9a', fg: '#ffffff' },   // purple
+    'B':  { bg: '#795548', fg: '#ffffff' },   // brown
+    'C':  { bg: '#f9a825', fg: '#000000' },   // amber
+    'D':  { bg: '#757575', fg: '#ffffff' },   // grey
+    'F':  { bg: '#d32f2f', fg: '#ffffff' }    // red
+  };
+  return map[grade] || { bg: '#9e9e9e', fg: '#ffffff' };
+};
+
+// Pass rule for display across all tabs: any non-'F' grade counts as Passed
+const isPassed = (row) => {
+  const g = row?.grade;
+  return (g && g !== 'F') || !!row?.is_passed;
+};
+
+// O(1) student lookup instead of scanning the students array for every row
+const getRowStudent = (row, studentsById) => (
+  typeof row.student === 'object' ? row.student : (studentsById.get(String(row.student)) || {})
+);
+
+const compareRowsByRoll = (a, b, studentsById) => {
+  const stuA = getRowStudent(a, studentsById);
+  const stuB = getRowStudent(b, studentsById);
+  const rollA = parseInt(String(stuA.roll_number || a.student_roll_number || '').replace(/\D/g, ''), 10);
+  const rollB = parseInt(String(stuB.roll_number || b.student_roll_number || '').replace(/\D/g, ''), 10);
+  if (!isNaN(rollA) && !isNaN(rollB) && rollA !== rollB) return rollA - rollB;
+  return String(stuA.roll_number || '').localeCompare(String(stuB.roll_number || ''), undefined, { numeric: true });
+};
+
+// The tables below live outside ResultsPage on purpose: marks entry re-renders
+// that page on every keystroke, and without memoization it also reconciled
+// every row of these large result tables each time.
+const SubjectWiseResultsTable = React.memo(function SubjectWiseResultsTable({
+  rows,
+  studentsById,
+  mcqLabel,
+  onOpenEdit,
+  onOpenDelete
+}) {
+  return (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow sx={{ bgcolor: 'primary.main' }}>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>রোল</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">লিখিত</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">{mcqLabel}</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">প্র্যাকটিক্যাল</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">মোট</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">গ্রেড</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">জিপিএ</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">অবস্থা</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center" className="no-print">অ্যাকশন</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((result, idx) => {
+            const student = getRowStudent(result, studentsById);
+            const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || result.student_name || 'N/A';
+            const roll = student.roll_number || result.student_roll_number || '-';
+            const w = result.written_marks;
+            const m = result.mcq_marks;
+            const p = result.practical_marks;
+            const fw = parseFloat(w) || 0;
+            const fm = parseFloat(m) || 0;
+            const fp = parseFloat(p) || 0;
+            const total = fw + fm + fp;
+            const isAbsent = (w === null || w === undefined || w === '' || w === '--') &&
+                             (m === null || m === undefined || m === '' || m === '--') &&
+                             (p === null || p === undefined || p === '' || p === '--');
+
+            return (
+              <TableRow key={idx} hover>
+                <TableCell>{studentName}</TableCell>
+                <TableCell>{roll}</TableCell>
+                <TableCell>{result.subject?.name || result.subject_name}</TableCell>
+                <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (w === null || w === undefined || w === '' ? '' : w)}</TableCell>
+                <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (m === null || m === undefined || m === '' ? '' : m)}</TableCell>
+                <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (p === null || p === undefined || p === '' ? '' : p)}</TableCell>
+                <TableCell align="center">
+                  <strong>{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : total}</strong>
+                </TableCell>
+                {(() => {
+                  const serverGrade = result.grade;
+                  const serverGpa = result.gpa;
+                  const serverPassed = result.is_passed;
+                  const failed = serverPassed === false;
+                  const grade = failed ? 'F' : (serverGrade || 'F');
+                  const gpa = failed ? '0.00' : ((serverGpa !== undefined && serverGpa !== null) ? parseFloat(serverGpa).toFixed(2) : '0.00');
+                  const s = getGradeStyle(grade);
+                  let passed = !!serverPassed;
+                  return (
+                    <>
+                      <TableCell align="center">
+                        <Chip label={grade} size="small" sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 'bold' }} />
+                      </TableCell>
+                      <TableCell align="center">{gpa}</TableCell>
+                      <TableCell align="center">
+                        <Chip label={passed ? 'Passed' : 'Failed'} color={passed ? 'success' : 'error'} size="small" />
+                      </TableCell>
+                    </>
+                  );
+                })()}
+                <TableCell align="center" className="no-print">
+                  <Stack direction="row" spacing={1} justifyContent="center">
+                    <ProtectedButton size="small" color="primary" onClick={() => onOpenEdit(result)}>
+                      <EditIcon fontSize="small" />
+                    </ProtectedButton>
+                    <ProtectedButton size="small" color="error" onClick={() => onOpenDelete(result)}>
+                      <DeleteIcon fontSize="small" />
+                    </ProtectedButton>
+                  </Stack>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+});
+
+const OverallResultsTable = React.memo(function OverallResultsTable({ rows, studentsById }) {
+  return (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow sx={{ bgcolor: 'secondary.main' }}>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Roll</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Student Name</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Total Obtained</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Total Possible</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Percentage</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">CGPA</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Grade</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Status</TableCell>
+            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Rank</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((result, idx) => {
+            const student = getRowStudent(result, studentsById);
+            const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || result.student_name || 'N/A';
+            const roll = student.roll_number || result.student_roll_number || '-';
+            return (
+              <TableRow key={idx} hover>
+                <TableCell>{roll}</TableCell>
+                <TableCell>{studentName}</TableCell>
+                <TableCell align="center">{result.total_marks_obtained}</TableCell>
+                <TableCell align="center">{result.total_marks_possible}</TableCell>
+                <TableCell align="center">{result.percentage}%</TableCell>
+                <TableCell align="center"><strong>{parseFloat(result.cgpa || 0).toFixed(2)}</strong></TableCell>
+                <TableCell align="center">
+                  {(() => { const s = getGradeStyle(result.grade); return (
+                    <Chip label={result.grade} size="small" sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 'bold' }} />
+                  ); })()}
+                </TableCell>
+                <TableCell align="center">
+                  <Chip label={isPassed(result) ? 'Passed' : 'Failed'} color={isPassed(result) ? 'success' : 'error'} size="small" />
+                </TableCell>
+                <TableCell align="center"><strong>{result.rank || '-'}</strong></TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+});
+
 export default function ResultsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -362,11 +539,13 @@ export default function ResultsPage() {
     bulkScrollPosRef.current = e.currentTarget.scrollTop;
   };
 
+  // Restore the saved scroll position when the dialog opens. Running this after
+  // every render forced a synchronous layout on each keystroke of the bulk form.
   useLayoutEffect(() => {
     if (bulkDialogOpen && bulkDialogContentRef.current) {
       bulkDialogContentRef.current.scrollTop = bulkScrollPosRef.current;
     }
-  });
+  }, [bulkDialogOpen]);
 
   const sortedBulkStudents = useMemo(() => {
     return [...bulkStudents].sort((a, b) => {
@@ -376,6 +555,12 @@ export default function ResultsPage() {
       return String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true });
     });
   }, [bulkStudents]);
+  // O(1) student lookup, reused by the result tables below
+  const studentsById = useMemo(() => {
+    const map = new Map();
+    (students || []).forEach(s => map.set(String(s.id), s));
+    return map;
+  }, [students]);
   const [criticalError, setCriticalError] = useState(null);
   const [classSelectOpen, setClassSelectOpen] = useState(false);
   const [sectionSelectOpen, setSectionSelectOpen] = useState(false);
@@ -691,7 +876,7 @@ export default function ResultsPage() {
   }, [id, navigate, loadClasses, loadExaminations]);
 
   // Open Edit dialog prefilled with selected result
-  const handleOpenEdit = (result) => {
+  const handleOpenEdit = useCallback((result) => {
     if (!isAuthenticated()) {
       navigate('/login');
       return;
@@ -703,7 +888,7 @@ export default function ResultsPage() {
       practical: parseFloat(result.practical_marks) || ''
     });
     setEditDialogOpen(true);
-  };
+  }, [navigate]);
 
   const handleCloseEdit = () => {
     setEditDialogOpen(false);
@@ -762,13 +947,13 @@ export default function ResultsPage() {
   };
 
   // Delete flow
-  const handleOpenDelete = (result) => {
+  const handleOpenDelete = useCallback((result) => {
     if (!isAuthenticated()) {
       navigate('/login');
       return;
     }
     setDeleteDialog({ open: true, item: result });
-  };
+  }, [navigate]);
   const handleConfirmDelete = async () => {
     if (!isAuthenticated()) {
       navigate('/login');
@@ -1700,19 +1885,6 @@ export default function ResultsPage() {
     }
   };
 
-  // Distinct hex colors per grade to avoid visual similarity (A vs B)
-  const getGradeStyle = (grade) => {
-    const map = {
-      'A+': { bg: '#2e7d32', fg: '#ffffff' },   // deep green
-      'A':  { bg: '#1565c0', fg: '#ffffff' },   // darker blue
-      'A-': { bg: '#6a1b9a', fg: '#ffffff' },   // purple
-      'B':  { bg: '#795548', fg: '#ffffff' },   // brown
-      'C':  { bg: '#f9a825', fg: '#000000' },   // amber
-      'D':  { bg: '#757575', fg: '#ffffff' },   // grey
-      'F':  { bg: '#d32f2f', fg: '#ffffff' }    // red
-    };
-    return map[grade] || { bg: '#9e9e9e', fg: '#ffffff' };
-  };
   const isBanglaFirst = (name) => {
     const n = String(name || '').replace(/\s*\(.*?\)\s*/g, '').trim();
     const lower = n.toLowerCase();
@@ -1726,11 +1898,27 @@ export default function ResultsPage() {
     return !!(lower.includes('বাংলা দ্বিত') || lower.includes('bangla second') || lower.includes('বাংলা-২') || lower.includes('2nd'));
   };
   const isBanglaPaper = (name) => isBanglaFirst(name) || isBanglaSecond(name);
-  // Pass rule for display across all tabs: any non-'F' grade counts as Passed
-  const isPassed = (row) => {
-    const g = row?.grade;
-    return (g && g !== 'F') || !!row?.is_passed;
-  };
+
+  // Rows are filtered/sorted once per data change instead of on every re-render,
+  // so typing marks in the bulk dialog no longer re-sorts the whole results table.
+  const tab0SubjectOptions = useMemo(
+    () => Array.from(new Set(results.map(r => r.subject?.name || r.subject_name))).filter(Boolean),
+    [results]
+  );
+
+  const tab0Rows = useMemo(() => {
+    const rows = results.filter(r => !tab0SubjectFilter || (r.subject?.name || r.subject_name) === tab0SubjectFilter);
+    const scoped = !selectedStudentMain ? rows : rows.filter(r => {
+      const rStuId = typeof r.student === 'object' ? r.student?.id : r.student;
+      return String(rStuId) === String(selectedStudentMain);
+    });
+    return scoped.sort((a, b) => compareRowsByRoll(a, b, studentsById));
+  }, [results, tab0SubjectFilter, selectedStudentMain, studentsById]);
+
+  const overallRows = useMemo(
+    () => [...overallResults].sort((a, b) => compareRowsByRoll(a, b, studentsById)),
+    [overallResults, studentsById]
+  );
 
   return (
     <Box sx={{ p: 3, minHeight: '100vh' }}>
@@ -1961,164 +2149,24 @@ export default function ResultsPage() {
               inputProps={{ autoComplete: 'off' }}
             >
               <MenuItem value="">সব বিষয়</MenuItem>
-              {Array.from(new Set(results.map(r => r.subject?.name || r.subject_name))).filter(Boolean).map(name => (
+              {tab0SubjectOptions.map(name => (
                 <MenuItem key={name} value={name}>{name}</MenuItem>
               ))}
             </TextField>
           </Stack>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'primary.main' }}>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>রোল</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>বিষয়</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">লিখিত</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">{mcqLabel}</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">প্র্যাকটিক্যাল</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">মোট</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">গ্রেড</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">জিপিএ</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">অবস্থা</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center" className="no-print">অ্যাকশন</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results
-                  .filter(r => !tab0SubjectFilter || (r.subject?.name || r.subject_name) === tab0SubjectFilter)
-                  .filter(r => {
-                    if (!selectedStudentMain) return true;
-                    const rStuId = typeof r.student === 'object' ? r.student?.id : r.student;
-                    return String(rStuId) === String(selectedStudentMain);
-                  })
-                  .sort((a, b) => {
-                    const studentA = typeof a.student === 'object' ? a.student : (students.find(s => s.id === a.student) || {});
-                    const studentB = typeof b.student === 'object' ? b.student : (students.find(s => s.id === b.student) || {});
-                    const rollA = parseInt(String(studentA.roll_number || a.student_roll_number || '').replace(/\D/g, ''), 10);
-                    const rollB = parseInt(String(studentB.roll_number || b.student_roll_number || '').replace(/\D/g, ''), 10);
-                    if (!isNaN(rollA) && !isNaN(rollB) && rollA !== rollB) return rollA - rollB;
-                    return String(studentA.roll_number || '').localeCompare(String(studentB.roll_number || ''), undefined, { numeric: true });
-                  })
-                  .map((result, idx) => {
-                    const student = typeof result.student === 'object' ? result.student : (students.find(s => s.id === result.student) || {});
-                    const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || result.student_name || 'N/A';
-                    const roll = student.roll_number || result.student_roll_number || '-';
-                    const w = result.written_marks;
-                    const m = result.mcq_marks;
-                    const p = result.practical_marks;
-                    const fw = parseFloat(w) || 0;
-                    const fm = parseFloat(m) || 0;
-                    const fp = parseFloat(p) || 0;
-                    const total = fw + fm + fp;
-                    const isAbsent = (w === null || w === undefined || w === '' || w === '--') &&
-                                     (m === null || m === undefined || m === '' || m === '--') &&
-                                     (p === null || p === undefined || p === '' || p === '--');
-
-                    return (
-                      <TableRow key={idx} hover>
-                        <TableCell>{studentName}</TableCell>
-                        <TableCell>{roll}</TableCell>
-                        <TableCell>{result.subject?.name || result.subject_name}</TableCell>
-                        <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (w === null || w === undefined || w === '' ? '' : w)}</TableCell>
-                        <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (m === null || m === undefined || m === '' ? '' : m)}</TableCell>
-                        <TableCell align="center">{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : (p === null || p === undefined || p === '' ? '' : p)}</TableCell>
-                        <TableCell align="center">
-                          <strong>{isAbsent ? <span style={{ color: 'red' }}>Absent</span> : total}</strong>
-                        </TableCell>
-                        {(() => {
-                          const serverGrade = result.grade;
-                          const serverGpa = result.gpa;
-                          const serverPassed = result.is_passed;
-                          const failed = serverPassed === false;
-                          const grade = failed ? 'F' : (serverGrade || 'F');
-                          const gpa = failed ? '0.00' : ((serverGpa !== undefined && serverGpa !== null) ? parseFloat(serverGpa).toFixed(2) : '0.00');
-                          const s = getGradeStyle(grade);
-                          let passed = !!serverPassed;
-                          return (
-                            <>
-                              <TableCell align="center">
-                                <Chip label={grade} size="small" sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 'bold' }} />
-                              </TableCell>
-                              <TableCell align="center">{gpa}</TableCell>
-                              <TableCell align="center">
-                                <Chip label={passed ? 'Passed' : 'Failed'} color={passed ? 'success' : 'error'} size="small" />
-                              </TableCell>
-                            </>
-                          );
-                        })()}
-                        <TableCell align="center" className="no-print">
-                          <Stack direction="row" spacing={1} justifyContent="center">
-                            <ProtectedButton size="small" color="primary" onClick={() => handleOpenEdit(result)}>
-                              <EditIcon fontSize="small" />
-                            </ProtectedButton>
-                            <ProtectedButton size="small" color="error" onClick={() => handleOpenDelete(result)}>
-                              <DeleteIcon fontSize="small" />
-                            </ProtectedButton>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <SubjectWiseResultsTable
+            rows={tab0Rows}
+            studentsById={studentsById}
+            mcqLabel={mcqLabel}
+            onOpenEdit={handleOpenEdit}
+            onOpenDelete={handleOpenDelete}
+          />
         </Box>
       )}
 
       {/* Tab 2: Overall Results */}
       {tabValue === 1 && (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'secondary.main' }}>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Roll</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Student Name</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Total Obtained</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Total Possible</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Percentage</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">CGPA</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Grade</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Status</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Rank</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {overallResults
-                .sort((a, b) => {
-                  const studentA = typeof a.student === 'object' ? a.student : (students.find(s => s.id === a.student) || {});
-                  const studentB = typeof b.student === 'object' ? b.student : (students.find(s => s.id === b.student) || {});
-                  const rollA = parseInt(String(studentA.roll_number || a.student_roll_number || '').replace(/\D/g, ''), 10);
-                  const rollB = parseInt(String(studentB.roll_number || b.student_roll_number || '').replace(/\D/g, ''), 10);
-                  if (!isNaN(rollA) && !isNaN(rollB) && rollA !== rollB) return rollA - rollB;
-                  return String(studentA.roll_number || '').localeCompare(String(studentB.roll_number || ''), undefined, { numeric: true });
-                })
-                .map((result, idx) => {
-                  const student = typeof result.student === 'object' ? result.student : (students.find(s => s.id === result.student) || {});
-                  const studentName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.user?.username || result.student_name || 'N/A';
-                  const roll = student.roll_number || result.student_roll_number || '-';
-                  return (
-                    <TableRow key={idx} hover>
-                      <TableCell>{roll}</TableCell>
-                      <TableCell>{studentName}</TableCell>
-                      <TableCell align="center">{result.total_marks_obtained}</TableCell>
-                      <TableCell align="center">{result.total_marks_possible}</TableCell>
-                      <TableCell align="center">{result.percentage}%</TableCell>
-                      <TableCell align="center"><strong>{parseFloat(result.cgpa || 0).toFixed(2)}</strong></TableCell>
-                      <TableCell align="center">
-                        {(() => { const s = getGradeStyle(result.grade); return (
-                          <Chip label={result.grade} size="small" sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 'bold' }} />
-                        ); })()}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip label={isPassed(result) ? 'Passed' : 'Failed'} color={isPassed(result) ? 'success' : 'error'} size="small" />
-                      </TableCell>
-                      <TableCell align="center"><strong>{result.rank || '-'}</strong></TableCell>
-                    </TableRow>
-                  );
-                })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <OverallResultsTable rows={overallRows} studentsById={studentsById} />
       )}
 
       {/* Tab 3: Statistics */}
