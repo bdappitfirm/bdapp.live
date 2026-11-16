@@ -341,7 +341,9 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
     return timeA.localeCompare(timeB);
   });
 
-  const isCompact = finalSlots.length > 12;
+  const numRows = Math.ceil(finalSlots.length / 2);
+  const isCompact = finalSlots.length > 6 || numRows > 3;
+  const isUltraCompact = finalSlots.length > 10 || numRows > 5;
 
   const formatBnDigits = (str) => {
     return String(str ?? '').replace(/[0-9]/g, d => ['০','১','২','৩','৪','৫','৬','৭','৮','৯'][d]);
@@ -414,13 +416,13 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
         borderRadius: '10px',
         color: '#1a237e',
         width: '100%',
-        maxWidth: { xs: '100%', sm: '640px' }, // Responsive width
+        maxWidth: { xs: '100%', sm: '680px' }, // Responsive width
         boxShadow: '0 4px 15px rgba(26, 35, 126, 0.1)',
         position: 'relative',
         fontFamily: "'NikoshBAN', 'Times New Roman', Times, serif",
         border: '1.5px solid #1a237e',
-        p: { xs: 0.5, sm: isCompact ? 0.8 : 1 }, // Dynamic padding
-        lineHeight: 1.4, // Increased line height
+        p: { xs: 0.5, sm: isUltraCompact ? 0.5 : isCompact ? 0.8 : 1.0 }, // Dynamic padding
+        lineHeight: 1.45,
         display: 'block',
         WebkitPrintColorAdjust: 'exact',
         printColorAdjust: 'exact',
@@ -436,8 +438,8 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        mb: 0.5,
-        padding: { xs: '6px', sm: '10px' },
+        mb: isUltraCompact ? 0.3 : isCompact ? 0.45 : 0.6,
+        padding: { xs: '5px', sm: isUltraCompact ? '5px 7px' : isCompact ? '7px 9px' : '9px 12px' },
         backgroundColor: 'white',
         borderBottom: '2px solid #1a237e',
         borderRadius: '6px',
@@ -448,35 +450,40 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
       }}>
         {/* QR Code */}
         <Box sx={{
-          width: { xs: '75px', sm: '95px' },
-          height: { xs: '75px', sm: '95px' },
+          width: { xs: '70px', sm: isUltraCompact ? '74px' : isCompact ? '84px' : '96px' },
+          height: { xs: '70px', sm: isUltraCompact ? '74px' : isCompact ? '84px' : '96px' },
           border: '1.5px solid #1a237e',
           borderRadius: '5px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: 'white',
-          p: 0.3
+          p: 0.2
         }}>
-          <QRCode renderAs="svg" value={qrData} size={isMobile ? 70 : 88} level="H" />
+          <QRCode
+            renderAs="svg"
+            value={qrData}
+            size={isMobile ? 65 : (isUltraCompact ? 68 : isCompact ? 78 : 88)}
+            level="H"
+          />
         </Box>
         
         {/* School Info */}
-        <Box sx={{ textAlign: 'center', flex: 1, px: { xs: 0.5, sm: 1.5 }, minWidth: 0 }}>
+        <Box sx={{ textAlign: 'center', flex: 1, px: { xs: 0.5, sm: 1 }, minWidth: 0 }}>
           <Typography sx={{
             fontWeight: 'bold', 
             fontSize: schoolName.length > 35
-              ? { xs: '0.75rem', sm: '0.9rem' }
+              ? { xs: '0.9rem', sm: isUltraCompact ? '1.0rem' : isCompact ? '1.1rem' : '1.2rem' }
               : schoolName.length > 25
-              ? { xs: '0.8rem', sm: '1.0rem' }
+              ? { xs: '0.95rem', sm: isUltraCompact ? '1.08rem' : isCompact ? '1.22rem' : '1.36rem' }
               : schoolName.length > 18
-              ? { xs: '0.85rem', sm: '1.1rem' }
-              : { xs: '0.95rem', sm: '1.25rem' },
-            lineHeight: 1.25,
-            pt: '2px',
+              ? { xs: '1.0rem', sm: isUltraCompact ? '1.15rem' : isCompact ? '1.3rem' : '1.48rem' }
+              : { xs: '1.05rem', sm: isUltraCompact ? '1.27rem' : isCompact ? '1.4rem' : '1.58rem' },
+            lineHeight: 1.35,
+            pt: '1px',
             pb: '1px',
             color: '#000',
-            mb: 0.2,
+            mb: 0.1,
             wordBreak: 'break-word',
             whiteSpace: 'normal',
             overflow: 'visible'
@@ -484,20 +491,20 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
             {schoolName}
           </Typography>
           <Typography sx={{
-            fontSize: { xs: '1.4rem', sm: '1.8rem' },
+            fontSize: { xs: '1.5rem', sm: isUltraCompact ? '1.75rem' : isCompact ? '1.95rem' : '2.2rem' },
             fontWeight: '900',
             color: '#1a237e',
-            my: 0.1,
-            lineHeight: 1.25,
-            letterSpacing: '1px'
+            my: 0.05,
+            lineHeight: 1.3,
+            letterSpacing: '0.5px'
           }}>
             প্রবেশপত্র
           </Typography>
           <Typography sx={{
-            fontSize: { xs: '0.85rem', sm: '1.05rem' },
+            fontSize: { xs: '1.0rem', sm: isUltraCompact ? '1.08rem' : isCompact ? '1.2rem' : '1.32rem' },
             fontWeight: 700,
             lineHeight: 1.35,
-            pt: '2px',
+            pt: '1px',
             pb: '1px',
             color: '#000',
             whiteSpace: 'nowrap'
@@ -508,8 +515,8 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
         
         {/* Student Photo */}
         <Box sx={{
-          width: { xs: '72px', sm: '92px' },
-          height: { xs: '90px', sm: '112px' },
+          width: { xs: '70px', sm: isUltraCompact ? '74px' : isCompact ? '84px' : '96px' },
+          height: { xs: '84px', sm: isUltraCompact ? '88px' : isCompact ? '100px' : '116px' },
           border: '1.5px solid #1a237e',
           borderRadius: '5px',
           overflow: 'hidden',
@@ -535,7 +542,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                 style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }}
               />
             ) : (
-              <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Photo</Typography>
+              <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Photo</Typography>
             )
           )}
         </Box>
@@ -569,8 +576,8 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
         {/* Student Info */}
         <Box sx={{
-          mb: isCompact ? 0.6 : 0.8,
-          padding: isCompact ? '9px 10px' : '12px 10px',
+          mb: isUltraCompact ? 0.35 : isCompact ? 0.5 : 0.7,
+          padding: isUltraCompact ? '5px 8px' : isCompact ? '7px 10px' : '10px 12px',
           backgroundColor: 'rgba(255,255,255,0.75)',
           borderRadius: '8px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
@@ -579,20 +586,20 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
         }}>
           <Typography variant="h6" sx={{
               fontWeight: 'bold',
-              fontSize: '1.5rem',
+              fontSize: isUltraCompact ? '1.4rem' : isCompact ? '1.58rem' : '1.8rem',
               textAlign: 'center',
-              mb: 0.8,
-              lineHeight: 1.3,
-              pb: 0.2
+              mb: isUltraCompact ? 0.2 : isCompact ? 0.3 : 0.5,
+              lineHeight: 1.4,
+              pb: 0.1
             }}>
               {name || 'শিক্ষার্থীর নাম'}
             </Typography>
 
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1, sm: 3 }, justifyContent: 'center' }}>
-              <Typography variant="body1" sx={{ fontSize: '1.15rem', lineHeight: 1.4, pb: 0.2 }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1, sm: isUltraCompact ? 1.5 : 2.5 }, justifyContent: 'center' }}>
+              <Typography variant="body1" sx={{ fontSize: isUltraCompact ? '1.2rem' : isCompact ? '1.3rem' : '1.45rem', lineHeight: 1.4, pb: 0.1 }}>
                 <strong>Roll:</strong> {rollNumber || 'রোল'}
               </Typography>
-              <Typography variant="body1" sx={{ fontSize: '1.15rem', lineHeight: 1.4, pb: 0.2 }}>
+              <Typography variant="body1" sx={{ fontSize: isUltraCompact ? '1.2rem' : isCompact ? '1.3rem' : '1.45rem', lineHeight: 1.4, pb: 0.1 }}>
                 <strong>Class:</strong> {className && className !== 'N/A' ? `${className} ${section}` : 'শ্রেণি'}
               </Typography>
           </Box>
@@ -600,16 +607,18 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
         {/* Exam Details */}
         {(() => {
-          const examDetailsP = isCompact ? 1.25 : 1.8;
-          const examDetailsMb = isCompact ? 0.8 : 1.2;
-          const routineTitleMb = isCompact ? 0.35 : 0.5;
-          const routineTitlePb = isCompact ? 0.55 : 0.8;
-          const headerPy = isCompact ? 0.55 : 0.8;
-          const headerFontSize = isCompact ? '9.8px !important' : '10.5px !important';
-          const rowPy = isCompact ? 0.4 : 0.6;
-          const rowPtPb = isCompact ? '3.5px' : '5px';
-          const rowLineHeight = isCompact ? 1.35 : 1.6;
-          const rowFontSize = isCompact ? '9.5px !important' : '10px !important';
+          const examDetailsP = isUltraCompact ? 0.7 : isCompact ? 1.0 : 1.4;
+          const examDetailsMb = isUltraCompact ? 0.4 : isCompact ? 0.7 : 1.0;
+          const routineTitleMb = isUltraCompact ? 0.2 : isCompact ? 0.35 : 0.5;
+          const routineTitlePb = isUltraCompact ? 0.2 : isCompact ? 0.4 : 0.6;
+          const headerPy = isUltraCompact ? 0.45 : isCompact ? 0.65 : 0.9;
+          const headerFontSize = isUltraCompact ? '11.6px !important' : isCompact ? '12.6px !important' : '13.8px !important';
+          const rowPy = isUltraCompact ? 0.3 : isCompact ? 0.45 : 0.6;
+          const rowPtPb = isUltraCompact ? '3.2px' : isCompact ? '4.8px' : '7.0px';
+          const rowLineHeight = isUltraCompact ? 1.5 : isCompact ? 1.65 : 1.85;
+          const rowFontSize = isUltraCompact ? '11.2px !important' : isCompact ? '12.4px !important' : '13.6px !important';
+          const timeFontSize = isUltraCompact ? '1.02rem' : isCompact ? '1.1rem' : '1.22rem';
+          const routineTitleFontSize = isUltraCompact ? '1.15rem' : isCompact ? '1.24rem' : '1.36rem';
 
           return (
             <Box sx={{
@@ -628,8 +637,8 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   textAlign: 'center',
                   borderBottom: '2px solid #e0e0e0',
                   pb: routineTitlePb,
-                  fontSize: '1.1rem',
-                  lineHeight: 1.4
+                  fontSize: routineTitleFontSize,
+                  lineHeight: 1.5
                 }}>
                   পরীক্ষার রুটিনঃ
                 </Typography>
@@ -640,11 +649,11 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   return (
                     <Typography sx={{
                       textAlign: 'center',
-                      fontSize: '0.95rem',
+                      fontSize: timeFontSize,
                       fontWeight: 'bold',
                       color: '#1a237e',
-                      mb: isCompact ? 0.5 : 1.0,
-                      lineHeight: 1.3
+                      mb: isUltraCompact ? 0.2 : isCompact ? 0.35 : 0.6,
+                      lineHeight: 1.4
                     }}>
                       {timeStr}
                     </Typography>
@@ -653,7 +662,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
 
               {/* Exam Routine Table - Four Columns */}
               {finalSlots.length === 0 ? (
-                <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '0.9rem' }}>
+                <Typography variant="body1" sx={{ textAlign: 'center', color: '#757575', fontSize: '0.95rem' }}>
                   রুটিন পাওয়া যায়নি
                 </Typography>
               ) : (
@@ -683,7 +692,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                       border: '1px solid #e0e8ff',
                       borderRadius: '4px',
                       overflow: 'visible',
-                      fontSize: '11px !important'
+                      fontSize: '12px !important'
                     }}>
                       {/* Header */}
                       <Box sx={{
@@ -765,7 +774,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                                 textAlign: 'center',
                                 borderBottom: '0.5px solid #e0e8ff'
                               }}>
-                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
+                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
                                   {subName1}
                                 </Box>
                               </Box>
@@ -788,7 +797,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                                 textAlign: 'center',
                                 borderBottom: '0.5px solid #e0e8ff'
                               }}>
-                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
+                                <Box sx={{ fontWeight: '600', fontSize: rowFontSize, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: rowLineHeight, pt: rowPtPb, pb: rowPtPb }}>
                                   {subName2}
                                 </Box>
                               </Box>
@@ -806,12 +815,10 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
         })()}
       </Box>
 
-      {/* Valid For removed per requirement */}
-
       {/* Instructions Section */}
       <Box sx={{
-        mt: 0.5, // Reduced
-        p: 0.6, // Reduced
+        mt: isUltraCompact ? 0.2 : isCompact ? 0.3 : 0.5,
+        p: isUltraCompact ? '4px 6px' : isCompact ? '5px 8px' : '7px 10px',
         backgroundColor: 'rgba(240, 244, 255, 0.9)',
         borderRadius: '6px',
         position: 'relative',
@@ -819,31 +826,35 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
       }}>
         <Typography variant="subtitle1" sx={{ 
             fontWeight: 'bold', 
-            mb: 0.1,
+            mb: 0.05,
             color: '#1a237e',
             textAlign: 'center',
-            fontSize: '13px !important',
-            lineHeight: 1.1
+            fontSize: isUltraCompact ? '12.6px !important' : isCompact ? '13.8px !important' : '15.4px !important',
+            lineHeight: 1.35
           }}>
             নির্দেশনা
           </Typography>
-          <Box component="p" sx={{ 
+          <Box component="ol" sx={{ 
             px: 0.5,
             m: 0,
-            fontSize: '12px !important',
-            lineHeight: 1.2,
+            pl: 2,
+            fontSize: isUltraCompact ? '11.6px !important' : isCompact ? '12.6px !important' : '14.2px !important',
+            lineHeight: 1.5,
             color: '#333',
-            textAlign: 'center'
+            textAlign: 'left'
           }}>
-            প্রবেশপত্র ছাড়া পরীক্ষার হলে প্রবেশ করতে পারবে না। পরীক্ষা শুরু হওয়ার কমপক্ষে ১৫ মিনিট আগে প্রবেশ করা আবশ্যক। নির্ধারিত বিষয় বাছাই করে পরীক্ষা দিতে হবে। প্রতিটি প্রশ্নের উত্তর সঠিকভাবে লিখতে হবে।
+            <li>পরীক্ষাকালে কোন প্রকার বই, খাতা, হ্যান্ডনোট, ইলেকট্রনিক ডিভাইস সঙ্গে আনা যাবে না।</li>
+            <li>পেন্সিল, ইরেজার, স্কেল, জ্যামিতি বক্স সঙ্গে আনতে হবে।</li>
+            <li>পরীক্ষা আরম্ভ হওয়ার ২০ মিনিট পূর্বে আসন গ্রহণ করতে হবে।</li>
+            <li>১৭/১১/২০২৬ খ্রি. এর মধ্যে সকল টিউশন ফি/ বকেয়া পরিশোধ করতে হবে।</li>
           </Box>
       </Box>
 
       {/* Footer */}
       <Box sx={{
-        mt: 0.3, // Further reduced
-        pt: 0.3, // Further reduced
-        borderTop: '2px dashed #d1d9ff',
+        mt: isUltraCompact ? 0.2 : isCompact ? 0.3 : 0.4,
+        pt: isUltraCompact ? 0.2 : isCompact ? 0.3 : 0.4,
+        borderTop: '1.5px dashed #d1d9ff',
         position: 'relative',
         zIndex: 1
       }}>
@@ -857,23 +868,23 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
           <Box sx={{ 
             textAlign: 'center', 
             flex: 1,
-            maxWidth: '200px', // Reduced
-            pt: 0.2
+            maxWidth: '180px',
+            pt: 0.1
           }}>
             <Box sx={{ 
-              height: '35px', // Further reduced
-              borderBottom: '2px solid #1a237e',
-              mb: 0.2,
+              height: isUltraCompact ? '24px' : isCompact ? '30px' : '38px',
+              borderBottom: '1.5px solid #1a237e',
+              mb: 0.1,
               display: 'flex',
               alignItems: 'flex-end',
               justifyContent: 'center',
-              pb: 0.2
+              pb: 0.1
             }}>
             </Box>
             <Typography variant="body1" sx={{
               fontWeight: 'bold',
-              fontSize: '0.9rem', // Reduced
-              lineHeight: 1.2
+              fontSize: isUltraCompact ? '0.95rem' : isCompact ? '1.02rem' : '1.12rem',
+              lineHeight: 1.3
             }}>
               শ্রেণি শিক্ষক
             </Typography>
@@ -883,12 +894,12 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
           <Box sx={{ 
             textAlign: 'center', 
             flex: 1,
-            maxWidth: '200px', // Reduced
-            pt: 0.2
+            maxWidth: '180px',
+            pt: 0.1
           }}>
             <Box sx={{ 
-              height: '45px', // Further reduced
-              mb: 0.2,
+              height: isUltraCompact ? '32px' : isCompact ? '40px' : '48px',
+              mb: 0.1,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -918,7 +929,7 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
                   alt="Signature"
                   style={{
                     maxWidth: '100%',
-                    maxHeight: '40px', // Further reduced
+                    maxHeight: isUltraCompact ? '28px' : isCompact ? '34px' : '42px',
                     objectFit: 'contain',
                     position: 'relative',
                     zIndex: 1
@@ -930,16 +941,16 @@ function AdmissionCard({ data, school, exam, examSlots = [] }) {
               )}
             </Box>
             <Box sx={{ 
-              height: '2px',
+              height: '1.5px',
               backgroundColor: '#1a237e',
               width: '100%',
-              mb: 0.2
+              mb: 0.1
             }} />
             {String(school?.id) !== '51' && (
               <Typography variant="body1" sx={{
                 fontWeight: 'bold',
-                fontSize: '0.9rem',
-                lineHeight: 1.2
+                fontSize: isUltraCompact ? '0.95rem' : isCompact ? '1.02rem' : '1.12rem',
+                lineHeight: 1.3
               }}>
                 প্রধান শিক্ষক
               </Typography>

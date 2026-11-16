@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ID Card Print Test</title>
+<style>
+  /* Replicate the exact print CSS from IDCard.css */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #eee;
+  }
+  .id-card-container {
+    display: block;
+    padding: 4mm;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .id-card-wrapper {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 0 4mm 0;
+    padding: 0;
+    display: block;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-sizing: border-box;
+  }
+  .id-card-wrapper > div {
+    position: relative;
+    display: block;
+    width: 196mm;
+    height: 63mm;
+    margin: 0 auto;
+    padding: 0;
+    overflow: hidden;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-sizing: border-box;
+    background: #fff;
+    border: 1px dashed #ccc;
+  }
+  .id-card-front, .id-card-back {
+    position: absolute;
+    top: 50%;
+    width: 66.7mm;
+    height: 386px;
+    margin: 0;
+    transform: translate(-50%, -50%) rotate(90deg) scale(0.93);
+    transform-origin: center center;
+    overflow: hidden;
+    border: 2px solid #0a4b94;
+    border-radius: 8px;
+    background: #fff;
+    box-sizing: border-box;
+  }
+  .id-card-front { left: 48mm; }
+  .id-card-back { left: 148mm; }
+</style>
+</head>
+<body>
+<div class="id-card-container" id="container">
+  <div class="id-card-wrapper"><div>
+    <div class="id-card-front">Card 1 Front</div>
+    <div class="id-card-back">Card 1 Back</div>
+  </div></div>
+  <div class="id-card-wrapper"><div>
+    <div class="id-card-front">Card 2 Front</div>
+    <div class="id-card-back">Card 2 Back</div>
+  </div></div>
+  <div class="id-card-wrapper"><div>
+    <div class="id-card-front">Card 3 Front</div>
+    <div class="id-card-back">Card 3 Back</div>
+  </div></div>
+  <div class="id-card-wrapper"><div>
+    <div class="id-card-front">Card 4 Front</div>
+    <div class="id-card-back">Card 4 Back</div>
+  </div></div>
+</div>
+<script>
+  // Measure in mm. 1mm = 96/25.4 px ≈ 3.7795 px
+  const pxPerMm = 96 / 25.4;
+  const container = document.getElementById('container');
+  const wrappers = document.querySelectorAll('.id-card-wrapper');
+  const rows = document.querySelectorAll('.id-card-wrapper > div');
+
+  const containerRect = container.getBoundingClientRect();
+  console.log('Container height:', containerRect.height, 'px =', (containerRect.height / pxPerMm).toFixed(2), 'mm');
+  console.log('A4 height: 297mm');
+
+  wrappers.forEach((w, i) => {
+    const r = w.getBoundingClientRect();
+    console.log(`Wrapper ${i+1}: top=${(r.top/pxPerMm).toFixed(2)}mm, height=${(r.height/pxPerMm).toFixed(2)}mm, bottom=${(r.bottom/pxPerMm).toFixed(2)}mm`);
+  });
+
+  rows.forEach((r, i) => {
+    const rect = r.getBoundingClientRect();
+    console.log(`Row ${i+1}: height=${(rect.height/pxPerMm).toFixed(2)}mm`);
+  });
+
+  // Check if last wrapper bottom exceeds A4
+  const last = wrappers[wrappers.length - 1].getBoundingClientRect();
+  const lastBottomMm = (last.bottom - containerRect.top) / pxPerMm;
+  console.log('Last wrapper bottom (relative to container top):', lastBottomMm.toFixed(2), 'mm');
+  console.log('Container padding bottom: 4mm');
+  console.log('Total needed:', (lastBottomMm + 4).toFixed(2), 'mm');
+  console.log('A4 height: 297mm');
+  console.log('Fits?', (lastBottomMm + 4) <= 297 ? 'YES' : 'NO - exceeds by ' + ((lastBottomMm + 4) - 297).toFixed(2) + 'mm');
+</script>
+</body>
+</html>

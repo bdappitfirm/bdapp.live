@@ -235,9 +235,19 @@ function IDCardGenerator() {
 
       {loading ? <CardSkeleton count={4} /> : cards.length > 0 ? (
         <Box className="id-card-container" sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center', p: 2 }}>
-          {cards.map((item, idx) => (
-            <IDCard key={idx} type={tabValue === 0 ? 'student' : 'teacher'} data={item} school={school} classrooms={classrooms} sections={allSections} overridePhone={hmPhone} lang={lang} />
-          ))}
+          {(() => {
+            const pages = [];
+            for (let i = 0; i < cards.length; i += 4) {
+              pages.push(cards.slice(i, i + 4));
+            }
+            return pages.map((pageCards, pIdx) => (
+              <Box key={`id-page-${pIdx}`} className="id-card-page">
+                {pageCards.map((item, idx) => (
+                  <IDCard key={item.id || idx} type={tabValue === 0 ? 'student' : 'teacher'} data={item} school={school} classrooms={classrooms} sections={allSections} overridePhone={hmPhone} lang={lang} />
+                ))}
+              </Box>
+            ));
+          })()}
         </Box>
       ) : <EmptyState icon={BadgeIcon} title="কোনো কার্ড নেই" message="অনুসন্ধান করুন" />}
 

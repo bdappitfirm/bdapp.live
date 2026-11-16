@@ -40,6 +40,7 @@ export default function AttendanceReportCard() {
   const toast = useToast();
 
   const [reportType, setReportType] = useState('monthly');
+  const [reportFor, setReportFor] = useState('student'); // 'student' | 'employee'
   const [category, setCategory] = useState('section');
   const [selectedClassroom, setSelectedClassroom] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
@@ -52,6 +53,10 @@ export default function AttendanceReportCard() {
   const [classrooms, setClassrooms] = useState([]);
   const [sections, setSections] = useState([]);
   const [students, setStudents] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -80,6 +85,23 @@ export default function AttendanceReportCard() {
     }
   }, [selectedClassroom, id]);
 
+  // Employee mode: load departments
+  useEffect(() => {
+    if (reportFor !== 'employee') return;
+    scopedGet('/api/employees/departments/', id)
+      .then(res => setDepartments(Array.isArray(res.data) ? res.data : (res.data?.results || [])))
+      .catch(() => setDepartments([]));
+  }, [reportFor, id]);
+
+  // Employee mode: load employees of the selected department
+  useEffect(() => {
+    if (reportFor !== 'employee') return;
+    scopedGet('/api/employees/employees/', id, { department: selectedDepartment || undefined, page_size: 1000 })
+      .then(res => setEmployees(Array.isArray(res.data) ? res.data : (res.data?.results || [])))
+      .catch(() => setEmployees([]));
+    setSelectedEmployee('');
+  }, [reportFor, selectedDepartment, id]);
+
   useEffect(() => {
     if (selectedClassroom) {
       scopedGet('/api/academics/students/', id, { classroom: selectedClassroom, section: selectedSection || undefined, page_size: 1000 })
@@ -101,11 +123,59 @@ export default function AttendanceReportCard() {
   }, [selectedClassroom, selectedSection, id]);
 
   const generateReport = async () => {
-    if (!selectedClassroom) { toast.warning('দয়া করে একটি শ্রেণি নির্বাচন করুন'); return; }
-    if (category === 'student' && !selectedStudent) { toast.warning('দয়া করে একজন শিক্ষার্থী নির্বাচন করুন'); return; }
+    if (reportFor === 'student' && !selectedClassroom) { toast.warning('দয়া করে একটি শ্রেণি নির্বাচন করুন'); return; }
+    if (reportFor === 'student' && category === 'student' && !selectedStudent) { toast.warning('দয়া করে একজন শিক্ষার্থী নির্বাচন করুন'); return; }
 
     setLoading(true); setReportData([]); setShowReport(false);
     try {
+      // ---------- EMPLOYEE (STAFF) REPORT ----------
+      if (reportFor === 'employee') {
+        if (reportType === 'daily') {
+          const [empRes, attRes] = await Promise.all([
+            scopedGet('/api/employees/employees/', id, { department: selectedDepartment || undefined, page_size: 1000 }),
+            scopedGet('/api/attendance/records/', id, { date: selectedDate, staff: 1, page_size: 1000 })
+          ]);
+          const emps = Array.isArray(empRes.data) ? empRes.data : (empRes.data?.results || []);
+          const records = Array.isArray(attRes.data) ? attRes.data : (attRes.data?.results || []);
+          const list = selectedEmployee ? emps.filter(e => e.id === parseInt(selectedEmployee)) : emps;
+          setReportData(list.map(e => {
+            const rec = records.find(r => r.employee === e.id);
+            return {
+              roll_number: e.employee_id,
+              name: e.name_en || e.name_bn || 'Employee',
+              designation: e.designation_name || '',
+              department: e.department_name || '',
+              present: rec ? rec.present : false,
+              time: rec ? dayjs(rec.scan_time || rec.created_at).format('hh:mm A') : '-',
+              note: rec?.note || ''
+            };
+          }));
+        } else {
+          const params = { employee: 1 };
+          if (selectedDepartment) params.department = selectedDepartment;
+          if (selectedEmployee) params.employee_id = selectedEmployee;
+          if (reportType === 'monthly') params.month = selectedMonth; else params.year = selectedYear;
+          const res = await scopedGet('/api/attendance/records/monthly_report/', id, params);
+          const rawData = res.data || [];
+          setReportData(rawData.map(r => {
+            const attValues = Object.values(r.attendance || {});
+            const present = attValues.filter(v => v === true).length;
+            const total = attValues.length;
+            return {
+              roll_number: r.roll,
+              name: r.name,
+              designation: r.designation || '',
+              department: r.department || '',
+              present_days: present,
+              total_days: total,
+              attendance_percentage: total > 0 ? ((present / total) * 100).toFixed(1) : 0
+            };
+          }));
+        }
+        setShowReport(true);
+        return;
+      }
+
       let endpoint = '/api/attendance/records/monthly_report/';
       let params = { school: id, classroom: selectedClassroom };
       if (selectedSection) params.section = selectedSection;
@@ -159,8 +229,14 @@ export default function AttendanceReportCard() {
 
   const handleDownloadCSV = () => {
     if (reportData.length === 0) return;
-    const headers = reportType === 'daily' ? ['রোল', 'নাম', 'অবস্থা', 'সময়', 'মন্তব্য'] : ['রোল', 'নাম', 'উপস্থিত দিন', 'মোট দিন', 'শতকরা (%)'];
-    const rows = reportData.map(r => reportType === 'daily' ? [r.roll_number, r.student_name, r.present ? 'উপস্থিত' : 'অনুপস্থিত', r.time, r.note] : [r.roll_number, r.student_name, r.present_days, r.total_days, r.attendance_percentage]);
+    const isEmp = reportFor === 'employee';
+    const headers = reportType === 'daily'
+      ? [isEmp ? 'আইডি' : 'রোল', isEmp ? 'কর্মীর নাম' : 'নাম', 'অবস্থা', 'সময়', 'মন্তব্য']
+      : [isEmp ? 'আইডি' : 'রোল', isEmp ? 'কর্মীর নাম' : 'নাম', 'উপস্থিত দিন', 'মোট দিন', 'শতকরা (%)'];
+    const rows = reportData.map(r => {
+      const nm = r.student_name || r.name || '';
+      return reportType === 'daily' ? [r.roll_number, nm, r.present ? 'উপস্থিত' : 'অনুপস্থিত', r.time, r.note] : [r.roll_number, nm, r.present_days, r.total_days, r.attendance_percentage];
+    });
     let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\r\n";
     rows.forEach(row => { csvContent += row.map(c => `"${c}"`).join(",") + "\r\n"; });
     const link = document.createElement("a");
@@ -213,12 +289,27 @@ export default function AttendanceReportCard() {
 
       <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: 2 }} className="no-print">
         <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Stack direction="row" spacing={1}>
+              <Button variant={reportFor === 'student' ? 'contained' : 'outlined'} color="primary" onClick={() => { setReportFor('student'); setReportData([]); setShowReport(false); }} fullWidth>🎓 শিক্ষার্থী</Button>
+              <Button variant={reportFor === 'employee' ? 'contained' : 'outlined'} color="primary" onClick={() => { setReportFor('employee'); setReportData([]); setShowReport(false); }} fullWidth>👨‍💼 কর্মী</Button>
+            </Stack>
+          </Grid>
           <Grid size={{ xs: 12, md: 6 }}><Stack direction="row" spacing={1}><Button variant={reportType === 'daily' ? 'contained' : 'outlined'} onClick={() => setReportType('daily')} fullWidth>দৈনিক</Button><Button variant={reportType === 'monthly' ? 'contained' : 'outlined'} onClick={() => setReportType('monthly')} fullWidth>মাসিক</Button><Button variant={reportType === 'yearly' ? 'contained' : 'outlined'} onClick={() => setReportType('yearly')} fullWidth>বাৎসরিক</Button></Stack></Grid>
-          <Grid size={{ xs: 12, md: 6 }}><Stack direction="row" spacing={1}><Button variant={category === 'class' ? 'contained' : 'outlined'} color="secondary" onClick={() => { setCategory('class'); setSelectedSection(''); }} fullWidth>ক্লাস-ভিত্তিক</Button><Button variant={category === 'section' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('section')} fullWidth>শাখা-ভিত্তিক</Button><Button variant={category === 'student' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('student')} fullWidth>শিক্ষার্থী-ভিত্তিক</Button></Stack></Grid>
-          <Grid size={{ xs: 12, md: 3 }}><TextField select fullWidth label="শ্রেণি" value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>{classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</TextField></Grid>
-          {(category === 'section' || category === 'student') && <Grid size={{ xs: 12, md: 2 }}><TextField select fullWidth label="শাখা" value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}><MenuItem value="">সব শাখা</MenuItem>{sections.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}</TextField></Grid>}
-          {category === 'student' && <Grid size={{ xs: 12, md: 3 }}><TextField select fullWidth label="শিক্ষার্থী" value={selectedStudent} onChange={(e) => setSelectedStudent(e.target.value)}>{students.map(s => <MenuItem key={s.id} value={s.id}>{s.user?.first_name} {s.user?.last_name} ({s.roll_number})</MenuItem>)}</TextField></Grid>}
-          <Grid size={{ xs: 12, md: category === 'student' ? 2 : 4 }}>{reportType === 'daily' && <TextField type="date" fullWidth label="তারিখ" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'monthly' && <TextField type="month" fullWidth label="মাস" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'yearly' && <TextField select fullWidth label="বছর" value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>{[0,1,2].map(i => { const y = dayjs().subtract(i, 'year').format('YYYY'); return <MenuItem key={y} value={y}>{y}</MenuItem> })}</TextField>}</Grid>
+          {reportFor === 'student' ? (
+            <>
+              <Grid size={{ xs: 12, md: 6 }}><Stack direction="row" spacing={1}><Button variant={category === 'class' ? 'contained' : 'outlined'} color="secondary" onClick={() => { setCategory('class'); setSelectedSection(''); }} fullWidth>ক্লাস-ভিত্তিক</Button><Button variant={category === 'section' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('section')} fullWidth>শাখা-ভিত্তিক</Button><Button variant={category === 'student' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('student')} fullWidth>শিক্ষার্থী-ভিত্তিক</Button></Stack></Grid>
+              <Grid size={{ xs: 12, md: 3 }}><TextField select fullWidth label="শ্রেণি" value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>{classrooms.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}</TextField></Grid>
+              {(category === 'section' || category === 'student') && <Grid size={{ xs: 12, md: 2 }}><TextField select fullWidth label="শাখা" value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}><MenuItem value="">সব শাখা</MenuItem>{sections.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}</TextField></Grid>}
+              {category === 'student' && <Grid size={{ xs: 12, md: 3 }}><TextField select fullWidth label="শিক্ষার্থী" value={selectedStudent} onChange={(e) => setSelectedStudent(e.target.value)}>{students.map(s => <MenuItem key={s.id} value={s.id}>{s.user?.first_name} {s.user?.last_name} ({s.roll_number})</MenuItem>)}</TextField></Grid>}
+            </>
+          ) : (
+            <>
+              <Grid size={{ xs: 12, md: 4 }}><TextField select fullWidth label="বিভাগ (Department)" value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)}><MenuItem value="">সকল বিভাগ</MenuItem>{departments.map(d => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}</TextField></Grid>
+              <Grid size={{ xs: 12, md: 4 }}><TextField select fullWidth label="কর্মী" value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)}><MenuItem value="">সকল কর্মী</MenuItem>{employees.map(e => <MenuItem key={e.id} value={e.id}>{e.name_en || e.name_bn} ({e.employee_id})</MenuItem>)}</TextField></Grid>
+            </>
+          )}
+          <Grid size={{ xs: 12, md: reportFor === 'student' && category === 'student' ? 2 : (reportFor === 'employee' ? 2 : 4) }}>{reportType === 'daily' && <TextField type="date" fullWidth label="তারিখ" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'monthly' && <TextField type="month" fullWidth label="মাস" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'yearly' && <TextField select fullWidth label="বছর" value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>{[0,1,2].map(i => { const y = dayjs().subtract(i, 'year').format('YYYY'); return <MenuItem key={y} value={y}>{y}</MenuItem> })}</TextField>}</Grid>
           <Grid size={{ xs: 12, md: 2 }}><Button variant="contained" fullWidth size="large" sx={{ height: '100%' }} startIcon={<VisibilityIcon />} onClick={generateReport} disabled={loading}>দেখুন</Button></Grid>
         </Grid>
       </Paper>
@@ -235,23 +326,31 @@ export default function AttendanceReportCard() {
         <Box id="printable-area">
           <Box className="print-only" sx={{ display: 'none', textAlign: 'center', mb: 4 }}>
             <Typography variant="h3" sx={{ fontWeight: 'bold' }}>{schoolInfo?.name}</Typography>
-            <Typography variant="h5">হাজিরা প্রতিবেদন — {reportType === 'daily' ? 'দৈনিক' : reportType === 'monthly' ? 'মাসিক' : 'বাৎসরিক'}</Typography>
-            <Typography variant="h6">শ্রেণি: {classrooms.find(c=>c.id===parseInt(selectedClassroom))?.name} | শাখা: {sections.find(s=>s.id===parseInt(selectedSection))?.name || 'সব'}</Typography>
+            <Typography variant="h5">হাজিরা প্রতিবেদন — {reportType === 'daily' ? 'দৈনিক' : reportType === 'monthly' ? 'মাসিক' : 'বাৎসরিক'}{reportFor === 'employee' ? ' (কর্মী)' : ''}</Typography>
+            {reportFor === 'student' ? (
+              <Typography variant="h6">শ্রেণি: {classrooms.find(c=>c.id===parseInt(selectedClassroom))?.name} | শাখা: {sections.find(s=>s.id===parseInt(selectedSection))?.name || 'সব'}</Typography>
+            ) : (
+              <Typography variant="h6">বিভাগ: {departments.find(d=>d.id===parseInt(selectedDepartment))?.name || 'সকল'}</Typography>
+            )}
             <Divider sx={{ my: 2, borderColor: 'black' }} />
           </Box>
           <TableContainer component={Paper}>
             <Table size="small">
               <TableHead sx={{ bgcolor: '#f5f5f5' }}>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 'bold' }}>রোল</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }}>শিক্ষার্থীর নাম</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>{reportFor === 'employee' ? 'আইডি' : 'রোল'}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>{reportFor === 'employee' ? 'কর্মীর নাম ও পদবী' : 'শিক্ষার্থীর নাম'}</TableCell>
                   {reportType === 'daily' ? (<><TableCell align="center">অবস্থা</TableCell><TableCell align="center">সময়</TableCell></>) : (<><TableCell align="center">উপস্থিত</TableCell><TableCell align="center">মোট দিন</TableCell><TableCell align="center">শতকরা (%)</TableCell></>)}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {reportData.map((row, idx) => (
                   <TableRow key={idx}>
-                    <TableCell>{row.roll_number}</TableCell><TableCell sx={{ fontWeight: 'bold' }}>{row.student_name}</TableCell>
+                    <TableCell>{row.roll_number}</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>
+                      {row.student_name || row.name}
+                      {reportFor === 'employee' && row.designation ? <Typography variant="caption" color="text.secondary" display="block">{row.designation}</Typography> : null}
+                    </TableCell>
                     {reportType === 'daily' ? (<><TableCell align="center">{row.present ? <PresentIcon color="success" /> : <AbsentIcon color="error" />}</TableCell><TableCell align="center">{row.time}</TableCell></>) : (<><TableCell align="center">{row.present_days}</TableCell><TableCell align="center">{row.total_days}</TableCell><TableCell align="center"><Chip label={`${row.attendance_percentage}%`} color={parseFloat(row.attendance_percentage) >= 80 ? 'success' : 'error'} size="small" /></TableCell></>)}
                   </TableRow>
                 ))}

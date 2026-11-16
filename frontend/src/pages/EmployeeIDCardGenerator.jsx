@@ -112,6 +112,16 @@ export default function EmployeeIDCardGenerator() {
     return () => clearTimeout(t);
   }, [loadEmployees]);
 
+  // Keep the @page rule in <head> only while this page is mounted so it can
+  // never leak document-wide and mutate another page's print layout.
+  useEffect(() => {
+    injectPrintPageStyle();
+    return () => {
+      const el = document.getElementById('emp-id-card-print-page');
+      if (el) el.remove();
+    };
+  }, []);
+
   const designationsForDept = useMemo(() => {
     if (!filterDept) return designations;
     return designations.filter((d) => String(d.department) === String(filterDept));
@@ -246,9 +256,19 @@ export default function EmployeeIDCardGenerator() {
           <Typography color="text.secondary" className="emp-print-hidden">
             কার্ড দেখতে উপরের তালিকা থেকে কর্মী নির্বাচন করুন।
           </Typography>
-        ) : selectedEmployees.map((emp) => (
-          <EmployeeIDCard key={emp.id} employee={emp} school={school} />
-        ))}
+        ) : (() => {
+          const pages = [];
+          for (let i = 0; i < selectedEmployees.length; i += 4) {
+            pages.push(selectedEmployees.slice(i, i + 4));
+          }
+          return pages.map((pageEmps, pIdx) => (
+            <Box key={`emp-page-${pIdx}`} className="emp-card-page">
+              {pageEmps.map((emp) => (
+                <EmployeeIDCard key={emp.id} employee={emp} school={school} />
+              ))}
+            </Box>
+          ));
+        })()}
       </Box>
     </Box>
   );

@@ -78,6 +78,12 @@ $SYNC_TABLES = @(
     "public.academics_subject_classrooms",
     "public.academics_subject_sections",
     "public.academics_studentprofile",
+    # কর্মী (Employee) টেবিলগুলো অবশ্যই attendance-এর আগে থাকতে হবে:
+    # attendance_attendancerecord.employee_id -> employees_employee FK, তাই
+    # parent রো ছাড়া ইমপোর্ট হলে FK violation-এ পুরো transaction rollback হয়।
+    "public.employees_department",
+    "public.employees_designation",
+    "public.employees_employee",
     "public.attendance_attendancerecord",
     "public.attendance_studentattendancesummary",
     "public.results_examination",
@@ -158,7 +164,7 @@ try {
 # psql process - which is why the summary always printed 0 for every table.
 $COUNT_TABLES = @(
     'schools_school','users_user','users_profile','academics_classroom','academics_section',
-    'academics_subject','academics_studentprofile','attendance_attendancerecord','attendance_studentattendancesummary',
+    'academics_subject','academics_studentprofile','employees_employee','attendance_attendancerecord','attendance_studentattendancesummary',
     'results_examination','results_examslot',
     'results_result','results_studentoverallresult'
 )
@@ -551,6 +557,30 @@ try {
 }
 if (-not $mediaListOk -and -not (Test-Path $TMP_MEDIA_LIST)) {
     Write-Err "Media list could not be obtained from LIVE."
+}
+
+# ---------------------------------------------------------------------------
+# 5a-bis: EMPLOYEE PHOTOS
+#   employees_employee.photo is NOT covered by get_media_list.py (that script
+#   only queries users_user / schools_school), so the newly-synced employees
+#   would show broken avatars locally. Append their refs here (read-only query).
+# ---------------------------------------------------------------------------
+if (Test-Path -LiteralPath $TMP_MEDIA_LIST) {
+    try {
+        # NOTE: single quotes (not double) - PowerShell 5.1 mangles embedded
+        # double quotes when passing args to ssh.exe. length() avoids needing
+        # a quoted '' literal inside the SQL.
+        $empPhotoCmd = "sudo -u $REMOTE_DB_USER psql -d $REMOTE_DB_NAME -A -t -q -c 'SELECT DISTINCT TRIM(photo) FROM public.employees_employee WHERE photo IS NOT NULL AND length(TRIM(photo)) > 0'"
+        $empPhotos = @(& ssh -n -o ConnectTimeout=20 -o BatchMode=yes "${SSH_USER}@${VPS_IP}" $empPhotoCmd 2>&1)
+        $empValid = @($empPhotos | ForEach-Object { ("$_").Trim() } |
+            Where-Object { $_ -and $_ -notmatch '^(ERROR|FATAL|psql:|could not)' })
+        if ($empValid.Count -gt 0) {
+            Add-Content -LiteralPath $TMP_MEDIA_LIST -Value ($empValid -join "`n") -Encoding UTF8
+        }
+        Write-Info ("Employee photo references on LIVE: {0}" -f $empValid.Count)
+    } catch {
+        Write-Err ("Employee photo list query failed: " + $_.Exception.Message)
+    }
 }
 
 # ---------------- 5b: Compute MISSING set (local-only, no SSH) ----------------

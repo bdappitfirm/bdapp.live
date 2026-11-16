@@ -23,6 +23,16 @@ const ReceiptBook = () => {
   const [error, setError] = useState(null);
   const [amount, setAmount] = useState('');
 
+  // Keep the @page rule in <head> only while the receipt page is mounted so it
+  // never leaks into (and mutates) other pages' print layout.
+  useEffect(() => {
+    const el = document.createElement('style');
+    el.id = 'receipt-book-print-page';
+    el.textContent = '@page { size: A4; margin: 0.5in; }';
+    document.head.appendChild(el);
+    return () => el.remove();
+  }, []);
+
   useEffect(() => {
     const fetchSchoolData = async () => {
       try {

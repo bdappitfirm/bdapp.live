@@ -3100,8 +3100,9 @@ export default function ResultCardGenerator() {
           @media print {
             @page {
               size: A4 portrait;
-              /* ResultCard.css ও SSCMarksheet.css - দুটোতেই margin 0, তাই এখানেও
-                 একই মান, যাতে ব্রাউজার/প্রিন্টার-ভেদে সেটিং বদলে না যায়। */
+              /* এই পেজই রেজাল্ট কার্ড / SSC মার্কশিটের একমাত্র @page উৎস।
+                 ResultCard.css ও SSCMarksheet.css থেকে @page সরানো হয়েছে
+                 (গ্লোবাল বান্ডলে থাকলে অন্য সব পেজের প্রিন্টও বদলে যেত)। */
               margin: 0mm !important;
             }
 

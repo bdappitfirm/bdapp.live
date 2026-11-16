@@ -321,17 +321,6 @@
 
 /* PRINT ENGINE FIXES */
 @media print {
-    @page {
-        size: A4 portrait;
-        margin: 0mm !important;
-    }
-
-    body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background-color: #fff !important;
-    }
-
     .no-print, header, footer, nav, aside, .MuiAppBar-root, .MuiDrawer-root, .MuiToolbar-root, .MuiTabs-root, .MuiDialog-root, button {
         display: none !important;
     }
@@ -359,14 +348,6 @@
 
     .section-header-row td {
         background-color: #fcfcfc !important;
-    }
-
-    #root, main, .single-card-view, .result-display-area {
-        display: block !important;
-        visibility: visible !important;
-        height: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
     }
 }
 

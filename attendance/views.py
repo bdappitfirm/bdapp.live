@@ -67,6 +67,9 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
                 'student__user',
                 'student__classroom',
                 'student__section',
+                'employee',
+                'employee__designation',
+                'employee__department',
                 'taken_by_user'
             )
 
@@ -88,6 +91,8 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
             p = self.request.query_params
             if p.get('date'): qs = qs.filter(date=p.get('date'))
             if p.get('student'): qs = qs.filter(student_id=p.get('student'))
+            if p.get('employee'): qs = qs.filter(employee_id=p.get('employee'))
+            if str(p.get('staff', '')).lower() in ('1', 'true', 'yes'): qs = qs.filter(employee__isnull=False)
             if p.get('classroom'): qs = qs.filter(student__classroom_id=p.get('classroom'))
             if p.get('section'): qs = qs.filter(student__section_id=p.get('section'))
 
@@ -162,10 +167,62 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
             sid = get_user_school_id(request.user, request)
             if not sid: return Response({'error': 'Unauthorized'}, status=401)
 
-            cid = request.query_params.get('classroom')
-            secid = request.query_params.get('section')
-            month_str = request.query_params.get('month') # YYYY-MM
-            student_id = request.query_params.get('student')
+            params = request.query_params
+            month_str = params.get('month')  # YYYY-MM
+            year_str = params.get('year')    # YYYY
+            is_employee = str(params.get('employee', '')).lower() in ('1', 'true', 'yes')
+
+            # ---------- EMPLOYEE (STAFF) REPORT ----------
+            if is_employee:
+                qs = AttendanceRecord.objects.filter(school_id=sid, employee__isnull=False)
+                if year_str:
+                    try:
+                        qs = qs.filter(date__year=int(year_str))
+                    except (TypeError, ValueError):
+                        return Response([])
+                else:
+                    if not month_str:
+                        from django.utils import timezone
+                        month_str = timezone.now().strftime('%Y-%m')
+                    try:
+                        year, month = map(int, month_str.split('-'))
+                        qs = qs.filter(date__year=year, date__month=month)
+                    except (TypeError, ValueError):
+                        qs = qs.filter(date__startswith=month_str)
+
+                dept_id = params.get('department')
+                if dept_id:
+                    qs = qs.filter(employee__department_id=dept_id)
+                emp_id = params.get('employee_id')
+                if emp_id:
+                    qs = qs.filter(employee_id=emp_id)
+
+                rows = qs.values(
+                    'employee_id', 'date', 'present',
+                    'employee__name_en', 'employee__name_bn', 'employee__employee_id',
+                    'employee__designation__name', 'employee__department__name'
+                )
+
+                emp_report = {}
+                for item in rows:
+                    eid = item['employee_id']
+                    if eid not in emp_report:
+                        emp_report[eid] = {
+                            'employee_id': eid,
+                            'name': item['employee__name_en'] or item['employee__name_bn'] or 'Employee',
+                            'roll': item['employee__employee_id'],
+                            'designation': item['employee__designation__name'],
+                            'department': item['employee__department__name'],
+                            'attendance': {}
+                        }
+                    emp_report[eid]['attendance'][str(item['date'])] = item['present']
+
+                return Response(sorted(emp_report.values(), key=lambda x: str(x['roll'] or '')))
+
+            # ---------- STUDENT REPORT ----------
+            cid = params.get('classroom')
+            secid = params.get('section')
+            student_id = params.get('student')
 
             if not month_str:
                 from django.utils import timezone

@@ -112,6 +112,7 @@ const SchoolDashboard = () => {
     { label: 'Merit List(মেধাতালিকা)', icon: <CardMembershipIcon />, key: 'merit-list' },
     { label: 'স্টুডেন্ট তালিকা', icon: <GroupIcon />, key: 'student-list' },
     { label: 'আইডি কার্ড', icon: <CardMembershipIcon />, key: 'id-card' },
+    { label: 'আইডি কার্ডের ফিতা', icon: <CardMembershipIcon />, key: 'id-card-ribbon' },
     { label: 'প্রবেশপত্র', icon: <CardMembershipIcon />, key: 'admission-cards' },
     { label: 'বেঞ্চ স্টিকার', icon: <EventSeatIcon />, key: 'bench-sticker' },
     { label: 'সার্টিফিকেট', icon: <CardMembershipIcon />, key: 'certificate' },

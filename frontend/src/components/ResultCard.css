@@ -12,29 +12,14 @@
 }
 
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 0 !important;
-  }
-
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background-color: white !important;
-    width: 210mm !important;
-    height: 297mm !important;
-    overflow: hidden !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  #root, main, .result-display-area {
+  /* Scope print container rules strictly so they do not pollute other pages */
+  .result-display-area,
+  .bulk-print-mode {
     display: block !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 210mm !important;
     height: 297mm !important;
-    overflow: hidden !important;
   }
 
   /* Full A4 page flex container to perfectly center the result card both vertically and horizontally */

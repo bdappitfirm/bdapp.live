@@ -364,28 +364,12 @@
   width: 100%;
 }
 
+.emp-card-page {
+  display: contents;
+}
+
 /* ---------------- Print ---------------- */
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 0;
-  }
-
-  html,
-  body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: none !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  main {
-    min-height: 0 !important;
-    overflow: visible !important;
-  }
-
   .no-print,
   header, footer, nav, aside,
   .MuiAppBar-root,
@@ -398,12 +382,6 @@
     display: none !important;
   }
 
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    box-sizing: border-box !important;
-  }
-
   .emp-card-generator-root {
     padding: 0 !important;
     margin: 0 !important;
@@ -411,38 +389,74 @@
     max-width: 100% !important;
   }
 
-  .emp-card-container {
+  /* 4 cards container per page */
+  .emp-card-page {
     display: flex !important;
-    flex-wrap: wrap !important;
-    justify-content: center !important;
-    align-content: flex-start !important;
-    gap: 3mm !important;
-    padding: 0 !important;
-    margin: 0 auto !important;
+    flex-direction: column !important;
+    justify-content: space-around !important;
+    align-items: center !important;
     width: 100% !important;
-    max-width: 210mm !important;
+    height: 284mm !important;
+    max-height: 284mm !important;
+    padding: 2mm 0 !important;
+    box-sizing: border-box !important;
+    /* Keep the whole 4-card group on one sheet; hiding the overflow would clip
+       (or mangle) the last card if a sheet ever came up short. */
+    overflow: visible !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    break-after: page !important;
+    page-break-after: always !important;
   }
 
-  .emp-card-container .emp-card-wrapper {
-    width: 66.7mm !important;
-    max-width: 66.7mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
+  .emp-card-page:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
+  .emp-card-container {
     display: block !important;
+    padding: 2mm !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* One row per card (front + back rotated to landscape, side by side) */
+  .emp-card-container .emp-card-wrapper {
+    position: relative !important;
+    display: block !important;
+    width: 199mm !important;
+    height: 63mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
 
-  .emp-card-container .emp-id-card-front,
-  .emp-card-container .emp-id-card-back {
+  .emp-card-container .emp-card-wrapper > .emp-id-card-front,
+  .emp-card-container .emp-card-wrapper > .emp-id-card-back {
+    position: absolute !important;
+    top: 50% !important;
     width: 66.7mm !important;
     height: 104mm !important;
     min-height: 104mm !important;
     max-width: 66.7mm !important;
     max-height: 104mm !important;
-    box-shadow: 0.5px solid #ccc !important;
+    margin: 0 !important;
+    transform: translate(-50%, -50%) rotate(90deg) scale(0.9423) !important;
+    transform-origin: center center !important;
+    box-shadow: none !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+
+  .emp-card-container .emp-card-wrapper > .emp-id-card-front {
+    left: 49mm !important;
+  }
+
+  .emp-card-container .emp-card-wrapper > .emp-id-card-back {
+    left: 150mm !important;
   }
 
   .emp-card-container canvas,

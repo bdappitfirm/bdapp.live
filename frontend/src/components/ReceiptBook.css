@@ -364,11 +364,11 @@
   }
 }
 
-/* Page break control */
-@page {
-  margin: 0.5in;
-  size: A4;
-}
+/* Page break control.
+   The @page rule was moved out of this globally-bundled stylesheet into
+   ReceiptBook.jsx (injected into <head> only while the receipt page is
+   mounted). An unscoped @page here leaks document-wide and silently changes
+   the print margin of every other page. */
 
 .receipt-copy {
   page-break-inside: avoid;

@@ -118,19 +118,21 @@ export default function AdmissionCardGenerator() {
         .screen-admission-cards .print-grid { display: contents !important; }
 
         /* Each .print-page is exactly one A4-landscape sheet. A fixed height
-           (instead of min-height) is what makes the vertical centring hold on
-           every page, not just the first: the block fills the whole page box, so
-           the browser never puts it at the top of a fragment. Its own padding
-           stands in for the page margin, keeping the cards off the paper edge. */
+           (instead of min-height) keeps the page-break predictable on every
+           page, not just the first: the block fills the whole page box, so the
+           browser never puts it at the top of a fragment. Its own padding
+           stands in for the page margin, keeping the cards off the paper edge.
+           align-items:center centres the (natural-height) card vertically on
+           the sheet, mirroring the on-screen preview. */
         .screen-admission-cards .print-page {
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
-          column-gap: 6mm !important;
+          column-gap: 5mm !important;
           width: 100% !important;
-          height: 198mm !important;
-          max-height: 198mm !important;
-          padding: 4mm 6mm !important;
+          height: 206mm !important;
+          max-height: 206mm !important;
+          padding: 2mm 4mm !important;
           box-sizing: border-box !important;
           overflow: hidden !important;
           break-after: page !important;
@@ -141,21 +143,41 @@ export default function AdmissionCardGenerator() {
           page-break-after: auto !important;
         }
 
+        /* The card keeps its natural (content) height, exactly like the screen
+           preview; the page wrapper centres it vertically on the sheet. */
         .screen-admission-cards .print-grid-item {
-          width: 130mm !important;
-          max-width: 130mm !important;
-          min-width: 130mm !important;
+          display: flex !important;
+          flex: 0 0 auto !important;
+          width: 140mm !important;
+          max-width: 140mm !important;
+          min-width: 140mm !important;
           margin: 0 !important;
           padding: 0 !important;
           box-sizing: border-box !important;
           page-break-inside: avoid !important;
           break-inside: avoid !important;
         }
+        /* Wrappers must NOT grow/shrink, so the card below keeps its natural
+           height (matching the on-screen preview) instead of being stretched to
+           the sheet. */
         .screen-admission-cards .print-card-shell,
+        .screen-admission-cards .print-card-shell > div {
+          display: flex !important;
+          flex: 0 0 auto !important;
+          flex-direction: column !important;
+          min-height: 0 !important;
+          width: 140mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          box-sizing: border-box !important;
+          overflow: visible !important;
+        }
         .screen-admission-cards .admission-card {
-          width: 130mm !important;
-          max-width: 130mm !important;
-          min-width: 130mm !important;
+          flex: 0 0 auto !important;
+          width: 140mm !important;
+          max-width: 140mm !important;
+          min-width: 140mm !important;
+          max-height: none !important;
           margin: 0 !important;
           padding: 0 !important;
           box-sizing: border-box !important;
