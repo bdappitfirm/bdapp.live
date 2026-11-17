@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   Box, Typography, Paper, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   CircularProgress, Grid, Alert, Card, CardContent, FormControl, InputLabel, Select, MenuItem,
-  Checkbox, ListItemText, OutlinedInput, Stack, Avatar
+  Checkbox, ListItemText, OutlinedInput, Stack, Avatar, IconButton, InputAdornment
 } from '@mui/material';
 
 import api from '../utils/api';
@@ -11,6 +11,8 @@ import { normalizeNumberInput } from '../utils/helpers';
 import { getMediaUrl } from '../utils/media';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
+import ClearIcon from '@mui/icons-material/Clear';
+import FilterAltOffIcon from '@mui/icons-material/FilterAltOff';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import QRCode from 'qrcode.react';
@@ -184,6 +186,8 @@ const SeatAllocationPage = () => {
   const [exams, setExams] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
   const [selectedClassrooms, setSelectedClassrooms] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [selectedSections, setSelectedSections] = useState([]);
   const [school, setSchool] = useState(null);
   const [selectedExam, setSelectedExam] = useState('');
   const [selectedBuildings, setSelectedBuildings] = useState([]);
@@ -198,6 +202,16 @@ const SeatAllocationPage = () => {
 
   // চলতি সালের শ্রেণি (যেমন ২০২৭-এর ক্লাস বাদ) — আসন বিন্যাসে শুধু সক্রিয় শ্রেণি দেখানো হবে
   const activeClassrooms = useMemo(() => getActiveClassrooms(classrooms), [classrooms]);
+
+  // নির্বাচনকৃত শ্রেণি অনুযায়ী সেকশন ফিল্টার করা
+  const availableSections = useMemo(() => {
+    if (!sections || sections.length === 0) return [];
+    if (!selectedClassrooms || selectedClassrooms.length === 0) return sections;
+    return sections.filter(sec => {
+      const classId = sec.classroom?.id || sec.classroom;
+      return selectedClassrooms.some(cid => String(cid) === String(classId));
+    });
+  }, [sections, selectedClassrooms]);
 
   const toBnDigits = (num) => {
     const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
@@ -230,6 +244,13 @@ const SeatAllocationPage = () => {
           const clsRes = await api.get(`/api/academics/classrooms/?school=${schoolId}`);
           const clsData = clsRes.data.results || clsRes.data || [];
           setClassrooms(clsData);
+        } catch (_) {}
+
+        // Fetch Sections
+        try {
+          const secRes = await api.get(`/api/academics/sections/?school=${schoolId}`);
+          const secData = secRes.data.results || secRes.data || [];
+          setSections(secData);
         } catch (_) {}
 
         try {
@@ -308,7 +329,62 @@ const SeatAllocationPage = () => {
 
   const handleClassroomChange = (event) => {
     const { target: { value } } = event;
-    setSelectedClassrooms(typeof value === 'string' ? value.split(',') : value);
+    const rawValues = typeof value === 'string' ? value.split(',') : value;
+
+    if (rawValues.includes('ALL')) {
+      const allSelected = activeClassrooms.length > 0 && activeClassrooms.every(c => selectedClassrooms.some(cid => String(cid) === String(c.id)));
+      if (allSelected) {
+        setSelectedClassrooms([]);
+        setSelectedSections([]);
+      } else {
+        setSelectedClassrooms(activeClassrooms.map(c => c.id));
+      }
+      return;
+    }
+
+    const cleanValues = rawValues.map(v => (isNaN(Number(v)) ? v : Number(v)));
+    setSelectedClassrooms(cleanValues);
+
+    if (cleanValues.length > 0) {
+      setSelectedSections(prev => prev.filter(sid => {
+        const sec = sections.find(s => String(s.id) === String(sid));
+        if (!sec) return false;
+        const cid = sec.classroom?.id || sec.classroom;
+        return cleanValues.some(c => String(c) === String(cid));
+      }));
+    }
+  };
+
+  const handleSectionChange = (event) => {
+    const { target: { value } } = event;
+    const rawValues = typeof value === 'string' ? value.split(',') : value;
+
+    if (rawValues.includes('ALL')) {
+      const allSelected = availableSections.length > 0 && availableSections.every(s => selectedSections.some(sid => String(sid) === String(s.id)));
+      if (allSelected) {
+        setSelectedSections([]);
+      } else {
+        setSelectedSections(availableSections.map(s => s.id));
+      }
+      return;
+    }
+
+    const cleanValues = rawValues.map(v => (isNaN(Number(v)) ? v : Number(v)));
+    setSelectedSections(cleanValues);
+  };
+
+  const handleClearClassrooms = () => {
+    setSelectedClassrooms([]);
+    setSelectedSections([]);
+  };
+
+  const handleClearSections = () => {
+    setSelectedSections([]);
+  };
+
+  const handleClearAllFilters = () => {
+    setSelectedClassrooms([]);
+    setSelectedSections([]);
   };
 
   const handleRoomCountChange = (buildingNum, count) => {
@@ -374,7 +450,8 @@ const SeatAllocationPage = () => {
         examination_id: selectedExam,
         school_id: schoolId,
         buildings: prepareBuildingData(),
-        classroom_ids: selectedClassrooms
+        classroom_ids: selectedClassrooms,
+        section_ids: selectedSections
       });
 
       const plans = response.data.seat_plans || response.data || [];
@@ -593,13 +670,7 @@ const SeatAllocationPage = () => {
                   value={selectedExam}
                   label="পরীক্ষা নির্বাচন করুন *"
                   onChange={(e) => {
-                    const examId = e.target.value;
-                    setSelectedExam(examId);
-                    const examObj = exams.find(ex => String(ex.id) === String(examId));
-                    if (examObj && examObj.classroom && selectedClassrooms.length === 0) {
-                      const cid = typeof examObj.classroom === 'object' ? examObj.classroom.id : examObj.classroom;
-                      if (cid) setSelectedClassrooms([cid]);
-                    }
+                    setSelectedExam(e.target.value);
                   }}
                 >
                   <MenuItem value="">-- পরীক্ষা নির্বাচন করুন ({filteredExams.length}টি পরীক্ষা) --</MenuItem>
@@ -621,36 +692,129 @@ const SeatAllocationPage = () => {
                   multiple
                   value={selectedClassrooms}
                   onChange={handleClassroomChange}
-                  input={<OutlinedInput label="শ্রেণি নির্বাচন করুন (এক বা একাধিক)" />}
+                  input={
+                    <OutlinedInput
+                      label="শ্রেণি নির্বাচন করুন (এক বা একাধিক)"
+                      endAdornment={
+                        selectedClassrooms.length > 0 ? (
+                          <InputAdornment position="end" sx={{ mr: 2 }}>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleClearClassrooms();
+                              }}
+                              title="শ্রেণি ক্লিয়ার করুন"
+                            >
+                              <ClearIcon fontSize="small" />
+                            </IconButton>
+                          </InputAdornment>
+                        ) : null
+                      }
+                    />
+                  }
                   renderValue={(selected) => {
-                    if (selected.length === 0) return 'সকল শ্রেণি (All Classes)';
+                    if (!selected || selected.length === 0) return 'সকল শ্রেণি (All Classes)';
+                    if (activeClassrooms.length > 0 && selected.length === activeClassrooms.length) return 'সকল শ্রেণি (All Classes)';
                     return selected.map(cid => {
                       const cls = activeClassrooms.find(c => String(c.id) === String(cid));
                       return cls ? cls.name : cid;
-                    }).join(', ');
+                    }).filter(Boolean).join(', ');
                   }}
                 >
-                  <MenuItem
-                    value="ALL"
-                    onClick={() => {
-                      if (selectedClassrooms.length === activeClassrooms.length) {
-                        setSelectedClassrooms([]);
-                      } else {
-                        setSelectedClassrooms(activeClassrooms.map(c => c.id));
+                  <MenuItem value="ALL">
+                    <Checkbox
+                      checked={
+                        activeClassrooms.length > 0 &&
+                        activeClassrooms.every(c => selectedClassrooms.some(cid => String(cid) === String(c.id)))
                       }
-                    }}
-                  >
-                    <Checkbox checked={activeClassrooms.length > 0 && selectedClassrooms.length === activeClassrooms.length} />
+                      indeterminate={
+                        selectedClassrooms.length > 0 &&
+                        selectedClassrooms.length < activeClassrooms.length
+                      }
+                    />
                     <ListItemText primary="সকল শ্রেণি (Select All)" />
                   </MenuItem>
                   {activeClassrooms.map((cls) => (
                     <MenuItem key={cls.id} value={cls.id}>
-                      <Checkbox checked={selectedClassrooms.indexOf(cls.id) > -1} />
+                      <Checkbox checked={selectedClassrooms.some(cid => String(cid) === String(cls.id))} />
                       <ListItemText primary={cls.name} />
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
+
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="section-select-label">শাখা / সেকশন নির্বাচন করুন (এক বা একাধিক)</InputLabel>
+                <Select
+                  labelId="section-select-label"
+                  multiple
+                  value={selectedSections}
+                  onChange={handleSectionChange}
+                  input={
+                    <OutlinedInput
+                      label="শাখা / সেকশন নির্বাচন করুন (এক বা একাধিক)"
+                      endAdornment={
+                        selectedSections.length > 0 ? (
+                          <InputAdornment position="end" sx={{ mr: 2 }}>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleClearSections();
+                              }}
+                              title="সেকশন ক্লিয়ার করুন"
+                            >
+                              <ClearIcon fontSize="small" />
+                            </IconButton>
+                          </InputAdornment>
+                        ) : null
+                      }
+                    />
+                  }
+                  renderValue={(selected) => {
+                    if (!selected || selected.length === 0) return 'সকল সেকশন (All Sections)';
+                    if (availableSections.length > 0 && selected.length === availableSections.length) return 'সকল সেকশন (All Sections)';
+                    return selected.map(sid => {
+                      const sec = availableSections.find(s => String(s.id) === String(sid));
+                      return sec ? `${sec.name}${sec.classroom?.name ? ` (${sec.classroom.name})` : ''}` : sid;
+                    }).filter(Boolean).join(', ');
+                  }}
+                >
+                  <MenuItem value="ALL">
+                    <Checkbox
+                      checked={
+                        availableSections.length > 0 &&
+                        availableSections.every(s => selectedSections.some(sid => String(sid) === String(s.id)))
+                      }
+                      indeterminate={
+                        selectedSections.length > 0 &&
+                        selectedSections.length < availableSections.length
+                      }
+                    />
+                    <ListItemText primary="সকল সেকশন (Select All)" />
+                  </MenuItem>
+                  {availableSections.map((sec) => (
+                    <MenuItem key={sec.id} value={sec.id}>
+                      <Checkbox checked={selectedSections.some(sid => String(sid) === String(sec.id))} />
+                      <ListItemText primary={`${sec.name} ${sec.classroom?.name ? `(${sec.classroom.name})` : ''}`} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {(selectedClassrooms.length > 0 || selectedSections.length > 0) && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+                  <Button
+                    size="small"
+                    color="secondary"
+                    startIcon={<FilterAltOffIcon />}
+                    onClick={handleClearAllFilters}
+                  >
+                    শ্রেণি ও সেকশন ফিল্টার ক্লিয়ার করুন
+                  </Button>
+                </Box>
+              )}
 
               <FormControl fullWidth margin="normal">
                 <InputLabel>ভবন নির্বাচন করুন</InputLabel>

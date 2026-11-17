@@ -1168,6 +1168,7 @@ class GenerateExamSeatPlanAPI(APIView):
         school_id = request.data.get('school_id') or get_user_school_id(request.user, request)
         buildings_config = request.data.get('buildings', [])
         classroom_ids = request.data.get('classroom_ids', [])
+        section_ids = request.data.get('section_ids', [])
 
         if not exam_id or not school_id:
             return Response({"detail": "examination_id and school_id are required"}, status=400)
@@ -1185,7 +1186,8 @@ class GenerateExamSeatPlanAPI(APIView):
                 examination=examination,
                 school=school,
                 buildings_config=buildings_config,
-                selected_classroom_ids=classroom_ids if classroom_ids else None
+                selected_classroom_ids=classroom_ids if classroom_ids else None,
+                selected_section_ids=section_ids if section_ids else None
             )
 
             serializer = ExamSeatPlanSerializer(plans, many=True)

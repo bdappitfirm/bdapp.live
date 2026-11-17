@@ -141,7 +141,7 @@ def generate_exam_buildings_and_rooms(school, buildings_config):
     return all_rooms
 
 
-def generate_exam_seat_plan(examination, school, buildings_config, selected_classroom_ids=None):
+def generate_exam_seat_plan(examination, school, buildings_config, selected_classroom_ids=None, selected_section_ids=None):
     from results.models import Examination, ExamSlot
     from academics.models import StudentProfile, ExamSeatPlan
     from users.models import Profile
@@ -195,6 +195,9 @@ def generate_exam_seat_plan(examination, school, buildings_config, selected_clas
             students_qs = StudentProfile.objects.filter(school=school, classroom_id__in=classroom_ids)
         else:
             students_qs = StudentProfile.objects.filter(school=school)
+
+    if selected_section_ids:
+        students_qs = students_qs.filter(section_id__in=selected_section_ids)
 
     def arrange_globally(students_list):
         """Advanced Round-Robin interleaving to ensure NO same-class adjacency"""
