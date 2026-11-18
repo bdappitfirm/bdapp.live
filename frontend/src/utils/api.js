@@ -311,20 +311,22 @@ api.interceptors.response.use(
     if (method === 'get') {
       if (!response.config._skipCache) {
         const cacheKey = getCacheKey(response.config);
+        // Local ক্যাশ লেখা ব্যাকগ্রাউন্ডে চালাই — বড় রেসপন্স (হাজার হাজার রো)
+        // সিঙ্ক করে Dexie-তে লিখলে পেজের লোডিং স্পিনার অনেকক্ষণ ঘুরতে থাকে।
         try {
           if (response.data && (typeof response.data !== 'object' || Object.keys(response.data).length > 0)) {
-            await cacheApiResponse(cacheKey, response.data);
+            Promise.resolve(cacheApiResponse(cacheKey, response.data)).catch(() => {});
 
             // Also populate structured Dexie tables if list data is received
             if (url.includes('/api/academics/students/')) {
               const students = response.data?.results || (Array.isArray(response.data) ? response.data : null);
-              if (students) await cacheData('students', students);
+              if (students) Promise.resolve(cacheData('students', students)).catch(() => {});
             } else if (url.includes('/api/attendance/records/')) {
               const records = response.data?.results || (Array.isArray(response.data) ? response.data : null);
-              if (records) await cacheData('attendance', records);
+              if (records) Promise.resolve(cacheData('attendance', records)).catch(() => {});
             } else if (url.includes('/api/results/results/')) {
               const results = response.data?.results || (Array.isArray(response.data) ? response.data : null);
-              if (results) await cacheData('results', results);
+              if (results) Promise.resolve(cacheData('results', results)).catch(() => {});
             }
           }
         } catch (e) {

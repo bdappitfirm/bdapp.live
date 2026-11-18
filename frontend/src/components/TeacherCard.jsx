@@ -33,8 +33,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import BadgeIcon from '@mui/icons-material/Badge';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import BloodtypeIcon from '@mui/icons-material/Bloodtype';
 import WorkIcon from '@mui/icons-material/Work';
 
 import PhotoUpload from './PhotoUpload';

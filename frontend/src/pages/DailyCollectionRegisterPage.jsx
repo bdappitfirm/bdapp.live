@@ -2,21 +2,30 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Button, Grid, TextField, MenuItem, Select,
+  TableHead, TableRow, TableFooter, Button, Grid, TextField, MenuItem, Select,
   FormControl, InputLabel, CircularProgress, Alert, Snackbar, Stack,
-  IconButton, ToggleButtonGroup, ToggleButton, Autocomplete
+  IconButton, ToggleButtonGroup, ToggleButton, Autocomplete, Dialog,
+  DialogTitle, DialogContent, DialogActions, Chip, Tooltip
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import HistoryIcon from '@mui/icons-material/History';
+import SearchIcon from '@mui/icons-material/Search';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import CloseIcon from '@mui/icons-material/Close';
 import api from '../utils/api';
 import dayjs from 'dayjs';
 import { useAuth } from '../context/AuthContext';
 import { useSchool } from '../context/SchoolContext';
 import { resolveSchoolLogo } from '../utils/media';
 import { canAccessDailyCollectionRegister, numberToBengaliWords } from '../utils/helpers';
+import { compareClassOrder, compareSectionOrder, sortClassrooms } from '../utils/classroomUtils';
 
 const DailyCollectionRegisterPage = () => {
   const { id: schoolId } = useParams();
@@ -26,10 +35,14 @@ const DailyCollectionRegisterPage = () => {
   const schoolLogo = resolveSchoolLogo(schoolInfo);
 
   const [loading, setLoading] = useState(false);
-  const [savingStatus, setSavingStatus] = useState(''); // 'saving', 'saved'
+  const [savingStatus, setSavingStatus] = useState(''); // 'saving', 'saved', 'error'
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  // Always use local dayjs format for current date
+  // Input Field Lock States (Global table lock & row-level locks)
+  const [isTableLocked, setIsTableLocked] = useState(false);
+  const [lockedRows, setLockedRows] = useState({});
+
+  // Date & Filter Mode
   const todayStr = dayjs().format('YYYY-MM-DD');
   const [reportMode, setReportMode] = useState('single_date'); // single_date, single_month, three_months, year_to_date
   const [selectedMonth, setSelectedMonth] = useState(() => dayjs().month() + 1);
@@ -37,15 +50,22 @@ const DailyCollectionRegisterPage = () => {
   const [selectedYear, setSelectedYear] = useState(() => dayjs().year());
   const [selectedDate, setSelectedDate] = useState(() => dayjs().format('YYYY-MM-DD'));
 
-  // Class, Section selection
+  // Class & Section selection
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
 
-  // Class students cache for quick lookup
+  // Class students cache for autocomplete search (per selected class)
   const [classStudents, setClassStudents] = useState([]);
   const [selectedStudentToAdd, setSelectedStudentToAdd] = useState(null);
+
+  // All school students list for global Old Payment History search bar
+  const [allStudentsList, setAllStudentsList] = useState([]);
+  const [selectedHistoryStudent, setSelectedHistoryStudent] = useState(null);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyPayments, setHistoryPayments] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Active students displayed in the collection register table
   const [activeStudents, setActiveStudents] = useState([]);
@@ -80,7 +100,59 @@ const DailyCollectionRegisterPage = () => {
 
   const hasAccess = canAccessDailyCollectionRegister(user);
 
-  // Fetch classes and sections on mount, and auto-load saved payments for current/selected date
+  // Class-wise, Section-wise, and Roll-wise strict sorting helper
+  // Uses the shared Bengali class/section ordering (শিশু → প্রথম → ... → নবম) so the
+  // register always follows the school's logical class sequence, not alphabetical order.
+  const sortStudentsClassWise = useCallback((studentList) => {
+    const getRollNumber = (s) => {
+      if (!s.roll_number) return 999999;
+      const cleaned = String(s.roll_number).replace(/\D/g, '');
+      return cleaned ? parseInt(cleaned, 10) : 999999;
+    };
+
+    return [...studentList].sort((a, b) => {
+      // Primary sort: Class order (শিশু, প্রথম, দ্বিতীয় ... নবম)
+      const classDiff = compareClassOrder(a.classroom?.name, b.classroom?.name);
+      if (classDiff !== 0) return classDiff;
+
+      // Secondary sort: Section order (ক, খ, গ ...)
+      const secDiff = compareSectionOrder(a.section?.name, b.section?.name);
+      if (secDiff !== 0) return secDiff;
+
+      // Tertiary sort: Roll number
+      const rollDiff = getRollNumber(a) - getRollNumber(b);
+      if (rollDiff !== 0) return rollDiff;
+
+      // Quaternary sort: Student Name
+      const nameA = a.display_name || a.full_name || '';
+      const nameB = b.display_name || b.full_name || '';
+      return nameA.localeCompare(nameB, 'bn');
+    });
+  }, []);
+
+  // Fetch all students for global payment history search bar
+  const fetchAllStudents = useCallback(async () => {
+    try {
+      const res = await api.get(`/api/academics/students/?school=${schoolId}&page_size=1000`);
+      const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
+      const formatted = data.map(s => {
+        const dn = s.display_name || s.full_name || `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() || s.user?.username || 'Student';
+        return {
+          id: String(s.id),
+          display_name: dn,
+          roll_number: s.roll_number || '',
+          className: s.classroom?.name || '',
+          sectionName: s.section?.name || '',
+          ...s
+        };
+      });
+      setAllStudentsList(formatted);
+    } catch (err) {
+      console.error('Error fetching all students for payment history search:', err);
+    }
+  }, [schoolId]);
+
+  // Load saved payments for date and arrange in class sequence
   const loadSavedPaymentsForDate = useCallback(async () => {
     try {
       setLoading(true);
@@ -96,7 +168,11 @@ const DailyCollectionRegisterPage = () => {
         api.get(`/api/academics/sections/?school=${schoolId}&page_size=1000`)
       ]);
 
-      setClasses(Array.isArray(clsRes.data) ? clsRes.data : clsRes.data?.results || []);
+      const clsData = Array.isArray(clsRes.data) ? clsRes.data : clsRes.data?.results || [];
+      // Sort classrooms in the school's logical class sequence (শিশু, প্রথম, দ্বিতীয় ... নবম)
+      const sortedClsData = sortClassrooms(clsData);
+
+      setClasses(sortedClsData);
       setSections(Array.isArray(secRes.data) ? secRes.data : secRes.data?.results || []);
 
       const payData = Array.isArray(payRes.data) ? payRes.data : payRes.data?.results || [];
@@ -124,8 +200,6 @@ const DailyCollectionRegisterPage = () => {
       });
 
       if (datePayments.length > 0) {
-        // শুধু যেসব শিক্ষার্থীর পেমেন্ট আছে তাদের আইডি দিয়ে আনা হয়, নয়তো শিক্ষার্থী তালিকার
-        // পেজিনেশন সীমার (প্রথম ১০০) বাইরের পেমেন্টগুলো নীরবে বাদ পড়ে যায়
         const paidStudentIds = [...new Set(datePayments.map(p => String(p.student_id || p.student?.id || p.student)).filter(Boolean))];
         const studRes = await api.get(`/api/academics/students/?school=${schoolId}&ids=${paidStudentIds.join(',')}&page_size=${paidStudentIds.length}`);
         const allStudents = Array.isArray(studRes.data) ? studRes.data : studRes.data?.results || [];
@@ -142,6 +216,7 @@ const DailyCollectionRegisterPage = () => {
 
         const loadedStudents = [];
         const initialRows = {};
+        const initialLocks = {};
 
         const paymentsByStudent = {};
         datePayments.forEach(p => {
@@ -187,27 +262,34 @@ const DailyCollectionRegisterPage = () => {
             });
 
             initialRows[sId] = aggregated;
+            // Old/saved payments default to locked state to prevent accidental scroll changes
+            initialLocks[sId] = true;
           }
         });
 
-        setActiveStudents(loadedStudents);
+        // Ensure strict class-wise, section-wise, roll-wise sequence!
+        const sortedStudents = sortStudentsClassWise(loadedStudents);
+        setActiveStudents(sortedStudents);
         setEditingRows(initialRows);
+        setLockedRows(initialLocks);
       } else {
         setActiveStudents([]);
         setEditingRows({});
+        setLockedRows({});
       }
     } catch (err) {
       console.error('Error loading saved payments for date:', err);
     } finally {
       setLoading(false);
     }
-  }, [schoolId, reportMode, selectedDate, todayStr, selectedMonth, endMonth, selectedYear]);
+  }, [schoolId, reportMode, selectedDate, todayStr, selectedMonth, endMonth, selectedYear, sortStudentsClassWise]);
 
   useEffect(() => {
     if (hasAccess) {
       loadSavedPaymentsForDate();
+      fetchAllStudents();
     }
-  }, [hasAccess, loadSavedPaymentsForDate]);
+  }, [hasAccess, loadSavedPaymentsForDate, fetchAllStudents]);
 
   const availableSections = useMemo(() => {
     if (!selectedClass) return [];
@@ -249,6 +331,26 @@ const DailyCollectionRegisterPage = () => {
     }
   }, [selectedClass, selectedSection, fetchClassStudents]);
 
+  // Open Old Payment History Dialog for a selected student
+  const handleOpenPaymentHistory = async (studentObj) => {
+    if (!studentObj) return;
+    setSelectedHistoryStudent(studentObj);
+    setHistoryDialogOpen(true);
+    setHistoryLoading(true);
+    try {
+      const res = await api.get(`/api/fees/payments/?school=${schoolId}&student=${studentObj.id}&page_size=1000`);
+      const payData = Array.isArray(res.data) ? res.data : res.data?.results || [];
+      // Sort payments newest first
+      payData.sort((a, b) => new Date(b.payment_date || 0) - new Date(a.payment_date || 0));
+      setHistoryPayments(payData);
+    } catch (err) {
+      console.error('Error fetching student payment history:', err);
+      setHistoryPayments([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   // Add selected student to active table view
   const handleAddStudent = () => {
     if (!selectedStudentToAdd) return;
@@ -256,7 +358,7 @@ const DailyCollectionRegisterPage = () => {
     const sId = student.id;
 
     if (!activeStudents.some(s => s.id === sId)) {
-      setActiveStudents(prev => [...prev, student]);
+      setActiveStudents(prev => sortStudentsClassWise([...prev, student]));
 
       const emptyFeeRow = {
         receipt_number: '—',
@@ -278,6 +380,10 @@ const DailyCollectionRegisterPage = () => {
       setEditingRows(prev => ({
         ...prev,
         [sId]: emptyFeeRow
+      }));
+      setLockedRows(prev => ({
+        ...prev,
+        [sId]: false
       }));
     }
     setSelectedStudentToAdd(null);
@@ -301,7 +407,19 @@ const DailyCollectionRegisterPage = () => {
       delete copy[studentId];
       return copy;
     });
+    setLockedRows(prev => {
+      const copy = { ...prev };
+      delete copy[studentId];
+      return copy;
+    });
     setSnackbar({ open: true, message: 'পেমেন্ট সফলভাবে মুছে ফেলা হয়েছে', severity: 'success' });
+  };
+
+  const toggleRowLock = (studentId) => {
+    setLockedRows(prev => ({
+      ...prev,
+      [studentId]: !prev[studentId]
+    }));
   };
 
   // Perform auto-save for a specific student row
@@ -360,6 +478,9 @@ const DailyCollectionRegisterPage = () => {
   };
 
   const handleFieldChange = (studentId, field, value) => {
+    // If row or table is locked, reject changes
+    if (isTableLocked || lockedRows[studentId]) return;
+
     setEditingRows(prev => {
       const updatedRow = {
         ...prev[studentId],
@@ -406,6 +527,37 @@ const DailyCollectionRegisterPage = () => {
     return total;
   }, [activeStudents, editingRows]);
 
+  const columnTotals = useMemo(() => {
+    const totals = {
+      due_amount: 0,
+      sports_fee: 0,
+      admission_fee: 0,
+      admission_print_fee: 0,
+      cert_reg_fee: 0,
+      tuition_fee: 0,
+      religion_fee: 0,
+      session_fee: 0,
+      exam_fee: 0,
+      culture_library_fee: 0,
+      refreshment_poor_fund_fee: 0,
+      misc_fee: 0,
+    };
+
+    activeStudents.forEach(s => {
+      const row = editingRows[s.id];
+      if (row) {
+        Object.keys(totals).forEach(field => {
+          const val = parseFloat(row[field]);
+          if (!isNaN(val)) {
+            totals[field] += val;
+          }
+        });
+      }
+    });
+
+    return totals;
+  }, [activeStudents, editingRows]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -429,7 +581,6 @@ const DailyCollectionRegisterPage = () => {
         @media print {
           @page { size: A4 landscape; margin: 8mm; }
 
-          /* শুধু মূল রেজিস্টার প্রিন্ট হবে — হেডার, নেভবার, সাইডবার ও কন্ট্রোল লুকানো হবে */
           .no-print,
           header, footer, nav,
           .MuiAppBar-root, .MuiToolbar-root, .MuiDrawer-root,
@@ -437,7 +588,6 @@ const DailyCollectionRegisterPage = () => {
             display: none !important;
           }
 
-          /* প্রিন্টে স্কুলের হেডার ও লোগো দেখানো হবে */
           .dcr-print-header { display: flex !important; }
 
           body, html, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
@@ -446,7 +596,6 @@ const DailyCollectionRegisterPage = () => {
             overflow: visible !important; width: 100% !important; max-width: 100% !important;
           }
 
-          /* টেবিল পুরোপুরি দেখাতে হবে — ডানে কাটা যাবে না, স্ক্রল-সীমাও থাকবে না */
           #printable-register {
             padding: 0 !important; margin: 0 !important;
             border: none !important; box-shadow: none !important;
@@ -463,7 +612,6 @@ const DailyCollectionRegisterPage = () => {
             border: 1px solid #000 !important;
             font-size: 8pt !important; padding: 1px 2px !important; line-height: 1.15 !important;
           }
-          /* কলাম প্রস্থ বিন্যাস (নাম ও রসিদ নং কলামে বেশি জায়গা) */
           #printable-register .dcr-main-table th:nth-child(1) { width: 4% !important; }
           #printable-register .dcr-main-table th:nth-child(2) { width: 5% !important; }
           #printable-register .dcr-main-table th:nth-child(3) { width: 5% !important; }
@@ -471,7 +619,6 @@ const DailyCollectionRegisterPage = () => {
           #printable-register .dcr-main-table th:nth-child(5) { width: 12% !important; }
           #printable-register .dcr-main-table th:nth-child(6) { width: 7% !important; }
 
-          /* এন্ট্রি বক্সগুলো প্রিন্টে সাধারণ টেক্সটের মতো দেখাবে */
           #printable-register .MuiFormControl-root { width: 100% !important; }
           #printable-register input {
             width: 100% !important; border: none !important; background: transparent !important;
@@ -495,7 +642,7 @@ const DailyCollectionRegisterPage = () => {
             দৈনিক ও কালিক আদায় রেজিস্টার
           </Typography>
         </Stack>
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
           {savingStatus === 'saving' && (
             <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
               অটো-সেভ হচ্ছে...
@@ -507,6 +654,17 @@ const DailyCollectionRegisterPage = () => {
               <Typography variant="body2" sx={{ fontWeight: 500 }}>সেভ হয়েছে</Typography>
             </Stack>
           )}
+
+          {/* Global Input Lock / Unlock Toggle */}
+          <Button
+            variant={isTableLocked ? "contained" : "outlined"}
+            color={isTableLocked ? "warning" : "primary"}
+            startIcon={isTableLocked ? <LockIcon /> : <LockOpenIcon />}
+            onClick={() => setIsTableLocked(prev => !prev)}
+          >
+            {isTableLocked ? "সব ঘর আনলক করুন" : "ইনপুট ঘর লক করুন"}
+          </Button>
+
           <Button
             variant="outlined"
             startIcon={<PrintIcon />}
@@ -522,6 +680,48 @@ const DailyCollectionRegisterPage = () => {
           <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
         </Snackbar>
       )}
+
+      {/* Global Student Old Payment History Search Bar */}
+      <Paper sx={{ p: 2, mb: 3, borderLeft: '5px solid #1a237e', bgcolor: '#f8f9fa' }} className="no-print">
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <HistoryIcon color="primary" sx={{ fontSize: 28 }} />
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#1a237e' }}>
+                স্টুডেন্ট ওয়াইজ পুরাতন পেমেন্ট হিস্টোরি অনুসন্ধান
+              </Typography>
+              <Typography variant="caption" color="textSecondary">
+                যে কোনো শিক্ষার্থীর নাম বা রোল লিখে পূর্বে দেওয়া সকল পেমেন্ট হিস্টোরি দেখুন
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ width: { xs: '100%', md: '480px' } }}>
+            <Autocomplete
+              size="small"
+              options={allStudentsList}
+              getOptionLabel={(option) => `${option.display_name} | শ্রেণি: ${option.className || '—'} | রোল: ${option.roll_number || '—'}`}
+              value={selectedHistoryStudent}
+              onChange={(e, val) => handleOpenPaymentHistory(val)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="শিক্ষার্থীর পুরাতন পেমেন্ট হিস্টোরি খুঁজুন (নাম বা রোল দিয়ে)"
+                  placeholder="শিক্ষার্থীর নাম বা রোল লিখুন..."
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <>
+                        <SearchIcon color="action" sx={{ mr: 1 }} />
+                        {params.InputProps.startAdornment}
+                      </>
+                    )
+                  }}
+                />
+              )}
+            />
+          </Box>
+        </Stack>
+      </Paper>
 
       {/* Class, Section & Student Selector Controls */}
       <Paper sx={{ p: 2, mb: 3 }} className="no-print">
@@ -593,7 +793,7 @@ const DailyCollectionRegisterPage = () => {
                 getOptionLabel={(option) => `রোল: ${option.roll_number || '—'} | ${option.display_name}`}
                 value={selectedStudentToAdd}
                 onChange={(e, val) => setSelectedStudentToAdd(val)}
-                renderInput={(params) => <TextField {...params} label="শিক্ষার্থী খুঁজুন (রোল বা নাম দিয়ে)" placeholder="রোল বা নাম লিখুন" />}
+                renderInput={(params) => <TextField {...params} label="রেজিস্টারে যুক্ত করতে শিক্ষার্থী খুঁজুন" placeholder="রোল বা নাম লিখুন" />}
               />
             </Grid>
 
@@ -680,12 +880,25 @@ const DailyCollectionRegisterPage = () => {
 
       {/* Overview Quick Summary (শুধু স্ক্রিনে — প্রিন্টে বাদ) */}
       <Paper className="no-print" sx={{ p: 2, mb: 3, bgcolor: '#e8f5e9', border: '1px solid #c8e6c9' }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#2e7d32', mb: 1 }}>
-          তালিকায় যুক্ত মোট শিক্ষার্থী: {activeStudents.length} জন | মোট আদায়
-        </Typography>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: '#1b5e20' }}>
-          ৳{grandTotal.toLocaleString()}
-        </Typography>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" spacing={2}>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#2e7d32', mb: 0.5 }}>
+              তালিকায় যুক্ত মোট শিক্ষার্থী: {activeStudents.length} জন (শ্রেণি অনুযায়ী সাজানো) | মোট আদায়
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: '#1b5e20' }}>
+              ৳{grandTotal.toLocaleString()}
+            </Typography>
+          </Box>
+          {isTableLocked && (
+            <Chip
+              icon={<LockIcon />}
+              label="ইনপুট ঘরগুলো লক করা রয়েছে (মাউস স্ক্রল বা এডিটিং নিষ্ক্রিয়)"
+              color="warning"
+              variant="outlined"
+              sx={{ fontWeight: 'bold' }}
+            />
+          )}
+        </Stack>
       </Paper>
 
       {loading && (
@@ -709,7 +922,7 @@ const DailyCollectionRegisterPage = () => {
         <Box sx={{ textAlign: 'center', mb: 2 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold' }}>দৈনিক ও কালিক আদায় রেজিস্টার</Typography>
           <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
-            {selectedClass ? `শ্রেণি: ${classes.find(c => String(c.id) === String(selectedClass))?.name || ''}` : 'সব শ্রেণি'}
+            {selectedClass ? `শ্রেণি: ${classes.find(c => String(c.id) === String(selectedClass))?.name || ''}` : 'সব শ্রেণি (শ্রেণিওয়ারী সাজানো)'}
             {selectedSection ? ` | শাখা: ${sections.find(s => String(s.id) === String(selectedSection))?.name || ''}` : ''}
             {' '} | {reportMode === 'single_date' && `তারিখ: ${selectedDate}`}
             {reportMode === 'single_month' && `মাসের নাম: ${monthNameBn} | সন: ${selectedYear}`}
@@ -719,10 +932,11 @@ const DailyCollectionRegisterPage = () => {
         </Box>
 
         <TableContainer sx={{ maxHeight: 600 }}>
-          <Table size="small" className="dcr-main-table" sx={{ minWidth: 1450, border: '1px solid #ddd' }}>
+          <Table size="small" className="dcr-main-table" sx={{ minWidth: 1550, border: '1px solid #ddd' }}>
             <TableHead>
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd', width: '50px' }}>ক্রমিক</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd', width: '45px' }}>ক্রমিক</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd', width: '55px' }} className="no-print">এডিট</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>শ্রেণি</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>শাখা</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>রোল</TableCell>
@@ -742,15 +956,15 @@ const DailyCollectionRegisterPage = () => {
                 <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>বিবিধ</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>মোট</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd' }}>আদায়</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd', width: '60px' }} className="no-print">মুছুন</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', border: '1px solid #ddd', width: '50px' }} className="no-print">মুছুন</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {activeStudents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={21} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={22} align="center" sx={{ py: 4 }}>
                     <Typography variant="body1" color="textSecondary">
-                      এই তারিখের জন্য কোনো আদায়ের ডেটা পাওয়া যায়নি। ওপরের সার্চ বক্স থেকে শিক্ষার্থী খুঁজে **্নযোগ করুন"** বাটনে ক্লিক করুন।
+                      এই তারিখের জন্য কোনো আদায়ের ডেটা পাওয়া যায়নি। ওপরের সার্চ বক্স থেকে শিক্ষার্থী খুঁজে **"যোগ করুন"** বাটনে ক্লিক করুন।
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -762,17 +976,35 @@ const DailyCollectionRegisterPage = () => {
                   const className = student.classroom?.name || '—';
                   const sectionName = student.section?.name || '---';
                   const rollNo = student.roll_number || '—';
+                  const isRowLocked = isTableLocked || !!lockedRows[student.id];
 
                   return (
-                    <TableRow key={student.id} hover>
+                    <TableRow key={student.id} hover sx={{ bgcolor: isRowLocked ? '#fafafa' : 'inherit' }}>
                       <TableCell sx={{ border: '1px solid #ddd' }}>{idx + 1}</TableCell>
-                      <TableCell sx={{ border: '1px solid #ddd' }}>{className}</TableCell>
+
+                      {/* Row Edit / Lock Toggle Button */}
+                      <TableCell sx={{ border: '1px solid #ddd' }} className="no-print">
+                        <Tooltip title={isTableLocked ? "সব ঘর লক করা আছে — উপরে 'সব ঘর আনলক করুন' চাপুন" : (lockedRows[student.id] ? "এডিট করুন" : "সম্পাদনা বন্ধ করুন (লক)")}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={isTableLocked}
+                              color={lockedRows[student.id] ? "primary" : "warning"}
+                              onClick={() => toggleRowLock(student.id)}
+                            >
+                              {lockedRows[student.id] ? <EditIcon fontSize="small" /> : <LockIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </TableCell>
+
+                      <TableCell sx={{ border: '1px solid #ddd', fontWeight: 500 }}>{className}</TableCell>
                       <TableCell sx={{ border: '1px solid #ddd' }}>{sectionName}</TableCell>
                       <TableCell sx={{ border: '1px solid #ddd' }}>{rollNo}</TableCell>
-                      <TableCell sx={{ border: '1px solid #ddd', fontWeight: 500 }}>{studentName}</TableCell>
+                      <TableCell sx={{ border: '1px solid #ddd', fontWeight: 600 }}>{studentName}</TableCell>
                       <TableCell sx={{ border: '1px solid #ddd' }}>{rowData.receipt_number || '—'}</TableCell>
 
-                      {/* Fee Head Inputs */}
+                      {/* Fee Head Inputs with Scroll Wheel Lock */}
                       {['due_amount', 'sports_fee', 'admission_fee', 'admission_print_fee', 'cert_reg_fee', 'tuition_fee', 'religion_fee', 'session_fee', 'exam_fee', 'culture_library_fee', 'refreshment_poor_fund_fee', 'misc_fee'].map(field => {
                         const val = rowData[field];
                         const displayVal = val !== undefined && val !== null ? val : '';
@@ -781,10 +1013,17 @@ const DailyCollectionRegisterPage = () => {
                             <TextField
                               size="small"
                               type="number"
+                              disabled={isRowLocked}
                               value={displayVal}
                               placeholder=""
                               onChange={(e) => handleFieldChange(student.id, field, e.target.value)}
-                              sx={{ width: '70px', '& input': { p: '4px 6px', fontSize: '0.85rem' } }}
+                              onWheel={(e) => e.target.blur()}
+                              sx={{
+                                width: '70px',
+                                '& input': { p: '4px 6px', fontSize: '0.85rem' },
+                                '& input[type=number]': { MozAppearance: 'textfield' },
+                                '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }
+                              }}
                             />
                           </TableCell>
                         );
@@ -806,6 +1045,31 @@ const DailyCollectionRegisterPage = () => {
                 })
               )}
             </TableBody>
+            <TableFooter>
+              <TableRow sx={{ bgcolor: '#e8eaf6' }}>
+                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold', textAlign: 'center' }}>
+                  —
+                </TableCell>
+                <TableCell sx={{ border: '1px solid #ddd' }} className="no-print" />
+                <TableCell colSpan={5} sx={{ border: '1px solid #ddd', fontWeight: 'bold', fontSize: '0.9rem', textAlign: 'right', color: '#1a237e' }}>
+                  সর্বমোট কালেকশন (Total):
+                </TableCell>
+
+                {['due_amount', 'sports_fee', 'admission_fee', 'admission_print_fee', 'cert_reg_fee', 'tuition_fee', 'religion_fee', 'session_fee', 'exam_fee', 'culture_library_fee', 'refreshment_poor_fund_fee', 'misc_fee'].map(field => (
+                  <TableCell key={field} sx={{ border: '1px solid #ddd', fontWeight: 'bold', p: '6px 4px', textAlign: 'center', color: '#1a237e', fontSize: '0.85rem' }}>
+                    {columnTotals[field] > 0 ? `৳${columnTotals[field].toLocaleString()}` : '0'}
+                  </TableCell>
+                ))}
+
+                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold', textAlign: 'center', color: '#1a237e', bgcolor: '#e8eaf6' }}>
+                  ৳{grandTotal.toLocaleString()}
+                </TableCell>
+                <TableCell sx={{ border: '1px solid #ddd', fontWeight: 'bold', textAlign: 'center', color: '#1b5e20', bgcolor: '#c8e6c9' }}>
+                  ৳{grandTotal.toLocaleString()}
+                </TableCell>
+                <TableCell sx={{ border: '1px solid #ddd' }} className="no-print" />
+              </TableRow>
+            </TableFooter>
           </Table>
         </TableContainer>
 
@@ -836,6 +1100,115 @@ const DailyCollectionRegisterPage = () => {
           </TableContainer>
         </Box>
       </Paper>
+
+      {/* Student Old Payment History Modal */}
+      <Dialog
+        open={historyDialogOpen}
+        onClose={() => setHistoryDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1a237e', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ReceiptIcon />
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              পুরাতন পেমেন্ট হিস্টোরি — {selectedHistoryStudent?.display_name || ''}
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setHistoryDialogOpen(false)} sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 2 }}>
+          {selectedHistoryStudent && (
+            <Paper sx={{ p: 2, mb: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="body2"><b>শিক্ষার্থীর নাম:</b> {selectedHistoryStudent.display_name}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2"><b>শ্রেণি:</b> {selectedHistoryStudent.className || selectedHistoryStudent.classroom?.name || '—'}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={2}>
+                  <Typography variant="body2"><b>শাখা:</b> {selectedHistoryStudent.sectionName || selectedHistoryStudent.section?.name || '—'}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2"><b>রোল নম্বর:</b> {selectedHistoryStudent.roll_number || '—'}</Typography>
+                </Grid>
+              </Grid>
+            </Paper>
+          )}
+
+          {historyLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : historyPayments.length === 0 ? (
+            <Alert severity="info" sx={{ my: 2 }}>
+              এই শিক্ষার্থীর জন্য কোনো পুরাতন পেমেন্ট রেকর্ড পাওয়া যায়নি।
+            </Alert>
+          ) : (
+            <>
+              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                  মোট পরিশোধিত রসিদ সংখ্যা: {historyPayments.length} টি
+                </Typography>
+                <Chip
+                  label={`সর্বমোট আদায়: ৳${historyPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toLocaleString()}`}
+                  color="success"
+                  sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}
+                />
+              </Box>
+              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#eee' }}>
+                      <TableCell sx={{ fontWeight: 'bold' }}>তারিখ</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>রসিদ নং</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>ফি-এর বিবরণ</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>পেমেন্ট পদ্ধতি</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>মোট টাকা</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {historyPayments.map((p) => {
+                      const breakdown = [];
+                      if (p.tuition_fee) breakdown.push(`বেতন: ৳${p.tuition_fee}`);
+                      if (p.exam_fee) breakdown.push(`পরীক্ষা: ৳${p.exam_fee}`);
+                      if (p.admission_fee) breakdown.push(`ভর্তি: ৳${p.admission_fee}`);
+                      if (p.session_fee) breakdown.push(`সেশন: ৳${p.session_fee}`);
+                      if (p.sports_fee) breakdown.push(`খেলাধুলা: ৳${p.sports_fee}`);
+                      if (p.due_amount) breakdown.push(`বকেয়া: ৳${p.due_amount}`);
+                      if (p.religion_fee) breakdown.push(`ধর্ম: ৳${p.religion_fee}`);
+                      if (p.cert_reg_fee) breakdown.push(`সনদ/রেজি: ৳${p.cert_reg_fee}`);
+                      if (p.misc_fee) breakdown.push(`বিবিধ: ৳${p.misc_fee}`);
+
+                      return (
+                        <TableRow key={p.id} hover>
+                          <TableCell sx={{ fontWeight: 500 }}>{p.payment_date || '—'}</TableCell>
+                          <TableCell>{p.receipt_number || '—'}</TableCell>
+                          <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                            {breakdown.length > 0 ? breakdown.join(', ') : 'সাধারণ পেমেন্ট'}
+                          </TableCell>
+                          <TableCell>{p.payment_method === 'cash' ? 'নগদ (Cash)' : p.payment_method || '—'}</TableCell>
+                          <TableCell sx={{ textAlign: 'right', fontWeight: 'bold', color: 'success.main' }}>
+                            ৳{parseFloat(p.amount || 0).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button variant="contained" onClick={() => setHistoryDialogOpen(false)}>
+            বন্ধ করুন
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

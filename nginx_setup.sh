@@ -10,7 +10,11 @@ server {
     keepalive_timeout 300s;
     send_timeout 300s;
 
-    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /favicon.ico {
+        alias /var/www/bdapp/frontend/build/logo192.png;
+        access_log off;
+        log_not_found off;
+    }
 
     # CRITICAL: Service Worker + PWA Cache Buster
     # Force the service worker script to always re-validate + instruct browser to clear its

@@ -70,11 +70,10 @@ export const prefetchEverything = async (schoolId) => {
         }
 
         // 5. Results
-        const resultRes = await api.get(`/api/results/results/?school=${schoolId}&page_size=1000`).catch(() => null);
-        if (resultRes?.data) {
-            const results = Array.isArray(resultRes.data) ? resultRes.data : resultRes.data?.results || [];
-            if (results.length > 0) await cacheData('results', results);
-        }
+        // স্কুল-ওয়াইড সব result একবারে নামানো যাবে না — এতে কয়েক হাজার সারি
+        // (কয়েক MB~৮৯MB) আসে এবং পুরো সার্ভার/অ্যাপ আটকে যায়। রেজাল্ট পেজে
+        // ঢোকার সময় (exam/student স্কোপড) ক্যাশ অটোমেটিক হয়ে যায়, তাই এখানে
+        // ওনার-ডিমান্ড ক্যাশিং-এর উপর ছেড়ে দেওয়া হলো।
 
         // 6. Attendance Records
         const attRes = await api.get(`/api/attendance/records/?school=${schoolId}&page_size=1000`).catch(() => null);
@@ -88,7 +87,6 @@ export const prefetchEverything = async (schoolId) => {
             `/api/users/committees/?school=${schoolId}`,
             `/api/schools/${schoolId}/`,
             `/api/ads/?school=${schoolId}`,
-            `/api/results/overall/?school=${schoolId}`,
             `/api/results/overall/dashboard_result_summary/?school=${schoolId}&year=${new Date().getFullYear()}&exam_type=annual`,
             `/api/attendance/records/monthly_report/?school=${schoolId}&month=${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
         ];

@@ -15,7 +15,11 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /favicon.ico {
+        alias /var/www/bdapp/frontend/build/logo192.png;
+        access_log off;
+        log_not_found off;
+    }
     
     location /static/ {
         root /var/www/bdapp/frontend/build;

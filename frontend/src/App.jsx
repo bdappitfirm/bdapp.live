@@ -46,46 +46,46 @@ const CHUNK_RELOAD_FLAG = 'bdapp_chunk_reloaded';
 
 export const safeLazy = (importFn) => {
   return React.lazy(async () => {
-    let lastError = null;
-
-    // অনলাইনে থাকলে কয়েকবার চেষ্টা করি — অনেক সময় সাময়িক নেটওয়ার্ক গোলযোগে
-    // চাঙ্ক লোড ব্যর্থ হয়, তখন সাথে সাথে "ডাউনলোড হয়নি" দেখানো উচিত নয়।
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        const module = await importFn();
-        try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG); } catch (_) {}
-        if (module && (module.default || typeof module === 'function')) {
-          return module;
-        }
-        return { default: OfflinePageFallback };
-      } catch (error) {
-        lastError = error;
-        if (!navigator.onLine) break;
-        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    try {
+      const module = await importFn();
+      try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG); } catch (_) {}
+      if (module && (module.default || typeof module === 'function')) {
+        return module;
       }
-    }
+      return { default: OfflinePageFallback };
+    } catch (error) {
+      console.warn('SafeLazy: Chunk load attempt failed', error);
 
-    // অনলাইনে থেকেও চাঙ্ক লোড হয়নি — এটি সাধারণত নতুন deploy-এর পর পুরনো
-    // বান্ডেল/পুরনো chunk নাম থাকার কারণে হয়। cache-busting সহ একবার রিলোড
-    // করলেই ব্রাউজার-ক্যাশ এড়িয়ে নতুন index.html ও নতুন চাঙ্ক পাওয়া যায়।
-    if (navigator.onLine) {
-      let alreadyReloaded = false;
-      try { alreadyReloaded = sessionStorage.getItem(CHUNK_RELOAD_FLAG) === '1'; } catch (_) {}
-      if (!alreadyReloaded) {
-        try { sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1'); } catch (_) {}
+      if (navigator.onLine) {
+        // Quick retry (150ms delay for temporary network blips)
         try {
-          const freshUrl = new URL(window.location.href);
-          freshUrl.searchParams.set('_bdapp_reload', String(Date.now()));
-          window.location.replace(freshUrl.toString());
-        } catch (_) {
-          window.location.reload();
+          await new Promise((r) => setTimeout(r, 150));
+          const module = await importFn();
+          try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG); } catch (_) {}
+          if (module && (module.default || typeof module === 'function')) {
+            return module;
+          }
+        } catch (retryErr) {
+          console.warn('SafeLazy: Retry failed', retryErr);
         }
-        return new Promise(() => {}); // রিলোড চলার সময় লোডিং স্পিনার ধরে রাখি
-      }
-    }
 
-    console.warn('SafeLazy: Module chunk unavailable', lastError);
-    return { default: OfflinePageFallback };
+        // Stale deployment chunk cache-busting reload check
+        let alreadyReloaded = false;
+        try { alreadyReloaded = sessionStorage.getItem(CHUNK_RELOAD_FLAG) === '1'; } catch (_) {}
+        if (!alreadyReloaded) {
+          try { sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1'); } catch (_) {}
+          try {
+            const freshUrl = new URL(window.location.href);
+            freshUrl.searchParams.set('_bdapp_reload', String(Date.now()));
+            window.location.replace(freshUrl.toString());
+          } catch (_) {
+            window.location.reload();
+          }
+        }
+      }
+
+      return { default: OfflinePageFallback };
+    }
   });
 };
 

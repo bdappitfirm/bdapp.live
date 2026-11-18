@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 
 // প্রতিটি রিলিজে এই ভার্সন বদলাতে হবে, যাতে পুরনো ক্যাশ মুছে নতুন বিল্ড ইনস্টল হয়।
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = `bdapp-cache-${CACHE_VERSION}`;
 
 // অ্যাপ শেল — সবসময় অফলাইনে থাকবে
@@ -9,7 +9,6 @@ const CORE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/favicon.ico',
   '/logo.svg',
   '/logo192.png',
   '/logo512.png',
@@ -100,6 +99,23 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// respondWith() কখনো যেন undefined বা Response ছাড়া কিছু না পায় — অন্যথায়
+// ব্রাউজার "Failed to convert value to 'Response'" এরর দেয়। তাই নিরাপদ ফলব্যাক।
+const offlineResponse = () =>
+  new Response('', { status: 503, statusText: 'Offline' });
+
+// নেভিগেশনের সময় ক্যাশ কিছু না থাকলে দেখানোর জন্য একটি হালকা অফলাইন পাতা
+const offlineHtmlResponse = () =>
+  new Response(
+    '<!doctype html><html lang="bn"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>অফলাইন</title></head>' +
+      '<body style="font-family:sans-serif;text-align:center;padding:48px 16px;color:#1a237e">' +
+      '<h2>আপনি এই মুহূর্তে অফলাইনে আছেন</h2>' +
+      '<p>ইন্টারনেট সংযোগ ফিরে এলে পেজটি আবার লোড করুন।</p></body></html>',
+    { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  );
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
@@ -138,7 +154,7 @@ self.addEventListener('fetch', (event) => {
           return (
             (await caches.match('/index.html')) ||
             (await caches.match('/')) ||
-            Response.error()
+            offlineHtmlResponse()
           );
         })
     );
@@ -150,13 +166,15 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
-        return fetch(request).then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        });
+        return fetch(request)
+          .then((response) => {
+            if (response && response.status === 200 && response.type === 'basic') {
+              const copy = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
+            return response;
+          })
+          .catch(() => offlineResponse());
       })
     );
     return;
@@ -165,19 +183,25 @@ self.addEventListener('fetch', (event) => {
   // ৩) বাকি সব -> Stale While Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      const fetchPromise = fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => cachedResponse);
+      const networkFetch = fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseClone);
+          });
+        }
+        return networkResponse;
+      });
 
-      return cachedResponse || fetchPromise;
+      // ক্যাশ থাকলে সাথে সাথে দেখাই এবং ব্যাকগ্রাউন্ডে রিফ্রেশ করি
+      if (cachedResponse) {
+        networkFetch.catch(() => {});
+        return cachedResponse;
+      }
+
+      // ক্যাশ নেই -> সরাসরি নেটওয়ার্ক; ব্যর্থ হলে অবশ্যই একটি বৈধ Response ফেরত দিই
+      // (undefined ফেরত দিলে ব্রাউজার "Failed to convert value to 'Response'" এরর দেয়)
+      return networkFetch.catch(() => offlineResponse());
     })
   );
 });

@@ -82,7 +82,6 @@ Write-Host "`n[3/6] কোড + বিল্ড প্যাক করা হচ
 if (Test-Path $TAR_NAME) { Remove-Item $TAR_NAME -Force }
 $tarArgs = @(
     "-czf", $TAR_NAME,
-    "--exclude=media",
     "--exclude=staticfiles",
     "--exclude=__pycache__",
     "--exclude=*.pyc",

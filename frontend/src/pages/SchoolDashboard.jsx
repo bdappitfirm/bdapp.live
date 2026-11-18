@@ -182,7 +182,7 @@ const SchoolDashboard = () => {
   const handleUserMenuOpen = (event) => setAnchorEl(event.currentTarget);
   const handleUserMenuClose = () => setAnchorEl(null);
 
-  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryLoading] = useState(false);
   const [summaryRows, setSummaryRows] = useState([]);
   const [feeYear, setFeeYear] = useState(new Date().getFullYear());
   
@@ -277,8 +277,8 @@ const SchoolDashboard = () => {
       } catch (e) {}
     }
 
-    // If we have cached stats, NEVER show loading spinner (Instant open)
-    if (cachedStats) {
+    // If sub-route is active or we have cached data, don't show blocking loading spinner
+    if (!isMainDashboard || cachedStats || cachedSchool) {
       setLoading(false);
     } else {
       setLoading(true);
@@ -288,11 +288,14 @@ const SchoolDashboard = () => {
     try {
       setCurrentSchoolId(id);
 
-      // Fetch in background (Stale-While-Revalidate) without blocking UI
-      const [schoolRes, statsRes] = await Promise.all([
-        api.get(`/api/schools/${id}/`).catch(() => null),
-        getDashboardStats(id, feeYear, isSimple).catch(() => null)
-      ]);
+      // Fetch in background (Stale-While-Revalidate) without blocking UI.
+      // Only request heavy stats calculations when on the main dashboard screen.
+      const promises = [api.get(`/api/schools/${id}/`).catch(() => null)];
+      if (isMainDashboard) {
+        promises.push(getDashboardStats(id, feeYear, isSimple).catch(() => null));
+      }
+
+      const [schoolRes, statsRes] = await Promise.all(promises);
 
       if (schoolRes && schoolRes.data) {
         setSchoolData(schoolRes.data);
@@ -304,13 +307,13 @@ const SchoolDashboard = () => {
     } catch (err) {
       console.warn("Background fetch warning (using local cache):", err);
       // Never show 524 or network timeout errors if local cache exists
-      if (!cachedStats && !cachedSchool) {
+      if (!cachedStats && !cachedSchool && isMainDashboard) {
          setError("ইন্টারনেট সংযোগ নেই এবং কোনো ক্যাশ করা ডাটা পাওয়া যায়নি।");
       }
     } finally {
       setLoading(false);
     }
-  }, [id, authLoading, feeYear]);
+  }, [id, authLoading, feeYear, isMainDashboard]);
 
   useEffect(() => {
     loadInitialData();
@@ -352,6 +355,7 @@ const SchoolDashboard = () => {
   }, []);
 
   const loadAdsFromApi = useCallback(async (schoolId) => {
+    if (!schoolId || !isMainDashboard) return false;
     try {
       const resp = await api.get(`/api/ads/`, { params: { school: schoolId } });
       const data = Array.isArray(resp.data) ? resp.data : (resp.data?.results || []);
@@ -369,14 +373,14 @@ const SchoolDashboard = () => {
       console.error("Error loading ads:", err);
       return false;
     }
-  }, []);
+  }, [isMainDashboard]);
 
   useEffect(() => {
     loadAdsFromApi(id);
   }, [id, loadAdsFromApi]);
 
   const generateSummary = useCallback(async () => {
-    if (!id) return;
+    if (!id || !isMainDashboard) return;
     const cachedSummary = localStorage.getItem(`dashboard_summary_${id}`);
     if (cachedSummary) {
       try {
@@ -395,7 +399,7 @@ const SchoolDashboard = () => {
     } catch (err) {
       console.warn("Background summary fetch warning (using local cache):", err);
     }
-  }, [id]);
+  }, [id, isMainDashboard]);
 
   useEffect(() => { generateSummary(); }, [generateSummary]);
 
