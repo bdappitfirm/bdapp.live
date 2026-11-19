@@ -39,14 +39,17 @@ export default function AttendanceReportCard() {
   const { id } = useParams();
   const toast = useToast();
 
-  const [reportType, setReportType] = useState('monthly');
+  const [reportType, setReportType] = useState('monthly'); // 'daily' | 'monthly' | 'custom' | 'yearly'
   const [reportFor, setReportFor] = useState('student'); // 'student' | 'employee'
   const [category, setCategory] = useState('section');
+  const [viewMode, setViewMode] = useState('datewise'); // 'datewise' | 'summary'
   const [selectedClassroom, setSelectedClassroom] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [selectedMonth, setSelectedMonth] = useState(dayjs().format('YYYY-MM'));
+  const [startDate, setStartDate] = useState(dayjs().subtract(1, 'month').format('YYYY-MM-DD'));
+  const [endDate, setEndDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [selectedYear, setSelectedYear] = useState(dayjs().format('YYYY'));
 
   const [schoolInfo, setSchoolInfo] = useState(null);
@@ -60,6 +63,22 @@ export default function AttendanceReportCard() {
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showReport, setShowReport] = useState(false);
+
+  // Extract dates that have at least 1 attendance record in the selected month/custom range
+  const activeDates = React.useMemo(() => {
+    if (reportType !== 'monthly' && reportType !== 'custom') return [];
+    const dateSet = new Set();
+    reportData.forEach(r => {
+      if (r.attendance) {
+        Object.keys(r.attendance).forEach(dStr => {
+          if (r.attendance[dStr] !== undefined) {
+            dateSet.add(dStr);
+          }
+        });
+      }
+    });
+    return Array.from(dateSet).sort();
+  }, [reportData, reportType]);
 
   useEffect(() => {
     const loadInitial = async () => {
@@ -154,23 +173,58 @@ export default function AttendanceReportCard() {
           const params = { employee: 1 };
           if (selectedDepartment) params.department = selectedDepartment;
           if (selectedEmployee) params.employee_id = selectedEmployee;
-          if (reportType === 'monthly') params.month = selectedMonth; else params.year = selectedYear;
+          if (reportType === 'custom') {
+            if (startDate > endDate) {
+              toast.warning('শুরুর তারিখ শেষের তারিখের চেয়ে বড় হতে পারে না');
+              setLoading(false);
+              return;
+            }
+            params.start_date = startDate;
+            params.end_date = endDate;
+          } else if (reportType === 'monthly') {
+            params.month = selectedMonth;
+          } else {
+            params.year = selectedYear;
+          }
+
           const res = await scopedGet('/api/attendance/records/monthly_report/', id, params);
           const rawData = res.data || [];
-          setReportData(rawData.map(r => {
+          const rawMap = new Map(rawData.map(r => [r.employee_id, r]));
+
+          const empList = selectedEmployee
+            ? employees.filter(e => e.id === parseInt(selectedEmployee))
+            : employees;
+
+          const baseList = empList.length > 0 ? empList : rawData;
+
+          const data = baseList.map(e => {
+            const isEmpObj = Boolean(e.employee_id !== undefined && (e.name_en || e.name_bn));
+            const empId = isEmpObj ? e.id : e.employee_id;
+            const r = isEmpObj ? (rawMap.get(empId) || {
+              employee_id: empId,
+              name: e.name_en || e.name_bn || 'Employee',
+              roll: e.employee_id,
+              designation: e.designation_name || '',
+              department: e.department_name || '',
+              attendance: {}
+            }) : e;
+
             const attValues = Object.values(r.attendance || {});
             const present = attValues.filter(v => v === true).length;
             const total = attValues.length;
             return {
-              roll_number: r.roll,
-              name: r.name,
-              designation: r.designation || '',
-              department: r.department || '',
+              ...r,
+              roll_number: r.roll || e.employee_id,
+              name: r.name || e.name_en || e.name_bn,
+              designation: r.designation || e.designation_name || '',
+              department: r.department || e.department_name || '',
               present_days: present,
               total_days: total,
               attendance_percentage: total > 0 ? ((present / total) * 100).toFixed(1) : 0
             };
-          }));
+          });
+
+          setReportData(data);
         }
         setShowReport(true);
         return;
@@ -188,26 +242,61 @@ export default function AttendanceReportCard() {
           return { student_id: s.id, student_name: `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim(), roll_number: s.roll_number, present: rec ? rec.present : false, time: rec ? dayjs(rec.created_at).format('hh:mm A') : '-', note: rec?.note || '' };
         });
         setReportData(data);
-      } else if (reportType === 'monthly') {
-        params.month = selectedMonth;
+      } else if (reportType === 'monthly' || reportType === 'custom') {
+        if (reportType === 'custom') {
+          if (startDate > endDate) {
+            toast.warning('শুরুর তারিখ শেষের তারিখের চেয়ে বড় হতে পারে না');
+            setLoading(false);
+            return;
+          }
+          params.start_date = startDate;
+          params.end_date = endDate;
+        } else {
+          params.month = selectedMonth;
+        }
+
         const res = await scopedGet(endpoint, id, params);
         let rawData = res.data || [];
         if (category === 'student' && selectedStudent) rawData = rawData.filter(r => r.student_id === parseInt(selectedStudent));
 
-        // Process monthly data to include stats
-        const data = rawData.map(r => {
+        const rawMap = new Map(rawData.map(r => [r.student_id, r]));
+
+        const studentList = (category === 'student' && selectedStudent)
+          ? students.filter(s => s.id === parseInt(selectedStudent))
+          : students;
+
+        const baseList = studentList.length > 0 ? studentList : rawData;
+
+        const data = baseList.map(s => {
+          const isStudentObj = Boolean(s.user || s.roll_number);
+          const stuId = isStudentObj ? s.id : s.student_id;
+          const r = isStudentObj ? (rawMap.get(stuId) || {
+            student_id: stuId,
+            name: `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim() || s.user?.username || '',
+            roll: s.roll_number,
+            attendance: {}
+          }) : s;
+
           const attValues = Object.values(r.attendance || {});
           const present = attValues.filter(v => v === true).length;
           const total = attValues.length;
           return {
             ...r,
-            student_name: r.name,
-            roll_number: r.roll,
+            student_name: r.name || `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim(),
+            roll_number: r.roll || s.roll_number,
             present_days: present,
             total_days: total,
             attendance_percentage: total > 0 ? ((present / total) * 100).toFixed(1) : 0
           };
         });
+
+        data.sort((a, b) => {
+          const ar = parseInt(String(a?.roll_number ?? '').replace(/\D/g, ''), 10);
+          const br = parseInt(String(b?.roll_number ?? '').replace(/\D/g, ''), 10);
+          if (!isNaN(ar) && !isNaN(br)) return ar - br;
+          return String(a?.roll_number || '').localeCompare(String(b?.roll_number || ''), undefined, { numeric: true });
+        });
+
         setReportData(data);
       } else if (reportType === 'yearly') {
         const res = await api.get(`/api/attendance/records/`, { params: { school: id, student: category === 'student' ? selectedStudent : undefined, date__year: selectedYear, page_size: 5000 } });
@@ -230,13 +319,32 @@ export default function AttendanceReportCard() {
   const handleDownloadCSV = () => {
     if (reportData.length === 0) return;
     const isEmp = reportFor === 'employee';
-    const headers = reportType === 'daily'
-      ? [isEmp ? 'আইডি' : 'রোল', isEmp ? 'কর্মীর নাম' : 'নাম', 'অবস্থা', 'সময়', 'মন্তব্য']
-      : [isEmp ? 'আইডি' : 'রোল', isEmp ? 'কর্মীর নাম' : 'নাম', 'উপস্থিত দিন', 'মোট দিন', 'শতকরা (%)'];
+
+    let headers = [];
+    if (reportType === 'daily') {
+      headers = [isEmp ? 'আইডি' : 'রোল', isEmp ? 'কর্মীর নাম' : 'নাম', 'অবস্থা', 'সময়', 'মন্তব্য'];
+    } else if ((reportType === 'monthly' || reportType === 'custom') && viewMode === 'datewise') {
+      const activeDateHeaders = activeDates.map(dStr => reportType === 'custom' ? dayjs(dStr).format('DD/MM/YYYY') : String(dayjs(dStr).date()));
+      headers = [isEmp ? 'আইডি' : 'রোল', isEmp ? 'কর্মীর নাম' : 'নাম', ...activeDateHeaders, 'উপস্থিত দিন', 'মোট দিন', 'শতকরা (%)'];
+    } else {
+      headers = [isEmp ? 'আইডি' : 'রোল', isEmp ? 'কর্মীর নাম' : 'নাম', 'উপস্থিত দিন', 'মোট দিন', 'শতকরা (%)'];
+    }
+
     const rows = reportData.map(r => {
       const nm = r.student_name || r.name || '';
-      return reportType === 'daily' ? [r.roll_number, nm, r.present ? 'উপস্থিত' : 'অনুপস্থিত', r.time, r.note] : [r.roll_number, nm, r.present_days, r.total_days, r.attendance_percentage];
+      if (reportType === 'daily') {
+        return [r.roll_number, nm, r.present ? 'উপস্থিত' : 'অনুপস্থিত', r.time, r.note];
+      } else if ((reportType === 'monthly' || reportType === 'custom') && viewMode === 'datewise') {
+        const dayCols = activeDates.map(dStr => {
+          const val = r.attendance?.[dStr];
+          return val === true ? 'P' : val === false ? 'A' : '-';
+        });
+        return [r.roll_number, nm, ...dayCols, r.present_days, r.total_days, `${r.attendance_percentage}%`];
+      } else {
+        return [r.roll_number, nm, r.present_days, r.total_days, `${r.attendance_percentage}%`];
+      }
     });
+
     let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\r\n";
     rows.forEach(row => { csvContent += row.map(c => `"${c}"`).join(",") + "\r\n"; });
     const link = document.createElement("a");
@@ -252,11 +360,12 @@ export default function AttendanceReportCard() {
 
     toast.info('পিডিএফ তৈরি হচ্ছে...');
     try {
+      const isLandscape = (reportType === 'monthly' || reportType === 'custom') && viewMode === 'datewise';
       const canvas = await html2canvas(element, { scale: 2 });
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210;
-      const pageHeight = 297;
+      const pdf = new jsPDF(isLandscape ? 'l' : 'p', 'mm', 'a4');
+      const imgWidth = isLandscape ? 297 : 210;
+      const pageHeight = isLandscape ? 210 : 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       let heightLeft = imgHeight;
       let position = 0;
@@ -283,19 +392,26 @@ export default function AttendanceReportCard() {
       <Paper elevation={0} sx={{ mb: 3, p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #1b5e20 0%, #43a047 100%)', color: 'white' }} className="no-print">
         <Stack direction="row" alignItems="center" spacing={2}>
           <AnalyticsIcon sx={{ fontSize: 40 }} />
-          <Box><Typography variant="h4" sx={{ fontWeight: 'bold' }}>হাজিরা প্রতিবেদন কেন্দ্র</Typography><Typography variant="body1">দৈনিক, মাসিক এবং বাৎসরিক রিপোর্ট দেখুন</Typography></Box>
+          <Box><Typography variant="h4" sx={{ fontWeight: 'bold' }}>হাজিরা প্রতিবেদন কেন্দ্র</Typography><Typography variant="body1">দৈনিক, মাসিক, তারিখ সীমা এবং বাৎসরিক রিপোর্ট দেখুন</Typography></Box>
         </Stack>
       </Paper>
 
       <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: 2 }} className="no-print">
         <Grid container spacing={3}>
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid size={{ xs: 12, md: 5 }}>
             <Stack direction="row" spacing={1}>
               <Button variant={reportFor === 'student' ? 'contained' : 'outlined'} color="primary" onClick={() => { setReportFor('student'); setReportData([]); setShowReport(false); }} fullWidth>🎓 শিক্ষার্থী</Button>
               <Button variant={reportFor === 'employee' ? 'contained' : 'outlined'} color="primary" onClick={() => { setReportFor('employee'); setReportData([]); setShowReport(false); }} fullWidth>👨‍💼 কর্মী</Button>
             </Stack>
           </Grid>
-          <Grid size={{ xs: 12, md: 6 }}><Stack direction="row" spacing={1}><Button variant={reportType === 'daily' ? 'contained' : 'outlined'} onClick={() => setReportType('daily')} fullWidth>দৈনিক</Button><Button variant={reportType === 'monthly' ? 'contained' : 'outlined'} onClick={() => setReportType('monthly')} fullWidth>মাসিক</Button><Button variant={reportType === 'yearly' ? 'contained' : 'outlined'} onClick={() => setReportType('yearly')} fullWidth>বাৎসরিক</Button></Stack></Grid>
+          <Grid size={{ xs: 12, md: 7 }}>
+            <Stack direction="row" spacing={1}>
+              <Button variant={reportType === 'daily' ? 'contained' : 'outlined'} onClick={() => setReportType('daily')} fullWidth>দৈনিক</Button>
+              <Button variant={reportType === 'monthly' ? 'contained' : 'outlined'} onClick={() => setReportType('monthly')} fullWidth>মাসিক</Button>
+              <Button variant={reportType === 'custom' ? 'contained' : 'outlined'} onClick={() => setReportType('custom')} fullWidth>তারিখ সীমা</Button>
+              <Button variant={reportType === 'yearly' ? 'contained' : 'outlined'} onClick={() => setReportType('yearly')} fullWidth>বাৎসরিক</Button>
+            </Stack>
+          </Grid>
           {reportFor === 'student' ? (
             <>
               <Grid size={{ xs: 12, md: 6 }}><Stack direction="row" spacing={1}><Button variant={category === 'class' ? 'contained' : 'outlined'} color="secondary" onClick={() => { setCategory('class'); setSelectedSection(''); }} fullWidth>ক্লাস-ভিত্তিক</Button><Button variant={category === 'section' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('section')} fullWidth>শাখা-ভিত্তিক</Button><Button variant={category === 'student' ? 'contained' : 'outlined'} color="secondary" onClick={() => setCategory('student')} fullWidth>শিক্ষার্থী-ভিত্তিক</Button></Stack></Grid>
@@ -309,16 +425,62 @@ export default function AttendanceReportCard() {
               <Grid size={{ xs: 12, md: 4 }}><TextField select fullWidth label="কর্মী" value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)}><MenuItem value="">সকল কর্মী</MenuItem>{employees.map(e => <MenuItem key={e.id} value={e.id}>{e.name_en || e.name_bn} ({e.employee_id})</MenuItem>)}</TextField></Grid>
             </>
           )}
-          <Grid size={{ xs: 12, md: reportFor === 'student' && category === 'student' ? 2 : (reportFor === 'employee' ? 2 : 4) }}>{reportType === 'daily' && <TextField type="date" fullWidth label="তারিখ" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'monthly' && <TextField type="month" fullWidth label="মাস" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} InputLabelProps={{ shrink: true }} />}{reportType === 'yearly' && <TextField select fullWidth label="বছর" value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>{[0,1,2].map(i => { const y = dayjs().subtract(i, 'year').format('YYYY'); return <MenuItem key={y} value={y}>{y}</MenuItem> })}</TextField>}</Grid>
+
+          <Grid size={{ xs: 12, md: reportType === 'custom' ? 6 : (reportFor === 'student' && category === 'student' ? 2 : (reportFor === 'employee' ? 2 : 4)) }}>
+            {reportType === 'daily' && <TextField type="date" fullWidth label="তারিখ" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} InputLabelProps={{ shrink: true }} />}
+            {reportType === 'monthly' && <TextField type="month" fullWidth label="মাস" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} InputLabelProps={{ shrink: true }} />}
+            {reportType === 'custom' && (
+              <Stack direction="row" spacing={1}>
+                <TextField type="date" fullWidth label="হতে (Start Date)" value={startDate} onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+                <TextField type="date" fullWidth label="পর্যন্ত (End Date)" value={endDate} onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+              </Stack>
+            )}
+            {reportType === 'yearly' && <TextField select fullWidth label="বছর" value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>{[0,1,2].map(i => { const y = dayjs().subtract(i, 'year').format('YYYY'); return <MenuItem key={y} value={y}>{y}</MenuItem> })}</TextField>}
+          </Grid>
+
+          {(reportType === 'monthly' || reportType === 'custom') && (
+            <Grid size={{ xs: 12 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mr: 1, color: 'text.secondary' }}>ভিউ মোড:</Typography>
+                <Button
+                  size="small"
+                  variant={viewMode === 'datewise' ? 'contained' : 'outlined'}
+                  color="success"
+                  onClick={() => setViewMode('datewise')}
+                >
+                  📅 তারিখ অনুযায়ী ম্যাট্রিক্স (Date-wise)
+                </Button>
+                <Button
+                  size="small"
+                  variant={viewMode === 'summary' ? 'contained' : 'outlined'}
+                  color="success"
+                  onClick={() => setViewMode('summary')}
+                >
+                  📊 সংক্ষিপ্ত বিবরণী (Summary)
+                </Button>
+              </Stack>
+            </Grid>
+          )}
+
           <Grid size={{ xs: 12, md: 2 }}><Button variant="contained" fullWidth size="large" sx={{ height: '100%' }} startIcon={<VisibilityIcon />} onClick={generateReport} disabled={loading}>দেখুন</Button></Grid>
         </Grid>
       </Paper>
 
       {showReport && reportData.length > 0 && (
-        <Stack direction="row" spacing={2} sx={{ mb: 3 }} className="no-print" justifyContent="center">
-          <Button variant="contained" color="info" startIcon={<DownloadIcon />} onClick={handleDownloadCSV}>CSV</Button>
-          <Button variant="contained" color="error" startIcon={<PdfIcon />} onClick={handleDownloadPDF}>PDF</Button>
-          <Button variant="contained" color="secondary" startIcon={<PrintIcon />} onClick={() => window.print()}>প্রিন্ট</Button>
+        <Stack direction="column" spacing={1} sx={{ mb: 2 }} className="no-print">
+          <Stack direction="row" spacing={2} justifyContent="center">
+            <Button variant="contained" color="info" startIcon={<DownloadIcon />} onClick={handleDownloadCSV}>CSV</Button>
+            <Button variant="contained" color="error" startIcon={<PdfIcon />} onClick={handleDownloadPDF}>PDF</Button>
+            <Button variant="contained" color="secondary" startIcon={<PrintIcon />} onClick={() => window.print()}>প্রিন্ট</Button>
+          </Stack>
+          {(reportType === 'monthly' || reportType === 'custom') && viewMode === 'datewise' && (
+            <Stack direction="row" spacing={1.5} justifyContent="center" sx={{ pt: 1, flexWrap: 'wrap' }}>
+              <Chip label="P = উপস্থিত" size="small" sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 'bold' }} />
+              <Chip label="A = অনুপস্থিত" size="small" sx={{ bgcolor: '#ffebee', color: '#c62828', fontWeight: 'bold' }} />
+              <Chip label="- = রেকর্ড নেই" size="small" variant="outlined" />
+              <Chip label="শুক্রবার = সাপ্তাহিক ছুটি" size="small" sx={{ bgcolor: '#ffe0b2', color: '#e65100', fontWeight: 'bold' }} />
+            </Stack>
+          )}
         </Stack>
       )}
 
@@ -326,7 +488,14 @@ export default function AttendanceReportCard() {
         <Box id="printable-area">
           <Box className="print-only" sx={{ display: 'none', textAlign: 'center', mb: 4 }}>
             <Typography variant="h3" sx={{ fontWeight: 'bold' }}>{schoolInfo?.name}</Typography>
-            <Typography variant="h5">হাজিরা প্রতিবেদন — {reportType === 'daily' ? 'দৈনিক' : reportType === 'monthly' ? 'মাসিক' : 'বাৎসরিক'}{reportFor === 'employee' ? ' (কর্মী)' : ''}</Typography>
+            <Typography variant="h5">
+              হাজিরা প্রতিবেদন — {
+                reportType === 'daily' ? 'দৈনিক'
+                : reportType === 'monthly' ? `মাসিক (${dayjs(selectedMonth, 'YYYY-MM').format('MMMM YYYY')})`
+                : reportType === 'custom' ? `তারিখ সীমা (${dayjs(startDate).format('DD/MM/YYYY')} হতে ${dayjs(endDate).format('DD/MM/YYYY')})`
+                : 'বাৎসরিক'
+              }{reportFor === 'employee' ? ' (কর্মী)' : ''}
+            </Typography>
             {reportFor === 'student' ? (
               <Typography variant="h6">শ্রেণি: {classrooms.find(c=>c.id===parseInt(selectedClassroom))?.name} | শাখা: {sections.find(s=>s.id===parseInt(selectedSection))?.name || 'সব'}</Typography>
             ) : (
@@ -334,24 +503,125 @@ export default function AttendanceReportCard() {
             )}
             <Divider sx={{ my: 2, borderColor: 'black' }} />
           </Box>
-          <TableContainer component={Paper}>
-            <Table size="small">
-              <TableHead sx={{ bgcolor: '#f5f5f5' }}>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 'bold' }}>{reportFor === 'employee' ? 'আইডি' : 'রোল'}</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }}>{reportFor === 'employee' ? 'কর্মীর নাম ও পদবী' : 'শিক্ষার্থীর নাম'}</TableCell>
-                  {reportType === 'daily' ? (<><TableCell align="center">অবস্থা</TableCell><TableCell align="center">সময়</TableCell></>) : (<><TableCell align="center">উপস্থিত</TableCell><TableCell align="center">মোট দিন</TableCell><TableCell align="center">শতকরা (%)</TableCell></>)}
+          <TableContainer component={Paper} sx={{ overflowX: 'auto', maxWidth: '100%' }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                  <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', bgcolor: '#f5f5f5' }}>{reportFor === 'employee' ? 'আইডি' : 'রোল'}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', bgcolor: '#f5f5f5', minWidth: 150 }}>{reportFor === 'employee' ? 'কর্মীর নাম ও পদবী' : 'শিক্ষার্থীর নাম'}</TableCell>
+                  {reportType === 'daily' ? (
+                    <>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>অবস্থা</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>সময়</TableCell>
+                    </>
+                  ) : (reportType === 'monthly' || reportType === 'custom') && viewMode === 'datewise' ? (
+                    <>
+                      {activeDates.length === 0 ? (
+                        <TableCell align="center" sx={{ fontWeight: 'bold', color: 'text.secondary', bgcolor: '#f5f5f5' }}>কোনো তথ্য নেই</TableCell>
+                      ) : (
+                        activeDates.map(dStr => {
+                          const displayLabel = reportType === 'custom' ? dayjs(dStr).format('DD/MM') : dayjs(dStr).date();
+                          const isFri = dayjs(dStr).day() === 5;
+                          return (
+                            <TableCell
+                              key={dStr}
+                              align="center"
+                              sx={{
+                                fontWeight: 'bold',
+                                p: '4px 2px',
+                                minWidth: reportType === 'custom' ? 38 : 28,
+                                bgcolor: isFri ? '#ffe0b2' : '#f5f5f5',
+                                color: isFri ? '#e65100' : 'inherit',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={dStr}
+                            >
+                              {displayLabel}
+                            </TableCell>
+                          );
+                        })
+                      )}
+                      <TableCell align="center" sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', bgcolor: '#f5f5f5' }}>উপস্থিত</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', bgcolor: '#f5f5f5' }}>মোট দিন</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', bgcolor: '#f5f5f5' }}>শতকরা (%)</TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>উপস্থিত</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>মোট দিন</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>শতকরা (%)</TableCell>
+                    </>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {reportData.map((row, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>{row.roll_number}</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>
+                  <TableRow key={idx} hover>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.roll_number}</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                       {row.student_name || row.name}
                       {reportFor === 'employee' && row.designation ? <Typography variant="caption" color="text.secondary" display="block">{row.designation}</Typography> : null}
                     </TableCell>
-                    {reportType === 'daily' ? (<><TableCell align="center">{row.present ? <PresentIcon color="success" /> : <AbsentIcon color="error" />}</TableCell><TableCell align="center">{row.time}</TableCell></>) : (<><TableCell align="center">{row.present_days}</TableCell><TableCell align="center">{row.total_days}</TableCell><TableCell align="center"><Chip label={`${row.attendance_percentage}%`} color={parseFloat(row.attendance_percentage) >= 80 ? 'success' : 'error'} size="small" /></TableCell></>)}
+
+                    {reportType === 'daily' ? (
+                      <>
+                        <TableCell align="center">{row.present ? <PresentIcon color="success" /> : <AbsentIcon color="error" />}</TableCell>
+                        <TableCell align="center">{row.time}</TableCell>
+                      </>
+                    ) : (reportType === 'monthly' || reportType === 'custom') && viewMode === 'datewise' ? (
+                      <>
+                        {activeDates.length === 0 ? (
+                          <TableCell align="center" sx={{ color: 'text.secondary' }}>-</TableCell>
+                        ) : (
+                          activeDates.map(dStr => {
+                            const val = row.attendance?.[dStr];
+                            const isFri = dayjs(dStr).day() === 5;
+                            let content = '-';
+                            let color = 'text.disabled';
+                            let bg = isFri ? '#fff3e0' : 'inherit';
+
+                            if (val === true) {
+                              content = 'P';
+                              color = '#2e7d32';
+                              bg = '#e8f5e9';
+                            } else if (val === false) {
+                              content = 'A';
+                              color = '#c62828';
+                              bg = '#ffebee';
+                            }
+
+                            return (
+                              <TableCell
+                                key={dStr}
+                                align="center"
+                                sx={{
+                                  p: '2px',
+                                  bgcolor: bg,
+                                  color: color,
+                                  fontWeight: val !== undefined ? 'bold' : 'normal',
+                                  fontSize: '0.82rem'
+                                }}
+                              >
+                                {content}
+                              </TableCell>
+                            );
+                          })
+                        )}
+                        <TableCell align="center" sx={{ fontWeight: 'bold' }}>{row.present_days}</TableCell>
+                        <TableCell align="center">{row.total_days}</TableCell>
+                        <TableCell align="center">
+                          <Chip label={`${row.attendance_percentage}%`} color={parseFloat(row.attendance_percentage) >= 80 ? 'success' : 'error'} size="small" />
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell align="center">{row.present_days}</TableCell>
+                        <TableCell align="center">{row.total_days}</TableCell>
+                        <TableCell align="center">
+                          <Chip label={`${row.attendance_percentage}%`} color={parseFloat(row.attendance_percentage) >= 80 ? 'success' : 'error'} size="small" />
+                        </TableCell>
+                      </>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -359,7 +629,17 @@ export default function AttendanceReportCard() {
           </TableContainer>
         </Box>
       )}
-      <style>{`@media print { .no-print { display: none !important; } .print-only { display: block !important; } #printable-area { padding: 10mm; } }`}</style>
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          #printable-area { padding: 5mm; width: 100%; }
+          @page { size: landscape; margin: 8mm; }
+          table { font-size: 11px !important; }
+          th, td { padding: 3px 2px !important; }
+        }
+      `}</style>
     </Box>
   );
 }
+

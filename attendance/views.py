@@ -170,12 +170,16 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
             params = request.query_params
             month_str = params.get('month')  # YYYY-MM
             year_str = params.get('year')    # YYYY
+            start_date = params.get('start_date') # YYYY-MM-DD
+            end_date = params.get('end_date')     # YYYY-MM-DD
             is_employee = str(params.get('employee', '')).lower() in ('1', 'true', 'yes')
 
             # ---------- EMPLOYEE (STAFF) REPORT ----------
             if is_employee:
                 qs = AttendanceRecord.objects.filter(school_id=sid, employee__isnull=False)
-                if year_str:
+                if start_date and end_date:
+                    qs = qs.filter(date__range=[start_date, end_date])
+                elif year_str:
                     try:
                         qs = qs.filter(date__year=int(year_str))
                     except (TypeError, ValueError):
@@ -224,16 +228,19 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
             secid = params.get('section')
             student_id = params.get('student')
 
-            if not month_str:
-                from django.utils import timezone
-                month_str = timezone.now().strftime('%Y-%m')
-
-            # Correct DateField filtering
-            try:
-                year, month = map(int, month_str.split('-'))
-                qs = AttendanceRecord.objects.filter(school_id=sid, date__year=year, date__month=month)
-            except:
-                qs = AttendanceRecord.objects.filter(school_id=sid, date__startswith=month_str)
+            if start_date and end_date:
+                qs = AttendanceRecord.objects.filter(school_id=sid, date__range=[start_date, end_date])
+            elif year_str:
+                qs = AttendanceRecord.objects.filter(school_id=sid, date__year=int(year_str))
+            else:
+                if not month_str:
+                    from django.utils import timezone
+                    month_str = timezone.now().strftime('%Y-%m')
+                try:
+                    year, month = map(int, month_str.split('-'))
+                    qs = AttendanceRecord.objects.filter(school_id=sid, date__year=year, date__month=month)
+                except:
+                    qs = AttendanceRecord.objects.filter(school_id=sid, date__startswith=month_str)
 
             if student_id:
                 qs = qs.filter(student_id=student_id)
